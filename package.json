@@ -1,0 +1,42 @@
+{
+  "name": "parlae-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "./dev.sh",
+    "dev:all": "./dev.sh -m all",
+    "dev:frontend": "./dev.sh -m frontend",
+    "dev:backend": "./dev.sh -m backend",
+    "dev:db": "./dev.sh -m db",
+    "dev:docker": "./dev.sh --docker",
+    "dev:frontend:only": "pnpm --filter web dev",
+    "dev:backend:only": "pnpm --filter @apps/backend start:dev",
+    "build": "pnpm --filter web build && pnpm --filter @apps/backend build",
+    "test": "pnpm --filter @apps/backend test && pnpm --filter web test",
+    "test:backend": "pnpm --filter @apps/backend test",
+    "test:frontend": "pnpm --filter web test",
+    "test:coverage": "pnpm test:backend && pnpm test:frontend",
+    "prisma:studio": "cd packages/prisma && npx prisma studio",
+    "prisma:migrate": "cd packages/prisma && npx prisma migrate dev",
+    "prisma:generate": "cd packages/prisma && npx prisma generate",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:clean": "docker-compose down -v"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "@sentry/cli",
+      "@tailwindcss/oxide",
+      "prisma"
+    ],
+    "ignoredBuiltDependencies": [
+      "@sentry/cli",
+      "core-js-pure",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}

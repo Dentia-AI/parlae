@@ -1,0 +1,30 @@
+{
+  "name": "@kit/wordpress",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "clean": "git clean -xdf .turbo node_modules",
+    "format": "prettier --check \"**/*.{ts,tsx}\"",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "start": "docker compose up"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./renderer": "./src/content-renderer.tsx"
+  },
+  "devDependencies": {
+    "@kit/cms-types": "workspace:*",
+    "@kit/ui": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "wp-types": "^4.68.1"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "src/*"
+      ]
+    }
+  }
+}

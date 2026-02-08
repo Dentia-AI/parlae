@@ -1,0 +1,15 @@
+packages:
+  - apps/frontend
+  - apps/frontend/apps/*
+  - apps/frontend/packages/**
+  - apps/frontend/tooling/*
+  - apps/*
+  - packages/prisma
+
+catalog:
+  '@types/node': 24.9.1
+  '@types/react': 19.2.2
+
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - '@sentry/cli'

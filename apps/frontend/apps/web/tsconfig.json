@@ -1,0 +1,75 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2020"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "~/*": [
+        "./app/*"
+      ],
+      "~/config/*": [
+        "./config/*"
+      ],
+      "~/components/*": [
+        "./components/*"
+      ],
+    "~/lib/*": [
+      "./lib/*"
+    ],
+    "~/types/*": [
+      "./types/*"
+    ],
+    "@kit/*": [
+      "../../packages/*/src/index.ts"
+    ],
+    "@kit/shared": [
+      "../../packages/shared/src/index.ts"
+    ],
+    "@kit/shared/*": [
+      "../../packages/shared/src/*"
+    ],
+    "@kit/prisma": [
+      "../../../packages/prisma/src/index.ts"
+    ],
+    "@kit/prisma/*": [
+      "../../../packages/prisma/src/*"
+    ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "*.ts",
+    "*.tsx",
+    "./config/**/*.ts",
+    "components/**/*",
+    "lib/**/*.ts",
+    "app",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

@@ -1,0 +1,143 @@
+/*
+* markdoc.css
+*
+* Styles for Markdoc Markdown files. Update this to customize the stylesheet for Markdoc content, such as
+* the blog post, documentation, etc.
+ */
+
+.markdoc {
+  @apply text-foreground;
+}
+
+.markdoc h1 {
+  @apply font-heading text-foreground text-3xl font-medium tracking-tight lg:mt-14 dark:text-white;
+}
+
+.markdoc h2 {
+  @apply font-heading text-foreground text-2xl font-medium tracking-tight lg:mt-6 lg:mb-3 dark:text-white;
+}
+
+.markdoc h3 {
+  @apply font-heading text-foreground text-xl font-medium tracking-tight lg:mt-12 dark:text-white;
+}
+
+.markdoc h4 {
+  @apply text-foreground mt-4 text-lg font-medium tracking-tight lg:mt-8 dark:text-white;
+}
+
+.markdoc h5 {
+  @apply text-foreground mt-3 text-base font-medium tracking-tight lg:mt-6 dark:text-white;
+}
+
+.markdoc h6 {
+  @apply text-foreground mt-2 text-sm font-normal tracking-tight dark:text-white;
+}
+
+.markdoc p {
+  @apply text-muted-foreground my-3 text-base leading-7;
+}
+
+.markdoc li {
+  @apply text-muted-foreground relative my-0.5 text-base leading-7;
+}
+
+.markdoc ul > li:before {
+  content: '-';
+
+  @apply mr-2;
+}
+
+.markdoc ol > li:before {
+  @apply text-secondary-foreground inline-flex font-medium;
+
+  content: counters(counts, '.') '. ';
+  font-feature-settings: 'tnum';
+}
+
+.markdoc b,
+.markdoc strong {
+  @apply text-secondary-foreground font-semibold dark:text-white;
+}
+
+.markdoc img,
+.markdoc video {
+  @apply rounded-md;
+}
+
+.markdoc ul,
+.markdoc ol {
+  @apply pl-1;
+}
+
+.markdoc ol > li {
+  counter-increment: counts;
+}
+
+.markdoc ol > li:before {
+  @apply mr-2 inline-flex font-semibold;
+
+  content: counters(counts, '.') '. ';
+  font-feature-settings: 'tnum';
+}
+
+.markdoc p > code,
+.markdoc li > code {
+  @apply bg-muted/50 text-secondary-foreground border p-0.5 font-mono text-sm font-semibold;
+}
+
+.markdoc pre {
+  @apply bg-muted/50 border-border text-foreground my-4 overflow-x-auto rounded-md border p-4 font-mono text-sm;
+}
+
+.markdoc blockquote {
+  @apply border-primary text-muted-foreground my-4 border border-l-8 px-6 py-4 text-lg font-medium;
+}
+
+.markdoc a {
+  @apply text-secondary-foreground border-b border-b-black pb-0.5 font-semibold hover:border-b-2 dark:border-yellow-300;
+}
+
+.markdoc hr {
+  @apply border-border mt-8 mb-6;
+}
+
+.markdoc [role='alert'] {
+  @apply m-0 my-8 py-4;
+}
+
+.markdoc [role='alert'] * {
+  color: inherit;
+  @apply m-0 p-0 text-sm;
+}
+
+.markdoc [role='alert'] h5 {
+  color: inherit;
+}
+
+.markdoc table {
+  @apply my-4 w-full caption-bottom text-sm;
+}
+
+.markdoc th {
+  @apply [&_tr]:border-b;
+}
+
+.markdoc tbody {
+  @apply [&_tr:last-child]:border-0;
+}
+
+.markdoc tfoot {
+  @apply bg-muted/50 border-t font-medium [&>tr]:last:border-b-0;
+}
+
+.markdoc tr {
+  @apply data-[state=selected]:bg-muted border-b transition-colors;
+}
+
+.markdoc th {
+  @apply text-muted-foreground h-10 px-2 text-left align-middle font-medium [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
+}
+
+.markdoc td {
+  @apply p-2 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
+}

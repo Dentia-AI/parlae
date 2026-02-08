@@ -1,0 +1,54 @@
+name: Deploy Backend
+
+on:
+  # Uncomment the push trigger to enable automatic deployments
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/backend/**'
+      - 'packages/prisma/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    # if: ${{ false }} # Actions globally disabled - remove this line to enable
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
+      ECR_REPOSITORY_NAME: parlae-backend
+      ECS_CLUSTER: parlae-cluster
+      ECS_SERVICE: parlae-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
+          docker buildx build \
+            --platform linux/amd64 \
+            -t "$IMAGE_URI" \
+            -f infra/docker/backend.Dockerfile \
+            --push \
+            .
+
+      - name: Force ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION"

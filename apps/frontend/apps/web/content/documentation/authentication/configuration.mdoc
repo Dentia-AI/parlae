@@ -1,0 +1,35 @@
+---
+title: "Configuration"
+description: "Learn how authentication works in MakerKit and how to configure it."
+publishedAt: 2024-04-11
+order: 1
+status: "published"
+---
+
+The application now authenticates users through **Amazon Cognito** via NextAuth.
+
+The provider configuration lives in `packages/shared/src/auth/nextauth.ts`. By default we expose a single Cognito provider and rely on environment variables to configure the user pool:
+
+```ts title="packages/shared/src/auth/nextauth.ts"
+providers.push(
+  Cognito({
+    clientId: process.env.COGNITO_CLIENT_ID,
+    clientSecret: process.env.COGNITO_CLIENT_SECRET,
+    issuer: process.env.COGNITO_ISSUER,
+  }),
+);
+```
+
+To enable the provider, make sure the following variables are set for the frontend:
+
+```bash
+COGNITO_CLIENT_ID=<app client id>
+COGNITO_CLIENT_SECRET=<app client secret>
+COGNITO_ISSUER=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+NEXTAUTH_SECRET=<random-string>
+NEXTAUTH_URL=https://app.yourdomain.com
+```
+
+Email verification, MFA, and password policies are controlled directly in Cognito. Because Cognito performs the verification flow, there is no additional configuration required inside the application.
+
+If you need to add additional OAuth providers, you can extend the NextAuth configuration by appending providers in `nextauth.ts`.

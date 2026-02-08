@@ -1,0 +1,54 @@
+name: Deploy Frontend
+
+on:
+  # Temporarily disabled – uncomment the push trigger when ready to enable.
+  # push:
+  #   paths:
+  #     - 'apps/frontend/**'
+  #     - 'apps/backend/packages/shared/**'
+  #     - 'packages/prisma/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    # if: ${{ false }} # Actions globally disabled for now
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
+      ECR_REPOSITORY_NAME: parlae-frontend
+      ECS_CLUSTER: parlae-cluster
+      ECS_SERVICE: parlae-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY_PROD }}" \
+            -t "$IMAGE_URI" \
+            -f infra/docker/frontend.Dockerfile \
+            --push \
+            .
+
+      - name: Force ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION"

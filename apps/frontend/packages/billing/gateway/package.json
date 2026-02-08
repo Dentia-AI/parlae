@@ -1,0 +1,42 @@
+{
+  "name": "@kit/billing-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "clean": "git clean -xdf .turbo node_modules",
+    "format": "prettier --check \"**/*.{ts,tsx}\"",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./components": "./src/components/index.ts",
+    "./checkout": "./src/components/embedded-checkout.tsx",
+    "./marketing": "./src/components/marketing.tsx"
+  },
+  "dependencies": {
+    "@kit/prisma": "workspace:*"
+  },
+  "devDependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@kit/billing": "workspace:*",
+    "@kit/shared": "workspace:*",
+    "@kit/stripe": "workspace:*",
+    "@kit/ui": "workspace:*",
+    "@types/react": "catalog:",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.546.0",
+    "next": "16.0.0",
+    "react": "19.2.0",
+    "react-hook-form": "^7.65.0",
+    "react-i18next": "^16.1.5",
+    "zod": "^3.25.74"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "src/*"
+      ]
+    }
+  }
+}

@@ -1,0 +1,113 @@
+version: '3.9'
+
+services:
+  postgres:
+    container_name: parlae-postgres
+    image: ankane/pgvector:v0.5.1
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parlae
+      POSTGRES_PASSWORD: parlae
+      POSTGRES_DB: parlae
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parlae"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    container_name: parlae-localstack
+    image: localstack/localstack:3.6
+    restart: unless-stopped
+    environment:
+      - SERVICES=s3
+      - AWS_DEFAULT_REGION=us-east-1
+    ports:
+      - "4567:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    container_name: parlae-backend
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://parlae:parlae@postgres:5432/parlae
+      AWS_REGION: us-east-2
+      S3_BUCKET_NAME: parlae-local-bucket
+      S3_PUBLIC_BASE_URL: http://localstack:4566/parlae-local-bucket
+      # Cognito Configuration (set these to your actual values or use placeholder for local dev)
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-us-east-2_PLACEHOLDER}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-placeholder-client-id}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:-https://cognito-idp.us-east-2.amazonaws.com/us-east-2_PLACEHOLDER}
+      # Stripe Configuration
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    ports:
+      - "4001:4000"
+    depends_on:
+      - postgres
+      - localstack
+
+  frontend:
+    container_name: parlae-frontend
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_GHL_WIDGET_ID: ${NEXT_PUBLIC_GHL_WIDGET_ID}
+        NEXT_PUBLIC_GHL_LOCATION_ID: ${NEXT_PUBLIC_GHL_LOCATION_ID}
+        NEXT_PUBLIC_GHL_CALENDAR_ID: ${NEXT_PUBLIC_GHL_CALENDAR_ID}
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_BASE_URL: http://localhost:3009
+      NEXT_PUBLIC_APP_BASE_URL: http://localhost:3009
+      NEXTAUTH_URL: http://localhost:3009
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-in-production}
+      NEXT_PUBLIC_NEXTAUTH_URL: ${NEXT_PUBLIC_NEXTAUTH_URL:-http://localhost:3009}
+      AWS_REGION: us-east-2
+      S3_BUCKET_NAME: parlae-local-bucket
+      S3_PUBLIC_BASE_URL: http://localstack:4566/parlae-local-bucket
+      NEXT_PUBLIC_S3_PUBLIC_BASE_URL: http://localhost:4567/parlae-local-bucket
+      BACKEND_URL: http://backend:4000
+      BACKEND_API_URL: http://backend:4000
+      # Cognito Configuration
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-placeholder-client-id}
+      COGNITO_CLIENT_SECRET: ${COGNITO_CLIENT_SECRET:-placeholder-client-secret}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:-https://cognito-idp.us-east-2.amazonaws.com/us-east-2_PLACEHOLDER}
+      # Enable credentials login for local dev (optional)
+      ENABLE_CREDENTIALS_SIGNIN: ${ENABLE_CREDENTIALS_SIGNIN:-true}
+      DATABASE_URL: postgresql://parlae:parlae@postgres:5432/parlae
+      # GoHighLevel Integration (Optional)
+      GHL_API_KEY: ${GHL_API_KEY:-}
+      GHL_LOCATION_ID: ${GHL_LOCATION_ID:-}
+      # GoHighLevel Chat & Calendar
+      NEXT_PUBLIC_GHL_WIDGET_ID: ${NEXT_PUBLIC_GHL_WIDGET_ID:-}
+      NEXT_PUBLIC_GHL_LOCATION_ID: ${NEXT_PUBLIC_GHL_LOCATION_ID:-}
+      NEXT_PUBLIC_GHL_CALENDAR_ID: ${NEXT_PUBLIC_GHL_CALENDAR_ID:-}
+      # Stripe Configuration
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+    ports:
+      - "3009:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  localstack_data:

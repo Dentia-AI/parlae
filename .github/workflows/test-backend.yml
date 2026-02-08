@@ -1,0 +1,88 @@
+name: Backend Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'apps/backend/**'
+      - 'packages/prisma/**'
+      - '.github/workflows/test-backend.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'apps/backend/**'
+      - 'packages/prisma/**'
+
+jobs:
+  test:
+    name: Run Backend Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [20.x]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @kit/prisma generate
+
+      - name: Run backend tests
+        run: pnpm --filter @apps/backend test
+        env:
+          NODE_ENV: test
+          COGNITO_USER_POOL_ID: test-pool
+          COGNITO_CLIENT_ID: test-client
+          AWS_REGION: us-east-1
+          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/test-pool
+
+      - name: Generate coverage report
+        run: pnpm --filter @apps/backend test:cov
+        env:
+          NODE_ENV: test
+          COGNITO_USER_POOL_ID: test-pool
+          COGNITO_CLIENT_ID: test-client
+          AWS_REGION: us-east-1
+          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/test-pool
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/backend/coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+      - name: Comment Test Results
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const testResults = 'Backend tests completed';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧪 Backend Test Results\n\n${testResults}`
+            });

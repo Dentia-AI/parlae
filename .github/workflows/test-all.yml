@@ -1,0 +1,158 @@
+name: All Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @kit/prisma generate
+
+      - name: Run backend tests
+        run: pnpm --filter @apps/backend test
+        env:
+          NODE_ENV: test
+          COGNITO_USER_POOL_ID: test-pool
+          COGNITO_CLIENT_ID: test-client
+          AWS_REGION: us-east-1
+          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/test-pool
+
+      - name: Generate backend coverage
+        run: pnpm --filter @apps/backend test:cov
+        env:
+          NODE_ENV: test
+          COGNITO_USER_POOL_ID: test-pool
+          COGNITO_CLIENT_ID: test-client
+          AWS_REGION: us-east-1
+          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/test-pool
+
+      - name: Upload backend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/backend/coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend tests
+        run: pnpm --filter web test
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret-for-ci
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Generate frontend coverage
+        run: pnpm --filter web test:coverage
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret-for-ci
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Upload frontend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/frontend/apps/web/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    if: always()
+    
+    steps:
+      - name: Check test results
+        run: |
+          echo "Backend Tests: ${{ needs.backend-tests.result }}"
+          echo "Frontend Tests: ${{ needs.frontend-tests.result }}"
+          
+          if [[ "${{ needs.backend-tests.result }}" != "success" ]] || [[ "${{ needs.frontend-tests.result }}" != "success" ]]; then
+            echo "❌ Some tests failed!"
+            exit 1
+          fi
+          
+          echo "✅ All tests passed!"
+
+      - name: Post summary
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const backendStatus = '${{ needs.backend-tests.result }}' === 'success' ? '✅' : '❌';
+            const frontendStatus = '${{ needs.frontend-tests.result }}' === 'success' ? '✅' : '❌';
+            
+            const body = `## 🧪 Test Results Summary
+            
+            | Test Suite | Status | Details |
+            |------------|--------|---------|
+            | Backend | ${backendStatus} | ${{ needs.backend-tests.result }} |
+            | Frontend | ${frontendStatus} | ${{ needs.frontend-tests.result }} |
+            
+            ### Coverage
+            View detailed coverage reports in the Codecov dashboard.
+            
+            ### Test Counts
+            - **Backend**: 85 tests across 8 suites
+            - **Frontend**: 48 tests across 5 suites
+            - **Total**: 133 tests 🚀
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+

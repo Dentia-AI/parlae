@@ -1,0 +1,44 @@
+name: Destroy Dev Environment
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: dev-environment
+  cancel-in-progress: false
+
+jobs:
+  destroy-dev:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-2
+      ENVIRONMENT: dev
+      INFRA_REPOSITORY: shaunk/dentia-infra
+      INFRA_PATH: dentia-infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout infrastructure repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.INFRA_REPOSITORY }}
+          token: ${{ secrets.INFRA_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: ${{ env.INFRA_PATH }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::509852961700:role/GitHubActionsDentiaDevRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Teardown dev environment with Terraform
+        working-directory: ${{ env.INFRA_PATH }}/infra/environments/dev
+        env:
+          TF_IN_AUTOMATION: 1
+        run: |
+          terraform init -backend-config=backend-prod.tf
+          terraform workspace select ${ENVIRONMENT} || terraform workspace new ${ENVIRONMENT}
+          terraform destroy -auto-approve -var="environment=${ENVIRONMENT}"
+
+      - name: Confirm destroy
+        run: echo "🧹 Dev environment destroyed successfully."

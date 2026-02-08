@@ -1,0 +1,28 @@
+{
+  "name": "@kit/next",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "clean": "git clean -xdf .turbo node_modules",
+    "format": "prettier --check \"**/*.{ts,tsx}\"",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./actions": "./src/actions/index.ts",
+    "./routes": "./src/routes/index.ts"
+  },
+  "devDependencies": {
+    "@kit/monitoring": "workspace:*",
+    "@kit/shared": "workspace:*",
+    "next": "16.0.0",
+    "zod": "^3.25.74"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "src/*"
+      ]
+    }
+  }
+}

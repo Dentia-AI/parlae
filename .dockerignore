@@ -1,0 +1,38 @@
+.git
+.gitignore
+
+# Package managers and caches
+node_modules
+**/node_modules
+.pnpm-store
+.pnpm
+.npm
+.yarn
+
+# Build artifacts
+dist
+build
+coverage
+tmp
+*.log
+.next
+.turbo
+**/.next
+**/.turbo
+**/dist
+**/build
+
+# Environment files (keep documented samples)
+.env
+.env.*
+!.env.example
+!.env.local.example
+!.env.*.example
+
+# Docker/dev helpers
+docker-compose.override.yml
+Dockerfile.local
+
+# Terraform state
+infra/.terraform
+infra/**/.terraform

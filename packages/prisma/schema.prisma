@@ -1,0 +1,836 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+enum AppPermission {
+  ROLES_MANAGE      @map("roles.manage")
+  BILLING_MANAGE    @map("billing.manage")
+  SETTINGS_MANAGE   @map("settings.manage")
+  MEMBERS_MANAGE    @map("members.manage")
+  INVITES_MANAGE    @map("invites.manage")
+  CAMPAIGNS_VIEW    @map("campaigns.view")
+  CAMPAIGNS_CREATE  @map("campaigns.create")
+  CAMPAIGNS_EDIT    @map("campaigns.edit")
+  CAMPAIGNS_DELETE  @map("campaigns.delete")
+  ADS_VIEW          @map("ads.view")
+  ADS_CREATE        @map("ads.create")
+  ADS_EDIT          @map("ads.edit")
+  ADS_DELETE        @map("ads.delete")
+  ANALYTICS_VIEW    @map("analytics.view")
+}
+
+enum BillingProvider {
+  STRIPE @map("stripe")
+}
+
+enum NotificationChannel {
+  IN_APP @map("in_app")
+  EMAIL  @map("email")
+}
+
+enum NotificationType {
+  INFO    @map("info")
+  WARNING @map("warning")
+  ERROR   @map("error")
+}
+
+enum PaymentStatus {
+  PENDING   @map("pending")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+  REFUNDED  @map("refunded")
+  CANCELED  @map("canceled")
+}
+
+enum PaymentType {
+  ONE_TIME  @map("one_time")
+  RECURRING @map("recurring")
+}
+
+enum RecurringInterval {
+  DAILY   @map("daily")
+  WEEKLY  @map("weekly")
+  MONTHLY @map("monthly")
+  YEARLY  @map("yearly")
+}
+
+enum RefundStatus {
+  PENDING   @map("pending")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+  CANCELED  @map("canceled")
+}
+
+enum SubscriptionItemType {
+  FLAT     @map("flat")
+  PER_SEAT @map("per_seat")
+  METERED  @map("metered")
+}
+
+enum SubscriptionStatus {
+  ACTIVE             @map("active")
+  TRIALING           @map("trialing")
+  PAST_DUE           @map("past_due")
+  CANCELED           @map("canceled")
+  UNPAID             @map("unpaid")
+  INCOMPLETE         @map("incomplete")
+  INCOMPLETE_EXPIRED @map("incomplete_expired")
+  PAUSED             @map("paused")
+}
+
+enum CampaignStatus {
+  PAUSED @map("paused")
+  ACTIVE @map("active")
+  ENDED  @map("ended")
+}
+
+enum SourceStatus {
+  NEW
+  CONVERTING
+  RETRIEVED
+}
+
+enum AdStatus {
+  ENABLED
+  DISABLED
+  ARCHIVED
+}
+
+enum TransactionType {
+  PAYMENT
+  FEE
+  AD_SPEND
+  REVERSAL
+}
+
+enum UserRole {
+  ACCOUNT_MANAGER @map("account_manager")
+  EMPLOYEE        @map("employee")
+  ADMIN           @map("admin")
+  SUPER_ADMIN     @map("super_admin")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  displayName     String?
+  avatarUrl       String?
+  cognitoUsername String?   @unique @map("cognito_username")
+  role            UserRole  @default(ACCOUNT_MANAGER) @map("role")
+  createdById     String?   @map("created_by_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  createdBy           User?                   @relation("EmployeeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdEmployees    User[]                  @relation("EmployeeCreator")
+  accountsOwned       Account[]               @relation("AccountPrimaryOwner")
+  memberships         AccountMembership[]
+  files               File[]
+  sourceContent       SourceContent[]
+  ads                 Ad[]
+  transactions        UserTransaction[]
+  nonces              Nonce[]
+  sentInvitations     Invitation[]            @relation("InvitationInviter")
+  cognitoTokens       CognitoTokens?
+  payments            Payment[]
+  adminAccessGranted  AdminAccess[]           @relation("AdminAccessGrantedByUser")
+  adminAccessReceived AdminAccess[]           @relation("AdminAccessReceivedByAdmin")
+  impersonationSessions ImpersonationSession[] @relation("ImpersonationAdmin")
+  impersonatedSessions  ImpersonationSession[] @relation("ImpersonationTarget")
+  ghlSubAccounts      GhlSubAccount[]
+
+  @@map("users")
+}
+
+model CognitoTokens {
+  id           String    @id @default(uuid())
+  userId       String    @unique @map("user_id")
+  accessToken  String    @map("access_token") @db.Text
+  idToken      String    @map("id_token") @db.Text
+  refreshToken String?   @map("refresh_token") @db.Text
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cognito_tokens")
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  name              String
+  slug              String?  @unique
+  email             String?
+  pictureUrl        String?  @map("picture_url")
+  isPersonalAccount Boolean  @default(false) @map("is_personal_account")
+  publicData        Json?    @map("public_data")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdBy         String?  @map("created_by")
+  updatedBy         String?  @map("updated_by")
+  primaryOwnerId    String   @map("primary_owner_user_id")
+  
+  // AI Receptionist phone integration fields
+  phoneIntegrationMethod   String? @default("none") @map("phone_integration_method")
+  phoneIntegrationSettings Json?   @default("{}") @map("phone_integration_settings")
+  advancedSetupEnabled     Boolean @default(false) @map("advanced_setup_enabled")
+  agentTemplateId          String? @map("agent_template_id")
+
+  primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
+  memberships           AccountMembership[]
+  billingCustomers      BillingCustomer[]
+  invitations           Invitation[]
+  notifications         Notification[]
+  orders                Order[]
+  subscriptions         Subscription[]
+  ads                   Ad[]
+  payments              Payment[]
+  adminAccess           AdminAccess[]
+  impersonationSessions ImpersonationSession[]
+  ghlSubAccounts        GhlSubAccount[]
+  agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
+
+  @@map("accounts")
+}
+
+model AgentTemplate {
+  id              String   @id @default(uuid())
+  name            String   @unique // e.g., "receptionist-v1", "emergency-v2"
+  displayName     String   // e.g., "Receptionist v1", "Emergency Handler v2"
+  description     String?
+  version         String   // e.g., "v1", "v2.1"
+  category        String   // e.g., "receptionist", "emergency", "booking"
+  isDefault       Boolean  @default(false) @map("is_default")
+  isActive        Boolean  @default(true) @map("is_active")
+  
+  // Template configuration (excludes user-specific settings)
+  squadConfig     Json     @map("squad_config")      // Squad structure and routing
+  assistantConfig Json     @map("assistant_config")  // Assistant settings (no voice, no knowledge base)
+  toolsConfig     Json?    @map("tools_config")      // Tools/functions configuration
+  modelConfig     Json     @map("model_config")      // Model settings (provider, model name, system prompt)
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdBy       String?  @map("created_by")
+  
+  accounts        Account[]
+
+  @@map("agent_templates")
+}
+
+model AccountMembership {
+  accountId String   @map("account_id")
+  userId    String   @map("user_id")
+  roleName  String   @map("account_role")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  account Account @relation(fields: [accountId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  role    Role    @relation(fields: [roleName], references: [name])
+
+  @@id([accountId, userId])
+  @@map("accounts_memberships")
+}
+
+model Role {
+  name           String @id
+  hierarchyLevel Int    @map("hierarchy_level")
+
+  memberships AccountMembership[]
+  permissions RolePermission[]
+  invitations Invitation[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id         Int           @id @default(autoincrement())
+  roleName   String        @map("role")
+  permission AppPermission @map("permission")
+
+  role Role @relation(fields: [roleName], references: [name])
+
+  @@unique([roleName, permission])
+  @@map("role_permissions")
+}
+
+model BillingCustomer {
+  id         Int             @id @default(autoincrement())
+  accountId  String          @map("account_id")
+  customerId String          @map("customer_id")
+  email      String?         @map("email")
+  provider   BillingProvider @map("provider")
+
+  account       Account        @relation(fields: [accountId], references: [id])
+  orders        Order[]
+  subscriptions Subscription[]
+
+  @@map("billing_customers")
+}
+
+model Config {
+  id                       Int             @id @default(autoincrement())
+  billingProvider          BillingProvider @map("billing_provider")
+  enableAccountBilling     Boolean         @map("enable_account_billing")
+  enableTeamAccountBilling Boolean         @map("enable_team_account_billing")
+  enableTeamAccounts       Boolean         @map("enable_team_accounts")
+
+  @@map("config")
+}
+
+model Invitation {
+  id         Int      @id @default(autoincrement())
+  accountId  String   @map("account_id")
+  email      String
+  inviteToken String  @map("invite_token")
+  invitedBy  String   @map("invited_by")
+  roleName   String   @map("role")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  expiresAt  DateTime @map("expires_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  role    Role    @relation(fields: [roleName], references: [name])
+  inviter User?   @relation("InvitationInviter", fields: [invitedBy], references: [id])
+
+  @@map("invitations")
+}
+
+model Nonce {
+  id                        String   @id
+  clientToken               String   @map("client_token")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  description               String?  @map("description")
+  expiresAt                 DateTime @map("expires_at")
+  lastVerificationAt        DateTime? @map("last_verification_at")
+  lastVerificationIp        Json?    @map("last_verification_ip")
+  lastVerificationUserAgent String? @map("last_verification_user_agent")
+  metadata                  Json?    @map("metadata")
+  nonceValue                String   @map("nonce")
+  purpose                   String   @map("purpose")
+  revoked                   Boolean  @default(false) @map("revoked")
+  revokedReason             String?  @map("revoked_reason")
+  scopes                    String[] @map("scopes")
+  tags                      String[] @map("tags")
+  usedAt                    DateTime? @map("used_at")
+  userId                    String?  @map("user_id")
+  verificationAttempts      Int      @default(0) @map("verification_attempts")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("nonces")
+}
+
+model Notification {
+  id        Int                 @id @default(autoincrement())
+  accountId String              @map("account_id")
+  body      String
+  channel   NotificationChannel @default(IN_APP) @map("channel")
+  createdAt DateTime            @default(now()) @map("created_at")
+  dismissed Boolean             @default(false) @map("dismissed")
+  expiresAt DateTime?           @map("expires_at")
+  link      String?             @map("link")
+  type      NotificationType    @map("type")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@map("notifications")
+}
+
+model Order {
+  id                String          @id
+  accountId         String          @map("account_id")
+  billingCustomerId Int             @map("billing_customer_id")
+  billingProvider   BillingProvider @map("billing_provider")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  currency          String          @map("currency")
+  status            PaymentStatus   @map("status")
+  totalAmount       Int             @map("total_amount")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  account        Account         @relation(fields: [accountId], references: [id])
+  billingCustomer BillingCustomer @relation(fields: [billingCustomerId], references: [id])
+  items          OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id
+  orderId     String   @map("order_id")
+  priceAmount Int?     @map("price_amount")
+  productId   String   @map("product_id")
+  quantity    Int      @default(1) @map("quantity")
+  variantId   String   @map("variant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("order_items")
+}
+
+model Subscription {
+  id                String             @id
+  accountId         String             @map("account_id")
+  billingCustomerId Int                @map("billing_customer_id")
+  billingProvider   BillingProvider    @map("billing_provider")
+  active            Boolean            @map("active")
+  cancelAtPeriodEnd Boolean            @map("cancel_at_period_end")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  currency          String             @map("currency")
+  periodStartsAt    DateTime           @map("period_starts_at")
+  periodEndsAt      DateTime           @map("period_ends_at")
+  status            SubscriptionStatus @map("status")
+  trialStartsAt     DateTime?          @map("trial_starts_at")
+  trialEndsAt       DateTime?          @map("trial_ends_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  account        Account        @relation(fields: [accountId], references: [id])
+  billingCustomer BillingCustomer @relation(fields: [billingCustomerId], references: [id])
+  items          SubscriptionItem[]
+
+  @@map("subscriptions")
+}
+
+model SubscriptionItem {
+  id             String              @id
+  subscriptionId String              @map("subscription_id")
+  interval       String              @map("interval")
+  intervalCount  Int                 @map("interval_count")
+  priceAmount    Int?                @map("price_amount")
+  productId      String              @map("product_id")
+  quantity       Int                 @default(1) @map("quantity")
+  type           SubscriptionItemType @map("type")
+  variantId      String              @map("variant_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  usageRecords UsageRecord[]
+
+  @@map("subscription_items")
+}
+
+model UsageRecord {
+  id                 String   @id @default(uuid())
+  subscriptionItemId String   @map("subscription_item_id")
+  quantity           Int      @map("quantity")
+  recordedAt         DateTime @default(now()) @map("recorded_at")
+  periodStartsAt     DateTime @map("period_starts_at")
+  periodEndsAt       DateTime @map("period_ends_at")
+
+  subscriptionItem SubscriptionItem @relation(fields: [subscriptionItemId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_usage")
+  @@index([subscriptionItemId, periodStartsAt, periodEndsAt], name: "subscription_usage_period_idx")
+}
+
+model File {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  storageUrl String   @map("storage_url")
+  size       Int      @map("size")
+  filename   String   @map("filename")
+  externalId String?  @map("external_id")
+
+  user          User            @relation(fields: [userId], references: [id])
+  sourceContent SourceContent[]
+  ads           Ad[]
+
+  @@map("files")
+}
+
+model SourceContent {
+  id                   String       @id @default(uuid())
+  userId               String       @map("user_id")
+  fileId               String?      @map("file_id")
+  status               SourceStatus @default(NEW) @map("status")
+  conversionProvider   String?      @map("conversion_provider")
+  externalConversionId String?      @map("external_conversion_id")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  file  File? @relation(fields: [fileId], references: [id])
+  ads   Ad[]
+
+  @@map("source_content")
+}
+
+model AdProvider {
+  id        String   @id @default(uuid())
+  type      String   @map("type")
+  apiId     String   @map("api_id")
+  apiSecret String   @map("api_secret")
+  active    Boolean  @default(true) @map("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  campaigns MetaAdCampaign[]
+
+  @@map("ad_provider")
+}
+
+model Ad {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  accountId       String?  @map("account_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  fileId          String?  @map("file_id")
+  sourceContentId String?  @map("source_content_id")
+  title           String?  @map("title")
+  message         String?  @map("message")
+  url             String?  @map("url")
+  status          AdStatus @default(DISABLED) @map("status")
+  conversionDetails Json?  @map("conversion_details")
+  target          Json?    @map("target")
+
+  user          User          @relation(fields: [userId], references: [id])
+  account       Account?      @relation(fields: [accountId], references: [id])
+  file          File?         @relation(fields: [fileId], references: [id])
+  sourceContent SourceContent? @relation(fields: [sourceContentId], references: [id])
+  campaigns     MetaAdCampaign[]
+
+  @@map("ads")
+}
+
+model UserTransaction {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  externalId  String?         @map("external_id")
+  amountCents Int             @map("amount")
+  type        TransactionType @map("type")
+  metadata    Json?           @map("metadata")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_transactions")
+}
+
+model Payment {
+  id                     String         @id @default(uuid())
+  userId                 String         @map("user_id")
+  accountId              String?        @map("account_id")
+  stripePaymentIntentId  String?        @unique @map("stripe_payment_intent_id")
+  stripeCheckoutSessionId String?       @unique @map("stripe_checkout_session_id")
+  amountCents            Int            @map("amount_cents")
+  currency               String         @default("usd") @map("currency")
+  status                 PaymentStatus  @map("status")
+  paymentType            PaymentType    @map("payment_type")
+  isRecurring            Boolean        @default(false) @map("is_recurring")
+  recurringInterval      RecurringInterval? @map("recurring_interval")
+  recurringFrequency     Int?           @map("recurring_frequency")
+  nextBillingDate        DateTime?      @map("next_billing_date")
+  lastBillingDate        DateTime?      @map("last_billing_date")
+  failureCount           Int            @default(0) @map("failure_count")
+  failureReason          String?        @map("failure_reason")
+  metadata               Json?          @map("metadata")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account       Account?        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  refunds       Refund[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([status])
+  @@index([nextBillingDate])
+  @@map("payments")
+}
+
+model Refund {
+  id                  String        @id @default(uuid())
+  paymentId           String        @map("payment_id")
+  stripeRefundId      String?       @unique @map("stripe_refund_id")
+  amountCents         Int           @map("amount_cents")
+  currency            String        @default("usd") @map("currency")
+  status              RefundStatus  @map("status")
+  reason              String?       @map("reason")
+  metadata            Json?         @map("metadata")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model MetaAdCampaign {
+  id                   String         @id @default(uuid())
+  createdAt            DateTime       @default(now()) @map("created_at")
+  adProviderId         String         @map("ad_provider_id")
+  adId                 String         @map("ad_id")
+  externalAdCampaignId String         @map("external_ad_campaign_id")
+  status               CampaignStatus @map("status")
+  target               Json?          @map("target")
+
+  provider AdProvider @relation(fields: [adProviderId], references: [id])
+  ad       Ad         @relation(fields: [adId], references: [id])
+  adSets   MetaAdSet[]
+
+  @@map("meta_ad_campaign")
+}
+
+model MetaAdSet {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at")
+  campaignId      String   @map("meta_ad_campaign_id")
+  externalAdSetId String   @map("external_ad_set_id")
+  stats           Json?    @map("stats")
+
+  campaign MetaAdCampaign @relation(fields: [campaignId], references: [id])
+
+  @@map("meta_ad_set")
+}
+
+model AdminAccess {
+  id               String    @id @default(uuid())
+  adminId          String    @map("admin_id")
+  grantedByUserId  String    @map("granted_by_user_id")
+  accountId        String?   @map("account_id")
+  grantedAt        DateTime  @default(now()) @map("granted_at")
+  revokedAt        DateTime? @map("revoked_at")
+  isRevoked        Boolean   @default(false) @map("is_revoked")
+  expiresAt        DateTime? @map("expires_at")
+  notes            String?   @map("notes")
+
+  admin        User     @relation("AdminAccessReceivedByAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  grantedBy    User     @relation("AdminAccessGrantedByUser", fields: [grantedByUserId], references: [id], onDelete: Cascade)
+  account      Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, isRevoked])
+  @@index([accountId])
+  @@map("admin_access")
+}
+
+model ImpersonationSession {
+  id              String    @id @default(uuid())
+  adminId         String    @map("admin_id")
+  targetUserId    String    @map("target_user_id")
+  accountId       String?   @map("account_id")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  isActive        Boolean   @default(true) @map("is_active")
+  ipAddress       String?   @map("ip_address")
+  userAgent       String?   @map("user_agent")
+  sessionToken    String    @unique @map("session_token")
+  autoRevokeAccess Boolean  @default(false) @map("auto_revoke_access")
+
+  admin      User     @relation("ImpersonationAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  targetUser User     @relation("ImpersonationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  account    Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, isActive])
+  @@index([targetUserId])
+  @@index([sessionToken])
+  @@map("impersonation_sessions")
+}
+
+// ==================================================
+// GHL Sub-Account & Voice Agent Management
+// ==================================================
+
+enum GhlSubAccountStatus {
+  PENDING   @map("pending")    // Sub-account creation in progress
+  ACTIVE    @map("active")     // Sub-account is active
+  SUSPENDED @map("suspended")  // Sub-account is temporarily suspended
+  DELETED   @map("deleted")    // Sub-account is deleted
+}
+
+enum VoiceAgentStatus {
+  DRAFT     @map("draft")      // Agent is being configured
+  ACTIVE    @map("active")     // Agent is live and taking calls
+  PAUSED    @map("paused")     // Agent is temporarily paused
+  ARCHIVED  @map("archived")   // Agent is archived
+}
+
+enum KnowledgeBaseSource {
+  UPLOAD  @map("upload")       // Uploaded file (PDF, DOCX, etc.)
+  URL     @map("url")          // Scraped from website URL
+  TEXT    @map("text")         // Manually entered text
+}
+
+model GhlSubAccount {
+  id              String              @id @default(uuid())
+  userId          String              @map("user_id")
+  accountId       String?             @map("account_id")
+  
+  // GHL Sub-Account Details
+  ghlLocationId   String              @unique @map("ghl_location_id")
+  ghlCompanyId    String?             @map("ghl_company_id")
+  
+  // Business Information
+  businessName    String              @map("business_name")
+  businessEmail   String?             @map("business_email")
+  businessPhone   String?             @map("business_phone")
+  businessAddress String?             @map("business_address")
+  businessWebsite String?             @map("business_website")
+  timezone        String?             @map("timezone")
+  industry        String?             @map("industry")
+  
+  // Status & Metadata
+  status          GhlSubAccountStatus @default(PENDING) @map("status")
+  setupCompleted  Boolean             @default(false) @map("setup_completed")
+  setupStep       Int                 @default(0) @map("setup_step")
+  metadata        Json?               @map("metadata")
+  
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  lastSyncedAt    DateTime?           @map("last_synced_at")
+  
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  voiceAgents  VoiceAgent[]
+  
+  @@index([userId])
+  @@index([accountId])
+  @@index([ghlLocationId])
+  @@index([status])
+  @@map("ghl_sub_accounts")
+}
+
+model VoiceAgent {
+  id              String             @id @default(uuid())
+  subAccountId    String             @map("sub_account_id")
+  
+  // Agent Identity
+  name            String             @map("name")
+  description     String?            @map("description")
+  ghlAgentId      String?            @unique @map("ghl_agent_id")
+  
+  // Voice Configuration
+  voiceId         String             @map("voice_id")
+  voiceName       String?            @map("voice_name")
+  phoneNumber     String?            @map("phone_number")
+  language        String             @default("en-US") @map("language")
+  
+  // Agent Behavior
+  prompt          String             @db.Text @map("prompt")
+  personality     String?            @map("personality")
+  greetingMessage String?            @map("greeting_message")
+  
+  // Business Hours & Availability
+  businessHours   Json?              @map("business_hours")
+  timezone        String?            @map("timezone")
+  
+  // Workflows & Actions (JSON config)
+  workflows       Json?              @map("workflows")
+  postCallActions Json?              @map("post_call_actions")
+  inCallActions   Json?              @map("in_call_actions")
+  customFields    Json?              @map("custom_fields")
+  webhookConfig   Json?              @map("webhook_config")
+  
+  // Status
+  status          VoiceAgentStatus   @default(DRAFT) @map("status")
+  isDeployed      Boolean            @default(false) @map("is_deployed")
+  
+  // Timestamps
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  deployedAt      DateTime?          @map("deployed_at")
+  lastCallAt      DateTime?          @map("last_call_at")
+  
+  // Relations
+  subAccount    GhlSubAccount    @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase[]
+  callLogs      CallLog[]
+  
+  @@index([subAccountId])
+  @@index([status])
+  @@index([phoneNumber])
+  @@map("voice_agents")
+}
+
+model KnowledgeBase {
+  id            String               @id @default(uuid())
+  voiceAgentId  String               @map("voice_agent_id")
+  
+  // Content Information
+  title         String               @map("title")
+  content       String               @db.Text @map("content")
+  source        KnowledgeBaseSource  @map("source")
+  
+  // Source Details
+  sourceUrl     String?              @map("source_url")
+  fileUrl       String?              @map("file_url")
+  fileName      String?              @map("file_name")
+  fileSize      Int?                 @map("file_size")
+  
+  // GHL Integration
+  ghlResourceId String?              @map("ghl_resource_id")
+  
+  // Processing Status
+  isProcessed   Boolean              @default(false) @map("is_processed")
+  processingError String?            @map("processing_error")
+  
+  // Metadata
+  metadata      Json?                @map("metadata")
+  
+  // Timestamps
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  
+  // Relations
+  voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+  
+  @@index([voiceAgentId])
+  @@index([source])
+  @@map("knowledge_base")
+}
+
+model CallLog {
+  id              String    @id @default(uuid())
+  voiceAgentId    String    @map("voice_agent_id")
+  
+  // Call Details
+  ghlCallId       String?   @unique @map("ghl_call_id")
+  phoneNumber     String    @map("phone_number")
+  direction       String    @map("direction") // 'inbound' or 'outbound'
+  duration        Int?      @map("duration") // Duration in seconds
+  status          String    @map("status") // 'completed', 'missed', 'voicemail', etc.
+  
+  // Call Content
+  transcript      String?   @db.Text @map("transcript")
+  summary         String?   @db.Text @map("summary")
+  recordingUrl    String?   @map("recording_url")
+  
+  // Lead Information
+  contactName     String?   @map("contact_name")
+  contactEmail    String?   @map("contact_email")
+  leadCaptured    Boolean   @default(false) @map("lead_captured")
+  appointmentSet  Boolean   @default(false) @map("appointment_set")
+  
+  // Metadata & Actions
+  metadata        Json?     @map("metadata")
+  actions         Json?     @map("actions") // Actions taken during/after call
+  
+  // Timestamps
+  callStartedAt   DateTime  @map("call_started_at")
+  callEndedAt     DateTime? @map("call_ended_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  // Relations
+  voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+  
+  @@index([voiceAgentId])
+  @@index([callStartedAt])
+  @@index([phoneNumber])
+  @@map("call_logs")
+}

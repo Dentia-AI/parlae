@@ -1,0 +1,7 @@
+{
+  "dashboardTitle": "Admin Console",
+  "dashboardSubtitle": "Manage users and impersonate accounts for troubleshooting.",
+  "usersTitle": "Users",
+  "impersonate": "Impersonate",
+  "stopImpersonation": "Return to admin"
+}
