@@ -1,17 +1,20 @@
 name: Deploy Frontend
 
 on:
-  # Temporarily disabled – uncomment the push trigger when ready to enable.
-  # push:
-  #   paths:
-  #     - 'apps/frontend/**'
-  #     - 'apps/backend/packages/shared/**'
-  #     - 'packages/prisma/**'
+  # Trigger after frontend tests pass
+  workflow_run:
+    workflows: ["Frontend Tests"]
+    types:
+      - completed
+    branches:
+      - main
+  # Manual trigger
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
-    # if: ${{ false }} # Actions globally disabled for now
+    # Only deploy if tests passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}

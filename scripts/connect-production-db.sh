@@ -5,12 +5,12 @@
 
 set -e
 
-PROFILE="dentia"
+PROFILE="parlae"
 REGION="us-east-2"
 
 echo "🔍 Finding bastion instance..."
 BASTION_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=dentia-bastion" \
+  --filters "Name=tag:Name,Values=parlae-bastion" \
            "Name=instance-state-name,Values=running" \
   --query "Reservations[0].Instances[0].InstanceId" \
   --output text \
@@ -36,7 +36,7 @@ echo "🚀 Starting port forwarding session..."
 echo ""
 echo "   📍 Connection Details:"
 echo "   ├─ Local port:  15432"
-echo "   ├─ Remote host: dentia-aurora-cluster.cluster-c9kuy2skoi93.us-east-2.rds.amazonaws.com"
+echo "   ├─ Remote host: parlae-aurora-cluster.cluster-cpe42k4icbjd.us-east-2.rds.amazonaws.com"
 echo "   └─ Remote port: 5432"
 echo ""
 echo "💡 Tips:"
@@ -59,7 +59,7 @@ aws ssm start-session \
   --target $BASTION_ID \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
   --parameters '{
-    "host":["dentia-aurora-cluster.cluster-c9kuy2skoi93.us-east-2.rds.amazonaws.com"],
+    "host":["parlae-aurora-cluster.cluster-cpe42k4icbjd.us-east-2.rds.amazonaws.com"],
     "portNumber":["5432"],
     "localPortNumber":["15432"]
   }' \

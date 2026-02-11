@@ -1,18 +1,20 @@
 name: Deploy Backend
 
 on:
-  # Uncomment the push trigger to enable automatic deployments
-  push:
+  # Trigger after backend tests pass
+  workflow_run:
+    workflows: ["Backend Tests"]
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - 'apps/backend/**'
-      - 'packages/prisma/**'
+  # Manual trigger
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
-    # if: ${{ false }} # Actions globally disabled - remove this line to enable
+    # Only deploy if tests passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}

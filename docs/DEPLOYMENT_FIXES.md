@@ -176,8 +176,26 @@ import { myServerAction } from '../_lib/server/server-actions';  // ✅ CORRECT!
 4. **Use the correct AWS region** (`us-east-2`) for all deployment configurations
 5. **Test builds locally** before pushing to avoid deployment failures
 
+## CI/CD Pipeline
+
+The deployment workflows have been updated to automatically trigger **after tests pass**:
+
+### Before (Manual/Risky)
+```
+Push to main → Deploy immediately (might deploy broken code)
+```
+
+### After (Safe/Automatic)
+```
+Push to main → Tests run → Tests pass ✅ → Deploy automatically
+                         → Tests fail ❌ → No deployment
+```
+
+See [CI_CD_PIPELINE.md](./CI_CD_PIPELINE.md) for complete details.
+
 ## Related Documentation
 
+- [CI_CD_PIPELINE.md](./CI_CD_PIPELINE.md) - Complete CI/CD pipeline explanation
 - [GITHUB_ACTIONS_AWS_SETUP.md](./GITHUB_ACTIONS_AWS_SETUP.md) - Complete AWS setup guide
 - [Next.js Server/Client Components](https://nextjs.org/docs/app/building-your-application/rendering/composition-patterns)
 - [Next.js Server Actions](https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations)

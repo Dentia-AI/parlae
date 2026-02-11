@@ -252,11 +252,11 @@ class VapiService {
         size: fileBuffer.length,
       }, '[Vapi] Uploading binary file');
 
-      // Use native FormData from undici
-      const { FormData } = await import('undici');
+      // Use FormData from formdata-node (already a dependency)
+      const { FormData, Blob } = await import('formdata-node');
       
       const formData = new FormData();
-      // Create a Blob instead of File (Node.js compatible)
+      // Create a Blob from formdata-node (Node.js compatible)
       const blob = new Blob([fileBuffer], { type: mimeType });
       formData.append('file', blob, fileName);
 
