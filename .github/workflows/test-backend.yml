@@ -47,6 +47,15 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @kit/prisma generate
 
+      - name: Lint backend code
+        run: pnpm --filter @apps/backend lint
+
+      - name: Type check backend code
+        run: pnpm --filter @apps/backend typecheck
+
+      - name: Build backend
+        run: pnpm --filter @apps/backend build
+
       - name: Run backend tests
         run: pnpm --filter @apps/backend test
         env:

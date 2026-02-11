@@ -36,6 +36,15 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @kit/prisma generate
 
+      - name: Lint backend code
+        run: pnpm --filter @apps/backend lint
+
+      - name: Type check backend code
+        run: pnpm --filter @apps/backend typecheck
+
+      - name: Build backend
+        run: pnpm --filter @apps/backend build
+
       - name: Run backend tests
         run: pnpm --filter @apps/backend test
         env:
@@ -82,6 +91,21 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @kit/prisma generate
+
+      - name: Lint frontend code
+        run: pnpm --filter web lint
+
+      - name: Type check frontend code
+        run: pnpm --filter web typecheck
+
+      - name: Build frontend
+        run: pnpm --filter web build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
 
       - name: Run frontend tests
         run: pnpm --filter web test

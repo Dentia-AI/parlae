@@ -9,6 +9,7 @@
     "start:debug": "node --inspect-brk dist/apps/backend/src/main.js",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "jest --detectOpenHandles",
     "test:watch": "jest --watch",
