@@ -26,14 +26,19 @@ The improved pipeline now follows a **fail-fast** approach with multiple quality
 
 ```
 ┌─────────┐   ┌──────────────┐   ┌───────┐   ┌──────┐   ┌────────┐
-│  Lint   │ → │  Type Check  │ → │ Build │ → │ Test │ → │ Deploy │
+│ Lint ⚠️ │ → │  Type Check  │ → │ Build │ → │ Test │ → │ Deploy │
 └─────────┘   └──────────────┘   └───────┘   └──────┘   └────────┘
     ↓              ↓                 ↓           ↓
-  Fast           Fast              Slow        Slow
-(5-10s)        (15-30s)         (1-2min)    (2-5min)
+Warning         Fast              Slow        Slow
+(non-block)   (15-30s)         (1-2min)    (2-5min)
+               ✅ BLOCKS        ✅ BLOCKS   ✅ BLOCKS
+
+⚠️ Lint is currently non-blocking while configs are being fixed
 ```
 
-### 1. Lint (ESLint)
+### 1. Lint (ESLint) ⚠️ NON-BLOCKING
+**Status:** Currently non-blocking due to config issues. See [ESLINT_CONFIG_TODO.md](./ESLINT_CONFIG_TODO.md) for details.
+
 **What it catches:**
 - Code style issues
 - Common mistakes and anti-patterns
@@ -47,6 +52,8 @@ The improved pipeline now follows a **fail-fast** approach with multiple quality
 - Console.log statements in production code
 - Missing return types
 - Unreachable code
+
+**Note:** This step uses `continue-on-error: true` and won't fail CI until configs are fixed.
 
 ### 2. Type Check (TypeScript)
 **What it catches:**

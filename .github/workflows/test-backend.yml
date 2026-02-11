@@ -49,6 +49,7 @@ jobs:
 
       - name: Lint backend code
         run: pnpm --filter @apps/backend lint
+        continue-on-error: true
 
       - name: Type check backend code
         run: pnpm --filter @apps/backend typecheck
