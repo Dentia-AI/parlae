@@ -4,49 +4,46 @@
 
 The production deployment needs the following GitHub secrets to be configured:
 
-### Cognito Secrets (from Terraform)
+### Cognito Secrets (from AWS SSM Parameter Store)
 
-1. **`COGNITO_CLIENT_ID`**
-2. **`COGNITO_CLIENT_SECRET`**  
-3. **`COGNITO_ISSUER`**
-4. **`NEXTAUTH_SECRET`**
+✅ **Already Configured:**
 
-## How to Get Values from Terraform
+1. **`COGNITO_CLIENT_ID`** - `389m79tk1dhn1v5122ivajamdm`
+2. **`COGNITO_CLIENT_SECRET`** - `1bmsb...` (sensitive)
+3. **`COGNITO_ISSUER`** - `https://cognito-idp.us-east-2.amazonaws.com/us-east-2_DiKONDdME`
+4. **`NEXTAUTH_SECRET`** - `U2o4N...` (sensitive)
 
-### Step 1: Get Terraform Outputs
+These are pulled from `/parlae/frontend/*` parameters in AWS SSM Parameter Store (region: us-east-2).
 
-```bash
-# Navigate to infrastructure directory
-cd /Users/shaunk/Projects/Parlae-AI/parlae-infra/infra/ecs
+## How to Get Values from AWS SSM Parameter Store
 
-# Get Cognito values from Terraform state
-terraform output cognito_client_id
-terraform output cognito_client_secret
-terraform output cognito_user_pool_id
-```
-
-### Step 2: Construct COGNITO_ISSUER
-
-The `COGNITO_ISSUER` format is:
-```
-https://cognito-idp.{region}.amazonaws.com/{user_pool_id}
-```
-
-For example, if:
-- Region: `us-east-1`
-- User Pool ID: `us-east-1_AbCdEfGhI`
-
-Then:
-```
-COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCdEfGhI
-```
-
-### Step 3: Generate NEXTAUTH_SECRET
+### Step 1: Get Cognito Values from SSM
 
 ```bash
-# Generate a secure random secret (minimum 32 characters)
-openssl rand -base64 32
+# Region is us-east-2 for Parlae
+REGION="us-east-2"
+
+# Get values from SSM
+aws ssm get-parameter --name "/parlae/frontend/COGNITO_CLIENT_ID" \
+  --profile parlae --region $REGION --with-decryption --query 'Parameter.Value' --output text
+
+aws ssm get-parameter --name "/parlae/frontend/COGNITO_CLIENT_SECRET" \
+  --profile parlae --region $REGION --with-decryption --query 'Parameter.Value' --output text
+
+aws ssm get-parameter --name "/parlae/frontend/COGNITO_ISSUER" \
+  --profile parlae --region $REGION --query 'Parameter.Value' --output text
+
+aws ssm get-parameter --name "/parlae/frontend/NEXTAUTH_SECRET" \
+  --profile parlae --region $REGION --with-decryption --query 'Parameter.Value' --output text
 ```
+
+### Step 2: Values Already Formatted
+
+The SSM parameters already contain the correct format:
+- `COGNITO_ISSUER`: `https://cognito-idp.us-east-2.amazonaws.com/us-east-2_DiKONDdME`
+- `NEXTAUTH_SECRET`: Already base64 encoded and secure
+
+No additional formatting needed!
 
 ## Adding Secrets to GitHub
 

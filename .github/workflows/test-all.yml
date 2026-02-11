@@ -110,6 +110,9 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_PUBLIC_PRODUCT_NAME: Parlae
+          NEXT_PUBLIC_SITE_TITLE: Parlae
+          NEXT_PUBLIC_SITE_DESCRIPTION: AI Voice Agent Platform
           COGNITO_CLIENT_ID: dummy-client-id-for-build
           COGNITO_CLIENT_SECRET: dummy-client-secret-for-build
           COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/dummy-pool
