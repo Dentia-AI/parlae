@@ -47,41 +47,64 @@ function getPaths() {
 }
 
 async function getContentItems() {
-  const client = await createCmsClient();
+  // Check if CMS is configured
+  const cmsClient = process.env.CMS_CLIENT;
+  
+  // If no CMS client is configured, return empty array
+  // This allows the build to succeed without a CMS
+  if (!cmsClient) {
+    console.log('[Sitemap] No CMS_CLIENT configured, skipping content items');
+    return [];
+  }
 
-  // do not paginate the content items
-  const limit = Infinity;
-  const posts = client
-    .getContentItems({
-      collection: 'posts',
-      content: false,
-      limit,
-    })
-    .then((response) => response.items)
-    .then((posts) =>
-      posts.map((post) => ({
-        loc: new URL(`/blog/${post.slug}`, appConfig.url).href,
-        lastmod: post.publishedAt
-          ? new Date(post.publishedAt).toISOString()
-          : new Date().toISOString(),
-      })),
-    );
+  try {
+    const client = await createCmsClient();
 
-  const docs = client
-    .getContentItems({
-      collection: 'documentation',
-      content: false,
-      limit,
-    })
-    .then((response) => response.items)
-    .then((docs) =>
-      docs.map((doc) => ({
-        loc: new URL(`/docs/${doc.slug}`, appConfig.url).href,
-        lastmod: doc.publishedAt
-          ? new Date(doc.publishedAt).toISOString()
-          : new Date().toISOString(),
-      })),
-    );
+    // do not paginate the content items
+    const limit = Infinity;
+    const posts = client
+      .getContentItems({
+        collection: 'posts',
+        content: false,
+        limit,
+      })
+      .then((response) => response.items)
+      .then((posts) =>
+        posts.map((post) => ({
+          loc: new URL(`/blog/${post.slug}`, appConfig.url).href,
+          lastmod: post.publishedAt
+            ? new Date(post.publishedAt).toISOString()
+            : new Date().toISOString(),
+        })),
+      )
+      .catch((error) => {
+        console.error('[Sitemap] Error fetching blog posts:', error);
+        return [];
+      });
 
-  return Promise.all([posts, docs]).then((items) => items.flat());
+    const docs = client
+      .getContentItems({
+        collection: 'documentation',
+        content: false,
+        limit,
+      })
+      .then((response) => response.items)
+      .then((docs) =>
+        docs.map((doc) => ({
+          loc: new URL(`/docs/${doc.slug}`, appConfig.url).href,
+          lastmod: doc.publishedAt
+            ? new Date(doc.publishedAt).toISOString()
+            : new Date().toISOString(),
+        })),
+      )
+      .catch((error) => {
+        console.error('[Sitemap] Error fetching docs:', error);
+        return [];
+      });
+
+    return Promise.all([posts, docs]).then((items) => items.flat());
+  } catch (error) {
+    console.error('[Sitemap] Error creating CMS client:', error);
+    return [];
+  }
 }

@@ -126,6 +126,8 @@ jobs:
           NEXT_PUBLIC_ENABLE_PERSONAL_ACCOUNT_BILLING: true
           NEXT_PUBLIC_LANGUAGE_PRIORITY: user
           NEXT_PUBLIC_ENABLE_VERSION_UPDATER: false
+          # CMS (optional - empty means no CMS)
+          CMS_CLIENT: ""
           # AWS / S3 (dummy values for build)
           AWS_REGION: us-east-2
           S3_BUCKET_NAME: parlae-ci-dummy-bucket

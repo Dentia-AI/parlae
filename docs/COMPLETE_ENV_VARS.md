@@ -88,7 +88,22 @@ NEXTAUTH_URL="https://app.parlae.ca"                                     # ✅ A
 
 ---
 
-### 4. AWS / S3 Storage (`app/api/uploads/presign/route.ts`)
+### 5. CMS / Content Management (Optional)
+
+**Optional** - Used for blog posts and documentation:
+
+```bash
+CMS_CLIENT=""                           # ✅ "keystatic" | "wordpress" | "" (empty = no CMS)
+```
+
+**Validation Logic:**
+- If empty or not set, sitemap generation skips CMS content
+- If set to "keystatic" or "wordpress", must have CMS properly configured
+- Sitemap route gracefully handles missing CMS
+
+---
+
+### 6. AWS / S3 Storage (`app/api/uploads/presign/route.ts`)
 
 **Required** for build to succeed (validation bypassed in CI):
 
@@ -105,7 +120,7 @@ S3_PUBLIC_BASE_URL=""                           # Optional: CDN URL for public a
 
 ---
 
-### 5. CI/CD Control Variables
+### 7. CI/CD Control Variables
 
 ```bash
 NEXT_PUBLIC_CI="true"         # ✅ Bypass HTTPS validation and S3 checks in CI
@@ -141,6 +156,9 @@ env:
   AWS_REGION: us-east-2
   S3_BUCKET_NAME: parlae-ci-dummy-bucket
   S3_PUBLIC_BASE_URL: https://dummy-s3-url-for-ci-build.com
+  
+  # CMS (optional - empty means no CMS)
+  CMS_CLIENT: ""
 ```
 
 ### Production Deployment (deploy-frontend.yml)
@@ -206,16 +224,22 @@ ENV AWS_REGION=$AWS_REGION
 - ✅ `NEXTAUTH_SECRET`
 - ✅ `NEXTAUTH_URL`
 
+### CMS (1 variable - optional)
+- ✅ `CMS_CLIENT`
+
 ### AWS/S3 (3 variables)
 - ✅ `AWS_REGION`
 - ✅ `S3_BUCKET_NAME`
 - ✅ `S3_PUBLIC_BASE_URL` (optional)
 
+### CMS (1 variable - optional)
+- ✅ `CMS_CLIENT` (optional: "keystatic" | "wordpress" | "" for none)
+
 ### CI Control (2 variables)
 - ✅ `NEXT_PUBLIC_CI`
 - ✅ `NODE_ENV`
 
-**Total:** 23 required environment variables
+**Total:** 24 environment variables (23 required + 1 optional CMS)
 
 ---
 
