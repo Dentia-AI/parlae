@@ -33,14 +33,41 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: 'true'
+
+      - name: Verify ECR Login and Repository
+        run: |
+          echo "ECR Registry: ${{ steps.login-ecr.outputs.registry }}"
+          echo "Testing ECR access..."
+          
+          # Check if repository exists, create if it doesn't
+          if ! aws ecr describe-repositories --repository-names ${ECR_REPOSITORY_NAME} --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "Repository ${ECR_REPOSITORY_NAME} not found. Creating..."
+            aws ecr create-repository \
+              --repository-name ${ECR_REPOSITORY_NAME} \
+              --region ${{ secrets.AWS_REGION }} \
+              --image-scanning-configuration scanOnPush=true
+          else
+            echo "Repository ${ECR_REPOSITORY_NAME} exists."
+          fi
 
       - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
+          IMAGE_URI_TAGGED="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
+          
+          echo "Building and pushing to: $IMAGE_URI"
+          
           docker buildx build \
             --platform linux/amd64 \
             -t "$IMAGE_URI" \
+            -t "$IMAGE_URI_TAGGED" \
             -f infra/docker/backend.Dockerfile \
             --push \
             .
