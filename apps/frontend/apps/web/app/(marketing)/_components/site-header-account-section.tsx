@@ -10,6 +10,7 @@ import { PersonalAccountDropdown } from '@kit/accounts/personal-account-dropdown
 import { Button } from '@kit/ui/button';
 import { If } from '@kit/ui/if';
 import { Trans } from '@kit/ui/trans';
+import { LanguageSelector } from '@kit/ui/language-selector';
 
 import featuresFlagConfig from '~/config/feature-flags.config';
 import pathsConfig from '~/config/paths.config';
@@ -53,17 +54,20 @@ export function SiteHeaderAccountSection({
 }) {
   if (user) {
     return (
-      <PersonalAccountDropdown
-        showProfileName={false}
-        paths={paths}
-        features={features}
-        user={user}
-        signOutRequested={() =>
-          nextAuthSignOut({
-            callbackUrl: getAppUrl(pathsConfig.auth.signIn),
-          })
-        }
-      />
+      <div className="flex items-center gap-x-2">
+        <LanguageSelector />
+        <PersonalAccountDropdown
+          showProfileName={false}
+          paths={paths}
+          features={features}
+          user={user}
+          signOutRequested={() =>
+            nextAuthSignOut({
+              callbackUrl: getAppUrl(pathsConfig.auth.signIn),
+            })
+          }
+        />
+      </div>
     );
   }
 
@@ -92,6 +96,8 @@ function AuthButtons() {
     <div
       className={'animate-in fade-in flex items-center gap-x-2 duration-500'}
     >
+      <LanguageSelector />
+      
       {features.enableThemeToggle && (
         <>
           <div className={'hidden md:flex'}>

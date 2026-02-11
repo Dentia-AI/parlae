@@ -1,0 +1,137 @@
+# Testing PMS Integration with Real Vapi Webhooks
+
+## ✅ Phone Number Assigned!
+
+Your Vapi phone number is now configured:
+- **Phone:** +1 (415) 663-5316
+- **Assistant:** Parlae Dental Receptionist (PMS Enabled)
+- **Assistant ID:** `644878a7-429b-4ed1-b850-6a9aefb8176d`
+
+## 🎯 Option 1: Test by Making a Real Phone Call (EASIEST)
+
+Just call your number and test the flow:
+
+```
+📞 Call: +1 (415) 663-5316
+
+Conversation Flow:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AI: "Hi! I'm Riley, your virtual dental receptionist. 
+     How can I help you today?"
+
+You: "I need to book an appointment"
+
+AI: "Of course! What's your name?"
+
+You: "John Doe"
+
+AI: 🔄 [Calls your webhook: POST /api/pms/patients/search]
+    → Searches Sikka database for "John Doe"
+
+AI: "Great, I found your record. What type of 
+     appointment would you like?"
+
+You: "A cleaning"
+
+AI: "Perfect! What day works for you?"
+
+You: "Next Monday"
+
+AI: 🔄 [Calls your webhook: GET /api/pms/appointments/availability]
+    → Checks Sikka for available slots
+
+AI: "We have 10am or 2pm available. Which works better?"
+
+You: "10am please"
+
+AI: 🔄 [Calls your webhook: POST /api/pms/appointments]
+    → Books appointment in Sikka
+
+AI: "Perfect! You're all set for Monday at 10am. 
+     Your confirmation number is ABC123. Is there 
+     anything else I can help with?"
+```
+
+### Monitor in Real-Time:
+
+**Terminal 1 - Watch Logs:**
+```bash
+tail -f /Users/shaunk/Projects/Parlae-AI/parlae/logs/frontend.log | grep -i pms
+```
+
+**Terminal 2 - Watch Database:**
+```bash
+watch -n 2 'psql postgresql://parlae:parlae@localhost:5433/parlae \
+  -c "SELECT action, success, response_time, created_at FROM pms_audit_logs \
+  ORDER BY created_at DESC LIMIT 5"'
+```
+
+---
+
+## 🧪 Option 2: Test with Vapi's Web SDK (Interactive)
+
+Create a test page to trigger Vapi calls:
+
+<function_calls>
+<invoke name="Write">
+<parameter name="contents"><!DOCTYPE html>
+<html>
+<head>
+  <title>Vapi PMS Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js"></script>
+</head>
+<body>
+  <h1>🧪 Vapi PMS Integration Test</h1>
+  
+  <button id="startCall">Start Test Call</button>
+  <button id="endCall" disabled>End Call</button>
+  
+  <div id="status"></div>
+  <div id="transcript"></div>
+  
+  <script>
+    const vapi = new Vapi('a55d08b7-d1d0-4b0c-a93a-00556a8d3a1d');
+    
+    const status = document.getElementById('status');
+    const transcript = document.getElementById('transcript');
+    const startBtn = document.getElementById('startCall');
+    const endBtn = document.getElementById('endCall');
+    
+    vapi.on('call-start', () => {
+      status.innerHTML = '✅ Call started';
+      startBtn.disabled = true;
+      endBtn.disabled = false;
+    });
+    
+    vapi.on('call-end', () => {
+      status.innerHTML = '⭕ Call ended';
+      startBtn.disabled = false;
+      endBtn.disabled = true;
+    });
+    
+    vapi.on('message', (message) => {
+      console.log('Vapi message:', message);
+      if (message.type === 'transcript') {
+        transcript.innerHTML += `<p><strong>${message.role}:</strong> ${message.transcript}</p>`;
+      }
+      if (message.type === 'function-call') {
+        transcript.innerHTML += `<p><em>🔧 Calling: ${message.functionCall.name}</em></p>`;
+      }
+    });
+    
+    startBtn.onclick = () => {
+      vapi.start({
+        assistantId: '644878a7-429b-4ed1-b850-6a9aefb8176d',
+        metadata: {
+          accountId: 'beec1af2-309a-42c6-afb6-2feaaf0c74ba',
+          clinicName: 'Test Dental Clinic'
+        }
+      });
+    };
+    
+    endBtn.onclick = () => {
+      vapi.stop();
+    };
+  </script>
+</body>
+</html>

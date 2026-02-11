@@ -26,8 +26,12 @@ export function SiteFooter() {
           heading: <Trans i18nKey="marketing:product" />,
           links: [
             {
-              href: '/docs',
-              label: <Trans i18nKey="marketing:documentation" />,
+              href: '#features',
+              label: <Trans i18nKey="marketing:features" />,
+            },
+            {
+              href: '#integrations',
+              label: <Trans i18nKey="marketing:integrations" />,
             },
           ],
         },

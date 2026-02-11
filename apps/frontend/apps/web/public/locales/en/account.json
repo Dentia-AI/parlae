@@ -4,6 +4,7 @@
   "homePage": "Home",
   "billingTab": "Billing",
   "settingsTab": "Settings",
+  "language": "Language",
   "multiFactorAuth": "Multi-Factor Authentication",
   "multiFactorAuthDescription": "Set up Multi-Factor Authentication method to further secure your account",
   "updateProfileSuccess": "Profile successfully updated",

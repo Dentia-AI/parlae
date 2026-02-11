@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
@@ -14,21 +14,23 @@ interface PortedNumberSetupProps {
   businessName: string;
   onBack: () => void;
   onComplete: () => void;
+  onCanSubmit?: (canSubmit: boolean, onSubmit: () => void) => void;
 }
 
 export function PortedNumberSetup({ 
   accountId, 
   businessName, 
   onBack, 
-  onComplete 
+  onComplete,
+  onCanSubmit
 }: PortedNumberSetupProps) {
   const [pending, startTransition] = useTransition();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [currentCarrier, setCurrentCarrier] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [authorized, setAuthorized] = useState(false);
-
-  const handleSubmit = () => {
+  
+  const handleSubmit = useCallback(() => {
     if (!phoneNumber || !currentCarrier || !authorized) {
       toast.error('Please fill in all required fields');
       return;
@@ -57,7 +59,14 @@ export function PortedNumberSetup({
         console.error(error);
       }
     });
-  };
+  }, [phoneNumber, currentCarrier, authorized, accountNumber, accountId, businessName, onComplete]);
+
+  const canSubmit = !!(phoneNumber && currentCarrier && authorized && !pending);
+
+  // Notify parent about submit state
+  useEffect(() => {
+    onCanSubmit?.(canSubmit, handleSubmit);
+  }, [canSubmit, handleSubmit, onCanSubmit]);
 
   return (
     <div className="space-y-6">
@@ -150,21 +159,6 @@ export function PortedNumberSetup({
           </ol>
         </AlertDescription>
       </Alert>
-
-      {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={pending}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <Button 
-          onClick={handleSubmit} 
-          disabled={!phoneNumber || !currentCarrier || !authorized || pending}
-        >
-          {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          Submit Port Request
-        </Button>
-      </div>
     </div>
   );
 }

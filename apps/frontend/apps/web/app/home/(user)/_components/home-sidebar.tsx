@@ -26,7 +26,9 @@ export function HomeSidebar(props: HomeSidebarProps) {
   return (
     <Sidebar collapsible={collapsible}>
       <SidebarHeader className={'flex flex-col gap-3 py-3'}>
-        <AppLogo className={'p-2 group-data-[minimized=true]/sidebar:py-0'} />
+        <div className="flex justify-center px-2">
+          <AppLogo />
+        </div>
         <div className="px-2 group-data-[minimized=true]/sidebar:hidden">
           <AccountSelector
             accounts={accounts}

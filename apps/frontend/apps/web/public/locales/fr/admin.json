@@ -1,0 +1,7 @@
+{
+  "dashboardTitle": "Console d'administration",
+  "dashboardSubtitle": "Gérez les utilisateurs et usurpez l'identité des comptes pour le dépannage.",
+  "usersTitle": "Utilisateurs",
+  "impersonate": "Usurper l'identité",
+  "stopImpersonation": "Retourner à l'admin"
+}

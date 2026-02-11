@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgres:
     container_name: parlae-postgres
@@ -70,8 +68,6 @@ services:
         NEXT_PUBLIC_GHL_LOCATION_ID: ${NEXT_PUBLIC_GHL_LOCATION_ID}
         NEXT_PUBLIC_GHL_CALENDAR_ID: ${NEXT_PUBLIC_GHL_CALENDAR_ID}
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       APP_BASE_URL: http://localhost:3009

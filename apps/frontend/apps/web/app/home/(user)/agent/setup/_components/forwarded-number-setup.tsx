@@ -15,19 +15,26 @@ interface ForwardedNumberSetupProps {
   businessName: string;
   onBack: () => void;
   onComplete: () => void;
+  onSetupStateChange?: (isComplete: boolean) => void;
 }
 
 export function ForwardedNumberSetup({ 
   accountId, 
   businessName, 
   onBack, 
-  onComplete 
+  onComplete,
+  onSetupStateChange
 }: ForwardedNumberSetupProps) {
   const [pending, startTransition] = useTransition();
   const [clinicNumber, setClinicNumber] = useState('');
   const [twilioNumber, setTwilioNumber] = useState('');
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
+
+  // Notify parent of setup state changes
+  useEffect(() => {
+    onSetupStateChange?.(setupComplete);
+  }, [setupComplete, onSetupStateChange]);
 
   const provisionTwilioNumber = () => {
     setIsProvisioning(true);
@@ -216,19 +223,6 @@ export function ForwardedNumberSetup({
           </Alert>
         </div>
       )}
-
-      {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={pending}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        {setupComplete && (
-          <Button onClick={handleComplete}>
-            Continue to Review
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

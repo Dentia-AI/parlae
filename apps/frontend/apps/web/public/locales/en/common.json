@@ -24,6 +24,10 @@
   "routes": {
     "application": "Application",
     "home": "Home",
+    "dashboard": "Dashboard",
+    "setup": "Setup",
+    "aiAgents": "AI Agents",
+    "advancedSetup": "Advanced Setup",
     "settings": "Settings",
     "profile": "Profile",
     "billing": "Billing"
@@ -70,5 +74,233 @@
   "billingInterval": {
     "monthly": "per month",
     "yearly": "per year"
+  },
+  "setup": {
+    "title": "Set Up Your AI Receptionist",
+    "subtitle": "Configure your AI-powered phone receptionist in a few simple steps",
+    "steps": {
+      "voice": "Voice",
+      "knowledge": "Knowledge",
+      "integrations": "Integrations",
+      "phone": "Phone",
+      "review": "Review"
+    },
+    "voice": {
+      "title": "Step 1: Voice Selection",
+      "description": "Choose the voice personality for your AI receptionist",
+      "selectVoice": "Please select a voice",
+      "continueToKnowledge": "Continue to Knowledge Base"
+    },
+    "knowledge": {
+      "title": "Knowledge Base",
+      "pageTitle": "Step 2: Knowledge Base",
+      "description": "Upload documents to train your AI receptionist",
+      "cardDescription": "Upload documents about your services, hours, policies, and FAQs",
+      "dropFilesHere": "Drop files here or click to upload",
+      "supportedFormats": "Supports PDF, DOC, DOCX, TXT files up to 10MB each",
+      "selectFiles": "Select Files",
+      "uploadedFiles": "Uploaded Files",
+      "uploaded": "Uploaded",
+      "uploadFailed": "Upload failed",
+      "continueToIntegrations": "Continue to Integrations",
+      "voiceNotFound": "Voice selection not found. Please go back to step 1.",
+      "uploadSuccess": "uploaded successfully",
+      "uploadError": "Failed to upload",
+      "filesReady": "file(s) ready for deployment",
+      "tipTitle": "Tip:",
+      "tipItems": {
+        "hours": "Business hours and location info",
+        "services": "Services offered and pricing",
+        "faqs": "Frequently asked questions (FAQs)",
+        "policies": "Appointment booking policies",
+        "insurance": "Insurance and payment information"
+      }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "pageTitle": "Step 3: Practice Management Integration",
+      "description": "Connect your practice management system for automated appointment booking",
+      "recommended": "Recommended",
+      "connected": "Connected",
+      "pmsTitle": "Practice Management System",
+      "pmsDescription": "Connect your PMS to enable automatic appointment booking, patient lookups, and more",
+      "pmsIntegrationTitle": "Practice Management Integration",
+      "pmsIntegrationDesc": "Connect your existing PMS for seamless appointment booking, patient management, and billing",
+      "pmsAlertRecommended": "Recommended: PMS integration provides full patient management, billing, and insurance verification. You can always connect it later if not ready now.",
+      "appointmentBooking": "Appointment Booking",
+      "patientLookup": "Patient Lookup",
+      "insuranceVerification": "Insurance Verification",
+      "paymentProcessing": "Payment Processing",
+      "connectPMS": "Connect PMS",
+      "setupPMS": "Setup PMS Integration",
+      "skipForNow": "Skip for Now",
+      "continue": "Continue",
+      "backToIntegrations": "Back to Integrations",
+      "otherIntegrations": "Other Integrations (Coming Soon)",
+      "otherIntegrationsDesc": "Additional calendar and scheduling integrations will be available soon",
+      "calendly": "Calendly Integration",
+      "calendlyDesc": "Sync appointments with your Calendly account",
+      "acuity": "Acuity Scheduling",
+      "acuityDesc": "Book appointments directly to Acuity",
+      "calendarTitle": "Calendar Integration",
+      "calendarDescConnected": "Optional: Add calendar sync for additional backup",
+      "calendarDescNotConnected": "Alternative option if you don't have a PMS system",
+      "googleCalendar": "Google Calendar",
+      "googleCalendarConnectedAs": "Connected as",
+      "googleCalendarBasicSync": "Sync appointments to your personal calendar",
+      "googleCalendarBasicManagement": "Basic appointment management using your Google Calendar",
+      "googleCalendarAppointmentOnly": "Appointment scheduling only",
+      "googleCalendarNote": "Note: Google Calendar provides basic appointment scheduling. For full features (patient records, billing, insurance), connect a PMS instead.",
+      "disconnect": "Disconnect",
+      "connectCalendar": "Connect Calendar",
+      "alertOptional": "This integration is optional but highly recommended. Your AI receptionist will be able to book appointments, look up patient information, and handle scheduling automatically when connected.",
+      "authSuccess": "Authorization successful! Verifying connection...",
+      "authError": "Authorization failed. Please try again.",
+      "connectionStatus": {
+        "pending": "Checking connection...",
+        "connected": "Connected to PMS",
+        "notConnected": "Not connected"
+      },
+      "alerts": {
+        "optional": "PMS integration is optional",
+        "optionalDesc": "You can set up your PMS integration now or skip and set it up later from settings.",
+        "connected": "PMS Connected",
+        "connectedDesc": "Your practice management system is connected and ready to sync appointments."
+      },
+      "benefits": {
+        "title": "Why Connect Your PMS?",
+        "autoScheduling": "Automatic Scheduling",
+        "autoSchedulingDesc": "Appointments are added directly to your calendar",
+        "realTimeAvail": "Real-time Availability",
+        "realTimeAvailDesc": "AI knows your schedule and books accordingly",
+        "noDoubleBooking": "No Double Bookings",
+        "noDoubleBookingDesc": "Prevents scheduling conflicts automatically"
+      }
+    },
+    "phone": {
+      "title": "Phone Integration",
+      "pageTitle": "Step 4: Phone Integration",
+      "description": "Connect your phone number to your AI receptionist",
+      "chooseMethod": "Step 4: Choose Integration Method",
+      "chooseMethodDesc": "Select how you want to connect your phone number",
+      "setupMethod": "Complete the setup for your selected method",
+      "selectMethod": "Please select a phone integration method",
+      "methods": {
+        "sip": "SIP Trunk",
+        "forwarded": "Call Forwarding",
+        "ported": "Port Number"
+      },
+      "recommended": "Recommended",
+      "setup": "Setup:",
+      "quality": "Quality:",
+      "difficulty": "Difficulty:",
+      "pros": "Pros",
+      "cons": "Cons",
+      "bestFor": "Best for:",
+      "sip": {
+        "name": "SIP Trunk",
+        "description": "Connect your existing PBX system via SIP",
+        "setupTime": "Hours",
+        "difficulty": "Advanced",
+        "quality": "Excellent",
+        "pros": [
+          "Works with existing PBX",
+          "High call quality",
+          "Flexible routing options",
+          "No number porting needed"
+        ],
+        "cons": [
+          "Requires technical setup",
+          "Need existing PBX system",
+          "May need IT assistance"
+        ],
+        "bestFor": "Clinics with existing phone systems"
+      },
+      "forwarded": {
+        "name": "Call Forwarding",
+        "description": "Forward calls from your existing number to our system",
+        "setupTime": "Minutes",
+        "difficulty": "Easy",
+        "quality": "Good",
+        "pros": [
+          "Setup in minutes",
+          "No paperwork required",
+          "Keep full control of your number",
+          "Easy to disable"
+        ],
+        "cons": [
+          "Caller ID may not show correctly",
+          "Slightly lower call quality",
+          "May incur forwarding charges"
+        ],
+        "bestFor": "Quick testing, temporary setup"
+      },
+      "ported": {
+        "name": "Port Number",
+        "description": "Transfer your existing phone number to our system",
+        "setupTime": "7-14 days",
+        "difficulty": "Medium",
+        "quality": "Best",
+        "pros": [
+          "Best call quality",
+          "Keep your existing number",
+          "Full control over routing",
+          "Perfect caller ID"
+        ],
+        "cons": [
+          "Takes 7-14 days to complete",
+          "Requires paperwork (LOA)",
+          "Temporary service interruption possible"
+        ],
+        "bestFor": "Long-term use, maximum quality"
+      },
+      "continueWith": "Continue with",
+      "selectedMethod": "Selected Method",
+      "submitPortRequest": "Submit Port Request",
+      "continueToReview": "Continue to Review",
+      "backToIntegrations": "Back to Integrations"
+    },
+    "review": {
+      "title": "Review & Launch",
+      "pageTitle": "Step 5: Review & Launch",
+      "description": "Review your configuration and launch your AI receptionist",
+      "paymentStep": "Step 1: Payment Information",
+      "reviewStep": "Step 2: Review & Launch",
+      "paymentAdded": "Payment method added successfully",
+      "addPaymentMethod": "Add your payment method to continue",
+      "reviewBeforeLaunch": "Review your configuration before going live",
+      "completePayment": "Complete payment to continue",
+      "configNotFound": "Configuration not found. Please start from step 1.",
+      "voiceMissing": "Voice configuration is missing. Please go back to step 1.",
+      "deploySuccess": "AI Receptionist deployed successfully!",
+      "deployError": "Failed to deploy receptionist",
+      "deployErrorGeneric": "An error occurred during deployment",
+      "live": {
+        "title": "Your AI Receptionist is Live!",
+        "description": "Your AI receptionist has been configured and is ready to answer calls",
+        "phoneNumber": "Internal phone number:",
+        "goToDashboard": "Go to Dashboard"
+      },
+      "voiceAssistant": "Voice Assistant",
+      "knowledgeBase": "Knowledge Base",
+      "integrations": "Integrations",
+      "change": "Change",
+      "edit": "Edit",
+      "noVoice": "No voice selected. Please go back to step 1.",
+      "filesUploaded": "file(s) uploaded",
+      "andMore": "and {count} more...",
+      "noFiles": "No files uploaded. You can add files later from settings.",
+      "noIntegrations": "No integrations configured. You can add integrations later from settings.",
+      "readyToLaunch": "Ready to launch?",
+      "readyToLaunchDesc": "Your AI receptionist will be configured with a phone number automatically. You can update settings later from the dashboard.",
+      "deployButton": "Deploy AI Receptionist",
+      "completePaymentToDeploy": "Complete Payment to Deploy"
+    },
+    "navigation": {
+      "back": "Back",
+      "continue": "Continue",
+      "skip": "Skip",
+      "finish": "Finish"
+    }
   }
 }

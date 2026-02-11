@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { RadioGroup, RadioGroupItem } from '@kit/ui/radio-group';
@@ -17,6 +16,8 @@ import {
   Info
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
+import { Trans } from '@kit/ui/trans';
+import { useTranslation } from 'react-i18next';
 
 type IntegrationMethod = 'ported' | 'forwarded' | 'sip';
 
@@ -31,94 +32,94 @@ export function PhoneMethodSelector({
   businessName, 
   onMethodSelected 
 }: PhoneMethodSelectorProps) {
+  const { t } = useTranslation();
   const [selectedMethod, setSelectedMethod] = useState<IntegrationMethod | null>(null);
 
   const methods = [
     {
       id: 'sip' as const,
-      name: 'SIP Trunk',
+      name: t('common:setup.phone.sip.name'),
       icon: Network,
-      setupTime: 'Hours',
-      difficulty: 'Advanced',
-      quality: 'Excellent',
+      setupTime: t('common:setup.phone.sip.setupTime'),
+      difficulty: t('common:setup.phone.sip.difficulty'),
+      quality: t('common:setup.phone.sip.quality'),
       recommended: true,
-      description: 'Connect your existing PBX system via SIP',
+      description: t('common:setup.phone.sip.description'),
       pros: [
-        'Works with existing PBX',
-        'High call quality',
-        'Flexible routing options',
-        'No number porting needed',
+        t('common:setup.phone.sip.pros.0'),
+        t('common:setup.phone.sip.pros.1'),
+        t('common:setup.phone.sip.pros.2'),
+        t('common:setup.phone.sip.pros.3'),
       ],
       cons: [
-        'Requires technical setup',
-        'Need existing PBX system',
-        'May need IT assistance',
+        t('common:setup.phone.sip.cons.0'),
+        t('common:setup.phone.sip.cons.1'),
+        t('common:setup.phone.sip.cons.2'),
       ],
-      bestFor: 'Clinics with existing phone systems',
+      bestFor: t('common:setup.phone.sip.bestFor'),
     },
     {
       id: 'forwarded' as const,
-      name: 'Call Forwarding',
+      name: t('common:setup.phone.forwarded.name'),
       icon: PhoneForwarded,
-      setupTime: 'Minutes',
-      difficulty: 'Easy',
-      quality: 'Good',
+      setupTime: t('common:setup.phone.forwarded.setupTime'),
+      difficulty: t('common:setup.phone.forwarded.difficulty'),
+      quality: t('common:setup.phone.forwarded.quality'),
       recommended: false,
-      description: 'Forward calls from your existing number to our system',
+      description: t('common:setup.phone.forwarded.description'),
       pros: [
-        'Setup in minutes',
-        'No paperwork required',
-        'Keep full control of your number',
-        'Easy to disable',
+        t('common:setup.phone.forwarded.pros.0'),
+        t('common:setup.phone.forwarded.pros.1'),
+        t('common:setup.phone.forwarded.pros.2'),
+        t('common:setup.phone.forwarded.pros.3'),
       ],
       cons: [
-        'Caller ID may not show correctly',
-        'Slightly lower call quality',
-        'May incur forwarding charges',
+        t('common:setup.phone.forwarded.cons.0'),
+        t('common:setup.phone.forwarded.cons.1'),
+        t('common:setup.phone.forwarded.cons.2'),
       ],
-      bestFor: 'Quick testing, temporary setup',
+      bestFor: t('common:setup.phone.forwarded.bestFor'),
     },
     {
       id: 'ported' as const,
-      name: 'Port Number',
+      name: t('common:setup.phone.ported.name'),
       icon: PhoneCall,
-      setupTime: '7-14 days',
-      difficulty: 'Medium',
-      quality: 'Best',
+      setupTime: t('common:setup.phone.ported.setupTime'),
+      difficulty: t('common:setup.phone.ported.difficulty'),
+      quality: t('common:setup.phone.ported.quality'),
       recommended: false,
-      description: 'Transfer your existing phone number to our system',
+      description: t('common:setup.phone.ported.description'),
       pros: [
-        'Best call quality',
-        'Keep your existing number',
-        'Full control over routing',
-        'Perfect caller ID',
+        t('common:setup.phone.ported.pros.0'),
+        t('common:setup.phone.ported.pros.1'),
+        t('common:setup.phone.ported.pros.2'),
+        t('common:setup.phone.ported.pros.3'),
       ],
       cons: [
-        'Takes 7-14 days to complete',
-        'Requires paperwork (LOA)',
-        'Temporary service interruption possible',
+        t('common:setup.phone.ported.cons.0'),
+        t('common:setup.phone.ported.cons.1'),
+        t('common:setup.phone.ported.cons.2'),
       ],
-      bestFor: 'Long-term use, maximum quality',
+      bestFor: t('common:setup.phone.ported.bestFor'),
     },
   ];
 
-  const handleContinue = () => {
-    if (!selectedMethod) {
-      toast.error('Please select a phone integration method');
-      return;
-    }
-
-    // Store selection in session storage
-    sessionStorage.setItem('phoneIntegrationMethod', selectedMethod);
-    
-    // Navigate to method-specific setup
-    onMethodSelected(selectedMethod);
+  const handleMethodClick = (methodId: IntegrationMethod) => {
+    setSelectedMethod(methodId);
+    onMethodSelected(methodId);
   };
 
   return (
-    <div className="space-y-6">
-      <RadioGroup value={selectedMethod || ''} onValueChange={(value) => setSelectedMethod(value as IntegrationMethod)}>
-        <div className="space-y-4">
+    <div className="space-y-4">
+      <RadioGroup 
+        value={selectedMethod || ''} 
+        onValueChange={(value) => {
+          const method = value as IntegrationMethod;
+          setSelectedMethod(method);
+          onMethodSelected(method);
+        }}
+      >
+        <div className="space-y-3">
           {methods.map((method) => {
             const Icon = method.icon;
             const isSelected = selectedMethod === method.id;
@@ -131,25 +132,25 @@ export function PhoneMethodSelector({
                     ? 'ring-2 ring-primary border-primary' 
                     : 'hover:border-primary/50'
                 }`}
-                onClick={() => setSelectedMethod(method.id)}
+                onClick={() => handleMethodClick(method.id)}
               >
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
+                    <div className="flex items-start gap-2 flex-1">
                       <RadioGroupItem value={method.id} id={method.id} className="mt-1" />
-                      <div className="flex-1 space-y-1">
+                      <div className="flex-1 space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <Icon className="h-5 w-5 text-primary" />
-                          <Label htmlFor={method.id} className="text-lg font-semibold cursor-pointer">
+                          <Icon className="h-4 w-4 text-primary" />
+                          <Label htmlFor={method.id} className="text-base font-semibold cursor-pointer">
                             {method.name}
                           </Label>
                           {method.recommended && (
-                            <Badge variant="default" className="bg-green-600">
-                              Recommended
+                            <Badge variant="default" className="bg-green-600 text-xs">
+                              <Trans i18nKey="common:setup.phone.recommended" />
                             </Badge>
                           )}
                         </div>
-                        <CardDescription className="text-sm">
+                        <CardDescription className="text-xs">
                           {method.description}
                         </CardDescription>
                       </div>
@@ -157,32 +158,38 @@ export function PhoneMethodSelector({
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3 pt-2">
                   {/* Stats */}
-                  <div className="flex gap-4 text-sm">
+                  <div className="flex gap-3 text-xs">
                     <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Setup:</span>
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        <Trans i18nKey="common:setup.phone.setup" />
+                      </span>
                       <span className="font-medium">{method.setupTime}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">Quality:</span>
+                      <span className="text-muted-foreground">
+                        <Trans i18nKey="common:setup.phone.quality" />
+                      </span>
                       <span className="font-medium">{method.quality}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">Difficulty:</span>
+                      <span className="text-muted-foreground">
+                        <Trans i18nKey="common:setup.phone.difficulty" />
+                      </span>
                       <span className="font-medium">{method.difficulty}</span>
                     </div>
                   </div>
 
                   {/* Pros & Cons */}
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1.5">
                       <div className="font-medium text-green-600 flex items-center gap-1">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Pros
+                        <CheckCircle2 className="h-3 w-3" />
+                        <Trans i18nKey="common:setup.phone.pros" />
                       </div>
-                      <ul className="space-y-1">
+                      <ul className="space-y-0.5">
                         {method.pros.map((pro, idx) => (
                           <li key={idx} className="text-muted-foreground flex items-start gap-1">
                             <span className="text-green-600 mt-0.5">•</span>
@@ -191,12 +198,12 @@ export function PhoneMethodSelector({
                         ))}
                       </ul>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <div className="font-medium text-orange-600 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        Cons
+                        <AlertCircle className="h-3 w-3" />
+                        <Trans i18nKey="common:setup.phone.cons" />
                       </div>
-                      <ul className="space-y-1">
+                      <ul className="space-y-0.5">
                         {method.cons.map((con, idx) => (
                           <li key={idx} className="text-muted-foreground flex items-start gap-1">
                             <span className="text-orange-600 mt-0.5">•</span>
@@ -208,11 +215,13 @@ export function PhoneMethodSelector({
                   </div>
 
                   {/* Best For */}
-                  <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
-                    <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-lg">
+                    <Info className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-medium">Best for:</div>
-                      <div className="text-sm text-muted-foreground">{method.bestFor}</div>
+                      <div className="text-xs font-medium">
+                        <Trans i18nKey="common:setup.phone.bestFor" />
+                      </div>
+                      <div className="text-xs text-muted-foreground">{method.bestFor}</div>
                     </div>
                   </div>
                 </CardContent>
@@ -221,15 +230,6 @@ export function PhoneMethodSelector({
           })}
         </div>
       </RadioGroup>
-
-      <Button 
-        onClick={handleContinue}
-        disabled={!selectedMethod}
-        size="lg"
-        className="w-full"
-      >
-        Continue with {selectedMethod ? methods.find(m => m.id === selectedMethod)?.name : 'Selected Method'}
-      </Button>
     </div>
   );
 }

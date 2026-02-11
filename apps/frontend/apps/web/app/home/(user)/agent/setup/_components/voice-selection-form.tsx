@@ -6,7 +6,7 @@ import { Button } from '@kit/ui/button';
 import { Card, CardContent } from '@kit/ui/card';
 import { RadioGroup, RadioGroupItem } from '@kit/ui/radio-group';
 import { Label } from '@kit/ui/label';
-import { Play, Loader2 } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 
 // Vapi voice providers and their voices
@@ -89,14 +89,25 @@ type VoiceFilter = 'all' | 'male' | 'female' | 'neutral';
 interface VoiceSelectionFormProps {
   accountId: string;
   businessName: string;
+  initialVoice?: any; // Pre-selected voice from saved progress
+  onVoiceSelect?: (voice: typeof AVAILABLE_VOICES[0] | null) => void;
 }
 
-export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFormProps) {
-  const router = useRouter();
+export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVoiceSelect }: VoiceSelectionFormProps) {
   const [selectedVoice, setSelectedVoice] = useState<typeof AVAILABLE_VOICES[0] | null>(null);
   const [filter, setFilter] = useState<VoiceFilter>('all');
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+
+  // Load initial voice from saved progress
+  useEffect(() => {
+    if (initialVoice?.voiceId) {
+      const voice = AVAILABLE_VOICES.find(v => v.voiceId === initialVoice.voiceId);
+      if (voice) {
+        setSelectedVoice(voice);
+      }
+    }
+  }, [initialVoice]);
 
   // Load available voices for Speech Synthesis API (for OpenAI preview)
   useEffect(() => {
@@ -112,10 +123,13 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
 
     // Create audio element for playing previews
     const audio = new Audio();
+    let isCleaningUp = false;
+    
     audio.onended = () => setPlayingVoice(null);
-    audio.onerror = () => {
-      // Only show error if we're actually trying to play something
-      if (playingVoice) {
+    audio.onerror = (error) => {
+      // Only show error if we're not cleaning up and actually trying to play
+      if (!isCleaningUp && audio.src) {
+        console.error('Audio error:', error);
         toast.error('Failed to play voice preview');
         setPlayingVoice(null);
       }
@@ -123,28 +137,20 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
     setAudioElement(audio);
 
     return () => {
+      isCleaningUp = true;
       audio.pause();
       audio.src = '';
     };
-  }, [playingVoice]);
+  }, []); // Remove playingVoice dependency to prevent race condition
 
   const filteredVoices = AVAILABLE_VOICES.filter(voice => {
     if (filter === 'all') return true;
     return voice.gender === filter;
   });
 
-  const handleContinue = () => {
-    if (!selectedVoice) {
-      toast.error('Please select a voice');
-      return;
-    }
-
-    // Store in session storage
-    sessionStorage.setItem('selectedVoice', JSON.stringify(selectedVoice));
-    sessionStorage.setItem('accountId', accountId);
-    sessionStorage.setItem('businessName', businessName);
-    
-    router.push(`/home/agent/setup/knowledge`);
+  const handleVoiceSelect = (voice: typeof AVAILABLE_VOICES[0] | null) => {
+    setSelectedVoice(voice);
+    onVoiceSelect?.(voice);
   };
 
   const handlePlayPreview = async (voiceId: string) => {
@@ -182,7 +188,7 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Filter Buttons */}
       <div className="flex gap-2">
         <Button 
@@ -220,9 +226,9 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
         value={selectedVoice?.id}
         onValueChange={(value) => {
           const voice = AVAILABLE_VOICES.find((v) => v.id === value);
-          setSelectedVoice(voice || null);
+          handleVoiceSelect(voice || null);
         }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        className="grid grid-cols-1 md:grid-cols-2 gap-3"
       >
         {filteredVoices.map((voice) => (
           <Card
@@ -232,61 +238,60 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
                 ? 'border-primary border-2 shadow-md'
                 : 'hover:border-muted-foreground/50'
             }`}
-            onClick={() => setSelectedVoice(voice)}
+            onClick={() => handleVoiceSelect(voice)}
           >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <RadioGroupItem value={voice.id} id={voice.id} />
-                    <div>
-                      <Label htmlFor={voice.id} className="font-semibold text-lg cursor-pointer">
-                        {voice.name}
-                      </Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                          {voice.provider}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {voice.gender === 'male' ? '🧑' : voice.gender === 'female' ? '👩' : '🤖'} {voice.gender}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          • {voice.accent}
-                        </span>
+              <CardContent className="p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value={voice.id} id={voice.id} />
+                      <div>
+                        <Label htmlFor={voice.id} className="font-semibold text-base cursor-pointer">
+                          {voice.name}
+                        </Label>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                            {voice.provider}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {voice.gender === 'male' ? '🧑' : voice.gender === 'female' ? '👩' : '🤖'} {voice.gender}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            • {voice.accent}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    <p className="text-sm text-muted-foreground mt-2 ml-7">
+                      {voice.description}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-3 ml-9">
-                    {voice.description}
-                  </p>
                 </div>
-              </div>
-              
-              {/* Preview Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-3 ml-9"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePlayPreview(voice.id);
-                }}
-                disabled={playingVoice === voice.id}
-              >
-                {playingVoice === voice.id ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Playing...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Preview Voice
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+                
+                {/* Preview Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 ml-7 h-8"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlayPreview(voice.id);
+                  }}
+                >
+                  {playingVoice === voice.id ? (
+                    <>
+                      <Pause className="h-3 w-3 mr-1.5" />
+                      Stop
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3 w-3 mr-1.5" />
+                      Preview
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
         ))}
       </RadioGroup>
 
@@ -295,16 +300,6 @@ export function VoiceSelectionForm({ accountId, businessName }: VoiceSelectionFo
           No voices found for this filter
         </div>
       )}
-
-      {/* Navigation */}
-      <div className="flex justify-end pt-6 border-t">
-        <Button
-          onClick={handleContinue}
-          disabled={!selectedVoice}
-        >
-          Continue to Knowledge Base
-        </Button>
-      </div>
     </div>
   );
 }

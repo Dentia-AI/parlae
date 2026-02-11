@@ -19,18 +19,22 @@
     "prisma:migrate": "pnpm --filter @kit/prisma migrate:deploy"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.705.0",
     "@kit/prisma": "workspace:*",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.0.0",
+    "axios": "^1.7.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "googleapis": "144",
     "reflect-metadata": "^0.2.0",
     "rimraf": "^6.0.1",
     "rxjs": "^7.8.2",
-    "stripe": "^19.1.0"
+    "stripe": "^19.1.0",
+    "twilio": "^5.3.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.2",

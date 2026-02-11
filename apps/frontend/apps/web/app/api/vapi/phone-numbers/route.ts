@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 import { createVapiService } from '@kit/shared/vapi/server';
 import { createTwilioService } from '@kit/shared/twilio/server';
 import { getLogger } from '@kit/shared/logger';
-import { getSupabaseRouteHandlerClient } from '@kit/supabase/route-handler-client';
-import { Database } from '@kit/supabase/database';
-
-type VapiPhoneNumber = Database['public']['Tables']['vapi_phone_numbers']['Row'];
-type VapiSquadTemplate = Database['public']['Tables']['vapi_squad_templates']['Row'];
-type VapiAssistantTemplate = Database['public']['Tables']['vapi_assistant_templates']['Row'];
+import { prisma } from '@kit/prisma';
+import { requireSession } from '~/lib/auth/get-session';
+import type { VapiSquadTemplate, VapiAssistantTemplate } from '@prisma/client';
 
 /**
  * POST /api/vapi/phone-numbers
@@ -35,13 +32,12 @@ type VapiAssistantTemplate = Database['public']['Tables']['vapi_assistant_templa
  */
 export async function POST(request: Request) {
   const logger = await getLogger();
-  const supabase = getSupabaseRouteHandlerClient();
 
   try {
     // 1. AUTHENTICATION: Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const session = await requireSession();
     
-    if (authError || !user) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -49,11 +45,10 @@ export async function POST(request: Request) {
     }
 
     // 2. Get user's account
-    const { data: membership } = await supabase
-      .from('accounts_memberships')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .single();
+    const membership = await prisma.accountMembership.findFirst({
+      where: { userId: session.user.id },
+      select: { accountId: true }
+    });
 
     if (!membership) {
       return NextResponse.json(
@@ -62,7 +57,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const accountId = membership.account_id;
+    const accountId = membership.accountId;
 
     // 3. Parse request body
     const body = await request.json();
@@ -101,14 +96,13 @@ export async function POST(request: Request) {
     let templateType: 'squad' | 'assistant';
 
     if (squadTemplateId) {
-      const { data } = await supabase
-        .from('vapi_squad_templates')
-        .select('*')
-        .eq('id', squadTemplateId)
-        .eq('status', 'active')
-        .single();
+      template = await prisma.vapiSquadTemplate.findFirst({
+        where: {
+          id: squadTemplateId,
+          status: 'active'
+        }
+      });
       
-      template = data;
       templateType = 'squad';
 
       if (!template) {
@@ -118,14 +112,13 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      const { data } = await supabase
-        .from('vapi_assistant_templates')
-        .select('*')
-        .eq('id', assistantTemplateId)
-        .eq('status', 'active')
-        .single();
+      template = await prisma.vapiAssistantTemplate.findFirst({
+        where: {
+          id: assistantTemplateId,
+          status: 'active'
+        }
+      });
       
-      template = data;
       templateType = 'assistant';
 
       if (!template) {
@@ -194,15 +187,19 @@ export async function POST(request: Request) {
     }
 
     // 6. GET ACCOUNT KNOWLEDGE BASE (if exists)
-    const { data: knowledgeFiles } = await supabase
-      .from('vapi_account_knowledge')
-      .select('vapi_file_id')
-      .eq('account_id', accountId)
-      .eq('is_processed', true);
+    const knowledgeFiles = await prisma.vapiAccountKnowledge.findMany({
+      where: {
+        accountId,
+        isProcessed: true
+      },
+      select: {
+        vapiFileId: true
+      }
+    });
 
     const knowledgeFileIds = knowledgeFiles
-      ?.map(k => k.vapi_file_id)
-      .filter(Boolean) as string[] || [];
+      .map(k => k.vapiFileId)
+      .filter(Boolean) as string[];
 
     // 7. LINK PHONE TO VAPI (Squad or Assistant)
     const twilioAccountSidToUse = twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || '';
@@ -230,10 +227,10 @@ export async function POST(request: Request) {
         vapiSquadId = squad.id;
 
         // Save squad ID to database
-        await supabase
-          .from('vapi_squad_templates')
-          .update({ vapi_squad_id: vapiSquadId })
-          .eq('id', template.id);
+        await prisma.vapiSquadTemplate.update({
+          where: { id: template.id },
+          data: { vapiSquadId }
+        });
       }
 
       // Import phone to Vapi and link to squad
@@ -281,10 +278,10 @@ export async function POST(request: Request) {
         vapiAssistantId = assistant.id;
 
         // Save assistant ID to database
-        await supabase
-          .from('vapi_assistant_templates')
-          .update({ vapi_assistant_id: vapiAssistantId })
-          .eq('id', template.id);
+        await prisma.vapiAssistantTemplate.update({
+          where: { id: template.id },
+          data: { vapiAssistantId }
+        });
       }
 
       // Import phone to Vapi and link to assistant
@@ -303,31 +300,24 @@ export async function POST(request: Request) {
     }
 
     // 8. SAVE TO DATABASE
-    const { data: savedPhone, error: dbError } = await supabase
-      .from('vapi_phone_numbers')
-      .insert({
-        account_id: accountId,
-        phone_number: phoneNumber,
-        friendly_name: friendlyName || template.display_name,
-        area_code: areaCode,
-        country_code: 'US',
-        twilio_phone_sid: twilioPhoneSid,
-        twilio_account_sid: twilioAccountSidToUse,
-        vapi_phone_id: vapiPhoneId,
-        squad_template_id: squadTemplateId || null,
-        assistant_template_id: assistantTemplateId || null,
-        use_account_knowledge: true,
-        custom_config: customConfig || null,
+    const savedPhone = await prisma.vapiPhoneNumber.create({
+      data: {
+        accountId,
+        phoneNumber,
+        friendlyName: friendlyName || template.displayName,
+        areaCode,
+        countryCode: 'US',
+        twilioPhoneSid: twilioPhoneSid || null,
+        twilioAccountSid: twilioAccountSidToUse,
+        vapiPhoneId,
+        squadTemplateId: squadTemplateId || null,
+        assistantTemplateId: assistantTemplateId || null,
+        useAccountKnowledge: true,
+        customConfig: customConfig || null,
         status: 'active',
-        activated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      logger.error({ error: dbError }, '[Vapi Phone] Failed to save to database');
-      throw new Error('Failed to save phone number to database');
-    }
+        activatedAt: new Date(),
+      }
+    });
 
     logger.info({
       phoneNumberId: savedPhone.id,
@@ -339,11 +329,11 @@ export async function POST(request: Request) {
       success: true,
       phoneNumber: {
         id: savedPhone.id,
-        phoneNumber: savedPhone.phone_number,
-        friendlyName: savedPhone.friendly_name,
+        phoneNumber: savedPhone.phoneNumber,
+        friendlyName: savedPhone.friendlyName,
         status: savedPhone.status,
         templateType: templateType,
-        templateName: template.display_name,
+        templateName: template.displayName,
       },
       message: 'Phone number setup successfully',
     });
@@ -373,13 +363,12 @@ export async function POST(request: Request) {
  */
 export async function GET(request: Request) {
   const logger = await getLogger();
-  const supabase = getSupabaseRouteHandlerClient();
 
   try {
     // Authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const session = await requireSession();
     
-    if (authError || !user) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -387,11 +376,10 @@ export async function GET(request: Request) {
     }
 
     // Get user's account
-    const { data: membership } = await supabase
-      .from('accounts_memberships')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .single();
+    const membership = await prisma.accountMembership.findFirst({
+      where: { userId: session.user.id },
+      select: { accountId: true }
+    });
 
     if (!membership) {
       return NextResponse.json(
@@ -401,20 +389,14 @@ export async function GET(request: Request) {
     }
 
     // Get all phone numbers for account
-    const { data: phoneNumbers, error } = await supabase
-      .from('vapi_phone_numbers')
-      .select(`
-        *,
-        squad_template:vapi_squad_templates(*),
-        assistant_template:vapi_assistant_templates(*)
-      `)
-      .eq('account_id', membership.account_id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      logger.error({ error }, '[Vapi Phone] Failed to fetch phone numbers');
-      throw error;
-    }
+    const phoneNumbers = await prisma.vapiPhoneNumber.findMany({
+      where: { accountId: membership.accountId },
+      include: {
+        squadTemplate: true,
+        assistantTemplate: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
     return NextResponse.json({
       success: true,

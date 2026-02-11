@@ -26,6 +26,10 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   createdBy: null,
   updatedBy: null,
   primaryOwnerId: 'test-user-id',
+  phoneIntegrationMethod: 'none',
+  phoneIntegrationSettings: {},
+  advancedSetupEnabled: false,
+  agentTemplateId: null,
   ...overrides,
 });
 

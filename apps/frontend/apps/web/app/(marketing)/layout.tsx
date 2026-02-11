@@ -8,9 +8,9 @@ async function SiteLayout(props: React.PropsWithChildren) {
 
   return (
     <div className={'flex min-h-[100vh] flex-col'}>
-      <SiteHeader user={user} />
+      <SiteHeader user={user} transparent />
 
-      <main className={'flex-1 pt-16 lg:pt-20'}>{props.children}</main>
+      <main className={'flex-1'}>{props.children}</main>
 
       <SiteFooter />
     </div>

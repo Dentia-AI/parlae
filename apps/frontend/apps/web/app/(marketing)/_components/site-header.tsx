@@ -1,4 +1,5 @@
 import { Header } from '@kit/ui/marketing';
+import { cn } from '@kit/ui/utils';
 
 import { AppLogo } from '~/components/app-logo';
 import type { JWTUserData } from '~/types/auth';
@@ -14,11 +15,14 @@ type SupportedUserShape =
       image?: string | null;
     });
 
-export function SiteHeader(props: { user?: SupportedUserShape | null }) {
+export function SiteHeader(props: { user?: SupportedUserShape | null; transparent?: boolean }) {
   const normalizedUser = normalizeUser(props.user);
 
   return (
     <Header
+      className={cn(
+        props.transparent && 'bg-transparent dark:bg-transparent border-b border-white/10'
+      )}
       logo={<AppLogo />}
       navigation={<SiteNavigation />}
       actions={<SiteHeaderAccountSection user={normalizedUser} />}
