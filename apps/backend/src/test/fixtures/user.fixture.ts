@@ -30,6 +30,15 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   phoneIntegrationSettings: {},
   advancedSetupEnabled: false,
   agentTemplateId: null,
+  setupProgress: {},
+  setupCompletedAt: null,
+  setupLastStep: null,
+  googleCalendarConnected: false,
+  googleCalendarAccessToken: null,
+  googleCalendarRefreshToken: null,
+  googleCalendarTokenExpiry: null,
+  googleCalendarId: null,
+  googleCalendarEmail: null,
   ...overrides,
 });
 
