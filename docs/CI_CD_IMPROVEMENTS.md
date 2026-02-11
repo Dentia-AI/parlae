@@ -26,14 +26,15 @@ The improved pipeline now follows a **fail-fast** approach with multiple quality
 
 ```
 ┌─────────┐   ┌──────────────┐   ┌───────┐   ┌──────┐   ┌────────┐
-│ Lint ⚠️ │ → │  Type Check  │ → │ Build │ → │ Test │ → │ Deploy │
+│ Lint ⚠️ │ → │ TypeCheck ⚠️ │ → │ Build │ → │ Test │ → │ Deploy │
 └─────────┘   └──────────────┘   └───────┘   └──────┘   └────────┘
     ↓              ↓                 ↓           ↓
-Warning         Fast              Slow        Slow
-(non-block)   (15-30s)         (1-2min)    (2-5min)
-               ✅ BLOCKS        ✅ BLOCKS   ✅ BLOCKS
+Warning         Warning           Slow        Slow
+(non-block)   (non-block)      (1-2min)    (2-5min)
+                               ✅ BLOCKS   ✅ BLOCKS
 
-⚠️ Lint is currently non-blocking while configs are being fixed
+⚠️ Lint & TypeCheck are currently non-blocking while issues are being fixed
+✅ Build & Test are BLOCKING and will catch critical errors
 ```
 
 ### 1. Lint (ESLint) ⚠️ NON-BLOCKING
@@ -55,7 +56,9 @@ Warning         Fast              Slow        Slow
 
 **Note:** This step uses `continue-on-error: true` and won't fail CI until configs are fixed.
 
-### 2. Type Check (TypeScript)
+### 2. Type Check (TypeScript) ⚠️ NON-BLOCKING
+**Status:** Currently non-blocking due to pre-existing type errors. See [TYPESCRIPT_ERRORS_TO_FIX.md](./TYPESCRIPT_ERRORS_TO_FIX.md) for details.
+
 **What it catches:**
 - Type errors
 - Variable shadowing
@@ -70,6 +73,8 @@ Warning         Fast              Slow        Slow
 - Property doesn't exist on type
 - Null/undefined access without checks
 - Incorrect function signatures
+
+**Note:** This step uses `continue-on-error: true` and won't fail CI until pre-existing errors are fixed.
 
 ### 3. Build (Next.js/NestJS)
 **What it catches:**

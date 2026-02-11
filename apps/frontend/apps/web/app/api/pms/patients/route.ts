@@ -129,6 +129,13 @@ export async function GET(request: NextRequest) {
     }
     
     const { context } = auth;
+    if (!context) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NO_CONTEXT', message: 'Missing context' } },
+        { status: 400 }
+      );
+    }
+    
     const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
     pmsIntegrationId = contextPmsIntegrationId;
     
@@ -250,6 +257,13 @@ export async function POST(request: NextRequest) {
     }
     
     const { context, data } = auth;
+    if (!context) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NO_CONTEXT', message: 'Missing context' } },
+        { status: 400 }
+      );
+    }
+    
     const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
     pmsIntegrationId = contextPmsIntegrationId;
     

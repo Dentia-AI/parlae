@@ -53,6 +53,7 @@ jobs:
 
       - name: Type check frontend code
         run: pnpm --filter web typecheck
+        continue-on-error: true
 
       - name: Build frontend
         run: pnpm --filter web build

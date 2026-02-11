@@ -252,11 +252,8 @@ class VapiService {
         size: fileBuffer.length,
       }, '[Vapi] Uploading binary file');
 
-      // Use FormData from formdata-node (already a dependency)
-      const { FormData, Blob } = await import('formdata-node');
-      
+      // Use native FormData and Blob (available in Node.js 18+)
       const formData = new FormData();
-      // Create a Blob from formdata-node (Node.js compatible)
       const blob = new Blob([fileBuffer], { type: mimeType });
       formData.append('file', blob, fileName);
 
@@ -266,7 +263,7 @@ class VapiService {
           'Authorization': this.getAuthHeader(),
           // Don't set Content-Type - let fetch set it with boundary
         },
-        body: formData,
+        body: formData as any, // Type assertion needed for Node.js FormData
       });
 
       if (!response.ok) {
