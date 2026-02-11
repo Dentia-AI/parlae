@@ -5,9 +5,9 @@ WORKDIR /app
 
 # Build arguments with defaults for production
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_51SNPE0F4uIWy4U8OvsQDnJmMEAUBNuBbtqYBvkUWPZ7NNuThT4t08xYnf08w7ZInw3HzbRS2HOG1PLDmytLERxUg00yIFu29Tn"
-ARG NEXT_PUBLIC_PRODUCT_NAME="Dentia"
+ARG NEXT_PUBLIC_PRODUCT_NAME="Parlae"
 ARG NEXT_PUBLIC_SITE_TITLE="Parlae"
-ARG NEXT_PUBLIC_SITE_DESCRIPTION="Manage your social media presence across all platforms with Parlae"
+ARG NEXT_PUBLIC_SITE_DESCRIPTION="AI Voice Agent Platform"
 ARG NEXT_PUBLIC_SITE_URL="https://www.parlae.ca"
 ARG NEXT_PUBLIC_DEFAULT_LOCALE="en"
 ARG NEXT_PUBLIC_DEFAULT_THEME_MODE="system"
@@ -20,9 +20,9 @@ ARG NEXT_PUBLIC_GHL_CALENDAR_ID
 # Auth build arguments (dummy values for build - real values set at runtime)
 ARG COGNITO_CLIENT_ID="dummy-client-id-for-docker-build"
 ARG COGNITO_CLIENT_SECRET="dummy-client-secret-for-docker-build"
-ARG COGNITO_ISSUER="https://cognito-idp.us-east-1.amazonaws.com/dummy-pool-for-build"
+ARG COGNITO_ISSUER="https://cognito-idp.us-east-2.amazonaws.com/dummy-pool-for-build"
 ARG NEXTAUTH_SECRET="dummy-nextauth-secret-minimum-32-characters-required-for-build"
-ARG NEXTAUTH_URL="https://www.parlae.ca"
+ARG NEXTAUTH_URL="https://app.parlae.ca"
 # Build metadata
 ARG GIT_COMMIT_SHA=unknown
 ARG BUILD_TIMESTAMP=unknown

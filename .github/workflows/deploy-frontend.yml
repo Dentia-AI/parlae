@@ -43,11 +43,15 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY_PROD }}" \
+            --build-arg NEXT_PUBLIC_PRODUCT_NAME="Parlae" \
+            --build-arg NEXT_PUBLIC_SITE_TITLE="Parlae" \
+            --build-arg NEXT_PUBLIC_SITE_DESCRIPTION="AI Voice Agent Platform" \
+            --build-arg NEXT_PUBLIC_SITE_URL="https://www.parlae.ca" \
             --build-arg COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}" \
             --build-arg COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
             --build-arg COGNITO_ISSUER="${{ secrets.COGNITO_ISSUER }}" \
             --build-arg NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
-            --build-arg NEXTAUTH_URL="https://www.parlae.ca" \
+            --build-arg NEXTAUTH_URL="https://app.parlae.ca" \
             -t "$IMAGE_URI" \
             -f infra/docker/frontend.Dockerfile \
             --push \

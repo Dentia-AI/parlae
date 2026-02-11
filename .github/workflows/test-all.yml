@@ -109,15 +109,16 @@ jobs:
         run: pnpm --filter web build
         env:
           NODE_ENV: production
-          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_PUBLIC_CI: true
+          NEXT_PUBLIC_SITE_URL: https://www.parlae.ca
           NEXT_PUBLIC_PRODUCT_NAME: Parlae
           NEXT_PUBLIC_SITE_TITLE: Parlae
           NEXT_PUBLIC_SITE_DESCRIPTION: AI Voice Agent Platform
           COGNITO_CLIENT_ID: dummy-client-id-for-build
           COGNITO_CLIENT_SECRET: dummy-client-secret-for-build
-          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/dummy-pool
+          COGNITO_ISSUER: https://cognito-idp.us-east-2.amazonaws.com/dummy-pool
           NEXTAUTH_SECRET: dummy-nextauth-secret-for-build-only
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://app.parlae.ca
 
       - name: Run frontend tests
         run: pnpm --filter web test
