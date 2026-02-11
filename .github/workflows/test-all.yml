@@ -110,10 +110,27 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_PUBLIC_CI: true
+          # App Configuration
           NEXT_PUBLIC_SITE_URL: https://www.parlae.ca
           NEXT_PUBLIC_PRODUCT_NAME: Parlae
           NEXT_PUBLIC_SITE_TITLE: Parlae
           NEXT_PUBLIC_SITE_DESCRIPTION: AI Voice Agent Platform
+          NEXT_PUBLIC_DEFAULT_LOCALE: en
+          # Theme Configuration
+          NEXT_PUBLIC_DEFAULT_THEME_MODE: system
+          NEXT_PUBLIC_THEME_COLOR: "#FAFAFA"
+          NEXT_PUBLIC_THEME_COLOR_DARK: "#0A0A0A"
+          # Feature Flags
+          NEXT_PUBLIC_ENABLE_THEME_TOGGLE: true
+          NEXT_PUBLIC_ENABLE_PERSONAL_ACCOUNT_DELETION: false
+          NEXT_PUBLIC_ENABLE_PERSONAL_ACCOUNT_BILLING: true
+          NEXT_PUBLIC_LANGUAGE_PRIORITY: user
+          NEXT_PUBLIC_ENABLE_VERSION_UPDATER: false
+          # AWS / S3 (dummy values for build)
+          AWS_REGION: us-east-2
+          S3_BUCKET_NAME: parlae-ci-dummy-bucket
+          S3_PUBLIC_BASE_URL: https://dummy-s3-url-for-ci-build.com
+          # Auth (dummy values for build)
           COGNITO_CLIENT_ID: dummy-client-id-for-build
           COGNITO_CLIENT_SECRET: dummy-client-secret-for-build
           COGNITO_ISSUER: https://cognito-idp.us-east-2.amazonaws.com/dummy-pool

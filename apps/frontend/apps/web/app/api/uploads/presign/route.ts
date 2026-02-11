@@ -14,7 +14,12 @@ const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME ?? process.env.S3_BUCKET;
 const S3_PUBLIC_BASE_URL =
   process.env.S3_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? '';
 
-if (!S3_BUCKET_NAME) {
+// Allow build to pass in CI/test environments without S3 configuration
+// The API route will return an error at runtime if called without proper config
+const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
+const isCI = process.env.NEXT_PUBLIC_CI === 'true';
+
+if (!S3_BUCKET_NAME && !isBuildTime && !isCI) {
   throw new Error('S3_BUCKET_NAME is not configured.');
 }
 
@@ -28,6 +33,14 @@ function sanitizeFilename(filename: string) {
 }
 
 export const POST = async (request: Request) => {
+  // Runtime check for S3 configuration
+  if (!S3_BUCKET_NAME) {
+    return NextResponse.json(
+      { error: 'S3 storage is not configured. Please contact support.' },
+      { status: 503 },
+    );
+  }
+
   const session = await auth();
   const userId = session?.user?.id as string | undefined;
 
