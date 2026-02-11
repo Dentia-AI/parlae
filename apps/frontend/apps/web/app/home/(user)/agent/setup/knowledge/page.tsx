@@ -12,6 +12,9 @@ import { Loader2, Upload, File, X, AlertCircle } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import { uploadKnowledgeBaseAction } from '../_lib/actions';
+import { Trans } from '@kit/ui/trans';
+import { useTranslation } from 'react-i18next';
+import { useSetupProgress } from '../_lib/use-setup-progress';
 
 interface UploadedFile {
   id: string; // This will be the Vapi file ID
@@ -26,14 +29,48 @@ export default function KnowledgeBasePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const csrfToken = useCsrfToken();
+  const { t } = useTranslation();
 
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [pending, startTransition] = useTransition();
   const [dragActive, setDragActive] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [accountId, setAccountId] = useState<string>('');
+
+  const { progress, saveKnowledge, isLoading } = useSetupProgress(accountId);
 
   useEffect(() => {
-    // No need to check for phone number anymore
-  }, [router]);
+    // Get accountId from sessionStorage
+    const storedAccountId = sessionStorage.getItem('accountId');
+    if (storedAccountId) {
+      setAccountId(storedAccountId);
+    }
+  }, []);
+
+  // Load saved knowledge base files from database
+  useEffect(() => {
+    if (progress?.knowledge?.data?.files && Array.isArray(progress.knowledge.data.files)) {
+      const savedFiles: UploadedFile[] = progress.knowledge.data.files.map((file: any) => ({
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        status: 'uploaded' as const,
+        vapiFileId: file.id,
+      }));
+      setFiles(savedFiles);
+    }
+  }, [progress]);
+
+  const handleStepClick = (stepIndex: number) => {
+    const routes = [
+      '/home/agent/setup',
+      '/home/agent/setup/knowledge',
+      '/home/agent/setup/integrations',
+      '/home/agent/setup/phone',
+      '/home/agent/setup/review',
+    ];
+    router.push(routes[stepIndex]);
+  };
 
   const handleFileChange = async (selectedFiles: FileList | null) => {
     if (!selectedFiles || selectedFiles.length === 0) return;
@@ -86,14 +123,14 @@ export default function KnowledgeBasePage() {
             : f
         ));
 
-        toast.success(`${file.name} uploaded successfully`);
+        toast.success(`${file.name} ${t('common:setup.knowledge.uploadSuccess')}`);
       } catch (error) {
         console.error('Upload error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         setFiles(prev => prev.map(f => 
           f.id === fileId ? { ...f, status: 'error' } : f
         ));
-        toast.error(`Failed to upload ${file.name}: ${errorMessage}`);
+        toast.error(`${t('common:setup.knowledge.uploadError')} ${file.name}: ${errorMessage}`);
       }
     }
   };
@@ -122,31 +159,50 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const selectedVoice = sessionStorage.getItem('selectedVoice');
     
     if (!selectedVoice) {
-      toast.error('Voice selection not found. Please go back to step 1.');
+      toast.error(t('common:setup.knowledge.voiceNotFound'));
       return;
     }
 
-    // Get only successfully uploaded files with Vapi file IDs
-    const uploadedFiles = files
-      .filter(f => f.status === 'uploaded' && f.vapiFileId)
-      .map(f => ({
-        id: f.vapiFileId,
-        name: f.name,
-        size: f.size,
-      }));
-
-    // Store files with Vapi IDs
-    sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(uploadedFiles));
-    
-    if (uploadedFiles.length > 0) {
-      toast.success(`${uploadedFiles.length} file(s) ready for deployment`);
+    if (!accountId) {
+      toast.error('Account ID not found. Please start from the beginning.');
+      return;
     }
-    
-    router.push(`/home/agent/setup/integrations`);
+
+    try {
+      setIsSaving(true);
+
+      // Get only successfully uploaded files with Vapi file IDs
+      const uploadedFiles = files
+        .filter(f => f.status === 'uploaded' && f.vapiFileId)
+        .map(f => ({
+          id: f.vapiFileId!,
+          name: f.name,
+          size: f.size,
+        }));
+
+      // Save to database
+      await saveKnowledge({ files: uploadedFiles });
+
+      // Also store in sessionStorage for backward compatibility
+      sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(uploadedFiles));
+      
+      if (uploadedFiles.length > 0) {
+        toast.success(`${uploadedFiles.length} ${t('common:setup.knowledge.filesReady')}`);
+      } else {
+        toast.success('Knowledge base progress saved');
+      }
+      
+      router.push(`/home/agent/setup/integrations`);
+    } catch (error) {
+      console.error('Failed to save knowledge base:', error);
+      toast.error('Failed to save knowledge base. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -157,150 +213,176 @@ export default function KnowledgeBasePage() {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const steps = [
+    t('common:setup.steps.voice'),
+    t('common:setup.steps.knowledge'),
+    t('common:setup.steps.integrations'),
+    t('common:setup.steps.phone'),
+    t('common:setup.steps.review'),
+  ];
+
   return (
-    <div className="container max-w-4xl py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Knowledge Base</h1>
-        <p className="text-muted-foreground mt-2">
-          Upload documents to train your AI receptionist
+    <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
+      {/* Header - Compact */}
+      <div className="mb-4 flex-shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">
+          <Trans i18nKey="common:setup.knowledge.title" />
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          <Trans i18nKey="common:setup.knowledge.description" />
         </p>
       </div>
 
-      {/* Progress Steps */}
-      <div className="mb-8">
+      {/* Progress Steps - Compact */}
+      <div className="mb-6 flex-shrink-0">
         <Stepper
-          steps={['Voice Selection', 'Knowledge Base', 'Integrations', 'Phone Integration', 'Review & Launch']}
+          steps={steps}
           currentStep={1}
+          onStepClick={handleStepClick}
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Step 3: Knowledge Base</CardTitle>
-          <CardDescription>
-            Upload documents about your services, hours, policies, and FAQs
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Upload Area */}
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              dragActive 
-                ? 'border-primary bg-primary/5' 
-                : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-            }`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-          >
-            <div className="flex flex-col items-center gap-4">
-              <div className="rounded-full bg-muted p-4">
-                <Upload className="h-8 w-8 text-muted-foreground" />
+      {/* Scrollable Content Area with Fade */}
+      <div className="flex-1 relative min-h-0">
+        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
+              <Trans i18nKey="common:setup.knowledge.pageTitle" defaults="Step 2: Knowledge Base" />
+            </CardTitle>
+            <CardDescription className="text-sm">
+              <Trans i18nKey="common:setup.knowledge.cardDescription" defaults="Upload documents about your services, hours, policies, and FAQs" />
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Upload Area */}
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                dragActive 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <div className="flex flex-col items-center gap-3">
+                <div className="rounded-full bg-muted p-3">
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-base font-medium mb-1">
+                    <Trans i18nKey="common:setup.knowledge.dropFilesHere" />
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <Trans i18nKey="common:setup.knowledge.supportedFormats" />
+                  </p>
+                </div>
+                <Input
+                  type="file"
+                  id="file-upload"
+                  className="hidden"
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt"
+                  onChange={(e) => handleFileChange(e.target.files)}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                >
+                  <Trans i18nKey="common:setup.knowledge.selectFiles" />
+                </Button>
               </div>
-              <div>
-                <p className="text-lg font-medium mb-1">
-                  Drop files here or click to upload
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Supports PDF, DOC, DOCX, TXT files up to 10MB each
-                </p>
-              </div>
-              <Input
-                type="file"
-                id="file-upload"
-                className="hidden"
-                multiple
-                accept=".pdf,.doc,.docx,.txt"
-                onChange={(e) => handleFileChange(e.target.files)}
-              />
-              <Button
-                variant="outline"
-                onClick={() => document.getElementById('file-upload')?.click()}
-              >
-                Select Files
-              </Button>
             </div>
-          </div>
 
-          {/* Uploaded Files List */}
-          {files.length > 0 && (
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">
-                Uploaded Files ({files.length})
-              </Label>
+            {/* Uploaded Files List */}
+            {files.length > 0 && (
               <div className="space-y-2">
-                {files.map((file) => (
-                  <Card key={file.id} className="p-3">
-                    <div className="flex items-center gap-3">
-                      <File className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{file.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatFileSize(file.size)}
-                          {file.status === 'uploading' && ` • ${file.progress}%`}
-                          {file.status === 'uploaded' && ' • Uploaded'}
-                          {file.status === 'error' && ' • Upload failed'}
-                        </p>
+                <Label className="text-sm font-medium">
+                  <Trans i18nKey="common:setup.knowledge.uploadedFiles" /> ({files.length})
+                </Label>
+                <div className="space-y-2">
+                  {files.map((file) => (
+                    <Card key={file.id} className="p-2.5">
+                      <div className="flex items-center gap-2">
+                        <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(file.size)}
+                            {file.status === 'uploading' && ` • ${file.progress}%`}
+                            {file.status === 'uploaded' && ` • ${t('common:setup.knowledge.uploaded')}`}
+                            {file.status === 'error' && ` • ${t('common:setup.knowledge.uploadFailed')}`}
+                          </p>
+                        </div>
+                        {file.status === 'uploading' && (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                        )}
+                        {file.status === 'error' && (
+                          <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFile(file.id)}
+                          disabled={file.status === 'uploading'}
+                          className="flex-shrink-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      {file.status === 'uploading' && (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      {file.status === 'uploading' && file.progress !== undefined && (
+                        <div className="mt-2 w-full bg-muted rounded-full h-1">
+                          <div
+                            className="bg-primary h-1 rounded-full transition-all"
+                            style={{ width: `${file.progress}%` }}
+                          />
+                        </div>
                       )}
-                      {file.status === 'error' && (
-                        <AlertCircle className="h-4 w-4 text-destructive" />
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(file.id)}
-                        disabled={file.status === 'uploading'}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {file.status === 'uploading' && file.progress !== undefined && (
-                      <div className="mt-2 w-full bg-muted rounded-full h-1.5">
-                        <div
-                          className="bg-primary h-1.5 rounded-full transition-all"
-                          style={{ width: `${file.progress}%` }}
-                        />
-                      </div>
-                    )}
-                  </Card>
-                ))}
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <Alert>
-            <AlertDescription>
-              <strong>Tip:</strong> Upload documents like:
-              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-                <li>Business hours and location info</li>
-                <li>Services offered and pricing</li>
-                <li>Frequently asked questions (FAQs)</li>
-                <li>Appointment booking policies</li>
-                <li>Insurance and payment information</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
+            <Alert>
+              <AlertDescription className="text-xs">
+                <strong><Trans i18nKey="common:setup.knowledge.tipTitle" /></strong> Upload documents like:
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li><Trans i18nKey="common:setup.knowledge.tipItems.hours" /></li>
+                  <li><Trans i18nKey="common:setup.knowledge.tipItems.services" /></li>
+                  <li><Trans i18nKey="common:setup.knowledge.tipItems.faqs" /></li>
+                  <li><Trans i18nKey="common:setup.knowledge.tipItems.policies" /></li>
+                  <li><Trans i18nKey="common:setup.knowledge.tipItems.insurance" /></li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+        </div>
+        {/* Fade effect at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />
+      </div>
 
-          {/* Navigation */}
-          <div className="flex justify-between pt-6 border-t">
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/home/agent/setup`)}
-            >
-              Back
-            </Button>
-            <Button
-              onClick={handleContinue}
-            >
-              Continue to Integrations
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Navigation - Fixed at bottom */}
+      <div className="pt-4 border-t flex-shrink-0 bg-background">
+        <div className="flex justify-between">
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/home/agent/setup`)}
+          >
+            <Trans i18nKey="common:setup.navigation.back" />
+          </Button>
+          <Button
+            onClick={handleContinue}
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : <Trans i18nKey="common:setup.knowledge.continueToIntegrations" />}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -46,6 +46,7 @@
     "@tanstack/react-query": "5.90.5",
     "@tanstack/react-table": "^8.21.3",
     "date-fns": "^4.1.0",
+    "googleapis": "144",
     "import-in-the-middle": "^1.9.0",
     "lucide-react": "^0.546.0",
     "next": "16.0.0",
@@ -59,6 +60,7 @@
     "recharts": "2.15.3",
     "require-in-the-middle": "^7.4.0",
     "sonner": "^2.0.7",
+    "stripe": "^19.1.0",
     "tailwind-merge": "^3.3.1",
     "urlpattern-polyfill": "^10.1.0",
     "zod": "^3.25.74"

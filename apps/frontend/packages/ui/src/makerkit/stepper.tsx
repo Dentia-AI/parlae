@@ -16,10 +16,12 @@ function Steps({
   steps,
   currentStep,
   variant,
+  onStepClick,
 }: {
   steps: string[];
   currentStep: number;
   variant?: Variant;
+  onStepClick?: (index: number) => void;
 }) {
   return steps.map((labelOrKey, index) => {
     const selected = currentStep === index;
@@ -41,9 +43,32 @@ function Steps({
 
     const { label, number } = getStepLabel(labelOrKey, index);
 
+    const isClickable = onStepClick !== undefined;
+    const containerClassName = cn(className, {
+      ['cursor-pointer hover:opacity-80 transition-opacity']: isClickable,
+    });
+
+    const handleClick = () => {
+      if (isClickable) {
+        onStepClick(index);
+      }
+    };
+
     return (
       <Fragment key={index}>
-        <div aria-selected={selected} className={className}>
+        <div 
+          aria-selected={selected} 
+          className={containerClassName}
+          onClick={handleClick}
+          role={isClickable ? 'button' : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onKeyDown={isClickable ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleClick();
+            }
+          } : undefined}
+        >
           <span className={labelClassName}>
             {number}
             <If condition={!isNumberVariant}>. {label}</If>
@@ -67,11 +92,13 @@ function Steps({
  *   - steps {string[]} - An array of strings representing the step labels.
  *   - currentStep {number} - The index of the currently active step.
  *   - variant {string} (optional) - The variant of the stepper component (default: 'default').
+ *   - onStepClick {function} (optional) - Callback when a step is clicked, receives step index.
  **/
 export function Stepper(props: {
   steps: string[];
   currentStep: number;
   variant?: Variant;
+  onStepClick?: (index: number) => void;
 }) {
   const variant = props.variant ?? 'default';
 
@@ -92,6 +119,7 @@ export function Stepper(props: {
         steps={props.steps}
         currentStep={props.currentStep}
         variant={variant}
+        onStepClick={props.onStepClick}
       />
     </div>
   );

@@ -18,7 +18,9 @@
     "./employee-management": "./src/employee-management/index.ts",
     "./notifications": "./src/notifications/index.ts",
     "./gohighlevel": "./src/gohighlevel/index.ts",
-    "./gohighlevel/server": "./src/gohighlevel/server.ts"
+    "./gohighlevel/server": "./src/gohighlevel/server.ts",
+    "./vapi/server": "./src/vapi/server.ts",
+    "./twilio/server": "./src/twilio/server.ts"
   },
   "devDependencies": {
     "@types/react": "catalog:"
@@ -27,6 +29,7 @@
     "@kit/next": "workspace:*",
     "@kit/prisma": "workspace:*",
     "@tanstack/react-query": "5.90.5",
+    "axios": "^1.7.9",
     "formdata-node": "^6.0.3",
     "next-auth": "^5.0.0-beta.20",
     "pino": "^10.1.0",

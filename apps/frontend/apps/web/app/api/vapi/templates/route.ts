@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseRouteHandlerClient } from '@kit/supabase/route-handler-client';
+import { prisma } from '@kit/prisma';
+import { requireSession } from '~/lib/auth/get-session';
 import { getLogger } from '@kit/shared/logger';
 
 /**
@@ -18,13 +19,12 @@ import { getLogger } from '@kit/shared/logger';
  */
 export async function GET(request: Request) {
   const logger = await getLogger();
-  const supabase = getSupabaseRouteHandlerClient();
 
   try {
     // Authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const session = await requireSession();
     
-    if (authError || !user) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -32,30 +32,22 @@ export async function GET(request: Request) {
     }
 
     // Get active squad templates
-    const { data: squads, error: squadsError } = await supabase
-      .from('vapi_squad_templates')
-      .select('*')
-      .eq('status', 'active')
-      .order('is_default', { ascending: false })
-      .order('display_name');
-
-    if (squadsError) {
-      logger.error({ error: squadsError }, '[Vapi Templates] Failed to fetch squads');
-      throw squadsError;
-    }
+    const squads = await prisma.vapiSquadTemplate.findMany({
+      where: { status: 'active' },
+      orderBy: [
+        { isDefault: 'desc' },
+        { displayName: 'asc' }
+      ]
+    });
 
     // Get active assistant templates
-    const { data: assistants, error: assistantsError } = await supabase
-      .from('vapi_assistant_templates')
-      .select('*')
-      .eq('status', 'active')
-      .order('is_default', { ascending: false })
-      .order('display_name');
-
-    if (assistantsError) {
-      logger.error({ error: assistantsError }, '[Vapi Templates] Failed to fetch assistants');
-      throw assistantsError;
-    }
+    const assistants = await prisma.vapiAssistantTemplate.findMany({
+      where: { status: 'active' },
+      orderBy: [
+        { isDefault: 'desc' },
+        { displayName: 'asc' }
+      ]
+    });
 
     return NextResponse.json({
       success: true,

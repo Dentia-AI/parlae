@@ -132,6 +132,33 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.callLog;
   }
 
+  // PMS Integration models
+  get pmsIntegration(): PrismaClient['pmsIntegration'] {
+    return this.client.pmsIntegration;
+  }
+
+  get pmsWriteback(): PrismaClient['pmsWriteback'] {
+    return this.client.pmsWriteback;
+  }
+
+  // Vapi models
+  get vapiPhoneNumber(): PrismaClient['vapiPhoneNumber'] {
+    return this.client.vapiPhoneNumber;
+  }
+
+  // TODO: Add these models to Prisma schema
+  // get vapiCallLog(): PrismaClient['vapiCallLog'] {
+  //   return this.client.vapiCallLog;
+  // }
+
+  // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {
+  //   return this.client.vapiSquadTemplate;
+  // }
+
+  // get vapiAssistantTemplate(): PrismaClient['vapiAssistantTemplate'] {
+  //   return this.client.vapiAssistantTemplate;
+  // }
+
   // Expose transaction method
   get $transaction(): PrismaClient['$transaction'] {
     return this.client.$transaction.bind(this.client);

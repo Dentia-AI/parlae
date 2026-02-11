@@ -24,6 +24,7 @@ import { SubMenuModeToggle } from '@kit/ui/mode-toggle';
 import { ProfileAvatar } from '@kit/ui/profile-avatar';
 import { Trans } from '@kit/ui/trans';
 import { cn } from '@kit/ui/utils';
+import { SubMenuLanguageSelector } from '@kit/ui/language-selector';
 
 import { usePersonalAccountData } from '../hooks/use-personal-account-data';
 
@@ -170,21 +171,6 @@ export function PersonalAccountDropdown({
           </Link>
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem asChild>
-          <Link
-            className={'s-full flex cursor-pointer items-center space-x-2'}
-            href={'/docs'}
-          >
-            <MessageCircleQuestion className={'h-5'} />
-
-            <span>
-              <Trans i18nKey={'common:documentation'} />
-            </span>
-          </Link>
-        </DropdownMenuItem>
-
         <If condition={isSuperAdmin}>
           <DropdownMenuSeparator />
 
@@ -207,6 +193,10 @@ export function PersonalAccountDropdown({
         <If condition={features.enableThemeToggle}>
           <SubMenuModeToggle />
         </If>
+
+        <DropdownMenuSeparator />
+
+        <SubMenuLanguageSelector />
 
         <DropdownMenuSeparator />
 

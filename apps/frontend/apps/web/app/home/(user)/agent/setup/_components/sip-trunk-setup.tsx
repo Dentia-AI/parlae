@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
@@ -15,13 +15,15 @@ interface SipTrunkSetupProps {
   businessName: string;
   onBack: () => void;
   onComplete: () => void;
+  onSetupStateChange?: (isComplete: boolean) => void;
 }
 
 export function SipTrunkSetup({ 
   accountId, 
   businessName, 
   onBack, 
-  onComplete 
+  onComplete,
+  onSetupStateChange
 }: SipTrunkSetupProps) {
   const [pending, startTransition] = useTransition();
   const [pbxType, setPbxType] = useState('');
@@ -31,6 +33,11 @@ export function SipTrunkSetup({
     username: string;
     password: string;
   } | null>(null);
+
+  // Notify parent of setup state changes
+  useEffect(() => {
+    onSetupStateChange?.(!!sipCredentials);
+  }, [sipCredentials, onSetupStateChange]);
 
   const handleProvision = () => {
     if (!pbxType || !clinicNumber) {
@@ -249,19 +256,6 @@ export function SipTrunkSetup({
           </Alert>
         </div>
       )}
-
-      {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={pending}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        {sipCredentials && (
-          <Button onClick={onComplete}>
-            Continue to Review
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

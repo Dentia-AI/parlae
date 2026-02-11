@@ -62,4 +62,7 @@ tmp/
 docker-compose.override.yml
 
 # Config files with secrets
-config.sh
+config.sh.backend.pid
+.frontend.pid
+.backend.pid
+.frontend.pid

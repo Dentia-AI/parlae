@@ -1,4 +1,4 @@
-import { CreditCard, Home, User, Users, Settings, Wrench } from 'lucide-react';
+import { CreditCard, User, Users, Settings, Wrench, BarChart3 } from 'lucide-react';
 import { z } from 'zod';
 
 import { NavigationConfigSchema } from '@kit/ui/navigation-schema';
@@ -13,23 +13,23 @@ const routes = [
     label: 'common:routes.application',
     children: [
       {
-        label: 'common:routes.home',
+        label: 'common:routes.dashboard',
         path: pathsConfig.app.home,
-        Icon: <Home className={iconClasses} />,
+        Icon: <BarChart3 className={iconClasses} />,
         end: true,
       },
       {
-        label: 'Setup',
+        label: 'common:routes.setup',
         path: '/home/agent',
         Icon: <Settings className={iconClasses} />,
         children: [
           {
-            label: 'AI Agents',
+            label: 'common:routes.aiAgents',
             path: '/home/agent',
             Icon: <Settings className={iconClasses} />,
           },
           {
-            label: 'Advanced Setup',
+            label: 'common:routes.advancedSetup',
             path: '/home/agent/advanced',
             Icon: <Wrench className={iconClasses} />,
           },

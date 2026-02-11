@@ -4,25 +4,25 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 enum AppPermission {
-  ROLES_MANAGE      @map("roles.manage")
-  BILLING_MANAGE    @map("billing.manage")
-  SETTINGS_MANAGE   @map("settings.manage")
-  MEMBERS_MANAGE    @map("members.manage")
-  INVITES_MANAGE    @map("invites.manage")
-  CAMPAIGNS_VIEW    @map("campaigns.view")
-  CAMPAIGNS_CREATE  @map("campaigns.create")
-  CAMPAIGNS_EDIT    @map("campaigns.edit")
-  CAMPAIGNS_DELETE  @map("campaigns.delete")
-  ADS_VIEW          @map("ads.view")
-  ADS_CREATE        @map("ads.create")
-  ADS_EDIT          @map("ads.edit")
-  ADS_DELETE        @map("ads.delete")
-  ANALYTICS_VIEW    @map("analytics.view")
+  ROLES_MANAGE     @map("roles.manage")
+  BILLING_MANAGE   @map("billing.manage")
+  SETTINGS_MANAGE  @map("settings.manage")
+  MEMBERS_MANAGE   @map("members.manage")
+  INVITES_MANAGE   @map("invites.manage")
+  CAMPAIGNS_VIEW   @map("campaigns.view")
+  CAMPAIGNS_CREATE @map("campaigns.create")
+  CAMPAIGNS_EDIT   @map("campaigns.edit")
+  CAMPAIGNS_DELETE @map("campaigns.delete")
+  ADS_VIEW         @map("ads.view")
+  ADS_CREATE       @map("ads.create")
+  ADS_EDIT         @map("ads.edit")
+  ADS_DELETE       @map("ads.delete")
+  ANALYTICS_VIEW   @map("analytics.view")
 }
 
 enum BillingProvider {
@@ -117,46 +117,46 @@ enum UserRole {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
+  id              String   @id @default(uuid())
+  email           String   @unique
   displayName     String?
   avatarUrl       String?
-  cognitoUsername String?   @unique @map("cognito_username")
-  role            UserRole  @default(ACCOUNT_MANAGER) @map("role")
-  createdById     String?   @map("created_by_id")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  cognitoUsername String?  @unique @map("cognito_username")
+  role            UserRole @default(ACCOUNT_MANAGER) @map("role")
+  createdById     String?  @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  createdBy           User?                   @relation("EmployeeCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdEmployees    User[]                  @relation("EmployeeCreator")
-  accountsOwned       Account[]               @relation("AccountPrimaryOwner")
-  memberships         AccountMembership[]
-  files               File[]
-  sourceContent       SourceContent[]
-  ads                 Ad[]
-  transactions        UserTransaction[]
-  nonces              Nonce[]
-  sentInvitations     Invitation[]            @relation("InvitationInviter")
-  cognitoTokens       CognitoTokens?
-  payments            Payment[]
-  adminAccessGranted  AdminAccess[]           @relation("AdminAccessGrantedByUser")
-  adminAccessReceived AdminAccess[]           @relation("AdminAccessReceivedByAdmin")
+  createdBy             User?                  @relation("EmployeeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdEmployees      User[]                 @relation("EmployeeCreator")
+  accountsOwned         Account[]              @relation("AccountPrimaryOwner")
+  memberships           AccountMembership[]
+  files                 File[]
+  sourceContent         SourceContent[]
+  ads                   Ad[]
+  transactions          UserTransaction[]
+  nonces                Nonce[]
+  sentInvitations       Invitation[]           @relation("InvitationInviter")
+  cognitoTokens         CognitoTokens?
+  payments              Payment[]
+  adminAccessGranted    AdminAccess[]          @relation("AdminAccessGrantedByUser")
+  adminAccessReceived   AdminAccess[]          @relation("AdminAccessReceivedByAdmin")
   impersonationSessions ImpersonationSession[] @relation("ImpersonationAdmin")
   impersonatedSessions  ImpersonationSession[] @relation("ImpersonationTarget")
-  ghlSubAccounts      GhlSubAccount[]
+  ghlSubAccounts        GhlSubAccount[]
 
   @@map("users")
 }
 
 model CognitoTokens {
-  id           String    @id @default(uuid())
-  userId       String    @unique @map("user_id")
-  accessToken  String    @map("access_token") @db.Text
-  idToken      String    @map("id_token") @db.Text
-  refreshToken String?   @map("refresh_token") @db.Text
-  expiresAt    DateTime  @map("expires_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  accessToken  String   @map("access_token") @db.Text
+  idToken      String   @map("id_token") @db.Text
+  refreshToken String?  @map("refresh_token") @db.Text
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -176,12 +176,25 @@ model Account {
   createdBy         String?  @map("created_by")
   updatedBy         String?  @map("updated_by")
   primaryOwnerId    String   @map("primary_owner_user_id")
-  
+
   // AI Receptionist phone integration fields
   phoneIntegrationMethod   String? @default("none") @map("phone_integration_method")
   phoneIntegrationSettings Json?   @default("{}") @map("phone_integration_settings")
   advancedSetupEnabled     Boolean @default(false) @map("advanced_setup_enabled")
   agentTemplateId          String? @map("agent_template_id")
+
+  // Setup wizard progress tracking
+  setupProgress    Json?     @default("{}") @map("setup_progress") // Stores progress for each step
+  setupCompletedAt DateTime? @map("setup_completed_at") // When the full setup was completed
+  setupLastStep    String?   @map("setup_last_step") // Last step user was on
+
+  // Google Calendar integration (alternative to PMS)
+  googleCalendarConnected     Boolean   @default(false) @map("google_calendar_connected")
+  googleCalendarAccessToken   String?   @map("google_calendar_access_token") @db.Text
+  googleCalendarRefreshToken  String?   @map("google_calendar_refresh_token") @db.Text
+  googleCalendarTokenExpiry   DateTime? @map("google_calendar_token_expiry")
+  googleCalendarId            String?   @map("google_calendar_id") // Primary calendar ID to use
+  googleCalendarEmail         String?   @map("google_calendar_email") // Connected Google account email
 
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
   memberships           AccountMembership[]
@@ -196,31 +209,33 @@ model Account {
   impersonationSessions ImpersonationSession[]
   ghlSubAccounts        GhlSubAccount[]
   agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
+  pmsIntegrations       PmsIntegration[]
+  vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account
 
   @@map("accounts")
 }
 
 model AgentTemplate {
-  id              String   @id @default(uuid())
-  name            String   @unique // e.g., "receptionist-v1", "emergency-v2"
-  displayName     String   // e.g., "Receptionist v1", "Emergency Handler v2"
-  description     String?
-  version         String   // e.g., "v1", "v2.1"
-  category        String   // e.g., "receptionist", "emergency", "booking"
-  isDefault       Boolean  @default(false) @map("is_default")
-  isActive        Boolean  @default(true) @map("is_active")
-  
+  id          String  @id @default(uuid())
+  name        String  @unique // e.g., "receptionist-v1", "emergency-v2"
+  displayName String // e.g., "Receptionist v1", "Emergency Handler v2"
+  description String?
+  version     String // e.g., "v1", "v2.1"
+  category    String // e.g., "receptionist", "emergency", "booking"
+  isDefault   Boolean @default(false) @map("is_default")
+  isActive    Boolean @default(true) @map("is_active")
+
   // Template configuration (excludes user-specific settings)
-  squadConfig     Json     @map("squad_config")      // Squad structure and routing
-  assistantConfig Json     @map("assistant_config")  // Assistant settings (no voice, no knowledge base)
-  toolsConfig     Json?    @map("tools_config")      // Tools/functions configuration
-  modelConfig     Json     @map("model_config")      // Model settings (provider, model name, system prompt)
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  createdBy       String?  @map("created_by")
-  
-  accounts        Account[]
+  squadConfig     Json  @map("squad_config") // Squad structure and routing
+  assistantConfig Json  @map("assistant_config") // Assistant settings (no voice, no knowledge base)
+  toolsConfig     Json? @map("tools_config") // Tools/functions configuration
+  modelConfig     Json  @map("model_config") // Model settings (provider, model name, system prompt)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  accounts Account[]
 
   @@map("agent_templates")
 }
@@ -289,15 +304,15 @@ model Config {
 }
 
 model Invitation {
-  id         Int      @id @default(autoincrement())
-  accountId  String   @map("account_id")
-  email      String
-  inviteToken String  @map("invite_token")
-  invitedBy  String   @map("invited_by")
-  roleName   String   @map("role")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-  expiresAt  DateTime @map("expires_at")
+  id          Int      @id @default(autoincrement())
+  accountId   String   @map("account_id")
+  email       String
+  inviteToken String   @map("invite_token")
+  invitedBy   String   @map("invited_by")
+  roleName    String   @map("role")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  expiresAt   DateTime @map("expires_at")
 
   account Account @relation(fields: [accountId], references: [id])
   role    Role    @relation(fields: [roleName], references: [name])
@@ -307,24 +322,24 @@ model Invitation {
 }
 
 model Nonce {
-  id                        String   @id
-  clientToken               String   @map("client_token")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  description               String?  @map("description")
-  expiresAt                 DateTime @map("expires_at")
+  id                        String    @id
+  clientToken               String    @map("client_token")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  description               String?   @map("description")
+  expiresAt                 DateTime  @map("expires_at")
   lastVerificationAt        DateTime? @map("last_verification_at")
-  lastVerificationIp        Json?    @map("last_verification_ip")
-  lastVerificationUserAgent String? @map("last_verification_user_agent")
-  metadata                  Json?    @map("metadata")
-  nonceValue                String   @map("nonce")
-  purpose                   String   @map("purpose")
-  revoked                   Boolean  @default(false) @map("revoked")
-  revokedReason             String?  @map("revoked_reason")
-  scopes                    String[] @map("scopes")
-  tags                      String[] @map("tags")
+  lastVerificationIp        Json?     @map("last_verification_ip")
+  lastVerificationUserAgent String?   @map("last_verification_user_agent")
+  metadata                  Json?     @map("metadata")
+  nonceValue                String    @map("nonce")
+  purpose                   String    @map("purpose")
+  revoked                   Boolean   @default(false) @map("revoked")
+  revokedReason             String?   @map("revoked_reason")
+  scopes                    String[]  @map("scopes")
+  tags                      String[]  @map("tags")
   usedAt                    DateTime? @map("used_at")
-  userId                    String?  @map("user_id")
-  verificationAttempts      Int      @default(0) @map("verification_attempts")
+  userId                    String?   @map("user_id")
+  verificationAttempts      Int       @default(0) @map("verification_attempts")
 
   user User? @relation(fields: [userId], references: [id])
 
@@ -358,9 +373,9 @@ model Order {
   totalAmount       Int             @map("total_amount")
   updatedAt         DateTime        @updatedAt @map("updated_at")
 
-  account        Account         @relation(fields: [accountId], references: [id])
+  account         Account         @relation(fields: [accountId], references: [id])
   billingCustomer BillingCustomer @relation(fields: [billingCustomerId], references: [id])
-  items          OrderItem[]
+  items           OrderItem[]
 
   @@map("orders")
 }
@@ -396,27 +411,27 @@ model Subscription {
   trialEndsAt       DateTime?          @map("trial_ends_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  account        Account        @relation(fields: [accountId], references: [id])
-  billingCustomer BillingCustomer @relation(fields: [billingCustomerId], references: [id])
-  items          SubscriptionItem[]
+  account         Account            @relation(fields: [accountId], references: [id])
+  billingCustomer BillingCustomer    @relation(fields: [billingCustomerId], references: [id])
+  items           SubscriptionItem[]
 
   @@map("subscriptions")
 }
 
 model SubscriptionItem {
-  id             String              @id
-  subscriptionId String              @map("subscription_id")
-  interval       String              @map("interval")
-  intervalCount  Int                 @map("interval_count")
-  priceAmount    Int?                @map("price_amount")
-  productId      String              @map("product_id")
-  quantity       Int                 @default(1) @map("quantity")
+  id             String               @id
+  subscriptionId String               @map("subscription_id")
+  interval       String               @map("interval")
+  intervalCount  Int                  @map("interval_count")
+  priceAmount    Int?                 @map("price_amount")
+  productId      String               @map("product_id")
+  quantity       Int                  @default(1) @map("quantity")
   type           SubscriptionItemType @map("type")
-  variantId      String              @map("variant_id")
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
+  variantId      String               @map("variant_id")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  subscription Subscription  @relation(fields: [subscriptionId], references: [id])
   usageRecords UsageRecord[]
 
   @@map("subscription_items")
@@ -432,8 +447,8 @@ model UsageRecord {
 
   subscriptionItem SubscriptionItem @relation(fields: [subscriptionItemId], references: [id], onDelete: Cascade)
 
-  @@map("subscription_usage")
   @@index([subscriptionItemId, periodStartsAt, periodEndsAt], name: "subscription_usage_period_idx")
+  @@map("subscription_usage")
 }
 
 model File {
@@ -462,9 +477,9 @@ model SourceContent {
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
 
-  user  User  @relation(fields: [userId], references: [id])
-  file  File? @relation(fields: [fileId], references: [id])
-  ads   Ad[]
+  user User  @relation(fields: [userId], references: [id])
+  file File? @relation(fields: [fileId], references: [id])
+  ads  Ad[]
 
   @@map("source_content")
 }
@@ -484,23 +499,23 @@ model AdProvider {
 }
 
 model Ad {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  accountId       String?  @map("account_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  fileId          String?  @map("file_id")
-  sourceContentId String?  @map("source_content_id")
-  title           String?  @map("title")
-  message         String?  @map("message")
-  url             String?  @map("url")
-  status          AdStatus @default(DISABLED) @map("status")
-  conversionDetails Json?  @map("conversion_details")
-  target          Json?    @map("target")
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  accountId         String?  @map("account_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  fileId            String?  @map("file_id")
+  sourceContentId   String?  @map("source_content_id")
+  title             String?  @map("title")
+  message           String?  @map("message")
+  url               String?  @map("url")
+  status            AdStatus @default(DISABLED) @map("status")
+  conversionDetails Json?    @map("conversion_details")
+  target            Json?    @map("target")
 
-  user          User          @relation(fields: [userId], references: [id])
-  account       Account?      @relation(fields: [accountId], references: [id])
-  file          File?         @relation(fields: [fileId], references: [id])
-  sourceContent SourceContent? @relation(fields: [sourceContentId], references: [id])
+  user          User             @relation(fields: [userId], references: [id])
+  account       Account?         @relation(fields: [accountId], references: [id])
+  file          File?            @relation(fields: [fileId], references: [id])
+  sourceContent SourceContent?   @relation(fields: [sourceContentId], references: [id])
   campaigns     MetaAdCampaign[]
 
   @@map("ads")
@@ -521,29 +536,29 @@ model UserTransaction {
 }
 
 model Payment {
-  id                     String         @id @default(uuid())
-  userId                 String         @map("user_id")
-  accountId              String?        @map("account_id")
-  stripePaymentIntentId  String?        @unique @map("stripe_payment_intent_id")
-  stripeCheckoutSessionId String?       @unique @map("stripe_checkout_session_id")
-  amountCents            Int            @map("amount_cents")
-  currency               String         @default("usd") @map("currency")
-  status                 PaymentStatus  @map("status")
-  paymentType            PaymentType    @map("payment_type")
-  isRecurring            Boolean        @default(false) @map("is_recurring")
-  recurringInterval      RecurringInterval? @map("recurring_interval")
-  recurringFrequency     Int?           @map("recurring_frequency")
-  nextBillingDate        DateTime?      @map("next_billing_date")
-  lastBillingDate        DateTime?      @map("last_billing_date")
-  failureCount           Int            @default(0) @map("failure_count")
-  failureReason          String?        @map("failure_reason")
-  metadata               Json?          @map("metadata")
-  createdAt              DateTime       @default(now()) @map("created_at")
-  updatedAt              DateTime       @updatedAt @map("updated_at")
+  id                      String             @id @default(uuid())
+  userId                  String             @map("user_id")
+  accountId               String?            @map("account_id")
+  stripePaymentIntentId   String?            @unique @map("stripe_payment_intent_id")
+  stripeCheckoutSessionId String?            @unique @map("stripe_checkout_session_id")
+  amountCents             Int                @map("amount_cents")
+  currency                String             @default("usd") @map("currency")
+  status                  PaymentStatus      @map("status")
+  paymentType             PaymentType        @map("payment_type")
+  isRecurring             Boolean            @default(false) @map("is_recurring")
+  recurringInterval       RecurringInterval? @map("recurring_interval")
+  recurringFrequency      Int?               @map("recurring_frequency")
+  nextBillingDate         DateTime?          @map("next_billing_date")
+  lastBillingDate         DateTime?          @map("last_billing_date")
+  failureCount            Int                @default(0) @map("failure_count")
+  failureReason           String?            @map("failure_reason")
+  metadata                Json?              @map("metadata")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account       Account?        @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  refunds       Refund[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  refunds Refund[]
 
   @@index([userId])
   @@index([accountId])
@@ -553,16 +568,16 @@ model Payment {
 }
 
 model Refund {
-  id                  String        @id @default(uuid())
-  paymentId           String        @map("payment_id")
-  stripeRefundId      String?       @unique @map("stripe_refund_id")
-  amountCents         Int           @map("amount_cents")
-  currency            String        @default("usd") @map("currency")
-  status              RefundStatus  @map("status")
-  reason              String?       @map("reason")
-  metadata            Json?         @map("metadata")
-  createdAt           DateTime      @default(now()) @map("created_at")
-  updatedAt           DateTime      @updatedAt @map("updated_at")
+  id             String       @id @default(uuid())
+  paymentId      String       @map("payment_id")
+  stripeRefundId String?      @unique @map("stripe_refund_id")
+  amountCents    Int          @map("amount_cents")
+  currency       String       @default("usd") @map("currency")
+  status         RefundStatus @map("status")
+  reason         String?      @map("reason")
+  metadata       Json?        @map("metadata")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
@@ -579,8 +594,8 @@ model MetaAdCampaign {
   status               CampaignStatus @map("status")
   target               Json?          @map("target")
 
-  provider AdProvider @relation(fields: [adProviderId], references: [id])
-  ad       Ad         @relation(fields: [adId], references: [id])
+  provider AdProvider  @relation(fields: [adProviderId], references: [id])
+  ad       Ad          @relation(fields: [adId], references: [id])
   adSets   MetaAdSet[]
 
   @@map("meta_ad_campaign")
@@ -599,19 +614,19 @@ model MetaAdSet {
 }
 
 model AdminAccess {
-  id               String    @id @default(uuid())
-  adminId          String    @map("admin_id")
-  grantedByUserId  String    @map("granted_by_user_id")
-  accountId        String?   @map("account_id")
-  grantedAt        DateTime  @default(now()) @map("granted_at")
-  revokedAt        DateTime? @map("revoked_at")
-  isRevoked        Boolean   @default(false) @map("is_revoked")
-  expiresAt        DateTime? @map("expires_at")
-  notes            String?   @map("notes")
+  id              String    @id @default(uuid())
+  adminId         String    @map("admin_id")
+  grantedByUserId String    @map("granted_by_user_id")
+  accountId       String?   @map("account_id")
+  grantedAt       DateTime  @default(now()) @map("granted_at")
+  revokedAt       DateTime? @map("revoked_at")
+  isRevoked       Boolean   @default(false) @map("is_revoked")
+  expiresAt       DateTime? @map("expires_at")
+  notes           String?   @map("notes")
 
-  admin        User     @relation("AdminAccessReceivedByAdmin", fields: [adminId], references: [id], onDelete: Cascade)
-  grantedBy    User     @relation("AdminAccessGrantedByUser", fields: [grantedByUserId], references: [id], onDelete: Cascade)
-  account      Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  admin     User     @relation("AdminAccessReceivedByAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  grantedBy User     @relation("AdminAccessGrantedByUser", fields: [grantedByUserId], references: [id], onDelete: Cascade)
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([adminId, isRevoked])
   @@index([accountId])
@@ -619,17 +634,17 @@ model AdminAccess {
 }
 
 model ImpersonationSession {
-  id              String    @id @default(uuid())
-  adminId         String    @map("admin_id")
-  targetUserId    String    @map("target_user_id")
-  accountId       String?   @map("account_id")
-  startedAt       DateTime  @default(now()) @map("started_at")
-  endedAt         DateTime? @map("ended_at")
-  isActive        Boolean   @default(true) @map("is_active")
-  ipAddress       String?   @map("ip_address")
-  userAgent       String?   @map("user_agent")
-  sessionToken    String    @unique @map("session_token")
-  autoRevokeAccess Boolean  @default(false) @map("auto_revoke_access")
+  id               String    @id @default(uuid())
+  adminId          String    @map("admin_id")
+  targetUserId     String    @map("target_user_id")
+  accountId        String?   @map("account_id")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  endedAt          DateTime? @map("ended_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  ipAddress        String?   @map("ip_address")
+  userAgent        String?   @map("user_agent")
+  sessionToken     String    @unique @map("session_token")
+  autoRevokeAccess Boolean   @default(false) @map("auto_revoke_access")
 
   admin      User     @relation("ImpersonationAdmin", fields: [adminId], references: [id], onDelete: Cascade)
   targetUser User     @relation("ImpersonationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
@@ -646,59 +661,91 @@ model ImpersonationSession {
 // ==================================================
 
 enum GhlSubAccountStatus {
-  PENDING   @map("pending")    // Sub-account creation in progress
-  ACTIVE    @map("active")     // Sub-account is active
-  SUSPENDED @map("suspended")  // Sub-account is temporarily suspended
-  DELETED   @map("deleted")    // Sub-account is deleted
+  PENDING   @map("pending") // Sub-account creation in progress
+  ACTIVE    @map("active") // Sub-account is active
+  SUSPENDED @map("suspended") // Sub-account is temporarily suspended
+  DELETED   @map("deleted") // Sub-account is deleted
 }
 
 enum VoiceAgentStatus {
-  DRAFT     @map("draft")      // Agent is being configured
-  ACTIVE    @map("active")     // Agent is live and taking calls
-  PAUSED    @map("paused")     // Agent is temporarily paused
-  ARCHIVED  @map("archived")   // Agent is archived
+  DRAFT    @map("draft") // Agent is being configured
+  ACTIVE   @map("active") // Agent is live and taking calls
+  PAUSED   @map("paused") // Agent is temporarily paused
+  ARCHIVED @map("archived") // Agent is archived
 }
 
 enum KnowledgeBaseSource {
-  UPLOAD  @map("upload")       // Uploaded file (PDF, DOCX, etc.)
-  URL     @map("url")          // Scraped from website URL
-  TEXT    @map("text")         // Manually entered text
+  UPLOAD @map("upload") // Uploaded file (PDF, DOCX, etc.)
+  URL    @map("url") // Scraped from website URL
+  TEXT   @map("text") // Manually entered text
+}
+
+enum CallOutcome {
+  BOOKED            @map("booked") // Appointment was booked
+  TRANSFERRED       @map("transferred") // Call was transferred to staff
+  INSURANCE_INQUIRY @map("insurance_inquiry") // Insurance verification/inquiry
+  PAYMENT_PLAN      @map("payment_plan") // Payment plan discussed/setup
+  INFORMATION       @map("information") // General information provided
+  VOICEMAIL         @map("voicemail") // Voicemail left
+  NO_ANSWER         @map("no_answer") // No answer
+  BUSY              @map("busy") // Line was busy
+  FAILED            @map("failed") // Call failed
+  OTHER             @map("other") // Other outcome
+}
+
+enum CallType {
+  INBOUND           @map("inbound") // Incoming call
+  OUTBOUND_LEAD     @map("outbound_lead") // Outbound lead follow-up
+  OUTBOUND_DEBT     @map("outbound_debt") // Outbound debt collection
+  OUTBOUND_FOLLOWUP @map("outbound_followup") // Outbound follow-up
+  OUTBOUND_CAMPAIGN @map("outbound_campaign") // Outbound campaign call
+  OUTBOUND_OTHER    @map("outbound_other") // Other outbound call
+}
+
+enum CallStatus {
+  SCHEDULED   @map("scheduled") // Scheduled for future
+  IN_PROGRESS @map("in_progress") // Currently in progress
+  COMPLETED   @map("completed") // Successfully completed
+  MISSED      @map("missed") // Missed call
+  VOICEMAIL   @map("voicemail") // Went to voicemail
+  FAILED      @map("failed") // Failed to connect
+  CANCELLED   @map("cancelled") // Cancelled before completion
 }
 
 model GhlSubAccount {
-  id              String              @id @default(uuid())
-  userId          String              @map("user_id")
-  accountId       String?             @map("account_id")
-  
+  id        String  @id @default(uuid())
+  userId    String  @map("user_id")
+  accountId String? @map("account_id")
+
   // GHL Sub-Account Details
-  ghlLocationId   String              @unique @map("ghl_location_id")
-  ghlCompanyId    String?             @map("ghl_company_id")
-  
+  ghlLocationId String  @unique @map("ghl_location_id")
+  ghlCompanyId  String? @map("ghl_company_id")
+
   // Business Information
-  businessName    String              @map("business_name")
-  businessEmail   String?             @map("business_email")
-  businessPhone   String?             @map("business_phone")
-  businessAddress String?             @map("business_address")
-  businessWebsite String?             @map("business_website")
-  timezone        String?             @map("timezone")
-  industry        String?             @map("industry")
-  
+  businessName    String  @map("business_name")
+  businessEmail   String? @map("business_email")
+  businessPhone   String? @map("business_phone")
+  businessAddress String? @map("business_address")
+  businessWebsite String? @map("business_website")
+  timezone        String? @map("timezone")
+  industry        String? @map("industry")
+
   // Status & Metadata
-  status          GhlSubAccountStatus @default(PENDING) @map("status")
-  setupCompleted  Boolean             @default(false) @map("setup_completed")
-  setupStep       Int                 @default(0) @map("setup_step")
-  metadata        Json?               @map("metadata")
-  
+  status         GhlSubAccountStatus @default(PENDING) @map("status")
+  setupCompleted Boolean             @default(false) @map("setup_completed")
+  setupStep      Int                 @default(0) @map("setup_step")
+  metadata       Json?               @map("metadata")
+
   // Timestamps
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
-  lastSyncedAt    DateTime?           @map("last_synced_at")
-  
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastSyncedAt DateTime? @map("last_synced_at")
+
   // Relations
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account      Account?      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  voiceAgents  VoiceAgent[]
-  
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  voiceAgents VoiceAgent[]
+
   @@index([userId])
   @@index([accountId])
   @@index([ghlLocationId])
@@ -707,51 +754,51 @@ model GhlSubAccount {
 }
 
 model VoiceAgent {
-  id              String             @id @default(uuid())
-  subAccountId    String             @map("sub_account_id")
-  
+  id           String @id @default(uuid())
+  subAccountId String @map("sub_account_id")
+
   // Agent Identity
-  name            String             @map("name")
-  description     String?            @map("description")
-  ghlAgentId      String?            @unique @map("ghl_agent_id")
-  
+  name        String  @map("name")
+  description String? @map("description")
+  ghlAgentId  String? @unique @map("ghl_agent_id")
+
   // Voice Configuration
-  voiceId         String             @map("voice_id")
-  voiceName       String?            @map("voice_name")
-  phoneNumber     String?            @map("phone_number")
-  language        String             @default("en-US") @map("language")
-  
+  voiceId     String  @map("voice_id")
+  voiceName   String? @map("voice_name")
+  phoneNumber String? @map("phone_number")
+  language    String  @default("en-US") @map("language")
+
   // Agent Behavior
-  prompt          String             @db.Text @map("prompt")
-  personality     String?            @map("personality")
-  greetingMessage String?            @map("greeting_message")
-  
+  prompt          String  @map("prompt") @db.Text
+  personality     String? @map("personality")
+  greetingMessage String? @map("greeting_message")
+
   // Business Hours & Availability
-  businessHours   Json?              @map("business_hours")
-  timezone        String?            @map("timezone")
-  
+  businessHours Json?   @map("business_hours")
+  timezone      String? @map("timezone")
+
   // Workflows & Actions (JSON config)
-  workflows       Json?              @map("workflows")
-  postCallActions Json?              @map("post_call_actions")
-  inCallActions   Json?              @map("in_call_actions")
-  customFields    Json?              @map("custom_fields")
-  webhookConfig   Json?              @map("webhook_config")
-  
+  workflows       Json? @map("workflows")
+  postCallActions Json? @map("post_call_actions")
+  inCallActions   Json? @map("in_call_actions")
+  customFields    Json? @map("custom_fields")
+  webhookConfig   Json? @map("webhook_config")
+
   // Status
-  status          VoiceAgentStatus   @default(DRAFT) @map("status")
-  isDeployed      Boolean            @default(false) @map("is_deployed")
-  
+  status     VoiceAgentStatus @default(DRAFT) @map("status")
+  isDeployed Boolean          @default(false) @map("is_deployed")
+
   // Timestamps
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
-  deployedAt      DateTime?          @map("deployed_at")
-  lastCallAt      DateTime?          @map("last_call_at")
-  
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deployedAt DateTime? @map("deployed_at")
+  lastCallAt DateTime? @map("last_call_at")
+
   // Relations
-  subAccount    GhlSubAccount    @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  subAccount    GhlSubAccount   @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   knowledgeBase KnowledgeBase[]
   callLogs      CallLog[]
-  
+
   @@index([subAccountId])
   @@index([status])
   @@index([phoneNumber])
@@ -759,78 +806,333 @@ model VoiceAgent {
 }
 
 model KnowledgeBase {
-  id            String               @id @default(uuid())
-  voiceAgentId  String               @map("voice_agent_id")
-  
+  id           String @id @default(uuid())
+  voiceAgentId String @map("voice_agent_id")
+
   // Content Information
-  title         String               @map("title")
-  content       String               @db.Text @map("content")
-  source        KnowledgeBaseSource  @map("source")
-  
+  title   String              @map("title")
+  content String              @map("content") @db.Text
+  source  KnowledgeBaseSource @map("source")
+
   // Source Details
-  sourceUrl     String?              @map("source_url")
-  fileUrl       String?              @map("file_url")
-  fileName      String?              @map("file_name")
-  fileSize      Int?                 @map("file_size")
-  
+  sourceUrl String? @map("source_url")
+  fileUrl   String? @map("file_url")
+  fileName  String? @map("file_name")
+  fileSize  Int?    @map("file_size")
+
   // GHL Integration
-  ghlResourceId String?              @map("ghl_resource_id")
-  
+  ghlResourceId String? @map("ghl_resource_id")
+
   // Processing Status
-  isProcessed   Boolean              @default(false) @map("is_processed")
-  processingError String?            @map("processing_error")
-  
+  isProcessed     Boolean @default(false) @map("is_processed")
+  processingError String? @map("processing_error")
+
   // Metadata
-  metadata      Json?                @map("metadata")
-  
+  metadata Json? @map("metadata")
+
+  // Sikka-specific fields (for quick lookup and backward compatibility)
+  practiceKey        String? @map("practice_key")
+  spuInstallationKey String? @map("spu_installation_key")
+  masterCustomerId   String? @map("master_customer_id")
+
+  // Sikka token management fields
+  requestKey  String?   @map("request_key") @db.Text
+  refreshKey  String?   @map("refresh_key") @db.Text
+  tokenExpiry DateTime? @map("token_expiry")
+  officeId    String?   @map("office_id")
+  secretKey   String?   @map("secret_key") @db.Text
+
   // Timestamps
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
   voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
-  
+
   @@index([voiceAgentId])
   @@index([source])
   @@map("knowledge_base")
 }
 
 model CallLog {
-  id              String    @id @default(uuid())
-  voiceAgentId    String    @map("voice_agent_id")
-  
+  id           String @id @default(uuid())
+  voiceAgentId String @map("voice_agent_id")
+
   // Call Details
-  ghlCallId       String?   @unique @map("ghl_call_id")
-  phoneNumber     String    @map("phone_number")
-  direction       String    @map("direction") // 'inbound' or 'outbound'
-  duration        Int?      @map("duration") // Duration in seconds
-  status          String    @map("status") // 'completed', 'missed', 'voicemail', etc.
-  
+  ghlCallId   String?     @unique @map("ghl_call_id")
+  vapiCallId  String?     @unique @map("vapi_call_id") // Vapi call ID
+  phoneNumber String      @map("phone_number")
+  callType    CallType    @default(INBOUND) @map("call_type")
+  direction   String      @map("direction") // 'inbound' or 'outbound' (deprecated, use callType)
+  duration    Int?        @map("duration") // Duration in seconds
+  status      CallStatus  @default(COMPLETED) @map("status")
+  outcome     CallOutcome @default(OTHER) @map("outcome") // Primary call outcome
+
   // Call Content
-  transcript      String?   @db.Text @map("transcript")
-  summary         String?   @db.Text @map("summary")
-  recordingUrl    String?   @map("recording_url")
-  
+  transcript   String? @map("transcript") @db.Text
+  summary      String? @map("summary") @db.Text
+  recordingUrl String? @map("recording_url")
+
   // Lead Information
-  contactName     String?   @map("contact_name")
-  contactEmail    String?   @map("contact_email")
-  leadCaptured    Boolean   @default(false) @map("lead_captured")
-  appointmentSet  Boolean   @default(false) @map("appointment_set")
-  
+  contactName    String? @map("contact_name")
+  contactEmail   String? @map("contact_email")
+  leadCaptured   Boolean @default(false) @map("lead_captured")
+  appointmentSet Boolean @default(false) @map("appointment_set")
+
+  // Analytics & Tracking
+  insuranceVerified    Boolean @default(false) @map("insurance_verified")
+  insuranceProvider    String? @map("insurance_provider")
+  paymentPlanDiscussed Boolean @default(false) @map("payment_plan_discussed")
+  paymentPlanAmount    Int?    @map("payment_plan_amount") // Amount in cents
+  collectionAttempt    Boolean @default(false) @map("collection_attempt")
+  collectionAmount     Int?    @map("collection_amount") // Amount collected in cents
+  collectionSuccess    Boolean @default(false) @map("collection_success")
+  transferredToStaff   Boolean @default(false) @map("transferred_to_staff")
+  transferredTo        String? @map("transferred_to") // Staff name/ID
+
+  // Outbound Call Support
+  campaignId       String?   @map("campaign_id") // Link to outbound campaign
+  scheduledAt      DateTime? @map("scheduled_at") // When call was scheduled
+  callPurpose      String?   @map("call_purpose") // Purpose of call (lead, debt, followup)
+  callNotes        String?   @map("call_notes") @db.Text
+  followUpRequired Boolean   @default(false) @map("follow_up_required")
+  followUpDate     DateTime? @map("follow_up_date")
+
+  // Quality & Satisfaction
+  callQuality       Int?    @map("call_quality") // 1-5 rating
+  customerSentiment String? @map("customer_sentiment") // positive, neutral, negative
+  aiConfidence      Float?  @map("ai_confidence") // AI confidence score 0-1
+
+  // Cost Tracking (for Vapi + Twilio)
+  costCents Int? @map("cost_cents") // Total call cost in cents
+
   // Metadata & Actions
-  metadata        Json?     @map("metadata")
-  actions         Json?     @map("actions") // Actions taken during/after call
-  
+  metadata Json? @map("metadata")
+  actions  Json? @map("actions") // Actions taken during/after call
+
   // Timestamps
-  callStartedAt   DateTime  @map("call_started_at")
-  callEndedAt     DateTime? @map("call_ended_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  
+  callStartedAt DateTime  @map("call_started_at")
+  callEndedAt   DateTime? @map("call_ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
   // Relations
   voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
-  
+
   @@index([voiceAgentId])
   @@index([callStartedAt])
   @@index([phoneNumber])
+  @@index([callType])
+  @@index([outcome])
+  @@index([status])
+  @@index([campaignId])
+  @@index([scheduledAt])
   @@map("call_logs")
+}
+
+// ============================================================================
+// PMS (Practice Management System) Integration
+// ============================================================================
+
+enum PmsProvider {
+  SIKKA       @map("sikka")
+  KOLLA       @map("kolla")
+  DENTRIX     @map("dentrix")
+  EAGLESOFT   @map("eaglesoft")
+  OPEN_DENTAL @map("open_dental")
+  CUSTOM      @map("custom")
+}
+
+enum PmsConnectionStatus {
+  ACTIVE         @map("active")
+  INACTIVE       @map("inactive")
+  ERROR          @map("error")
+  SETUP_REQUIRED @map("setup_required")
+}
+
+model PmsIntegration {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Provider Info
+  provider     PmsProvider @map("provider")
+  providerName String?     @map("provider_name") // Custom name if provider is CUSTOM
+
+  // Connection Status
+  status     PmsConnectionStatus @default(SETUP_REQUIRED) @map("status")
+  lastSyncAt DateTime?           @map("last_sync_at")
+  lastError  String?             @map("last_error") @db.Text
+
+  // Configuration (Provider-specific settings, NO credentials)
+  // Example: { defaultAppointmentDuration: 30, timezone: "America/Los_Angeles", allowOnlineBooking: true }
+  config Json? @map("config")
+
+  // Feature Flags (Available features for this integration)
+  // Example: { appointments: true, patients: true, insurance: true, payments: true }
+  features Json? @map("features")
+
+  // Metadata
+  metadata Json? @map("metadata")
+
+  // Sikka-specific fields (kept for backward compatibility)
+  practiceKey        String? @map("practice_key")
+  spuInstallationKey String? @map("spu_installation_key")
+  masterCustomerId   String? @map("master_customer_id")
+
+  // Sikka token management fields
+  requestKey  String?   @map("request_key") @db.Text
+  refreshKey  String?   @map("refresh_key") @db.Text
+  tokenExpiry DateTime? @map("token_expiry")
+  officeId    String?   @map("office_id")
+  secretKey   String?   @map("secret_key") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account      Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  auditLogs    PmsAuditLog[]
+  cachedData   PmsCachedData[]
+  phoneNumbers VapiPhoneNumber[] // Phone numbers linked to this PMS
+  writebacks   PmsWriteback[] // Writeback operations for this PMS
+
+  @@unique([accountId, provider])
+  @@index([accountId])
+  @@index([status])
+  @@index([tokenExpiry])
+  @@map("pms_integrations")
+}
+
+// Vapi Phone Number to PMS/Clinic Mapping
+model VapiPhoneNumber {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Vapi Phone Info
+  vapiPhoneId String @unique @map("vapi_phone_id") // From Vapi API
+  phoneNumber String @unique @map("phone_number") // E.164 format: +15551234567
+
+  // Vapi Configuration
+  vapiAssistantId String? @map("vapi_assistant_id") // Primary assistant ID
+  vapiSquadId     String? @map("vapi_squad_id") // Squad ID if using multi-agent
+
+  // PMS Integration Link
+  pmsIntegrationId String? @map("pms_integration_id") // Which clinic/PMS this phone belongs to
+
+  // Metadata
+  name     String? @map("name") // Friendly name: "Main Line", "After Hours", etc.
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  pmsIntegration PmsIntegration? @relation(fields: [pmsIntegrationId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([pmsIntegrationId])
+  @@map("vapi_phone_numbers")
+}
+
+model PmsAuditLog {
+  id               String @id @default(uuid())
+  pmsIntegrationId String @map("pms_integration_id")
+
+  // Request Info
+  action   String @map("action") // bookAppointment, getPatient, etc.
+  endpoint String @map("endpoint")
+  method   String @map("method") // GET, POST, PATCH, DELETE
+
+  // User/Agent Context
+  userId     String? @map("user_id")
+  vapiCallId String? @map("vapi_call_id")
+  ipAddress  String? @map("ip_address")
+  userAgent  String? @map("user_agent")
+
+  // Request/Response (PHI redacted in logs)
+  requestSummary String? @map("request_summary") @db.Text
+  responseStatus Int?    @map("response_status")
+  responseTime   Int?    @map("response_time") // milliseconds
+
+  // PHI Access Tracking (HIPAA requirement)
+  phiAccessed Boolean @default(false) @map("phi_accessed")
+  patientId   String? @map("patient_id") // External PMS patient ID
+
+  // Error Tracking
+  success      Boolean @default(true) @map("success")
+  errorMessage String? @map("error_message") @db.Text
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  pmsIntegration PmsIntegration @relation(fields: [pmsIntegrationId], references: [id], onDelete: Cascade)
+
+  @@index([pmsIntegrationId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([vapiCallId])
+  @@index([patientId])
+  @@map("pms_audit_logs")
+}
+
+// Track async writeback operations to PMS (Sikka POST/PATCH/DELETE)
+model PmsWriteback {
+  id               String @id // Writeback ID from Sikka API
+  pmsIntegrationId String @map("pms_integration_id")
+
+  // Operation Info
+  operation   String @map("operation") // 'book_appointment', 'create_patient', 'cancel_appointment'
+  method      String @map("method") // 'POST', 'PATCH', 'DELETE'
+  endpoint    String @map("endpoint") // '/appointment', '/patient/{id}'
+  requestBody Json   @map("request_body")
+
+  // Status Tracking
+  result       String  @default("pending") @map("result") // 'pending', 'completed', 'failed'
+  errorMessage String? @map("error_message") @db.Text
+
+  // Timestamps
+  submittedAt   DateTime  @default(now()) @map("submitted_at")
+  completedAt   DateTime? @map("completed_at")
+  lastCheckedAt DateTime? @map("last_checked_at")
+  checkCount    Int       @default(0) @map("check_count")
+
+  // Relations
+  pmsIntegration PmsIntegration @relation(fields: [pmsIntegrationId], references: [id], onDelete: Cascade)
+
+  @@index([pmsIntegrationId])
+  @@index([result])
+  @@index([submittedAt])
+  @@map("pms_writebacks")
+}
+
+model PmsCachedData {
+  id               String @id @default(uuid())
+  pmsIntegrationId String @map("pms_integration_id")
+
+  // Cache Key (e.g., "patient:12345", "appointment:67890")
+  cacheKey  String @map("cache_key")
+  cacheType String @map("cache_type") // patient, appointment, provider, availability, etc.
+
+  // Cached Data (Encrypted at application layer if contains PHI)
+  data Json @map("data")
+
+  // Cache Metadata
+  expiresAt     DateTime @map("expires_at")
+  lastFetchedAt DateTime @default(now()) @map("last_fetched_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  pmsIntegration PmsIntegration @relation(fields: [pmsIntegrationId], references: [id], onDelete: Cascade)
+
+  @@unique([pmsIntegrationId, cacheKey])
+  @@index([pmsIntegrationId])
+  @@index([expiresAt])
+  @@index([cacheType])
+  @@map("pms_cached_data")
 }

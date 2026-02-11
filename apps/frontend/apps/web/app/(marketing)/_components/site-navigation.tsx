@@ -14,29 +14,21 @@ import { Trans } from '@kit/ui/trans';
 import { SiteNavigationItem } from './site-navigation-item';
 
 const links = {
-  Blog: {
-    label: 'marketing:blog',
-    path: '/blog',
+  Features: {
+    labelKey: 'marketing:features',
+    path: '#features',
   },
-  Docs: {
-    label: 'marketing:documentation',
-    path: '/docs',
+  Integrations: {
+    labelKey: 'marketing:integrations',
+    path: '#integrations',
   },
-  Pricing: {
-    label: 'marketing:pricing',
-    path: '/pricing',
+  Testimonials: {
+    labelKey: 'marketing:testimonials',
+    path: '#testimonials',
   },
-  FAQ: {
-    label: 'marketing:faq',
-    path: '/faq',
-  },
-  Book: {
-    label: 'marketing:bookACall',
-    path: '/book',
-  },
-  Contact: {
-    label: 'marketing:contact',
-    path: '/contact',
+  Compare: {
+    labelKey: 'marketing:compare',
+    path: '#compare',
   },
 };
 
@@ -44,7 +36,7 @@ export function SiteNavigation() {
   const NavItems = Object.values(links).map((item) => {
     return (
       <SiteNavigationItem key={item.path} path={item.path}>
-        <Trans i18nKey={item.label} />
+        <Trans i18nKey={item.labelKey} />
       </SiteNavigationItem>
     );
   });
@@ -80,7 +72,7 @@ function MobileDropdown() {
           return (
             <DropdownMenuItem key={item.path} asChild>
               <Link className={className} href={item.path}>
-                <Trans i18nKey={item.label} />
+                <Trans i18nKey={item.labelKey} />
               </Link>
             </DropdownMenuItem>
           );
