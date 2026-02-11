@@ -129,7 +129,8 @@ export async function GET(request: NextRequest) {
     }
     
     const { context } = auth;
-    const { accountId, pmsIntegrationId } = context;
+    const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
+    pmsIntegrationId = contextPmsIntegrationId;
     
     // 2. Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -248,7 +249,9 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { accountId, data, vapiCallId } = auth;
+    const { context, data } = auth;
+    const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
+    pmsIntegrationId = contextPmsIntegrationId;
     
     // 2. Validate request body
     const validation = createPatientSchema.safeParse(data.data || data);
