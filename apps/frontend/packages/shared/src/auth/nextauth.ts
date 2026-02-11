@@ -10,7 +10,15 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const requiredVars = ['COGNITO_CLIENT_ID', 'COGNITO_CLIENT_SECRET', 'COGNITO_ISSUER'] as const;
 
-if (isProduction) {
+// Check if we're using dummy values (for local CI/testing only)
+const hasDummyValues = requiredVars.some(v => 
+  process.env[v]?.includes('dummy-client-id-for-build') ||
+  process.env[v]?.includes('dummy-client-secret-for-build') ||
+  process.env[v]?.includes('dummy-pool-for-build')
+);
+
+// Only validate env vars in production runtime (not during local CI builds with dummy values)
+if (isProduction && !hasDummyValues) {
   for (const variable of requiredVars) {
     if (!process.env[variable]) {
       throw new Error(`${variable} is not set`);
@@ -20,6 +28,11 @@ if (isProduction) {
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error('NEXTAUTH_SECRET is not set');
+} else if (isProduction && !process.env.NEXTAUTH_SECRET.includes('dummy')) {
+  // Additional validation for production
+  if (process.env.NEXTAUTH_SECRET.length < 32) {
+    console.warn('NEXTAUTH_SECRET should be at least 32 characters for security');
+  }
 }
 
 function normalizeDomain(value?: string | null) {

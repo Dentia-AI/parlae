@@ -43,6 +43,11 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY_PROD }}" \
+            --build-arg COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}" \
+            --build-arg COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
+            --build-arg COGNITO_ISSUER="${{ secrets.COGNITO_ISSUER }}" \
+            --build-arg NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+            --build-arg NEXTAUTH_URL="https://www.parlae.ca" \
             -t "$IMAGE_URI" \
             -f infra/docker/frontend.Dockerfile \
             --push \
