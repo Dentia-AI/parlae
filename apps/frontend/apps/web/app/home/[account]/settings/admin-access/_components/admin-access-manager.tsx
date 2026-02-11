@@ -32,7 +32,7 @@ import { Plus, Trash2, User, Search, AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { AdminAccessItem } from '../_lib/server/admin-access-loader';
-import { searchAdminUsers } from '../_lib/server/admin-access-loader';
+import { searchAdminUsersAction } from '../_lib/server/server-actions';
 import {
   grantAdminAccessAction,
   revokeAdminAccessAction,
@@ -61,7 +61,7 @@ export function AdminAccessManager({
   // Search for admin users
   const { data: adminUsers, isLoading: isSearching } = useQuery({
     queryKey: ['search-admins', searchQuery],
-    queryFn: () => searchAdminUsers(searchQuery),
+    queryFn: () => searchAdminUsersAction(searchQuery),
     enabled: searchQuery.length >= 2,
   });
 

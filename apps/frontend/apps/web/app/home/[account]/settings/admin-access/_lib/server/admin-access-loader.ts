@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { cache } from 'react';
 
 import { prisma } from '@kit/prisma';
@@ -59,29 +61,6 @@ export const getAdminAccessesForAccount = cache(
   },
 );
 
-/**
- * Search for users with ADMIN role to grant access
- */
-export const searchAdminUsers = cache(
-  async (search: string): Promise<Array<{ id: string; email: string; displayName: string | null; avatarUrl: string | null }>> => {
-    const users = await prisma.user.findMany({
-      where: {
-        role: 'ADMIN',
-        OR: [
-          { email: { contains: search, mode: 'insensitive' } },
-          { displayName: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        avatarUrl: true,
-      },
-      take: 10,
-    });
-
-    return users;
-  },
-);
+// Note: searchAdminUsers has been moved to server-actions.ts
+// since it needs to be called from client components
 
