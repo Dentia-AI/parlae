@@ -53,6 +53,7 @@ jobs:
             --build-arg COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}" \
             --build-arg COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
             --build-arg COGNITO_ISSUER="${{ secrets.COGNITO_ISSUER }}" \
+            --build-arg COGNITO_DOMAIN="${{ secrets.COGNITO_DOMAIN }}" \
             --build-arg NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
             --build-arg NEXTAUTH_URL="https://app.parlae.ca" \
             -t "$IMAGE_URI" \

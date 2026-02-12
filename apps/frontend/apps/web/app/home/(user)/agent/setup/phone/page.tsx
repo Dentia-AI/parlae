@@ -29,7 +29,7 @@ function PhoneSetupContent() {
   const [businessName, setBusinessName] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const { progress, savePhoneIntegration, isLoading } = useSetupProgress(accountId);
+  const { progress, savePhone, isLoading } = useSetupProgress(accountId);
 
   const handleStepClick = (stepIndex: number) => {
     const routes = [
@@ -85,7 +85,7 @@ function PhoneSetupContent() {
       setIsSaving(true);
 
       // Save to database
-      await savePhoneIntegration({ 
+      await savePhone({ 
         method: tempSelectedMethod,
         settings: {} 
       });
