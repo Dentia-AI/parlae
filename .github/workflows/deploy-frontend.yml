@@ -40,6 +40,9 @@ jobs:
       - name: Build and push image
         run: |
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
+          GIT_SHA=$(git rev-parse HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
           docker buildx build \
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY_PROD }}" \
@@ -54,12 +57,16 @@ jobs:
             --build-arg COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
             --build-arg COGNITO_ISSUER="${{ secrets.COGNITO_ISSUER }}" \
             --build-arg COGNITO_DOMAIN="${{ secrets.COGNITO_DOMAIN }}" \
+            --build-arg GIT_COMMIT_SHA="${GIT_SHA}" \
+            --build-arg BUILD_TIMESTAMP="${BUILD_TIME}" \
             --build-arg NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
             --build-arg NEXTAUTH_URL="https://app.parlae.ca" \
             -t "$IMAGE_URI" \
             -f infra/docker/frontend.Dockerfile \
             --push \
             .
+          
+          echo "✅ Built and pushed image with Git SHA: ${GIT_SHA}"
 
       - name: Force ECS deployment
         run: |

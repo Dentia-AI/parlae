@@ -27,10 +27,15 @@ export async function register() {
       nextAuthUrl: process.env.NEXTAUTH_URL,
       cognitoIssuer: process.env.COGNITO_ISSUER?.substring(0, 50) + '...',
       cognitoDomain: process.env.COGNITO_DOMAIN || 'NOT_SET',
+      cognitoSocialProviders: process.env.NEXT_PUBLIC_COGNITO_SOCIAL_PROVIDERS || 'NOT_SET',
+      languagePriority: process.env.NEXT_PUBLIC_LANGUAGE_PRIORITY || 'NOT_SET',
     };
     
+    console.log('========================================');
+    console.log('🚀 PARLAE FRONTEND STARTED');
+    console.log('========================================');
     console.log(JSON.stringify({
-      message: '🚀 Frontend Application Started',
+      message: 'Frontend Application Started',
       version: startupInfo.version,
       gitCommit: startupInfo.gitCommit,
       buildTimestamp: startupInfo.buildTimestamp,
@@ -40,7 +45,10 @@ export async function register() {
       authUrl: startupInfo.nextAuthUrl,
       cognitoIssuer: startupInfo.cognitoIssuer,
       cognitoDomain: startupInfo.cognitoDomain,
-    }));
+      cognitoSocialProviders: startupInfo.cognitoSocialProviders,
+      languagePriority: startupInfo.languagePriority,
+    }, null, 2));
+    console.log('========================================');
   } catch (error) {
     console.error(JSON.stringify({
       message: 'Failed to log build info',
