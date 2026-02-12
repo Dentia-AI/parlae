@@ -134,9 +134,39 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
+
+# Runtime environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Build metadata (must be re-declared in runner stage)
+ARG GIT_COMMIT_SHA=unknown
+ARG BUILD_TIMESTAMP=unknown
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
+ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
+
+# Runtime Auth environment variables (must be re-declared in runner stage)
+ARG COGNITO_CLIENT_ID=""
+ARG COGNITO_CLIENT_SECRET=""
+ARG COGNITO_ISSUER=""
+ARG COGNITO_DOMAIN=""
+ARG NEXTAUTH_SECRET=""
+ARG NEXTAUTH_URL=""
+ENV COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
+ENV COGNITO_CLIENT_SECRET=$COGNITO_CLIENT_SECRET
+ENV COGNITO_ISSUER=$COGNITO_ISSUER
+ENV COGNITO_DOMAIN=$COGNITO_DOMAIN
+ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
+ENV NEXTAUTH_URL=$NEXTAUTH_URL
+
+# Runtime AWS/S3 variables (these are typically set by ECS task definition, but declare them here too)
+ARG AWS_REGION="us-east-2"
+ARG S3_BUCKET_NAME=""
+ARG S3_PUBLIC_BASE_URL=""
+ENV AWS_REGION=$AWS_REGION
+ENV S3_BUCKET_NAME=$S3_BUCKET_NAME
+ENV S3_PUBLIC_BASE_URL=$S3_PUBLIC_BASE_URL
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs

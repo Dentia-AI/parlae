@@ -11,18 +11,44 @@ When using Docker image tag `:latest`, ECS may cache the image even when using `
 - `/version` endpoint returns OLD build timestamp and git commit
 - Code changes don't appear in production
 
-## Root Cause
+## Root Causes
+
+### Issue 1: Docker Image Tag Caching
 
 1. Docker builds image with `:latest` tag
 2. Push to ECR overwrites `:latest` tag with new image
 3. `--force-new-deployment` restarts ECS tasks
 4. **BUT**: ECS may use cached `:latest` image if it was already pulled, because the tag name hasn't changed
 
+### Issue 2: Multi-Stage Dockerfile ENV Variables Not Propagating
+
+Build arguments (`ARG`) and environment variables (`ENV`) set in the **builder** stage don't automatically carry over to the **runner** stage in multi-stage Docker builds. The Dockerfile had:
+
+```dockerfile
+# Builder stage
+ARG GIT_COMMIT_SHA=unknown
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
+
+# Runner stage (NEW STAGE - variables don't carry over!)
+FROM node:20-slim AS runner
+# Missing: ARG and ENV declarations for GIT_COMMIT_SHA
+```
+
+This caused the runtime container to show `"gitCommit": "unknown"` and `"cognitoDomain": "parlae-auth"` even though the build args were passed correctly.
+
 ## Solution
+
+### Fix 1: Use Git SHA for Image Tags
 
 Use Git SHA as the image tag instead of `:latest`. This guarantees each build has a unique tag.
 
-### Changes Made to `.github/workflows/deploy-frontend.yml`
+### Fix 2: Re-declare Build Args in Runner Stage
+
+Add `ARG` and `ENV` declarations for all runtime-needed variables in the Dockerfile's runner stage.
+
+## Changes Made
+
+### 1. `.github/workflows/deploy-frontend.yml`
 
 ```yaml
 # Before
@@ -39,16 +65,56 @@ The workflow now:
 2. Updates ECS task definition to use the Git SHA tagged image
 3. Forces ECS deployment with the new task definition
 
-### To Deploy the Fix
+### 2. `infra/docker/frontend.Dockerfile`
+
+Added ARG and ENV declarations to the **runner stage** for all runtime-needed variables:
+
+```dockerfile
+FROM node:20-slim AS runner
+WORKDIR /app
+# ... apt-get setup ...
+
+# Build metadata (must be re-declared in runner stage)
+ARG GIT_COMMIT_SHA=unknown
+ARG BUILD_TIMESTAMP=unknown
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
+ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
+
+# Runtime Auth environment variables (must be re-declared in runner stage)
+ARG COGNITO_CLIENT_ID=""
+ARG COGNITO_CLIENT_SECRET=""
+ARG COGNITO_ISSUER=""
+ARG COGNITO_DOMAIN=""
+ARG NEXTAUTH_SECRET=""
+ARG NEXTAUTH_URL=""
+ENV COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
+ENV COGNITO_CLIENT_SECRET=$COGNITO_CLIENT_SECRET
+ENV COGNITO_ISSUER=$COGNITO_ISSUER
+ENV COGNITO_DOMAIN=$COGNITO_DOMAIN
+ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
+ENV NEXTAUTH_URL=$NEXTAUTH_URL
+
+# ... rest of runner stage ...
+```
+
+**Critical**: In multi-stage Docker builds, each `FROM` instruction starts a fresh stage. ARG and ENV variables from previous stages are NOT inherited and must be re-declared.
+
+## To Deploy the Fix
 
 ```bash
 cd /Users/shaunk/Projects/Parlae-AI/parlae
 
-# 1. Stage the workflow changes
-git add .github/workflows/deploy-frontend.yml
+# 1. Stage the changes
+git add .github/workflows/deploy-frontend.yml \
+        infra/docker/frontend.Dockerfile \
+        docs/ECS_IMAGE_CACHING_FIX.md
 
 # 2. Commit
-git commit -m "fix: Use Git SHA for Docker image tags to prevent ECS caching"
+git commit -m "fix: Docker multi-stage build args and Git SHA image tags
+
+- Re-declare build args in runner stage for runtime access
+- Use Git SHA for image tags to prevent ECS caching
+- Fixes: gitCommit unknown, cognitoDomain truncated, auth/translate issues"
 
 # 3. Push to trigger deployment
 git push origin main
