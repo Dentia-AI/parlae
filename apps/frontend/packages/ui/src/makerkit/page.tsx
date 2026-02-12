@@ -16,7 +16,7 @@ type PageProps = React.PropsWithChildren<{
 
 const ENABLE_SIDEBAR_TRIGGER = process.env.NEXT_PUBLIC_ENABLE_SIDEBAR_TRIGGER
   ? process.env.NEXT_PUBLIC_ENABLE_SIDEBAR_TRIGGER === 'true'
-  : true;
+  : false;
 
 export function Page(props: PageProps) {
   switch (props.style) {

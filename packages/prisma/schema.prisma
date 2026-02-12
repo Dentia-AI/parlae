@@ -223,7 +223,7 @@ model Account {
 model AgentTemplate {
   id          String  @id @default(uuid())
   name        String  @unique // e.g., "receptionist-v1", "emergency-v2"
-  displayName String // e.g., "Receptionist v1", "Emergency Handler v2"
+  displayName String  @map("display_name") // e.g., "Receptionist v1", "Emergency Handler v2"
   description String?
   version     String // e.g., "v1", "v2.1"
   category    String // e.g., "receptionist", "emergency", "booking"

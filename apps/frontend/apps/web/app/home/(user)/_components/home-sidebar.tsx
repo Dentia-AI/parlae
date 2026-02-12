@@ -4,6 +4,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarNavigation,
+  SidebarTrigger,
 } from '@kit/ui/shadcn-sidebar';
 
 import { AppLogo } from '~/components/app-logo';
@@ -26,8 +27,13 @@ export function HomeSidebar(props: HomeSidebarProps) {
   return (
     <Sidebar collapsible={collapsible}>
       <SidebarHeader className={'flex flex-col gap-3 py-3'}>
-        <div className="flex justify-center px-2">
-          <AppLogo />
+        <div className="flex items-center justify-center px-2 group-data-[minimized=true]/sidebar:flex-col group-data-[minimized=true]/sidebar:gap-4 relative">
+          <div className="group-data-[minimized=false]/sidebar:absolute group-data-[minimized=false]/sidebar:left-2">
+            <SidebarTrigger className="text-muted-foreground hover:text-foreground h-5 w-5 cursor-pointer" />
+          </div>
+          <div>
+            <AppLogo />
+          </div>
         </div>
         <div className="px-2 group-data-[minimized=true]/sidebar:hidden">
           <AccountSelector

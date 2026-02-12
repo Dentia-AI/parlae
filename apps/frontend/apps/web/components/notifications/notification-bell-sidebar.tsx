@@ -27,12 +27,12 @@ export function NotificationBellSidebar() {
         className="w-full justify-start relative"
         onClick={() => setExpanded(!expanded)}
       >
-        <Bell className="h-5 w-5 mr-2" />
-        <span className="flex-1 text-left">Notifications</span>
+        <Bell className="h-5 w-5 group-data-[minimized=false]/sidebar:mr-2" />
+        <span className="flex-1 text-left group-data-[minimized=true]/sidebar:hidden">Notifications</span>
         {unreadCount > 0 && (
           <Badge
             variant="destructive"
-            className="h-5 min-w-5 rounded-full px-1 text-xs"
+            className="h-5 min-w-5 rounded-full px-1 text-xs absolute -top-1 -right-1 group-data-[minimized=false]/sidebar:static"
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </Badge>

@@ -40,7 +40,7 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 border-r bg-muted/30 min-h-screen">
+    <aside className="w-64 border-r bg-muted/30 min-h-screen sticky top-0 flex-shrink-0">
       <div className="p-6">
         <h2 className="text-lg font-semibold mb-6">Admin Console</h2>
         <nav className="space-y-1">
