@@ -35,7 +35,7 @@
   "documentation": "Documentation",
   "signedInAs": "Signed in as",
   "signOut": "Sign out",
-  "homeTabDescription": "Your latest campaign and billing activity lives here.",
+  "homeTabDescription": "Your latest activity and overview lives here.",
   "planCardLabel": "Personal plan",
   "planCardDescription": "Manage your personal account billing details.",
   "planPickerAlertErrorTitle": "Unable to load plans",
