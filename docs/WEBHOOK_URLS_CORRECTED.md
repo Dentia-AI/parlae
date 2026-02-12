@@ -1,8 +1,13 @@
 # Webhook URLs - Production Configuration
 
-## ✅ Corrected Architecture
+## ✅ Current Architecture (Frontend API Routes)
 
-After fixing the ALB routing (priority 8 for `/api/*` → Backend), all webhook URLs now correctly route to the **NestJS backend** service.
+**Important**: Webhooks are handled by **Next.js Frontend API Routes**, not the backend. This is because:
+1. OAuth callbacks need session/cookie access (which Next.js provides)
+2. Frontend routes can integrate directly with frontend features (GHL sync, etc.)
+3. Webhooks were already implemented in the frontend before backend routes were created
+
+The frontend middleware (`proxy.ts`) has CSRF bypass for these webhook paths to allow external services to POST data.
 
 ---
 
@@ -21,7 +26,7 @@ POST https://app.parlae.ca/api/vapi/webhook
 - `end-of-call-report`: Transcript, recording, analytics
 - `function-call`: AI function execution
 
-**Controller**: `apps/backend/src/vapi/vapi-webhook.controller.ts`
+**Handler**: `/apps/frontend/apps/web/app/api/vapi/webhook/route.ts`
 
 **Configure in Vapi Dashboard**:
 - Server URL: `https://app.parlae.ca/api/vapi/webhook`
@@ -33,7 +38,7 @@ POST https://app.parlae.ca/api/vapi/webhook
 
 ### 2. Stripe Webhook (Billing/Payments)
 ```
-POST https://app.parlae.ca/api/stripe/webhook
+POST https://app.parlae.ca/api/billing/webhook
 ```
 
 **Purpose**: Handles Stripe payment events
@@ -42,7 +47,7 @@ POST https://app.parlae.ca/api/stripe/webhook
 - `invoice.paid`
 - `customer.subscription.updated`
 
-**Controller**: `apps/backend/src/stripe/stripe.controller.ts` (line 84)
+**Handler**: `/apps/frontend/apps/web/app/api/billing/webhook/route.ts`
 
 **Configure in Stripe Dashboard**:
 - Go to: Developers → Webhooks
@@ -61,7 +66,7 @@ GET https://app.parlae.ca/api/pms/sikka/oauth/callback
 
 **Purpose**: OAuth callback for Sikka Practice Management System authorization
 
-**Controller**: `apps/backend/src/pms/pms.controller.ts` (line 51)
+**Handler**: `/apps/frontend/apps/web/app/api/pms/sikka/oauth/callback/route.ts`
 
 **Configure in Sikka Dashboard**:
 - Set OAuth redirect URI: `https://app.parlae.ca/api/pms/sikka/oauth/callback`
@@ -93,25 +98,43 @@ GET https://app.parlae.ca/api/google-calendar/callback
 
 ---
 
-## 🔄 ALB Routing Configuration
+## 🔄 Request Flow (How Webhooks Work)
 
-### Priority Order (Lower = Higher Priority)
+### Traffic Flow
 
-1. **Priority 5**: Backend hostname (if configured)
-   - `backend.parlae.ca/*` → Backend
+```
+External Service (Vapi/Stripe/Sikka)
+    ↓ POST/GET https://app.parlae.ca/api/...
+    ↓
+CloudFront (CDN)
+    ↓
+ALB (Application Load Balancer)
+    ├─ Priority 5: api.parlae.ca/* → Backend ❌ (not used)
+    ├─ Priority 8: /api/* → Backend ❌ (only if no host match)
+    └─ Priority 10: app.parlae.ca/* → Frontend ✅ (MATCHES FIRST!)
+    ↓
+Frontend Next.js Container (ECS)
+    ↓
+Middleware (proxy.ts) → CSRF Bypass for webhooks ✅
+    ↓
+Next.js API Route (/app/api/.../route.ts) ✅
+```
 
-2. **Priority 8**: API routes → **Backend** ✅
-   - `/api/*` → Backend NestJS (port 4000)
+### Why Webhooks Go to Frontend
 
-3. **Priority 10+**: Frontend routes
-   - `app.parlae.ca/*` → Frontend Next.js (port 3000)
+1. **ALB Rule Matching**: Both host (`app.parlae.ca`) AND path (`/*`) conditions must match
+   - Priority 8 only checks path `/api/*` (no host requirement)
+   - Priority 10 checks host `app.parlae.ca` AND path `/*` → **Wins!**
+   
+2. **Frontend Has Handlers**: All webhook routes exist as Next.js API routes  
+3. **CSRF Bypass**: Added to `proxy.ts` to allow external POST requests
 
 ### ⚠️ Important Notes
 
-- All `/api/*` requests now go to the backend first
-- OAuth callbacks use frontend for session/cookie management
-- Webhooks use backend for event processing
-- Frontend communicates with backend via `BACKEND_API_URL` internally
+- **Webhooks go to Frontend** (not backend) due to ALB rule matching
+- **CSRF protection bypassed** for webhook paths in `proxy.ts`
+- **OAuth callbacks** require frontend for session/cookie management
+- **Backend NestJS** accessible only via `api.parlae.ca` or internal calls
 
 ---
 

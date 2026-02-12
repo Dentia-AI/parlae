@@ -276,7 +276,20 @@ async function withCsrfMiddleware(
 function shouldBypassCsrf(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
+  // NextAuth routes
   if (path.startsWith('/api/auth')) {
+    return true;
+  }
+
+  // External webhook endpoints (have their own signature validation)
+  const webhookPaths = [
+    '/api/stripe/webhook',
+    '/api/vapi/webhook',
+    '/api/pms/sikka/oauth/callback',
+    '/api/google-calendar/callback',
+  ];
+
+  if (webhookPaths.some((webhookPath) => path.startsWith(webhookPath))) {
     return true;
   }
 
