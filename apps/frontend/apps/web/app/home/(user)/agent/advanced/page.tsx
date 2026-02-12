@@ -42,11 +42,11 @@ export default async function AdvancedSetupPage() {
         </div>
 
         {/* Locked State */}
-        <Card className="border-amber-200 bg-amber-50/50">
+        <Card className="border-border bg-muted/30">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center space-y-6 py-8">
-              <div className="rounded-full bg-amber-100 p-6">
-                <Lock className="h-12 w-12 text-amber-600" />
+              <div className="rounded-full bg-muted p-6">
+                <Lock className="h-12 w-12 text-muted-foreground" />
               </div>
               
               <div className="space-y-2 max-w-lg">

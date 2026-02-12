@@ -164,17 +164,28 @@ export async function GET(request: NextRequest) {
       : 0;
 
     // Get activity trend (calls per day)
-    const activityTrend = await prisma.$queryRaw`
-      SELECT 
-        DATE(call_started_at) as date,
-        COUNT(*)::int as count
-      FROM call_logs
-      WHERE call_started_at >= ${startDate}
-        AND call_started_at <= ${endDate}
-        ${agentId ? prisma.$queryRaw`AND voice_agent_id = ${agentId}` : prisma.$queryRaw``}
-      GROUP BY DATE(call_started_at)
-      ORDER BY date ASC
-    `;
+    const activityTrend = agentId
+      ? await prisma.$queryRaw`
+          SELECT 
+            DATE(call_started_at) as date,
+            COUNT(*)::int as count
+          FROM call_logs
+          WHERE call_started_at >= ${startDate}
+            AND call_started_at <= ${endDate}
+            AND voice_agent_id = ${agentId}
+          GROUP BY DATE(call_started_at)
+          ORDER BY date ASC
+        `
+      : await prisma.$queryRaw`
+          SELECT 
+            DATE(call_started_at) as date,
+            COUNT(*)::int as count
+          FROM call_logs
+          WHERE call_started_at >= ${startDate}
+            AND call_started_at <= ${endDate}
+          GROUP BY DATE(call_started_at)
+          ORDER BY date ASC
+        `;
 
     // Get call outcomes distribution
     const outcomesDistribution = callsByOutcome.map(group => ({
