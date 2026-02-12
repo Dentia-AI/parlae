@@ -6,10 +6,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@kit/ui/dropdown-menu';
 import { NavigationMenu, NavigationMenuList } from '@kit/ui/navigation-menu';
 import { Trans } from '@kit/ui/trans';
+import { LanguageSelector } from '@kit/ui/language-selector';
 
 import { SiteNavigationItem } from './site-navigation-item';
 
@@ -77,6 +79,12 @@ function MobileDropdown() {
             </DropdownMenuItem>
           );
         })}
+        
+        <DropdownMenuSeparator />
+        
+        <div className="px-2 py-2">
+          <LanguageSelector />
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

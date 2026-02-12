@@ -55,7 +55,9 @@ export function SiteHeaderAccountSection({
   if (user) {
     return (
       <div className="flex items-center gap-x-2">
-        <LanguageSelector />
+        <div className="hidden md:flex">
+          <LanguageSelector />
+        </div>
         <PersonalAccountDropdown
           showProfileName={false}
           paths={paths}
@@ -96,7 +98,9 @@ function AuthButtons() {
     <div
       className={'animate-in fade-in flex items-center gap-x-2 duration-500'}
     >
-      <LanguageSelector />
+      <div className="hidden md:flex">
+        <LanguageSelector />
+      </div>
       
       {features.enableThemeToggle && (
         <>
