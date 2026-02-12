@@ -3,7 +3,7 @@
 # This script runs migrations before starting the application
 # Used in ECS containers to ensure DB is up-to-date before app starts
 
-set -e
+# Note: Don't use 'set -e' here because we want to handle migration failures gracefully
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🗄️  Running Database Migrations"
