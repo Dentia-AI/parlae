@@ -1,115 +1,65 @@
-# Database Migration Fix - Setup Progress Fields
-
-**Date**: February 11, 2026  
-**Issue**: POST /home/agent/setup/phone returning 500 error  
-**Status**: ✅ Fixed
+# Database Migration Fix - phone_integration_method
 
 ## Problem
 
-The application was crashing with a Prisma error:
-
+Sign-up was failing with error:
 ```
-The column `accounts.setup_progress` does not exist in the current database.
+The column `accounts.phone_integration_method` does not exist in the current database.
 ```
 
-### Root Cause
+## Root Cause
 
-The Prisma schema was updated to include new setup progress tracking fields:
-- `setup_progress` (JSONB)
-- `setup_completed_at` (TIMESTAMP)
-- `setup_last_step` (TEXT)
+The Prisma schema included `phoneIntegrationMethod` field, but the corresponding database migration was never applied to production. The migration SQL existed in `migrations/add_ai_receptionist_fields.sql` but it wasn't in the proper Prisma migrations format.
 
-However, the database migration was never applied, so these columns didn't exist in the actual PostgreSQL database.
+## Solution
 
-## Solution Applied
+Created proper Prisma migration: `20260212000000_add_phone_integration_fields`
 
-### 1. Resolved Conflicting Migration
+This migration adds:
+- `accounts.phone_integration_method` column (TEXT with CHECK constraint)
+- `accounts.phone_integration_settings` column (JSONB)
+- Index on `phone_integration_method` for performance
 
-First, marked a conflicting migration as applied:
+## Deployment
+
+The migration will run automatically when you deploy:
 
 ```bash
-prisma migrate resolve --applied 20260211000000_add_call_analytics_and_outbound
+cd /Users/shaunk/Projects/Parlae-AI/parlae
+
+# Stage the new migration
+git add packages/prisma/migrations/20260212000000_add_phone_integration_fields/
+
+# Commit
+git commit -m "fix: Add missing phone_integration_method database migration"
+
+# Push - this will trigger deployment
+git push origin main
 ```
 
-This migration was trying to add columns that already existed in the database.
+## How It Works
 
-### 2. Applied Setup Progress Migration
+1. Docker container starts with `migrate-and-start.sh` entrypoint
+2. Script runs `prisma migrate deploy` before starting the app
+3. Prisma applies any pending migrations (including our new one)
+4. App starts with database up-to-date
 
-```bash
-prisma migrate deploy --schema=./packages/prisma/schema.prisma
+## Verification
+
+After deployment, check ECS logs for:
+```
+✅ Migrations completed successfully
+🚀 Starting application...
 ```
 
-Applied migration: `20260211000001_add_setup_progress`
+Then test sign-up - should work without the phone_integration_method error!
 
-This added the following columns to the `accounts` table:
+## Files Changed
 
-```sql
-ALTER TABLE "accounts" 
-ADD COLUMN "setup_progress" JSONB DEFAULT '{}',
-ADD COLUMN "setup_completed_at" TIMESTAMP(3),
-ADD COLUMN "setup_last_step" TEXT;
-```
+- `packages/prisma/migrations/20260212000000_add_phone_integration_fields/migration.sql` (NEW)
 
-### 3. Regenerated Prisma Client
+## Notes
 
-```bash
-prisma generate --schema=./packages/prisma/schema.prisma
-```
-
-This ensured TypeScript types and client methods are updated to include the new fields.
-
-## Result
-
-✅ Database schema is now in sync with Prisma schema  
-✅ Prisma client regenerated with new fields  
-✅ Application can now access `account.setupProgress`, `account.setupCompletedAt`, and `account.setupLastStep`  
-✅ POST /home/agent/setup/phone should now work without errors
-
-## Next Steps
-
-The dev server will automatically pick up the new Prisma client. The setup wizard pages can now:
-
-1. Save progress after each step completion
-2. Persist data even if users navigate away
-3. Resume from where they left off
-4. Track completion timestamps
-
-## Testing
-
-To verify the fix is working:
-
-1. Navigate to `/home/agent/setup/phone`
-2. The page should load without 500 errors
-3. Check browser console for any remaining errors
-4. Test saving progress through the setup wizard
-
-## Commands Used
-
-All commands were run from the project root with the DATABASE_URL environment variable:
-
-```bash
-# Mark conflicting migration as applied
-DATABASE_URL="postgresql://parlae:parlae@localhost:5433/parlae?schema=public" \
-  node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js \
-  migrate resolve --applied 20260211000000_add_call_analytics_and_outbound \
-  --schema=./packages/prisma/schema.prisma
-
-# Apply pending migrations
-DATABASE_URL="postgresql://parlae:parlae@localhost:5433/parlae?schema=public" \
-  node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js \
-  migrate deploy --schema=./packages/prisma/schema.prisma
-
-# Regenerate client
-DATABASE_URL="postgresql://parlae:parlae@localhost:5433/parlae?schema=public" \
-  node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js \
-  generate --schema=./packages/prisma/schema.prisma
-```
-
-## Prevention
-
-For future migrations:
-
-1. Always run `prisma migrate deploy` after updating the schema
-2. Ensure migrations are applied in all environments (dev, staging, prod)
-3. Add migration commands to deployment scripts
-4. Consider adding a migration check to the startup process
+- The migration uses `ADD COLUMN IF NOT EXISTS` so it's safe to run multiple times
+- Existing accounts will get `phone_integration_method = 'none'` by default
+- The migration is idempotent (safe to re-run)
