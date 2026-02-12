@@ -48,10 +48,10 @@ const issuerDomain = process.env.COGNITO_ISSUER;
 const defaultAllowedOrigins = [
   'https://hub.parlae.ca',
   'https://app.parlae.ca',
-  'https://hub.dentiaapp.com',
+  'https://hub.parlae.com',
   'https://hub.dentia.co',
-  'https://hub.dentia.app',
-  'https://hub.dentia.ca',
+  'https://hub.parlae.app',
+  'https://hub.parlae.ca',
   'http://localhost:3000',
 ];
 const allowedCallbackOrigins = (

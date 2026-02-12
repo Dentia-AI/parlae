@@ -4,10 +4,10 @@ import crypto from 'crypto';
 import { auth } from '@kit/shared/auth';
 
 const DEFAULT_ALLOWED_RETURN_URLS = [
-  'https://hub.dentiaapp.com/session/sso_login',
-  'https://hub.dentia.co/session/sso_login',
-  'https://hub.dentia.app/session/sso_login',
-  'https://hub.dentia.ca/session/sso_login',
+  'https://hub.parlae.ca/session/sso_login',
+  'https://hub.parlae.com/session/sso_login',
+  'https://hub.parlae.ai/session/sso_login',
+  'https://hub.parlae.app/session/sso_login',
 ];
 const SSO_SECRET = process.env.DISCOURSE_SSO_SECRET;
 const ALLOWED_RETURN_URLS = (process.env.DISCOURSE_SSO_ALLOWED_RETURN_URLS ?? DEFAULT_ALLOWED_RETURN_URLS.join(','))

@@ -3,7 +3,7 @@
  * Only allows redirects to Dentia domains over HTTPS
  * 
  * This prevents open redirect vulnerabilities while supporting
- * unified auth flow between app.dentiaapp.com and hub.dentiaapp.com
+ * unified auth flow between app.parlae.ca and hub.parlae.ca
  */
 export function isValidRedirectUrl(url: string): boolean {
   try {
@@ -11,10 +11,9 @@ export function isValidRedirectUrl(url: string): boolean {
     
     // Whitelist of allowed domains
     const allowedDomains = [
-      'dentiaapp.com',
-      'dentia.co',
-      'dentia.app',
-      'dentia.ca',
+      'parlae.ca',
+      'parlae.com',
+      'parlae.ai',
     ];
     
     // Check if hostname ends with an allowed domain

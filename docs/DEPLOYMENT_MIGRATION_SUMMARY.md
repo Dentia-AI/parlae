@@ -221,7 +221,7 @@ aws logs tail /ecs/dentia-backend --follow --profile dentia --region us-east-2
 # 2. Click "Deploy Dev Environment"
 # 3. Click "Run workflow" → Select develop → Run
 # 4. Wait ~10-15 minutes
-# 5. Access at https://dev.dentiaapp.com
+# 5. Access at https://dev.parlae.ca
 
 # Option 2: Via GitHub CLI
 gh workflow run deploy-dev-environment.yml --ref develop
@@ -441,7 +441,7 @@ aws logs tail /ecs/dentia-backend --filter-pattern "Migration" --profile dentia 
 1. **Test dev environment deployment**:
    - Remove `if: ${{ false }}` from `deploy-dev-environment.yml`
    - Trigger manually via GitHub Actions
-   - Test your app at https://dev.dentiaapp.com
+   - Test your app at https://dev.parlae.ca
    - Destroy when done
 
 2. **Review and enable CI/CD** (optional):

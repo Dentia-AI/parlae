@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { auth } from '@kit/shared/auth';
 
 /**
- * CORS headers for hub.dentiaapp.com to check auth status
+ * CORS headers for hub.parlae.ca to check auth status
  * This enables the unified auth flow where hub can detect if user is logged in
  */
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': 'https://hub.dentiaapp.com',
+  'Access-Control-Allow-Origin': 'https://hub.parlae.ca',
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -14,7 +14,7 @@ const CORS_HEADERS = {
 
 /**
  * GET /api/auth/session
- * Returns the current authentication status for CORS requests from hub.dentiaapp.com
+ * Returns the current authentication status for CORS requests from hub.parlae.ca
  * This allows hub to implement silent SSO (auto-login if already authenticated)
  */
 export async function GET(request: Request) {

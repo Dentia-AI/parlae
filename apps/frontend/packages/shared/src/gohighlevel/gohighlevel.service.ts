@@ -207,7 +207,7 @@ class GoHighLevelService {
   /**
    * Parse domain and subdomain from hostname to generate tags
    * 
-   * @param hostname - The hostname from the request (e.g., hub.dentiaapp.com)
+   * @param hostname - The hostname from the request (e.g., hub.parlae.ca)
    * @returns Array of tags based on domain/subdomain
    */
   private parseDomainTags(hostname: string): string[] {
@@ -220,9 +220,9 @@ class GoHighLevelService {
     const host = hostname.toLowerCase();
 
     // Determine subdomain/app location
-    if (host.includes('hub.dentiaapp.com') || host.includes('hub.dentia')) {
+    if (host.includes('hub.parlae.ca') || host.includes('hub.parlae.com')) {
       tags.push('hub-signup');
-    } else if (host.includes('www.dentiaapp.com') || host.includes('www.dentia')) {
+    } else if (host.includes('www.parlae.ca') || host.includes('www.parlae.com')) {
       tags.push('main-app-signup');
     } else if (host.startsWith('www.')) {
       tags.push('main-app-signup');
@@ -234,14 +234,14 @@ class GoHighLevelService {
     }
 
     // Determine base domain
-    if (host.includes('dentia.ca')) {
-      tags.push('domain-dentia-ca');
-    } else if (host.includes('dentia.co')) {
-      tags.push('domain-dentia-co');
-    } else if (host.includes('dentiaapp.com')) {
-      tags.push('domain-dentiaapp-com');
-    } else if (host.includes('dentia.app')) {
-      tags.push('domain-dentia-app');
+    if (host.includes('parlae.ca')) {
+      tags.push('domain-parlae-ca');
+    } else if (host.includes('parlae.com')) {
+      tags.push('domain-parlae-com');
+    } else if (host.includes('parlae.ai')) {
+      tags.push('domain-parlae-ai');
+    } else if (host.includes('parlae.app')) {
+      tags.push('domain-parlae-app');
     }
 
     return tags;
@@ -273,7 +273,7 @@ class GoHighLevelService {
       name: params.displayName || undefined,
       phone: params.phone,
       tags,
-      source: 'Dentia App Registration',
+      source: 'Parlae App Registration',
     });
   }
 

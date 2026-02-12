@@ -11,8 +11,8 @@ import { isAdminUser } from '~/lib/auth/admin';
 const CSRF_SECRET_COOKIE = 'csrfSecret';
 const NEXT_ACTION_HEADER = 'next-action';
 const IMPERSONATOR_COOKIE = 'impersonator-id';
-const DEFAULT_APP_HOST = 'app.dentiaapp.com';
-const DEFAULT_MARKETING_HOST = 'www.dentiaapp.com';
+const DEFAULT_APP_HOST = 'app.parlae.ca';
+const DEFAULT_MARKETING_HOST = 'www.parlae.ca';
 const SESSION_COOKIE_NAME =
   process.env.NODE_ENV === 'production'
     ? '__Secure-authjs.session-token'

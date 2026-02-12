@@ -1,4 +1,4 @@
-const FALLBACK_APP_HOST = 'app.dentiaapp.com';
+const FALLBACK_APP_HOST = 'app.parlae.ca';
 
 function getPrimaryAppHost() {
   const APP_HOSTS_ENV = process.env.APP_HOSTS ?? process.env.APP_HOST ?? '';
@@ -41,7 +41,7 @@ export function getAppUrl(path: string = '/') {
   const parsedHosts = APP_HOSTS_ENV.split(',')
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean);
-  const primaryAppHost = parsedHosts[0] ?? 'app.dentiaapp.com';
+  const primaryAppHost = parsedHosts[0] ?? 'app.parlae.ca';
   const appBaseUrl = `https://${primaryAppHost}`;
 
   if (!path) {
@@ -60,5 +60,5 @@ export function getAppUrl(path: string = '/') {
 }
 
 // Keep these for backward compatibility but they will use build-time values
-export const primaryAppHost = 'app.dentiaapp.com';
-export const appBaseUrl = 'https://app.dentiaapp.com';
+export const primaryAppHost = 'app.parlae.ca';
+export const appBaseUrl = 'https://app.parlae.ca';

@@ -77,7 +77,7 @@ describe('/api/auth/session', () => {
       const request = new Request('http://localhost:3000/api/auth/session');
       const response = await GET(request);
 
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://hub.dentiaapp.com');
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://hub.parlae.ca');
       expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
       expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
       expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
@@ -157,7 +157,7 @@ describe('/api/auth/session', () => {
       const response = await OPTIONS();
 
       expect(response.status).toBe(204);
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://hub.dentiaapp.com');
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://hub.parlae.ca');
       expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
       expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
       expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
