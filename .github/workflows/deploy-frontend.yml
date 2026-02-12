@@ -39,9 +39,11 @@ jobs:
 
       - name: Build and push image
         run: |
-          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
           GIT_SHA=$(git rev-parse HEAD)
+          GIT_SHA_SHORT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${GIT_SHA_SHORT}"
+          IMAGE_URI_LATEST="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:latest"
           
           docker buildx build \
             --platform linux/amd64 \
@@ -62,16 +64,55 @@ jobs:
             --build-arg NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
             --build-arg NEXTAUTH_URL="https://app.parlae.ca" \
             -t "$IMAGE_URI" \
+            -t "$IMAGE_URI_LATEST" \
             -f infra/docker/frontend.Dockerfile \
             --push \
             .
           
-          echo "✅ Built and pushed image with Git SHA: ${GIT_SHA}"
+          echo "✅ Built and pushed images:"
+          echo "   - ${IMAGE_URI}"
+          echo "   - ${IMAGE_URI_LATEST}"
+          echo "IMAGE_TAG=${GIT_SHA_SHORT}" >> $GITHUB_ENV
 
       - name: Force ECS deployment
         run: |
+          # Update task definition to use the specific Git SHA tagged image
+          TASK_FAMILY="parlae-frontend"
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          CURRENT_TASK_JSON=$(aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_DEF" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition')
+          
+          # Update image in container definitions
+          NEW_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
+          
+          # Register new task definition with updated image
+          NEW_TASK_DEF=$(echo "$CURRENT_TASK_JSON" | jq --arg img "$NEW_IMAGE" \
+            '.containerDefinitions[0].image = $img | 
+             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --region "$AWS_REGION" \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "✅ Registered new task definition: $NEW_TASK_ARN"
+          echo "   Using image: $NEW_IMAGE"
+          
+          # Update service to use new task definition
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
+            --task-definition "$NEW_TASK_ARN" \
             --force-new-deployment \
             --region "$AWS_REGION"
+          
+          echo "✅ Triggered ECS deployment with new image"
