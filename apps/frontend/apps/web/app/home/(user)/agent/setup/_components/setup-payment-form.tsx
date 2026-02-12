@@ -155,7 +155,7 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!stripeRef.current || !paymentElementRef.current) {
+    if (!stripeRef.current || !clientSecret) {
       setError('Payment form not loaded');
       return;
     }
@@ -164,31 +164,44 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
     setError(null);
 
     try {
-      // TODO: In production, implement full flow:
-      // 1. Call server action to create SetupIntent and get client_secret
-      // 2. Confirm the setup with stripe.confirmSetup()
-      // 3. Save payment method ID to database
+      console.log('Confirming Stripe setup...');
       
-      // Example of what the production code would look like:
-      /*
-      const { clientSecret } = await createSetupIntent();
-      
-      const { error } = await stripeRef.current.confirmSetup({
-        elements: paymentElementRef.current,
+      // Confirm the SetupIntent with Stripe
+      const { error: confirmError, setupIntent } = await stripeRef.current.confirmSetup({
         clientSecret,
-        confirmParams: {
-          return_url: `${window.location.origin}/home/agent/setup/review`,
-        },
+        redirect: 'if_required', // Don't redirect, handle success inline
       });
       
-      if (error) {
-        setError(error.message);
+      if (confirmError) {
+        console.error('Stripe confirmation error:', confirmError);
+        setError(confirmError.message || 'Failed to confirm payment method');
         return;
       }
-      */
-      
-      // For now, simulate the flow
-      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      console.log('SetupIntent confirmed:', setupIntent);
+
+      // Save the payment method ID to the account
+      if (setupIntent?.payment_method) {
+        console.log('Saving payment method to account...');
+        
+        const response = await fetch('/api/stripe/save-payment-method', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken,
+          },
+          body: JSON.stringify({
+            paymentMethodId: setupIntent.payment_method,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to save payment method: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('Payment method saved:', result);
+      }
       
       setPaymentCompleted(true);
       onPaymentComplete();

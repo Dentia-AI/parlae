@@ -123,6 +123,8 @@ export const deployReceptionistAction = enhanceAction(
           id: true,
           name: true,
           phoneIntegrationSettings: true,
+          paymentMethodVerified: true,
+          stripePaymentMethodId: true,
         },
       });
 
@@ -130,27 +132,69 @@ export const deployReceptionistAction = enhanceAction(
         throw new Error('Account not found');
       }
 
+      // VERIFY PAYMENT METHOD BEFORE PROCEEDING
+      if (!account.paymentMethodVerified || !account.stripePaymentMethodId) {
+        logger.error(
+          { accountId: account.id, hasPaymentMethod: !!account.stripePaymentMethodId },
+          '[Receptionist] Payment method not verified'
+        );
+        throw new Error('Payment method required. Please add a payment method before deploying.');
+      }
+
+      logger.info(
+        { accountId: account.id, paymentMethodVerified: true },
+        '[Receptionist] Payment method verified, proceeding with deployment'
+      );
+
       const phoneIntegrationSettings = account.phoneIntegrationSettings as any;
       const businessName = phoneIntegrationSettings?.businessName || account.name;
       const organizationPrefix = businessName;
 
       // STEP 1: Get or provision a real Twilio phone number
-      // In dev, we'll use an existing number. In prod, we'd purchase one.
       const { createTwilioService } = await import('@kit/shared/twilio/server');
       const twilioService = createTwilioService();
       
+      let phoneNumber: string;
       const existingNumbers = await twilioService.listNumbers();
       
-      if (existingNumbers.length === 0) {
+      // Check if we need to purchase a new number based on phone integration settings
+      const needsPhoneNumber = phoneIntegrationSettings?.needsPhoneNumber === true;
+      
+      if (needsPhoneNumber && existingNumbers.length === 0) {
+        // User configured forwarding and needs a number - purchase one now that payment is verified
+        logger.info(
+          { accountId: account.id, areaCode: phoneIntegrationSettings?.areaCode },
+          '[Receptionist] Purchasing new Twilio number for forwarding (payment verified)'
+        );
+        
+        try {
+          // TODO: Search for available numbers by area code or region
+          // For now, this will throw an error in production
+          // const availableNumbers = await twilioService.searchNumbers({ areaCode: phoneIntegrationSettings?.areaCode });
+          // const purchasedNumber = await twilioService.purchaseNumber({ phoneNumber: availableNumbers[0] });
+          // phoneNumber = purchasedNumber.phoneNumber;
+          
+          throw new Error(
+            'Phone number purchasing not yet fully implemented. Please run admin setup to provision a number first, or contact support.'
+          );
+        } catch (purchaseError) {
+          logger.error(
+            { error: purchaseError, accountId: account.id },
+            '[Receptionist] Failed to purchase phone number'
+          );
+          throw purchaseError;
+        }
+      } else if (existingNumbers.length > 0) {
+        // Use existing number
+        phoneNumber = existingNumbers[0].phoneNumber;
+        logger.info(
+          { phoneNumber, accountId: account.id },
+          '[Receptionist] Using existing Twilio phone number'
+        );
+      } else {
+        // No existing numbers and didn't request purchase
         throw new Error('No Twilio phone numbers available. Please purchase a phone number first or run the admin setup.');
       }
-      
-      const phoneNumber = existingNumbers[0].phoneNumber;
-      
-      logger.info(
-        { phoneNumber, accountId: account.id },
-        '[Receptionist] Using existing Twilio phone number'
-      );
 
       // STEP 2: Create Vapi assistant
       logger.info(

@@ -196,6 +196,11 @@ model Account {
   googleCalendarId            String?   @map("google_calendar_id") // Primary calendar ID to use
   googleCalendarEmail         String?   @map("google_calendar_email") // Connected Google account email
 
+  // Payment verification for phone number purchasing
+  stripePaymentMethodId       String?   @map("stripe_payment_method_id") // Stripe payment method ID for phone number charges
+  paymentMethodVerified       Boolean   @default(false) @map("payment_method_verified") // Whether payment method is verified
+  paymentMethodVerifiedAt     DateTime? @map("payment_method_verified_at") // When payment method was verified
+
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
   memberships           AccountMembership[]
   billingCustomers      BillingCustomer[]

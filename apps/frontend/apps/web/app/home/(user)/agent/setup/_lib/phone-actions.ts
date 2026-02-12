@@ -30,7 +30,8 @@ const SetupSipTrunkSchema = z.object({
 
 /**
  * Setup Ported Number Integration
- * Submits a port request to transfer the clinic's number to Twilio
+ * Saves port request configuration - actual porting happens through Twilio support
+ * No payment verification needed as this just saves configuration
  */
 export const setupPortedNumberAction = enhanceAction(
   async (data, user) => {
@@ -38,22 +39,14 @@ export const setupPortedNumberAction = enhanceAction(
 
     logger.info(
       { userId: user.id, phoneNumber: data.phoneNumber },
-      '[Phone Integration] Setting up ported number'
+      '[Phone Integration] Saving ported number configuration'
     );
 
     try {
-      const twilioService = createTwilioService();
-
-      // In production, this would submit an actual port request to Twilio
-      // For now, we'll store the information and simulate the process
+      // Just save the port request information
+      // Actual porting is handled through Twilio support and doesn't require immediate payment
+      // Payment will be required when deploying the AI receptionist
       
-      // TODO: Implement actual Twilio port request
-      // const portRequest = await twilioService.createPortRequest({
-      //   phoneNumber: data.phoneNumber,
-      //   currentCarrier: data.currentCarrier,
-      //   accountNumber: data.accountNumber,
-      // });
-
       // Store port request information
       await prisma.account.update({
         where: { id: data.accountId },
@@ -64,20 +57,21 @@ export const setupPortedNumberAction = enhanceAction(
             phoneNumber: data.phoneNumber,
             currentCarrier: data.currentCarrier,
             accountNumber: data.accountNumber,
-            portStatus: 'pending',
-            portRequestedAt: new Date().toISOString(),
+            portStatus: 'pending_configuration', // Not submitted yet, just configured
+            configuredAt: new Date().toISOString(),
           },
         },
       });
 
       logger.info(
         { accountId: data.accountId, phoneNumber: data.phoneNumber },
-        '[Phone Integration] Port request submitted'
+        '[Phone Integration] Port configuration saved (actual port will be initiated after payment)'
       );
 
       return {
         success: true,
-        portStatus: 'pending',
+        portStatus: 'configured',
+        message: 'Configuration saved. Port request will be submitted after payment.',
         estimatedCompletionDays: 14,
       };
     } catch (error) {
@@ -108,34 +102,12 @@ export const setupForwardedNumberAction = enhanceAction(
 
     logger.info(
       { userId: user.id, clinicNumber: data.clinicNumber },
-      '[Phone Integration] Setting up forwarded number'
+      '[Phone Integration] Saving forwarded number configuration'
     );
 
     try {
-      const twilioService = createTwilioService();
-
-      // Get existing Twilio numbers or purchase a new one
-      const existingNumbers = await twilioService.listNumbers();
-      
-      let twilioNumber;
-      
-      if (existingNumbers.length > 0) {
-        // Use existing number
-        twilioNumber = existingNumbers[0].phoneNumber;
-        logger.info(
-          { twilioNumber },
-          '[Phone Integration] Using existing Twilio number for forwarding'
-        );
-      } else {
-        // Purchase new number
-        // In production, you'd search for and purchase a number
-        // For now, return an error asking to run admin setup first
-        throw new Error(
-          'No Twilio numbers available. Please run admin setup to purchase a number first.'
-        );
-      }
-
-      // Store forwarding configuration
+      // Just save the configuration - don't purchase anything yet
+      // The actual phone number purchase will happen during deployment after payment
       await prisma.account.update({
         where: { id: data.accountId },
         data: {
@@ -143,20 +115,20 @@ export const setupForwardedNumberAction = enhanceAction(
           phoneIntegrationSettings: {
             businessName: data.businessName,
             clinicNumber: data.clinicNumber,
-            twilioForwardNumber: twilioNumber,
-            setupCompletedAt: new Date().toISOString(),
+            needsPhoneNumber: true, // Flag that we need to purchase a number during deployment
+            configuredAt: new Date().toISOString(),
           },
         },
       });
 
       logger.info(
-        { accountId: data.accountId, twilioNumber },
-        '[Phone Integration] Forwarding setup complete'
+        { accountId: data.accountId },
+        '[Phone Integration] Forwarding configuration saved (number will be purchased after payment)'
       );
 
       return {
         success: true,
-        twilioNumber,
+        message: 'Configuration saved. Phone number will be provisioned after payment.',
       };
     } catch (error) {
       logger.error(
@@ -179,6 +151,7 @@ export const setupForwardedNumberAction = enhanceAction(
 /**
  * Setup SIP Trunk Integration
  * Generates SIP credentials for PBX integration
+ * Note: Still requires a Twilio phone number to attach the Vapi assistant to
  */
 export const setupSipTrunkAction = enhanceAction(
   async (data, user) => {
@@ -186,22 +159,20 @@ export const setupSipTrunkAction = enhanceAction(
 
     logger.info(
       { userId: user.id, clinicNumber: data.clinicNumber, pbxType: data.pbxType },
-      '[Phone Integration] Setting up SIP trunk'
+      '[Phone Integration] Setting up SIP trunk configuration'
     );
 
     try {
-      // Generate SIP credentials
-      // In production, these would be created in Twilio's SIP trunking service
+      // Generate SIP credentials for user's PBX
+      // User's existing number routes through SIP trunk to Twilio/Vapi
+      // We still need a Twilio number to attach the Vapi assistant to
+      
       const sipUsername = `sip_${data.accountId.substring(0, 8)}`;
       const sipPassword = generateSecurePassword();
       const sipUrl = `sip:${sipUsername}@sip.twilio.com`;
 
-      // TODO: Create actual SIP trunk in Twilio
-      // const trunk = await twilioService.createSipTrunk({
-      //   friendlyName: data.businessName,
-      //   domainName: sipUrl,
-      // });
-
+      // TODO: Create actual SIP trunk in Twilio during deployment
+      
       // Store SIP configuration
       await prisma.account.update({
         where: { id: data.accountId },
@@ -209,19 +180,20 @@ export const setupSipTrunkAction = enhanceAction(
           phoneIntegrationMethod: 'sip',
           phoneIntegrationSettings: {
             businessName: data.businessName,
-            clinicNumber: data.clinicNumber,
+            clinicNumber: data.clinicNumber, // User's existing number on their PBX
             pbxType: data.pbxType,
             sipUrl,
             sipUsername,
             sipPassword, // In production, encrypt this!
-            setupCompletedAt: new Date().toISOString(),
+            needsPhoneNumber: true, // We need a Twilio number for the Vapi endpoint
+            configuredAt: new Date().toISOString(),
           },
         },
       });
 
       logger.info(
         { accountId: data.accountId, sipUsername },
-        '[Phone Integration] SIP trunk setup complete'
+        '[Phone Integration] SIP trunk configuration saved (Twilio number will be provisioned after payment)'
       );
 
       return {
@@ -231,6 +203,7 @@ export const setupSipTrunkAction = enhanceAction(
           username: sipUsername,
           password: sipPassword,
         },
+        message: 'SIP credentials generated. Twilio phone number will be provisioned after payment.',
       };
     } catch (error) {
       logger.error(

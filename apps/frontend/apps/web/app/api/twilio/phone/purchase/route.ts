@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { phoneNumber, friendlyName, subAccountSid, voiceUrl, smsUrl } = body;
+    const { phoneNumber, friendlyName, subAccountSid, voiceUrl, smsUrl, accountId } = body;
 
     // Validate required fields
     if (!phoneNumber) {
@@ -33,6 +33,56 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    if (!accountId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Account ID is required',
+        },
+        { status: 400 }
+      );
+    }
+
+    // VERIFY PAYMENT METHOD BEFORE PURCHASING
+    const { prisma } = await import('@kit/prisma');
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        paymentMethodVerified: true,
+        stripePaymentMethodId: true,
+      },
+    });
+
+    if (!account) {
+      logger.error({ accountId }, '[Twilio API] Account not found');
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Account not found',
+        },
+        { status: 404 }
+      );
+    }
+
+    if (!account.paymentMethodVerified || !account.stripePaymentMethodId) {
+      logger.error(
+        { accountId, hasPaymentMethod: !!account.stripePaymentMethodId },
+        '[Twilio API] Payment method not verified'
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Payment method required. Please add a payment method before purchasing a phone number.',
+        },
+        { status: 402 }
+      );
+    }
+
+    logger.info({
+      accountId,
+      paymentMethodVerified: true,
+    }, '[Twilio API] Payment method verified, proceeding with phone purchase');
 
     const twilioService = createTwilioService();
 

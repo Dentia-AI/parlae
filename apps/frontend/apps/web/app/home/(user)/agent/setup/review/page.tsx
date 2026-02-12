@@ -62,6 +62,25 @@ export default function ReviewPage() {
       voice: voice ? JSON.parse(voice) : null,
       files: files ? JSON.parse(files) : [],
     });
+
+    // Check if payment method is already verified
+    const checkPaymentStatus = async () => {
+      try {
+        const response = await fetch(`/api/stripe/check-payment-method?accountId=${accountId}`);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.verified) {
+            setPaymentCompleted(true);
+            setPaymentSectionOpen(false);
+            setReviewSectionOpen(true);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check payment status:', error);
+      }
+    };
+
+    checkPaymentStatus();
   }, [router]);
 
   const handleDeploy = () => {
