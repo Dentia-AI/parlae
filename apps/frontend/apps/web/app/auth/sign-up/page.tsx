@@ -41,12 +41,12 @@ async function SignUpPage({ searchParams }: SignUpPageProps) {
     <div className="space-y-8">
       <header className="space-y-2 text-center">
         <Heading level={3} className="tracking-tight">
-          <Trans i18nKey={'auth:signUpHeading'} defaults={'Join Dentia'} />
+          <Trans i18nKey={'auth:signUpHeading'} defaults={'Welcome'} />
         </Heading>
         <p className="text-sm text-muted-foreground">
           <Trans
             i18nKey={'auth:signUpSubheading'}
-            defaults={'Create your workspace to start uploading assets and managing billing.'}
+            defaults={'Create your account and start building AI agents for your healthcare practice.'}
           />
         </p>
       </header>

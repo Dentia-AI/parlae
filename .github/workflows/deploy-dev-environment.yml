@@ -47,6 +47,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY_DEV }}" \
+            --build-arg NEXT_PUBLIC_COGNITO_SOCIAL_PROVIDERS="Google" \
             -t ${ECR_ACCOUNT}/${FRONTEND_IMAGE}:dev \
             -f infra/docker/frontend.Dockerfile \
             --push \

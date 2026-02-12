@@ -1,7 +1,6 @@
-import Link from 'next/link';
+import { Trans } from '@kit/ui/trans';
 
-import { ArrowLeft } from 'lucide-react';
-
+import { withI18n } from '~/lib/i18n/with-i18n';
 import { AppLogo } from '~/components/app-logo';
 
 function AuthLayout({ children }: React.PropsWithChildren) {
@@ -11,33 +10,36 @@ function AuthLayout({ children }: React.PropsWithChildren) {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.35),_transparent_55%)]" />
         <div className="relative flex h-full flex-col justify-between p-12 text-primary-foreground">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/" className="flex items-center gap-2 text-sm font-medium text-primary">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Back to marketing site
-            </Link>
+            <AppLogo className="h-10 w-auto" />
           </div>
 
           <div className="space-y-6">
-            <AppLogo className="h-12 w-auto text-white" />
+            <AppLogo className="h-16 w-auto text-white" />
             <div className="space-y-4 text-white">
-              <h1 className="text-4xl font-semibold leading-tight lg:text-5xl">Only ads you need</h1>
+              <h1 className="text-4xl font-semibold leading-tight lg:text-5xl">
+                <Trans i18nKey={'auth:layoutHeading'} defaults={'Welcome to Parlae'} />
+              </h1>
               <p className="text-lg text-white/80">
-                Manage billing, upload creative assets, and collaborate with your team from a single dashboard that’s
-                powered entirely by AWS.
+                <Trans
+                  i18nKey={'auth:layoutDescription'}
+                  defaults={
+                    'Get started with your AI agent for your healthcare team. Transform patient engagement and step into an exciting future of intelligent practice management.'
+                  }
+                />
               </p>
             </div>
           </div>
 
-          <dl className="grid grid-cols-2 gap-6 text-white/75">
-            <div>
-              <dt className="text-sm uppercase tracking-wide">99.9% uptime</dt>
-              <dd className="text-2xl font-semibold text-white">AWS Aurora + Cognito</dd>
-            </div>
-            <div>
-              <dt className="text-sm uppercase tracking-wide">Usage based billing</dt>
-              <dd className="text-2xl font-semibold text-white">Stripe metered plans</dd>
-            </div>
-          </dl>
+          <div className="space-y-4 text-white/75">
+            <p className="text-sm">
+              <Trans
+                i18nKey={'auth:layoutTagline'}
+                defaults={
+                  'Empower your practice with AI-driven conversations that enhance patient care and streamline team collaboration.'
+                }
+              />
+            </p>
+          </div>
         </div>
       </aside>
 
@@ -56,4 +58,4 @@ function AuthLayout({ children }: React.PropsWithChildren) {
   );
 }
 
-export default AuthLayout;
+export default withI18n(AuthLayout);

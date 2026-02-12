@@ -52,7 +52,7 @@ async function SignInPage({ searchParams }: SignInPageProps) {
         <p className="text-sm text-muted-foreground">
           <Trans
             i18nKey={'auth:signInSubheading'}
-            defaults={'Sign in to manage your campaigns, billing, and uploads.'}
+            defaults={"Sign in to check what's new and manage your AI agents."}
           />
         </p>
       </header>
