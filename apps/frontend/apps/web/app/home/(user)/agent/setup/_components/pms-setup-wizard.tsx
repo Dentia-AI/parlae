@@ -145,9 +145,9 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
               <p className="text-sm text-muted-foreground">
                 Download and install the Sikka Practice Utility (SPU) on your practice server. You should have received installation instructions via email.
               </p>
-              <Alert className="border-blue-500 bg-blue-50">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-xs text-blue-800">
+              <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-xs text-blue-800 dark:text-blue-300">
                   <strong>Important:</strong> The SPU connects your existing PMS (Dentrix, Eaglesoft, Open Dental, etc.) to Sikka's cloud platform. Make sure it's running and connected to your PMS before proceeding.
                 </AlertDescription>
               </Alert>
