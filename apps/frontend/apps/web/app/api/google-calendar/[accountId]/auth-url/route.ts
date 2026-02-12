@@ -6,7 +6,7 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI || 
-    `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/google-calendar/callback`
+    `${process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca'}/api/google-calendar/callback`
 );
 
 export async function GET(
