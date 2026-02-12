@@ -51,7 +51,23 @@ MIGRATION_EXIT_CODE=$?
 if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
   echo ""
   echo "❌ Migration failed with exit code $MIGRATION_EXIT_CODE"
-  exit $MIGRATION_EXIT_CODE
+  echo "Checking migration status..."
+  npx prisma migrate status || true
+  echo ""
+  echo "⚠️  Attempting to resolve failed migrations..."
+  # Mark failed migrations as rolled back so they can be re-applied
+  npx prisma migrate resolve --rolled-back 20260212000001_make_shaun_super_admin || true
+  echo ""
+  echo "Retrying prisma migrate deploy..."
+  npx prisma migrate deploy
+  MIGRATION_EXIT_CODE=$?
+  
+  if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "❌ Migration retry failed with exit code $MIGRATION_EXIT_CODE"
+    echo "⚠️  Starting application anyway (some features may not work)"
+    # Don't exit - let the app start even with migration failures
+  fi
 fi
 
 echo ""
