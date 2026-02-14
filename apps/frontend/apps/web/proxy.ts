@@ -287,6 +287,7 @@ function shouldBypassCsrf(request: NextRequest) {
     '/api/vapi/webhook',
     '/api/pms/sikka/oauth/callback',
     '/api/google-calendar/callback',
+    '/api/vapi/upload-file', // File upload with FormData
   ];
 
   if (webhookPaths.some((webhookPath) => path.startsWith(webhookPath))) {

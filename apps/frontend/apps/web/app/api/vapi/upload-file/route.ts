@@ -61,6 +61,11 @@ export async function POST(request: NextRequest) {
       success: true,
       fileId,
       fileName: file.name,
+    }, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
   } catch (error) {
     logger.error({

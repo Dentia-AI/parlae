@@ -5,13 +5,15 @@ export class VapiWebhookController {
   private readonly logger = new Logger(VapiWebhookController.name);
 
   /**
-   * POST /api/vapi/webhook
+   * POST /vapi/webhook
    * 
-   * Receives webhooks from Vapi for call events:
+   * Receives NON-TOOL webhooks from Vapi for call lifecycle events:
    * - assistant-request: When a call starts
    * - status-update: Call status changes  
    * - end-of-call-report: Full transcript, recording, extracted data
-   * - function-call: When AI wants to execute a function
+   * 
+   * Note: function-call (tool calls) use individual endpoints:
+   * /vapi/tools/book-appointment, /vapi/tools/transfer-to-human, etc.
    */
   @Post('webhook')
   async handleWebhook(
@@ -44,9 +46,6 @@ export class VapiWebhookController {
       case 'end-of-call-report':
         return this.handleEndOfCall(payload);
       
-      case 'function-call':
-        return this.handleFunctionCall(payload);
-      
       default:
         this.logger.warn(`Unknown webhook type: ${messageType}`);
         return { received: true };
@@ -72,9 +71,4 @@ export class VapiWebhookController {
     return { received: true };
   }
 
-  private async handleFunctionCall(payload: any) {
-    this.logger.log('Handling function-call');
-    // Execute custom function
-    return { received: true };
-  }
 }

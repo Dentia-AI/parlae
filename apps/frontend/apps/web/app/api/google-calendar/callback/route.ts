@@ -17,19 +17,21 @@ export async function GET(request: NextRequest) {
 
   // Handle OAuth errors
   if (error) {
+    const publicUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca';
     return NextResponse.redirect(
       new URL(
         `/home/agent/setup/integrations?status=error&error=${encodeURIComponent(error)}`,
-        request.url
+        publicUrl
       )
     );
   }
 
   if (!code || !state) {
+    const publicUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca';
     return NextResponse.redirect(
       new URL(
         '/home/agent/setup/integrations?status=error&error=Missing authorization code',
-        request.url
+        publicUrl
       )
     );
   }
@@ -64,18 +66,20 @@ export async function GET(request: NextRequest) {
     });
 
     // Redirect back to integrations page with success
+    const publicUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca';
     return NextResponse.redirect(
       new URL(
         `/home/agent/setup/integrations?status=success&provider=google-calendar&email=${encodeURIComponent(userInfo.data.email || '')}`,
-        request.url
+        publicUrl
       )
     );
   } catch (error) {
     console.error('Google Calendar callback error:', error);
+    const publicUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca';
     return NextResponse.redirect(
       new URL(
         `/home/agent/setup/integrations?status=error&error=${encodeURIComponent('Failed to connect Google Calendar')}`,
-        request.url
+        publicUrl
       )
     );
   }

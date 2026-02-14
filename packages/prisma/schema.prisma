@@ -1022,6 +1022,10 @@ model VapiPhoneNumber {
   vapiAssistantId String? @map("vapi_assistant_id") // Primary assistant ID
   vapiSquadId     String? @map("vapi_squad_id") // Squad ID if using multi-agent
 
+  // Twilio Integration (for SMS/messaging)
+  twilioPhoneNumberSid   String? @map("twilio_phone_number_sid") // Twilio Phone Number SID (starts with PN)
+  twilioMessagingServiceSid String? @map("twilio_messaging_service_sid") // Twilio Messaging Service SID (starts with MG)
+
   // PMS Integration Link
   pmsIntegrationId String? @map("pms_integration_id") // Which clinic/PMS this phone belongs to
 
