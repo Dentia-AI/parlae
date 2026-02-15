@@ -27,6 +27,7 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
   const [stripeLoaded, setStripeLoaded] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const paymentElementRef = useRef<any>(null);
+  const elementsRef = useRef<any>(null);
   const stripeRef = useRef<any>(null);
   const csrfToken = useCsrfToken();
 
@@ -157,10 +158,8 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
         },
       });
 
-      // Payment Element automatically includes:
-      // - Card input
-      // - Link (Pay with email)
-      // - Other payment methods if configured
+      elementsRef.current = elements;
+
       const paymentElement = elements.create('payment', {
         layout: {
           type: 'tabs',
@@ -184,7 +183,7 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!stripeRef.current || !clientSecret) {
+    if (!stripeRef.current || !elementsRef.current) {
       setError('Payment form not loaded');
       return;
     }
@@ -195,10 +194,10 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
     try {
       console.log('Confirming Stripe setup...');
       
-      // Confirm the SetupIntent with Stripe
+      // Confirm the SetupIntent using the Elements instance
       const { error: confirmError, setupIntent } = await stripeRef.current.confirmSetup({
-        clientSecret,
-        redirect: 'if_required', // Don't redirect, handle success inline
+        elements: elementsRef.current,
+        redirect: 'if_required',
       });
       
       if (confirmError) {
