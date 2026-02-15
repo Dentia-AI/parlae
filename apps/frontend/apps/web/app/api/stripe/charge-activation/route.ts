@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { getSessionUser } from '@kit/shared/auth';
+import { auth } from '@kit/shared/auth/nextauth';
 
 /**
- * Charges the $5 activation fee when the user deploys their AI receptionist.
+ * Charges the activation fee when the user deploys their AI receptionist.
  *
  * This creates a Stripe PaymentIntent using the saved payment method
- * and charges it immediately. The amount is configurable via
- * ACTIVATION_FEE_CENTS env var (defaults to 500 = $5.00).
+ * and charges it immediately. The amount is configurable per-clinic
+ * by admin, or falls back to ACTIVATION_FEE_CENTS env var (default $5).
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSessionUser();
+    const session = await auth();
 
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const account = await prisma.account.findFirst({
       where: {
-        primaryOwnerId: session.id,
+        primaryOwnerId: session.user.id,
         isPersonalAccount: true,
       },
     });
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       description: 'Parlae AI Receptionist - Activation Fee',
       metadata: {
         accountId: account.id,
-        userId: session.id,
+        userId: session.user.id,
         type: 'activation_fee',
       },
     });
