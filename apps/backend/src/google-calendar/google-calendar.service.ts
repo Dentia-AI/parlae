@@ -286,7 +286,7 @@ export class GoogleCalendarService {
       description += `\n📞 Booked via AI Receptionist`;
 
       // Prepare attendees
-      const attendees = [];
+      const attendees: Array<{ email: string }> = [];
       if (appointment.patient.email) {
         attendees.push({ email: appointment.patient.email });
       }

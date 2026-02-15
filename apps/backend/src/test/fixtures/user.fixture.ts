@@ -42,6 +42,14 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   stripePaymentMethodId: null,
   paymentMethodVerified: false,
   paymentMethodVerifiedAt: null,
+  brandingLogoUrl: null,
+  brandingPrimaryColor: null,
+  brandingBusinessName: null,
+  brandingContactEmail: null,
+  brandingContactPhone: null,
+  brandingAddress: null,
+  brandingWebsite: null,
+  twilioMessagingServiceSid: null,
   ...overrides,
 });
 

@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.705.0",
+    "@aws-sdk/client-ses": "^3.990.0",
     "@kit/prisma": "workspace:*",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.0",

@@ -22,6 +22,9 @@ importers:
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.705.0
         version: 3.987.0
+      '@aws-sdk/client-ses':
+        specifier: ^3.990.0
+        version: 3.990.0
       '@kit/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma

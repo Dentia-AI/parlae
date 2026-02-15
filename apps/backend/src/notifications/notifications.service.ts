@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TwilioMessagingService } from '../twilio/twilio-messaging.service';
+import { EmailService } from '../email/email.service';
+import { renderAppointmentConfirmation } from '../email/templates/appointment-confirmation.template';
+import { renderAppointmentCancellation } from '../email/templates/appointment-cancellation.template';
+import { renderAppointmentReschedule } from '../email/templates/appointment-reschedule.template';
 
 interface PatientInfo {
   firstName: string;
@@ -21,8 +25,8 @@ interface AppointmentInfo {
 interface ClinicInfo {
   accountId: string; // Added for branding lookup
   name: string;
-  phone?: string;
-  email?: string;
+  phone?: string | null;
+  email?: string | null;
 }
 
 @Injectable()
@@ -33,6 +37,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly twilioService: TwilioMessagingService,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -420,12 +425,6 @@ export class NotificationsService {
     appointment: AppointmentInfo,
     clinic: ClinicInfo,
   ): Promise<void> {
-    // Dynamically import mailer and templates
-    const { getMailer } = await import('@kit/mailers');
-    const { renderAppointmentConfirmationEmail } = await import('@kit/email-templates');
-    
-    const mailer = await getMailer();
-    
     const time = this.formatAppointmentTime(appointment.startTime);
     const [date, timeStr] = time.split(' at ');
     
@@ -443,29 +442,25 @@ export class NotificationsService {
       },
     });
     
-    const { html, subject } = await renderAppointmentConfirmationEmail({
+    const { html, subject } = renderAppointmentConfirmation({
       patientName: `${patient.firstName} ${patient.lastName}`,
       clinicName: clinic.name,
       appointmentType: appointment.appointmentType,
-      appointmentDate: date || time,
-      appointmentTime: timeStr || '',
-      duration: appointment.duration,
+      date: date || time,
+      time: timeStr || '',
+      duration: `${appointment.duration} minutes`,
       notes: appointment.notes,
-      eventLink: appointment.externalEventLink,
-      branding: account ? {
-        logoUrl: account.brandingLogoUrl || undefined,
-        businessName: account.brandingBusinessName || undefined,
-        primaryColor: account.brandingPrimaryColor || undefined,
-        contactEmail: account.brandingContactEmail || clinic.email || undefined,
-        contactPhone: account.brandingContactPhone || undefined,
-        address: account.brandingAddress || undefined,
-        website: account.brandingWebsite || undefined,
-      } : undefined,
+      logoUrl: account?.brandingLogoUrl || undefined,
+      businessName: account?.brandingBusinessName || undefined,
+      primaryColor: account?.brandingPrimaryColor || undefined,
+      contactEmail: account?.brandingContactEmail || clinic.email || undefined,
+      contactPhone: account?.brandingContactPhone || clinic.phone || undefined,
+      address: account?.brandingAddress || undefined,
+      website: account?.brandingWebsite || undefined,
     });
 
-    await mailer.sendEmail({
+    await this.emailService.sendEmail({
       to,
-      from: process.env.EMAIL_FROM || 'support@parlae.ca',
       subject,
       html,
     });
@@ -484,11 +479,6 @@ export class NotificationsService {
     clinic: ClinicInfo,
     reason?: string,
   ): Promise<void> {
-    const { getMailer } = await import('@kit/mailers');
-    const { renderAppointmentCancellationEmail } = await import('@kit/email-templates');
-    
-    const mailer = await getMailer();
-    
     const time = this.formatAppointmentTime(appointment.startTime);
     const [date, timeStr] = time.split(' at ');
     
@@ -505,28 +495,24 @@ export class NotificationsService {
       },
     });
     
-    const { html, subject } = await renderAppointmentCancellationEmail({
+    const { html, subject } = renderAppointmentCancellation({
       patientName: `${patient.firstName} ${patient.lastName}`,
       clinicName: clinic.name,
       appointmentType: appointment.appointmentType,
-      appointmentDate: date || time,
-      appointmentTime: timeStr || '',
-      duration: appointment.duration,
+      date: date || time,
+      time: timeStr || '',
       reason,
-      branding: account ? {
-        logoUrl: account.brandingLogoUrl || undefined,
-        businessName: account.brandingBusinessName || undefined,
-        primaryColor: account.brandingPrimaryColor || undefined,
-        contactEmail: account.brandingContactEmail || clinic.email || undefined,
-        contactPhone: account.brandingContactPhone || undefined,
-        address: account.brandingAddress || undefined,
-        website: account.brandingWebsite || undefined,
-      } : undefined,
+      logoUrl: account?.brandingLogoUrl || undefined,
+      businessName: account?.brandingBusinessName || undefined,
+      primaryColor: account?.brandingPrimaryColor || undefined,
+      contactEmail: account?.brandingContactEmail || clinic.email || undefined,
+      contactPhone: account?.brandingContactPhone || clinic.phone || undefined,
+      address: account?.brandingAddress || undefined,
+      website: account?.brandingWebsite || undefined,
     });
 
-    await mailer.sendEmail({
+    await this.emailService.sendEmail({
       to,
-      from: process.env.EMAIL_FROM || 'support@parlae.ca',
       subject,
       html,
     });
@@ -568,7 +554,7 @@ export class NotificationsService {
       },
     });
     
-    const { html, subject } = await renderAppointmentRescheduleEmail({
+    const { html, subject } = renderAppointmentReschedule({
       patientName: `${patient.firstName} ${patient.lastName}`,
       clinicName: clinic.name,
       appointmentType: newAppointment.appointmentType,
@@ -576,23 +562,18 @@ export class NotificationsService {
       oldTime: oldTimeStr || '',
       newDate: newDate || newTime,
       newTime: newTimeStr || '',
-      duration: newAppointment.duration,
-      notes: newAppointment.notes,
-      eventLink: newAppointment.externalEventLink,
-      branding: account ? {
-        logoUrl: account.brandingLogoUrl || undefined,
-        businessName: account.brandingBusinessName || undefined,
-        primaryColor: account.brandingPrimaryColor || undefined,
-        contactEmail: account.brandingContactEmail || clinic.email || undefined,
-        contactPhone: account.brandingContactPhone || undefined,
-        address: account.brandingAddress || undefined,
-        website: account.brandingWebsite || undefined,
-      } : undefined,
+      duration: `${newAppointment.duration} minutes`,
+      logoUrl: account?.brandingLogoUrl || undefined,
+      businessName: account?.brandingBusinessName || undefined,
+      primaryColor: account?.brandingPrimaryColor || undefined,
+      contactEmail: account?.brandingContactEmail || clinic.email || undefined,
+      contactPhone: account?.brandingContactPhone || clinic.phone || undefined,
+      address: account?.brandingAddress || undefined,
+      website: account?.brandingWebsite || undefined,
     });
 
-    await mailer.sendEmail({
+    await this.emailService.sendEmail({
       to,
-      from: process.env.EMAIL_FROM || 'support@parlae.ca',
       subject,
       html,
     });
