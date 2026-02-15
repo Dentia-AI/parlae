@@ -8,7 +8,7 @@ import { Stepper } from '@kit/ui/stepper';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
 import { Alert, AlertDescription } from '@kit/ui/alert';
-import { Loader2, Upload, File, X, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, File, X, AlertCircle, Eye, Trash2 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import { uploadKnowledgeBaseAction } from '../_lib/actions';
@@ -135,8 +135,60 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const removeFile = (fileId: string) => {
-    setFiles(prev => prev.filter(f => f.id !== fileId));
+  const removeFile = async (fileId: string, vapiFileId?: string) => {
+    if (!vapiFileId) {
+      // File not yet uploaded to Vapi, just remove from UI
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+      return;
+    }
+
+    try {
+      // Delete from Vapi
+      const response = await fetch(`/api/vapi/delete-file/${vapiFileId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-csrf-token': csrfToken,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete file from Vapi');
+      }
+
+      // Remove from UI
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+      toast.success(t('common:setup.knowledge.fileDeleted'));
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error(t('common:setup.knowledge.deleteError'));
+    }
+  };
+
+  const viewFile = async (vapiFileId: string, fileName: string) => {
+    try {
+      // Get file URL from Vapi
+      const response = await fetch(`/api/vapi/get-file/${vapiFileId}`, {
+        headers: {
+          'x-csrf-token': csrfToken,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get file URL');
+      }
+
+      const data = await response.json();
+      
+      // Open file in new tab
+      if (data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        toast.error('File URL not available');
+      }
+    } catch (error) {
+      console.error('View file error:', error);
+      toast.error('Failed to view file');
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -184,8 +236,8 @@ export default function KnowledgeBasePage() {
           size: f.size,
         }));
 
-      // Save to database
-      await saveKnowledge({ files: uploadedFiles });
+      // Save to database (saveKnowledge expects array directly, not wrapped in object)
+      await saveKnowledge(uploadedFiles);
 
       // Also store in sessionStorage for backward compatibility
       sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(uploadedFiles));
@@ -323,14 +375,26 @@ export default function KnowledgeBasePage() {
                         {file.status === 'error' && (
                           <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
                         )}
+                        {file.status === 'uploaded' && file.vapiFileId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewFile(file.vapiFileId!, file.name)}
+                            className="flex-shrink-0"
+                            title="View file"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeFile(file.id)}
+                          onClick={() => removeFile(file.id, file.vapiFileId)}
                           disabled={file.status === 'uploading'}
                           className="flex-shrink-0"
+                          title="Delete file"
                         >
-                          <X className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                       {file.status === 'uploading' && file.progress !== undefined && (

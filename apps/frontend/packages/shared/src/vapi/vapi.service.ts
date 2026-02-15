@@ -925,6 +925,145 @@ class VapiService {
   }
 
   /**
+   * Get file details from Vapi
+   */
+  async getFile(fileId: string): Promise<any | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/file/${fileId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+          fileId,
+        }, '[Vapi] Failed to get file');
+        return null;
+      }
+
+      const file = await response.json();
+
+      logger.info({
+        fileId,
+        fileName: file.name,
+      }, '[Vapi] Successfully retrieved file');
+
+      return file;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+        fileId,
+      }, '[Vapi] Exception while getting file');
+
+      return null;
+    }
+  }
+
+  /**
+   * Delete a file from Vapi
+   */
+  async deleteFile(fileId: string): Promise<boolean> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return false;
+    }
+
+    try {
+      logger.info({
+        fileId,
+      }, '[Vapi] Deleting file');
+
+      const response = await fetch(`${this.baseUrl}/file/${fileId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+          fileId,
+        }, '[Vapi] Failed to delete file');
+        return false;
+      }
+
+      logger.info({
+        fileId,
+      }, '[Vapi] Successfully deleted file');
+
+      return true;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+        fileId,
+      }, '[Vapi] Exception while deleting file');
+
+      return false;
+    }
+  }
+
+  /**
+   * List all files in Vapi
+   */
+  async listFiles(): Promise<any[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/file`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to list files');
+        return [];
+      }
+
+      const files = await response.json();
+
+      logger.info({
+        count: files.length,
+      }, '[Vapi] Successfully listed files');
+
+      return files;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while listing files');
+
+      return [];
+    }
+  }
+
+  /**
    * List all assistants
    */
   async listAssistants(): Promise<VapiAssistant[]> {
