@@ -433,6 +433,162 @@ export class GoogleCalendarService {
   }
 
   /**
+   * List calendar events in a date range
+   * Used as fallback for getAppointments when PMS is not connected
+   */
+  async listEvents(
+    accountId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      const response = await calendar.events.list({
+        calendarId,
+        timeMin: startDate.toISOString(),
+        timeMax: endDate.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 50,
+      });
+
+      const events = response.data.items || [];
+
+      this.logger.log({
+        accountId,
+        eventCount: events.length,
+        msg: 'Listed calendar events',
+      });
+
+      return {
+        success: true,
+        events: events.map((event) => ({
+          id: event.id,
+          summary: event.summary,
+          description: event.description,
+          startTime: event.start?.dateTime || event.start?.date,
+          endTime: event.end?.dateTime || event.end?.date,
+          status: event.status,
+          htmlLink: event.htmlLink,
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Failed to list calendar events', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check free/busy time slots for availability
+   * Used as fallback for checkAvailability when PMS is not connected
+   */
+  async checkFreeBusy(
+    accountId: string,
+    date: string, // YYYY-MM-DD
+    durationMinutes: number = 30,
+  ) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      // Query the full business day (8am - 6pm)
+      const dayStart = new Date(`${date}T08:00:00`);
+      const dayEnd = new Date(`${date}T18:00:00`);
+
+      const response = await calendar.freebusy.query({
+        requestBody: {
+          timeMin: dayStart.toISOString(),
+          timeMax: dayEnd.toISOString(),
+          timeZone: 'America/Toronto', // TODO: Make configurable
+          items: [{ id: calendarId }],
+        },
+      });
+
+      const busySlots =
+        response.data.calendars?.[calendarId]?.busy || [];
+
+      // Generate available slots by finding gaps between busy periods
+      const availableSlots: Array<{ startTime: string; endTime: string }> = [];
+      let currentSlotStart = dayStart;
+
+      for (const busy of busySlots) {
+        const busyStart = new Date(busy.start!);
+        const busyEnd = new Date(busy.end!);
+
+        // If there's a gap before this busy slot that fits the requested duration
+        const gapMinutes =
+          (busyStart.getTime() - currentSlotStart.getTime()) / (1000 * 60);
+        if (gapMinutes >= durationMinutes) {
+          availableSlots.push({
+            startTime: currentSlotStart.toISOString(),
+            endTime: busyStart.toISOString(),
+          });
+        }
+
+        // Move past this busy period
+        if (busyEnd > currentSlotStart) {
+          currentSlotStart = busyEnd;
+        }
+      }
+
+      // Check for remaining time after last busy slot
+      const remainingMinutes =
+        (dayEnd.getTime() - currentSlotStart.getTime()) / (1000 * 60);
+      if (remainingMinutes >= durationMinutes) {
+        availableSlots.push({
+          startTime: currentSlotStart.toISOString(),
+          endTime: dayEnd.toISOString(),
+        });
+      }
+
+      this.logger.log({
+        accountId,
+        date,
+        busyCount: busySlots.length,
+        availableCount: availableSlots.length,
+        msg: 'Checked calendar availability',
+      });
+
+      return {
+        success: true,
+        availableSlots,
+        busySlots: busySlots.map((b) => ({
+          start: b.start,
+          end: b.end,
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Failed to check calendar availability', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if Google Calendar is connected for a given account
+   */
+  async isConnectedForAccount(accountId: string): Promise<boolean> {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { googleCalendarConnected: true },
+    });
+    return account?.googleCalendarConnected === true;
+  }
+
+  /**
    * Disconnect Google Calendar
    */
   async disconnect(accountId: string) {

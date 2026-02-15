@@ -20,6 +20,8 @@
     "./gohighlevel": "./src/gohighlevel/index.ts",
     "./gohighlevel/server": "./src/gohighlevel/server.ts",
     "./vapi/server": "./src/vapi/server.ts",
+    "./vapi/vapi-pms-tools.config": "./src/vapi/vapi-pms-tools.config.ts",
+    "./vapi/templates": "./src/vapi/templates/index.ts",
     "./twilio/server": "./src/twilio/server.ts"
   },
   "devDependencies": {

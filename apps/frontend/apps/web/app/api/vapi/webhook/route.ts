@@ -201,6 +201,11 @@ async function handleEndOfCall(payload: any) {
 
 /**
  * Handle function call - AI wants to execute an action
+ * 
+ * Dispatches to the backend PMS service for Sikka operations.
+ * Tool names and parameters match Sikka API exactly.
+ * See: vapi-pms-tools.config.ts for tool definitions
+ * See: apps/backend/src/vapi/vapi-tools.service.ts for implementations
  */
 async function handleFunctionCall(payload: any) {
   const logger = await getLogger();
@@ -214,40 +219,148 @@ async function handleFunctionCall(payload: any) {
     parameters,
   }, '[Vapi Webhook] Function call requested');
 
-  try {
-    // Handle different function calls
-    switch (name) {
-      case 'bookAppointment':
-        // TODO: Implement appointment booking
-        const { date, time, service } = parameters;
-        logger.info({
-          date,
-          time,
-          service,
-        }, '[Vapi Webhook] Booking appointment');
-        
-        // Return success response to Vapi
-        return NextResponse.json({
-          result: {
-            success: true,
-            message: `Appointment booked for ${date} at ${time}`,
-            confirmationNumber: 'APT-' + Date.now(),
-          },
-        });
+  const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
-      case 'transferCall':
-        // TODO: Implement call transfer
-        const { phoneNumber } = parameters;
-        logger.info({
-          phoneNumber,
-        }, '[Vapi Webhook] Transferring call');
-        
-        return NextResponse.json({
-          result: {
-            success: true,
-            message: 'Transferring call...',
-          },
-        });
+  // Extract caller's phone number from Vapi call metadata
+  // Available as call.customer.number in every Vapi webhook payload
+  const callerPhone = call?.customer?.number;
+  if (callerPhone) {
+    logger.info({ callerPhone }, '[Vapi Webhook] Caller phone from metadata');
+  }
+
+  try {
+    // ================================================================
+    // PMS Tool Calls - Forward to backend VapiToolsService
+    // Parameters match Sikka API (see sikka.service.ts)
+    // The caller's phone is injected into the payload for auto-lookup
+    // ================================================================
+    switch (name) {
+
+      // --------------------------------------------------------
+      // Patient Management
+      // --------------------------------------------------------
+
+      case 'searchPatients': {
+        // Sikka: GET /patients/search
+        // Params: { query: string, limit?: number }
+        // Phone-first: the AI should pass phone number as query (most reliable)
+        const result = await forwardToBackend(BACKEND_URL, 'searchPatients', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'getPatientInfo': {
+        // Sikka: GET /patients/{patientId} or search by phone/name
+        // Params: { patientId: string } or { phone, name, firstName, lastName }
+        const result = await forwardToBackend(BACKEND_URL, 'getPatientInfo', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'createPatient': {
+        // Sikka: POST /patient (singular)
+        // Params: { firstName, lastName, phone, email?, dateOfBirth?, notes? }
+        const result = await forwardToBackend(BACKEND_URL, 'createPatient', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'updatePatient': {
+        // Sikka: PATCH /patient/{patientId}
+        // Params: { patientId, phone?, email?, address?, notes? }
+        const result = await forwardToBackend(BACKEND_URL, 'updatePatient', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Appointment Management
+      // --------------------------------------------------------
+
+      case 'checkAvailability': {
+        // Sikka: GET /appointments_available_slots
+        // Params: { date: YYYY-MM-DD, duration?: number, providerId?, appointmentType? }
+        const result = await forwardToBackend(BACKEND_URL, 'checkAvailability', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'bookAppointment': {
+        // Sikka: POST /appointment (singular)
+        // Params: { patientId, appointmentType, startTime (ISO 8601), duration (minutes), providerId?, notes? }
+        const result = await forwardToBackend(BACKEND_URL, 'bookAppointment', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'rescheduleAppointment': {
+        // Sikka: PATCH /appointments/{appointmentId}
+        // Params: { appointmentId, startTime (ISO 8601), duration?, providerId?, notes? }
+        const result = await forwardToBackend(BACKEND_URL, 'rescheduleAppointment', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'cancelAppointment': {
+        // Sikka: DELETE /appointments/{appointmentId}
+        // Params: { appointmentId, reason? }
+        const result = await forwardToBackend(BACKEND_URL, 'cancelAppointment', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'getAppointments': {
+        // Sikka: GET /appointments?patientId=xxx
+        // Params: { patientId, startDate?, endDate? }
+        const result = await forwardToBackend(BACKEND_URL, 'getAppointments', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Patient Notes
+      // --------------------------------------------------------
+
+      case 'addPatientNote': {
+        // Sikka: POST /medical_notes
+        // Params: { patientId, content, category? }
+        const result = await forwardToBackend(BACKEND_URL, 'addPatientNote', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Insurance & Billing
+      // --------------------------------------------------------
+
+      case 'getPatientInsurance': {
+        // Sikka: GET /patients/{patientId}/insurance
+        // Params: { patientId }
+        const result = await forwardToBackend(BACKEND_URL, 'getPatientInsurance', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      case 'getPatientBalance': {
+        // Sikka: GET /patient_balance?patient_id={patientId}
+        // Params: { patientId }
+        const result = await forwardToBackend(BACKEND_URL, 'getPatientBalance', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Provider Management
+      // --------------------------------------------------------
+
+      case 'getProviders': {
+        // Sikka: GET /providers
+        // Params: none
+        const result = await forwardToBackend(BACKEND_URL, 'getProviders', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Call Transfer
+      // --------------------------------------------------------
+
+      case 'transferToHuman':
+      case 'transferCall': {
+        const result = await forwardToBackend(BACKEND_URL, 'transferToHuman', payload, logger);
+        return NextResponse.json(result);
+      }
+
+      // --------------------------------------------------------
+      // Unknown
+      // --------------------------------------------------------
 
       default:
         logger.warn({
@@ -257,7 +370,7 @@ async function handleFunctionCall(payload: any) {
         return NextResponse.json({
           result: {
             success: false,
-            message: 'Function not implemented',
+            message: `Function "${name}" is not implemented. Please try a different approach.`,
           },
         });
     }
@@ -270,8 +383,86 @@ async function handleFunctionCall(payload: any) {
     return NextResponse.json({
       result: {
         success: false,
-        message: 'Failed to execute function',
+        message: "I'm having trouble with that right now. Let me try a different approach.",
       },
     });
+  }
+}
+
+/**
+ * Forward a tool call to the backend VapiToolsService.
+ * 
+ * The backend handles:
+ * - PMS service resolution (Sikka credentials, token management)
+ * - HIPAA audit logging
+ * - Error handling with user-friendly messages
+ * 
+ * Falls back to a stub response if backend is not reachable.
+ */
+async function forwardToBackend(
+  backendUrl: string,
+  toolName: string,
+  payload: any,
+  logger: any
+): Promise<any> {
+  if (!backendUrl) {
+    logger.warn({
+      toolName,
+    }, '[Vapi Webhook] No BACKEND_API_URL configured - using stub response');
+    
+    return {
+      result: {
+        success: false,
+        message: 'Backend service is not configured. Please contact support.',
+      },
+    };
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}/vapi/tools/${toolName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.BACKEND_API_KEY || ''}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(25000), // 25s timeout
+    });
+
+    if (!response.ok) {
+      logger.error({
+        toolName,
+        status: response.status,
+        statusText: response.statusText,
+      }, '[Vapi Webhook] Backend returned error');
+
+      return {
+        result: {
+          success: false,
+          message: "I'm having a technical issue. Let me try another way to help you.",
+        },
+      };
+    }
+
+    const result = await response.json();
+    
+    logger.info({
+      toolName,
+      success: result?.result?.success,
+    }, '[Vapi Webhook] Backend response received');
+
+    return result;
+  } catch (error) {
+    logger.error({
+      toolName,
+      error: error instanceof Error ? error.message : error,
+    }, '[Vapi Webhook] Failed to reach backend');
+
+    return {
+      result: {
+        success: false,
+        message: "I'm having trouble connecting to our system. Let me take your information and someone will follow up.",
+      },
+    };
   }
 }

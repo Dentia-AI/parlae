@@ -2,25 +2,44 @@ import { NextResponse } from 'next/server';
 import { createVapiService } from '@kit/shared/vapi/server';
 import { createTwilioService } from '@kit/shared/twilio/server';
 import { getLogger } from '@kit/shared/logger';
+import { prisma } from '@kit/prisma';
+import {
+  getDentalClinicTemplate,
+  buildSquadPayloadFromTemplate,
+  dbShapeToTemplate,
+  DENTAL_CLINIC_TEMPLATE_VERSION,
+} from '@kit/shared/vapi/templates';
+import type {
+  TemplateVariables,
+  RuntimeConfig,
+} from '@kit/shared/vapi/templates';
 
 /**
  * POST /api/agent/setup-squad
  * 
- * Create a multi-assistant Squad for complex workflows like:
- * - Dental clinic: Triage → Emergency/Scheduler
- * - Sales: Qualifier → Demo Scheduler → Account Manager
- * - Support: L1 → L2 → Engineering
+ * Create a multi-assistant Squad for complex workflows.
+ * 
+ * Supports template-based creation:
+ * - If `templateId` is provided, the squad config is loaded from the DB template.
+ * - Otherwise, the built-in default template is used.
+ * - If `accountId` is provided, the template version is recorded on the account.
  * 
  * Body:
  * {
  *   customerName: string
  *   squadType: 'dental-clinic' | 'sales' | 'support'
- *   phoneNumber?: string (or will purchase new)
+ *   templateId?: string          // Optional: DB template ID to use
+ *   accountId?: string           // Optional: Account to link template version to
+ *   phoneNumber?: string         // Or will purchase new
  *   areaCode?: string
+ *   twilioSubAccountSid?: string
  *   businessInfo: {
- *     services?: string[]
+ *     services?: string[] | string
  *     hours?: string
  *     location?: string
+ *     insurance?: string
+ *     pricing?: string
+ *     policies?: string
  *   }
  * }
  */
@@ -33,6 +52,8 @@ export async function POST(request: Request) {
       customerName,
       customerEmail,
       squadType,
+      templateId,
+      accountId,
       phoneNumber: existingPhoneNumber,
       areaCode,
       twilioSubAccountSid,
@@ -42,6 +63,7 @@ export async function POST(request: Request) {
     logger.info({
       customerName,
       squadType,
+      templateId: templateId ?? 'built-in',
     }, '[Squad Setup] Starting squad setup');
 
     const vapiService = createVapiService();
@@ -108,17 +130,37 @@ export async function POST(request: Request) {
       }
     }
 
-    // STEP 3: Create squad based on type
+    // STEP 3: Resolve template variables & runtime config
+    const templateVars: TemplateVariables = {
+      clinicName: customerName,
+      clinicHours: businessInfo?.hours,
+      clinicLocation: businessInfo?.location,
+      clinicInsurance: businessInfo?.insurance,
+      clinicServices: Array.isArray(businessInfo?.services)
+        ? businessInfo.services.join(', ')
+        : businessInfo?.services,
+    };
+
+    const runtimeConfig: RuntimeConfig = {
+      webhookUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
+      webhookSecret: process.env.VAPI_SERVER_SECRET,
+      knowledgeFileIds,
+    };
+
+    // STEP 4: Create squad based on type
     let squad;
+    let usedTemplateVersion: string | undefined;
+    let usedTemplateName: string | undefined;
 
     switch (squadType) {
       case 'dental-clinic':
-        squad = await createDentalClinicSquad(
-          vapiService,
-          customerName,
-          knowledgeFileIds,
-          businessInfo
-        );
+        {
+          const { squadPayload, templateVersion, templateName } =
+            await resolveDentalClinicSquad(templateId, templateVars, runtimeConfig, logger);
+          squad = await vapiService.createSquad(squadPayload);
+          usedTemplateVersion = templateVersion;
+          usedTemplateName = templateName;
+        }
         break;
 
       case 'sales':
@@ -158,12 +200,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // STEP 4: Link phone number to squad
+    // STEP 5: Link phone number to squad
     if (phoneNumber && twilioService.isEnabled()) {
       const twilioAccountSid = twilioSubAccountSid || process.env.TWILIO_ACCOUNT_SID || '';
       const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
 
-      // Import phone to Vapi (will use the first assistant in the squad)
       const vapiPhoneNumber = await vapiService.importPhoneNumber(
         phoneNumber,
         twilioAccountSid,
@@ -175,10 +216,46 @@ export async function POST(request: Request) {
       }
     }
 
+    // STEP 6: Record template version on account (if accountId provided)
+    if (accountId && usedTemplateVersion) {
+      try {
+        const existingAccount = await prisma.account.findUnique({
+          where: { id: accountId },
+          select: { phoneIntegrationSettings: true },
+        });
+
+        const existingSettings = (existingAccount?.phoneIntegrationSettings as any) ?? {};
+
+        await prisma.account.update({
+          where: { id: accountId },
+          data: {
+            ...(templateId ? { agentTemplateId: templateId } : {}),
+            phoneIntegrationSettings: {
+              ...existingSettings,
+              vapiSquadId: squad.id,
+              templateVersion: usedTemplateVersion,
+              templateName: usedTemplateName,
+              lastTemplateUpdate: new Date().toISOString(),
+            },
+          },
+        });
+
+        logger.info({
+          accountId,
+          templateVersion: usedTemplateVersion,
+          templateName: usedTemplateName,
+        }, '[Squad Setup] Template version recorded on account');
+      } catch (dbError) {
+        logger.error({ dbError, accountId }, '[Squad Setup] Failed to record template on account');
+        // Non-fatal: squad was created, just the DB link failed
+      }
+    }
+
     logger.info({
       squadId: squad.id,
       squadName: squad.name,
       phoneNumber,
+      templateVersion: usedTemplateVersion,
     }, '[Squad Setup] Squad created successfully');
 
     return NextResponse.json({
@@ -190,10 +267,16 @@ export async function POST(request: Request) {
         phoneNumber,
         members: squad.members?.length || 0,
       },
+      template: {
+        version: usedTemplateVersion,
+        name: usedTemplateName,
+        source: templateId ? 'database' : 'built-in',
+      },
       message: 'Squad created successfully',
     });
 
   } catch (error) {
+    const logger = await getLogger();
     logger.error({
       error: error instanceof Error ? {
         name: error.name,
@@ -210,227 +293,67 @@ export async function POST(request: Request) {
 }
 
 /**
- * Create a dental clinic triage and booking squad
- * Based on: https://docs.vapi.ai/squads/examples/clinic-triage-scheduling
+ * Resolve the dental clinic squad config from a DB template or the built-in default.
+ *
+ * Returns the Vapi-ready squad payload and template metadata.
  */
-async function createDentalClinicSquad(
-  vapiService: any,
-  customerName: string,
-  knowledgeFileIds: string[],
-  businessInfo: any
-) {
-  const logger = await getLogger();
+async function resolveDentalClinicSquad(
+  templateId: string | undefined,
+  variables: TemplateVariables,
+  runtime: RuntimeConfig,
+  logger: any,
+): Promise<{
+  squadPayload: Record<string, unknown>;
+  templateVersion: string;
+  templateName: string;
+}> {
+  let templateConfig;
+  let templateVersion: string;
+  let templateName: string;
 
-  logger.info('[Squad Setup] Creating dental clinic squad');
+  if (templateId) {
+    // ── Load template from database ──────────────────────────────────────
+    logger.info({ templateId }, '[Squad Setup] Loading template from database');
 
-  // Define tools for booking appointments
-  const bookingTool = {
-    type: 'function' as const,
-    function: {
-      name: 'bookAppointment',
-      description: 'Books a dental appointment for the patient',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          patientName: { type: 'string', description: 'Patient full name' },
-          phoneNumber: { type: 'string', description: 'Contact phone number' },
-          email: { type: 'string', description: 'Contact email' },
-          serviceType: { 
-            type: 'string',
-            enum: ['cleaning', 'filling', 'exam', 'emergency', 'cosmetic'],
-            description: 'Type of dental service needed'
-          },
-          preferredDate: { type: 'string', description: 'Preferred appointment date (YYYY-MM-DD)' },
-          preferredTime: { type: 'string', description: 'Preferred time (HH:MM)' },
-        },
-        required: ['patientName', 'phoneNumber', 'serviceType'],
-      },
-    },
-    async: false,
-    server: {
-      url: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      secret: process.env.VAPI_SERVER_SECRET,
-      timeoutSeconds: 20,
-    },
-    messages: [
-      {
-        type: 'request-start' as const,
-        content: 'Let me check our availability...',
-      },
-      {
-        type: 'request-complete' as const,
-        content: 'Great! I\'ve booked your appointment.',
-      },
-    ],
-  };
+    const dbTemplate = await prisma.agentTemplate.findUnique({
+      where: { id: templateId },
+    });
 
-  const checkAvailabilityTool = {
-    type: 'function' as const,
-    function: {
-      name: 'checkAvailability',
-      description: 'Checks available appointment slots',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          date: { type: 'string', description: 'Date to check (YYYY-MM-DD)' },
-          serviceType: { type: 'string', description: 'Type of service' },
-        },
-        required: ['date'],
-      },
-    },
-    async: false,
-    server: {
-      url: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      secret: process.env.VAPI_SERVER_SECRET,
-    },
-  };
+    if (!dbTemplate) {
+      throw new Error(`Template ${templateId} not found`);
+    }
 
-  const squad = await vapiService.createSquad({
-    name: `${customerName} - Dental Clinic`,
-    members: [
-      {
-        assistant: {
-          name: 'Triage Assistant',
-          voice: {
-            provider: 'elevenlabs',
-            voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel - calm, professional
-          },
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o',
-            systemPrompt: `You are the triage assistant for ${customerName}.
+    if (!dbTemplate.isActive) {
+      throw new Error(`Template ${templateId} is not active`);
+    }
 
-Your role is to:
-1. Greet the caller warmly
-2. Ask about their dental concern
-3. Identify if it's an emergency (severe pain, bleeding, trauma, swelling, infection)
-4. For emergencies: transfer to Emergency Assistant
-5. For routine care: transfer to Scheduler Assistant
+    templateConfig = dbShapeToTemplate(dbTemplate as any);
+    templateVersion = dbTemplate.version;
+    templateName = dbTemplate.name;
 
-Red flags (transfer to emergency):
-- Severe/unbearable pain
-- Uncontrolled bleeding
-- Facial swelling
-- Knocked-out tooth
-- Signs of infection (fever, pus)
-- Broken jaw or facial trauma
+    logger.info({
+      templateName,
+      templateVersion,
+    }, '[Squad Setup] Using DB template');
+  } else {
+    // ── Use built-in default template ────────────────────────────────────
+    templateConfig = getDentalClinicTemplate();
+    templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
+    templateName = templateConfig.name;
 
-Be empathetic, professional, and efficient. Get the key information quickly.`,
-            temperature: 0.7,
-            maxTokens: 300,
-            ...(knowledgeFileIds.length > 0 && {
-              knowledgeBase: {
-                provider: 'canonical',
-                topK: 3,
-                fileIds: knowledgeFileIds,
-              },
-            }),
-          },
-          firstMessage: `Thank you for calling ${customerName}! How can I help you today?`,
-          firstMessageMode: 'assistant-speaks-first',
-          recordingEnabled: true,
-          serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-          serverUrlSecret: process.env.VAPI_SERVER_SECRET,
-        },
-        assistantDestinations: [
-          {
-            type: 'assistant',
-            assistantName: 'Emergency Assistant',
-            message: 'Transferring you to our emergency line immediately.',
-            description: 'Transfer to emergency for urgent dental issues requiring immediate attention',
-          },
-          {
-            type: 'assistant',
-            assistantName: 'Scheduler Assistant',
-            message: 'Let me connect you with our scheduler to find the best appointment time.',
-            description: 'Transfer to scheduler for routine appointments',
-          },
-        ],
-      },
-      {
-        assistant: {
-          name: 'Emergency Assistant',
-          voice: {
-            provider: 'elevenlabs',
-            voiceId: 'pNInz6obpgDQGcFmaJgB', // Adam - calm, authoritative
-          },
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o',
-            systemPrompt: `You are the emergency dental assistant for ${customerName}.
+    logger.info({
+      templateName,
+      templateVersion,
+    }, '[Squad Setup] Using built-in default template');
+  }
 
-Your role is to:
-1. Stay calm and reassuring
-2. Gather critical information quickly:
-   - Name and contact info
-   - Exact nature of emergency
-   - When it started
-   - Current location
-3. Provide immediate first aid advice if appropriate
-4. Tell them we'll see them immediately or direct to ER if needed
-5. Get them scheduled for an emergency appointment TODAY
+  const squadPayload = buildSquadPayloadFromTemplate(
+    templateConfig,
+    variables,
+    runtime,
+  );
 
-Keep interactions brief and focused. This is urgent.`,
-            temperature: 0.6,
-            maxTokens: 200,
-          },
-          firstMessage: 'I understand this is urgent. Let me help you right away.',
-          tools: [bookingTool],
-          recordingEnabled: true,
-          serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-          serverUrlSecret: process.env.VAPI_SERVER_SECRET,
-        },
-      },
-      {
-        assistant: {
-          name: 'Scheduler Assistant',
-          voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL', // Bella - warm, friendly
-          },
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o',
-            systemPrompt: `You are the scheduling assistant for ${customerName}.
-
-Your role is to:
-1. Gather patient information (name, phone, email)
-2. Understand what service they need
-3. Check availability using the checkAvailability tool
-4. Offer 2-3 time slots
-5. Book the appointment using the bookAppointment tool
-6. Confirm all details clearly
-
-${businessInfo?.hours ? `Our hours: ${businessInfo.hours}` : 'Check our hours before offering times.'}
-${businessInfo?.location ? `Our location: ${businessInfo.location}` : ''}
-
-Be friendly, efficient, and make sure they have all the information they need.`,
-            temperature: 0.7,
-            maxTokens: 400,
-          },
-          firstMessage: 'I\'d be happy to help you schedule an appointment!',
-          tools: [checkAvailabilityTool, bookingTool],
-          recordingEnabled: true,
-          serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-          serverUrlSecret: process.env.VAPI_SERVER_SECRET,
-          analysisSchema: {
-            type: 'object',
-            properties: {
-              patientName: { type: 'string' },
-              phoneNumber: { type: 'string' },
-              email: { type: 'string' },
-              serviceType: { type: 'string' },
-              appointmentBooked: { type: 'boolean' },
-              appointmentDate: { type: 'string' },
-              appointmentTime: { type: 'string' },
-            },
-          },
-        },
-      },
-    ],
-  });
-
-  return squad;
+  return { squadPayload, templateVersion, templateName };
 }
 
 /**
