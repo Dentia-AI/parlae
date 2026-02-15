@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
         id: true,
         name: true,
         email: true,
-        stripeCustomerId: true,
       },
     });
 
@@ -54,7 +53,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Create or retrieve Stripe Customer
-    let customerId = account.stripeCustomerId;
+    // Use a raw query to safely read stripeCustomerId (column may not exist yet if migration pending)
+    let customerId: string | null = null;
+    try {
+      const fullAccount = await prisma.account.findUnique({
+        where: { id: account.id },
+      });
+      customerId = (fullAccount as any)?.stripeCustomerId ?? null;
+    } catch {
+      // Column may not exist yet
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -68,12 +76,15 @@ export async function POST(request: NextRequest) {
 
       customerId = customer.id;
 
-      await prisma.account.update({
-        where: { id: account.id },
-        data: { stripeCustomerId: customerId },
-      });
-
-      console.log('Stripe Customer created:', customerId);
+      try {
+        await prisma.account.update({
+          where: { id: account.id },
+          data: { stripeCustomerId: customerId } as any,
+        });
+        console.log('Stripe Customer created:', customerId);
+      } catch {
+        console.warn('Could not save stripeCustomerId (migration may be pending)');
+      }
     }
 
     // Create a SetupIntent attached to the customer

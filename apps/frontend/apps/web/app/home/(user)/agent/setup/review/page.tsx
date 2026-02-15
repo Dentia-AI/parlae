@@ -122,8 +122,14 @@ export default function ReviewPage() {
         });
 
         if (!chargeResponse.ok) {
-          const chargeResult = await chargeResponse.json();
-          toast.error(chargeResult.error || 'Failed to process activation fee');
+          let errorMsg = 'Failed to process activation fee';
+          try {
+            const chargeResult = await chargeResponse.json();
+            errorMsg = chargeResult.error || errorMsg;
+          } catch {
+            // Response wasn't JSON
+          }
+          toast.error(errorMsg);
           return;
         }
 

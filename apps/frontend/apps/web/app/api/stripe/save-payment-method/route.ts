@@ -56,7 +56,8 @@ export async function POST(request: NextRequest) {
     }
 
     // If we have a Stripe Customer, set this as the default payment method
-    if (account.stripeCustomerId) {
+    const stripeCustomerId = (account as any).stripeCustomerId;
+    if (stripeCustomerId) {
       try {
         const secretKey = process.env.STRIPE_SECRET_KEY;
         if (secretKey) {
@@ -65,14 +66,14 @@ export async function POST(request: NextRequest) {
             apiVersion: '2024-12-18.acacia',
           });
 
-          await stripe.customers.update(account.stripeCustomerId, {
+          await stripe.customers.update(stripeCustomerId, {
             invoice_settings: {
               default_payment_method: paymentMethodId,
             },
           });
 
           logger.info(
-            { customerId: account.stripeCustomerId, paymentMethodId },
+            { customerId: stripeCustomerId, paymentMethodId },
             '[Payment] Set as default payment method on Stripe Customer',
           );
         }

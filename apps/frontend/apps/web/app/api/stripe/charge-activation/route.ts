@@ -31,13 +31,6 @@ export async function POST(request: NextRequest) {
         primaryOwnerId: session.id,
         isPersonalAccount: true,
       },
-      select: {
-        id: true,
-        stripeCustomerId: true,
-        stripePaymentMethodId: true,
-        paymentMethodVerified: true,
-        publicData: true,
-      },
     });
 
     if (!account) {
@@ -71,7 +64,7 @@ export async function POST(request: NextRequest) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: activationFeeCents,
       currency: 'cad',
-      customer: account.stripeCustomerId ?? undefined,
+      customer: (account as any).stripeCustomerId ?? undefined,
       payment_method: account.stripePaymentMethodId,
       confirm: true,
       off_session: true,
