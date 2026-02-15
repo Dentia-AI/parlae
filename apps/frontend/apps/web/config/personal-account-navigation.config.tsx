@@ -1,9 +1,8 @@
-import { CreditCard, User, Users, Settings, Wrench, BarChart3, Palette, FileText } from 'lucide-react';
+import { BarChart3, FileText, Bot, Wrench, UserCog, ToggleLeft, Sparkles } from 'lucide-react';
 import { z } from 'zod';
 
 import { NavigationConfigSchema } from '@kit/ui/navigation-schema';
 
-import featureFlagsConfig from '~/config/feature-flags.config';
 import pathsConfig from '~/config/paths.config';
 
 const iconClasses = 'w-4';
@@ -26,12 +25,12 @@ const routes = [
       {
         label: 'common:routes.setup',
         path: '/home/agent',
-        Icon: <Settings className={iconClasses} />,
+        Icon: <Bot className={iconClasses} />,
         children: [
           {
             label: 'common:routes.aiAgents',
             path: '/home/agent',
-            Icon: <Settings className={iconClasses} />,
+            Icon: <Sparkles className={iconClasses} />,
           },
           {
             label: 'common:routes.advancedSetup',
@@ -43,29 +42,17 @@ const routes = [
     ],
   },
   {
-    label: 'common:routes.settings',
+    label: 'common:routes.manage',
     children: [
       {
-        label: 'common:routes.profile',
+        label: 'common:routes.accountSettings',
         path: pathsConfig.app.personalAccountSettings,
-        Icon: <User className={iconClasses} />,
+        Icon: <UserCog className={iconClasses} />,
       },
       {
-        label: 'Email Branding',
-        path: '/home/settings/branding',
-        Icon: <Palette className={iconClasses} />,
-      },
-      featureFlagsConfig.enablePersonalAccountBilling
-        ? {
-            label: 'common:routes.billing',
-            path: pathsConfig.app.personalAccountBilling,
-            Icon: <CreditCard className={iconClasses} />,
-          }
-        : undefined,
-      {
-        label: 'account:team',
-        path: '/home/employees',
-        Icon: <Users className={iconClasses} />,
+        label: 'common:routes.features',
+        path: '/home/features',
+        Icon: <ToggleLeft className={iconClasses} />,
       },
     ].filter((route) => !!route),
   },

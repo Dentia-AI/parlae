@@ -9,10 +9,9 @@ import { ProfileAccountDropdownContainer } from '~/components/personal-account-d
 import { personalAccountNavigationConfig } from '~/config/personal-account-navigation.config';
 
 import { type UserWorkspace } from '../_lib/server/load-user-workspace';
-import { AccountSelector } from './account-selector';
 
 export function HomeMenuNavigation(props: { workspace: UserWorkspace }) {
-  const { workspace, user, accounts } = props.workspace;
+  const { workspace, user } = props.workspace;
 
   const routes = personalAccountNavigationConfig.routes.reduce<
     Array<{
@@ -46,11 +45,6 @@ export function HomeMenuNavigation(props: { workspace: UserWorkspace }) {
       </div>
 
       <div className={'flex items-center gap-4'}>
-        <AccountSelector
-          accounts={accounts}
-          currentAccountId={workspace.id}
-          className="w-[200px]"
-        />
         <NotificationBell />
         <ProfileAccountDropdownContainer
           user={user}

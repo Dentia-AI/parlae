@@ -5,7 +5,7 @@ import {
   getNotificationsAction,
   dismissNotificationAction,
   dismissAllNotificationsAction,
-} from '@kit/shared/notifications';
+} from '@kit/shared/notifications/server-actions';
 import { toast } from '@kit/ui/sonner';
 
 export function useNotifications() {

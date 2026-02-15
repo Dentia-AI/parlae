@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Separator } from '@kit/ui/separator';
-import { CheckCircle2, Users, Settings, Copy } from 'lucide-react';
+import { CheckCircle2, Users, Settings, Copy, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { prisma } from '@kit/prisma';
 import { getSessionUser } from '@kit/shared/auth';
@@ -60,6 +60,15 @@ export default async function TemplateDetailPage({
 
   return (
     <div className="container max-w-7xl py-8 space-y-6">
+      {/* Back to Templates */}
+      <Link
+        href="/admin/agent-templates"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Templates
+      </Link>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">

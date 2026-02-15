@@ -1,5 +1,5 @@
 /**
- * Dentia Production Billing Configuration
+ * Parlae Production Billing Configuration
  * 
  * IMPORTANT: Update the price IDs below with your actual Stripe production price IDs
  * Get them from: https://dashboard.stripe.com/products
@@ -16,7 +16,7 @@ export default createBillingSchema({
     {
       id: 'starter',
       name: 'Starter',
-      description: 'The perfect plan to get started with Dentia',
+      description: 'Perfect for small practices getting started with AI',
       currency: 'USD',
       badge: 'Value',
       plans: [
@@ -52,9 +52,11 @@ export default createBillingSchema({
         },
       ],
       features: [
-        'Up to 3 social media accounts',
-        '100 posts per month',
-        'Basic analytics',
+        '1 AI receptionist',
+        '1 phone number',
+        'Up to 100 calls/month',
+        'Basic call analytics',
+        'Email confirmations',
         'Email support',
       ],
     },
@@ -63,7 +65,7 @@ export default createBillingSchema({
       name: 'Pro',
       badge: 'Popular',
       highlighted: true,
-      description: 'Perfect for growing businesses',
+      description: 'Ideal for growing practices',
       currency: 'USD',
       plans: [
         {
@@ -98,17 +100,19 @@ export default createBillingSchema({
         },
       ],
       features: [
-        'Up to 10 social media accounts',
-        'Unlimited posts',
+        'Everything in Starter',
+        'Up to 500 calls/month',
+        'SMS confirmations',
+        'PMS integration',
+        'Google Calendar sync',
         'Advanced analytics',
         'Priority support',
-        'Team collaboration',
       ],
     },
     {
       id: 'enterprise',
       name: 'Enterprise',
-      description: 'For large organizations',
+      description: 'For multi-location practices',
       currency: 'USD',
       plans: [
         {
@@ -143,12 +147,13 @@ export default createBillingSchema({
         },
       ],
       features: [
-        'Unlimited social media accounts',
-        'Unlimited posts',
-        'Custom analytics',
+        'Everything in Pro',
+        'Unlimited calls',
+        'Multiple phone numbers',
+        'Multiple locations',
+        'Custom AI training',
+        'Outbound calls (coming soon)',
         'Dedicated account manager',
-        'Advanced team features',
-        'Custom integrations',
         'SLA guarantee',
       ],
     },

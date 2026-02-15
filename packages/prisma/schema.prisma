@@ -885,9 +885,9 @@ model CallLog {
   status      CallStatus  @default(COMPLETED) @map("status")
   outcome     CallOutcome @default(OTHER) @map("outcome") // Primary call outcome
 
-  // Call Content (HIPAA: transcript may contain PHI - encrypted at rest via DB encryption)
-  transcript   String? @map("transcript") @db.Text
-  summary      String? @map("summary") @db.Text
+  // Call Content (HIPAA: PHI encrypted at application layer via AES-256-GCM + Aurora encryption at rest)
+  transcript   String? @map("transcript") @db.Text // App-level encrypted
+  summary      String? @map("summary") @db.Text // App-level encrypted
   recordingUrl String? @map("recording_url")
 
   // Vapi Structured Output - Analysis extracted by AI at end of call

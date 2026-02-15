@@ -31,6 +31,16 @@ export function ForwardedNumberSetup({
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
 
+  // Load saved state from sessionStorage on mount
+  useEffect(() => {
+    const savedNumber = sessionStorage.getItem('phoneNumber');
+    const savedMethod = sessionStorage.getItem('phoneIntegrationMethod');
+    if (savedNumber && savedMethod === 'forwarded') {
+      setClinicNumber(savedNumber);
+      setSetupComplete(true);
+    }
+  }, []);
+
   // Notify parent of setup state changes
   useEffect(() => {
     onSetupStateChange?.(setupComplete);
@@ -52,6 +62,10 @@ export function ForwardedNumberSetup({
           setSetupComplete(true);
           sessionStorage.setItem('phoneIntegrationMethod', 'forwarded');
           sessionStorage.setItem('phoneNumber', clinicNumber);
+          sessionStorage.setItem(
+            'phoneIntegrationSettings',
+            JSON.stringify({ clinicNumber }),
+          );
           toast.success(result.message || 'Configuration saved successfully!');
         } else {
           toast.error(result.error || 'Failed to save configuration');

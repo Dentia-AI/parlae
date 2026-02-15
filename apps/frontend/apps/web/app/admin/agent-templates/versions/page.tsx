@@ -30,8 +30,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
+import Link from 'next/link';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 type AccountOverview = {
@@ -250,6 +252,14 @@ export default function VersionOverviewPage() {
 
   return (
     <div className="container max-w-7xl py-8 space-y-6">
+      <Link
+        href="/admin/agent-templates"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Templates
+      </Link>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

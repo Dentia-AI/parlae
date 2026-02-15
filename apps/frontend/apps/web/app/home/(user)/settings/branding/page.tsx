@@ -85,15 +85,8 @@ export default function BrandingSettingsPage() {
   }
 
   return (
-    <div className="container max-w-4xl py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Email Branding</h1>
-        <p className="text-muted-foreground mt-2">
-          Customize how your clinic appears in appointment confirmation emails
-        </p>
-      </div>
-
-      <Alert className="mb-6">
+    <div className="space-y-6">
+      <Alert>
         <AlertDescription>
           These settings will be used in all appointment confirmation emails sent to your patients. 
           If not provided, default values will be used.
@@ -275,3 +268,4 @@ export default function BrandingSettingsPage() {
     </div>
   );
 }
+

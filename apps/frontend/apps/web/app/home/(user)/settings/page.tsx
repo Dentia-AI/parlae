@@ -1,9 +1,9 @@
-import { Heading } from '@kit/ui/heading';
-import { PageBody } from '@kit/ui/page';
+import { prisma } from '@kit/prisma';
 
 import { createI18nServerInstance } from '~/lib/i18n/i18n.server';
 import { withI18n } from '~/lib/i18n/with-i18n';
 import { requireUserInServerComponent } from '~/lib/server/require-user-in-server-component';
+import { ProfileSettingsClient } from './_components/profile-settings-client';
 
 export const generateMetadata = async () => {
   const i18n = await createI18nServerInstance();
@@ -16,25 +16,39 @@ export const generateMetadata = async () => {
 async function PersonalAccountSettingsPage() {
   const user = await requireUserInServerComponent();
 
-  return (
-    <PageBody>
-      <div className={'flex w-full flex-1 flex-col gap-6 lg:max-w-2xl'}>
-        <header className={'space-y-1'}>
-          <Heading level={3}>Account</Heading>
-          <p className={'text-muted-foreground'}>
-            Manage your personal details. Updates to authentication settings are
-            handled through Cognito.
-          </p>
-        </header>
+  // Fetch account info
+  const account = await prisma.account.findFirst({
+    where: {
+      primaryOwnerId: user.id,
+      isPersonalAccount: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      slug: true,
+      pictureUrl: true,
+      createdAt: true,
+    },
+  });
 
-        <section className={'space-y-2 rounded-xl border bg-card p-6'}>
-          <div className={'flex flex-col gap-1'}>
-            <span className={'text-sm text-muted-foreground'}>Email</span>
-            <span className={'text-base font-medium'}>{user.email}</span>
-          </div>
-        </section>
-      </div>
-    </PageBody>
+  return (
+    <ProfileSettingsClient
+      user={{
+        id: user.id,
+        email: user.email ?? '',
+        displayName: user.name ?? user.email ?? '',
+        avatarUrl: user.image ?? null,
+      }}
+      account={account ? {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        slug: account.slug,
+        pictureUrl: account.pictureUrl,
+        createdAt: account.createdAt.toISOString(),
+      } : null}
+    />
   );
 }
 

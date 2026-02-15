@@ -112,18 +112,47 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
       const stripe = window.Stripe(publishableKey);
       stripeRef.current = stripe;
 
+      // Detect dark mode
+      const isDarkMode = document.documentElement.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+
       // Use Payment Element with clientSecret for Link support
       const elements = stripe.elements({
         clientSecret,
         appearance: {
-          theme: 'stripe',
+          theme: isDarkMode ? 'night' : 'stripe',
           variables: {
-            colorPrimary: '#0066cc',
-            colorBackground: '#ffffff',
-            colorText: '#1f2937',
+            colorPrimary: '#6366f1',
+            colorBackground: isDarkMode ? '#1c1c1e' : '#ffffff',
+            colorText: isDarkMode ? '#e5e5e5' : '#1f2937',
             colorDanger: '#ef4444',
+            colorTextPlaceholder: isDarkMode ? '#6b7280' : '#9ca3af',
             fontFamily: 'system-ui, -apple-system, sans-serif',
             borderRadius: '6px',
+          },
+          rules: {
+            '.Label': {
+              color: isDarkMode ? '#d1d5db' : '#374151',
+            },
+            '.Input': {
+              backgroundColor: isDarkMode ? '#27272a' : '#ffffff',
+              borderColor: isDarkMode ? '#3f3f46' : '#d1d5db',
+              color: isDarkMode ? '#e5e5e5' : '#1f2937',
+            },
+            '.Input:focus': {
+              borderColor: '#6366f1',
+              boxShadow: '0 0 0 1px #6366f1',
+            },
+            '.Tab': {
+              backgroundColor: isDarkMode ? '#27272a' : '#f9fafb',
+              borderColor: isDarkMode ? '#3f3f46' : '#e5e7eb',
+              color: isDarkMode ? '#d1d5db' : '#6b7280',
+            },
+            '.Tab--selected': {
+              backgroundColor: isDarkMode ? '#1c1c1e' : '#ffffff',
+              borderColor: '#6366f1',
+              color: isDarkMode ? '#e5e5e5' : '#1f2937',
+            },
           },
         },
       });

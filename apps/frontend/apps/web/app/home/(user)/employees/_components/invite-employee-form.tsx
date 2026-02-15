@@ -34,8 +34,8 @@ import {
 import { toast } from '@kit/ui/sonner';
 import { Trans } from '@kit/ui/trans';
 
-import { InviteEmployeeSchema } from '@kit/shared/employee-management';
-import { inviteEmployeeAction } from '@kit/shared/employee-management';
+import { InviteEmployeeSchema } from '@kit/shared/employee-management/schema';
+import { inviteEmployeeAction } from '@kit/shared/employee-management/server-actions';
 
 interface InviteEmployeeFormProps {
   accountId: string;

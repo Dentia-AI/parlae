@@ -1,22 +1,80 @@
-import { AppBreadcrumbs } from '@kit/ui/app-breadcrumbs';
-import { Trans } from '@kit/ui/trans';
+'use client';
 
-import { withI18n } from '~/lib/i18n/with-i18n';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { cn } from '@kit/ui/utils';
+import { User, Palette, CreditCard, Users } from 'lucide-react';
 
-// local imports
-import { HomeLayoutPageHeader } from '../_components/home-page-header';
+const settingsTabs = [
+  {
+    label: 'Profile',
+    href: '/home/settings',
+    icon: User,
+    exact: true,
+  },
+  {
+    label: 'Branding',
+    href: '/home/settings/branding',
+    icon: Palette,
+  },
+  {
+    label: 'Billing',
+    href: '/home/settings/billing',
+    icon: CreditCard,
+  },
+  {
+    label: 'Team',
+    href: '/home/settings/team',
+    icon: Users,
+  },
+];
 
-function UserSettingsLayout(props: React.PropsWithChildren) {
+export default function SettingsLayout(props: React.PropsWithChildren) {
+  const pathname = usePathname();
+
   return (
-    <>
-      <HomeLayoutPageHeader
-        title={<Trans i18nKey={'account:routes.settings'} />}
-        description={<AppBreadcrumbs />}
-      />
+    <div className="flex flex-col h-full">
+      {/* Settings Header */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 pt-6 pb-0">
+        <div className="max-w-5xl">
+          <h1 className="text-2xl font-bold tracking-tight">Account Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage your account, branding, billing, and team
+          </p>
 
-      {props.children}
-    </>
+          {/* Tab Navigation */}
+          <nav className="flex gap-1 mt-4 -mb-px">
+            {settingsTabs.map((tab) => {
+              const isActive = tab.exact
+                ? pathname === tab.href
+                : pathname.startsWith(tab.href);
+
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors',
+                    isActive
+                      ? 'border-primary text-primary bg-muted/50'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30',
+                  )}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* Settings Content */}
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-5xl px-6 py-6">
+          {props.children}
+        </div>
+      </div>
+    </div>
   );
 }
-
-export default withI18n(UserSettingsLayout);

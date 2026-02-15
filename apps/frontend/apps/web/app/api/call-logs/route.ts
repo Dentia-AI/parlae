@@ -79,11 +79,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
+      // Note: summary is encrypted at application layer (HIPAA/PHI protection)
+      // so it cannot be used in database-level text search. Search uses
+      // non-encrypted fields: contact info, phone, and call reason.
       where.OR = [
         { contactName: { contains: search, mode: 'insensitive' } },
         { phoneNumber: { contains: search } },
         { contactEmail: { contains: search, mode: 'insensitive' } },
-        { summary: { contains: search, mode: 'insensitive' } },
+        { callReason: { contains: search, mode: 'insensitive' } },
       ];
     }
 

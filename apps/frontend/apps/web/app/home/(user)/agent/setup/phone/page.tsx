@@ -56,12 +56,25 @@ function PhoneSetupContent() {
   // Load saved phone integration progress from database
   useEffect(() => {
     if (progress?.phone?.data) {
-      const savedMethod = progress.phone.data.method;
+      const savedMethod = progress.phone.data.method as IntegrationMethod;
       if (savedMethod) {
         setSelectedMethod(savedMethod);
         setTempSelectedMethod(savedMethod);
-        // Also sync to sessionStorage
+        // Sync to sessionStorage
         sessionStorage.setItem('phoneIntegrationMethod', savedMethod);
+
+        // Also restore settings to sessionStorage
+        if (progress.phone.data.settings) {
+          sessionStorage.setItem(
+            'phoneIntegrationSettings',
+            JSON.stringify(progress.phone.data.settings),
+          );
+          // Restore specific fields
+          const settings = progress.phone.data.settings as Record<string, any>;
+          if (settings.clinicNumber) {
+            sessionStorage.setItem('phoneNumber', settings.clinicNumber);
+          }
+        }
       }
     }
   }, [progress]);
@@ -87,7 +100,9 @@ function PhoneSetupContent() {
       // Save to database
       await savePhone({ 
         method: tempSelectedMethod,
-        settings: {} 
+        settings: {
+          clinicNumber: sessionStorage.getItem('phoneNumber') || '',
+        },
       });
 
       // Store selection in session storage for backward compatibility
