@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
 
+// Trigger CI/CD build - 2026-02-14
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,

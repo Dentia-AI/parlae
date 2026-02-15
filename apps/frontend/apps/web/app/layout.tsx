@@ -14,6 +14,7 @@ import '../styles/globals.css';
 
 import Script from 'next/script';
 
+// Trigger CI/CD build - 2026-02-14
 export const generateMetadata = () => {
   return generateRootMetadata();
 };
