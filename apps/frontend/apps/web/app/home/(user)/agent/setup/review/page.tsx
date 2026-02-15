@@ -119,6 +119,7 @@ export default function ReviewPage() {
         const chargeResponse = await fetch('/api/stripe/charge-activation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
         });
 
         if (!chargeResponse.ok) {
