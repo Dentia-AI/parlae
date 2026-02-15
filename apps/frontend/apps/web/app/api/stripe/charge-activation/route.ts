@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       },
       select: {
         id: true,
+        stripeCustomerId: true,
         stripePaymentMethodId: true,
         paymentMethodVerified: true,
         publicData: true,
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: activationFeeCents,
       currency: 'cad',
+      customer: account.stripeCustomerId ?? undefined,
       payment_method: account.stripePaymentMethodId,
       confirm: true,
       off_session: true,

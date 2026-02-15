@@ -55,6 +55,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If we have a Stripe Customer, set this as the default payment method
+    if (account.stripeCustomerId) {
+      try {
+        const secretKey = process.env.STRIPE_SECRET_KEY;
+        if (secretKey) {
+          const Stripe = (await import('stripe')).default;
+          const stripe = new Stripe(secretKey, {
+            apiVersion: '2024-12-18.acacia',
+          });
+
+          await stripe.customers.update(account.stripeCustomerId, {
+            invoice_settings: {
+              default_payment_method: paymentMethodId,
+            },
+          });
+
+          logger.info(
+            { customerId: account.stripeCustomerId, paymentMethodId },
+            '[Payment] Set as default payment method on Stripe Customer',
+          );
+        }
+      } catch (stripeErr) {
+        logger.warn(
+          { error: stripeErr instanceof Error ? stripeErr.message : stripeErr },
+          '[Payment] Failed to set default on Stripe Customer (non-fatal)',
+        );
+      }
+    }
+
     // Update account with payment method
     await prisma.account.update({
       where: { id: account.id },

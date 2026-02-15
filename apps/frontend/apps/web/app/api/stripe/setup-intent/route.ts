@@ -1,42 +1,104 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@kit/prisma';
+import { getSessionUser } from '@kit/shared/auth';
 
+/**
+ * POST /api/stripe/setup-intent
+ *
+ * Creates a Stripe SetupIntent for collecting payment method details.
+ * If the user doesn't have a Stripe Customer yet, one is created and stored.
+ * Passing the customer ID allows the Payment Element to show previously
+ * saved cards and enables Stripe Link autofill.
+ */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const secretKey = process.env.STRIPE_SECRET_KEY;
-    
+
     if (!secretKey) {
       return NextResponse.json(
         { error: 'Stripe not configured' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    // Dynamically import Stripe to avoid issues
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(secretKey, {
       apiVersion: '2024-12-18.acacia',
     });
 
-    // Create a SetupIntent
-    const setupIntent = await stripe.setupIntents.create({
-      payment_method_types: ['card'],
-      usage: 'off_session',
-      // In production, add:
-      // customer: customerId,
-      // metadata: { userId: user.id }
+    // Get the user's account
+    const account = await prisma.account.findFirst({
+      where: {
+        primaryOwnerId: session.id,
+        isPersonalAccount: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        stripeCustomerId: true,
+      },
     });
 
-    console.log('SetupIntent created:', setupIntent.id);
+    if (!account) {
+      return NextResponse.json(
+        { error: 'Account not found' },
+        { status: 404 },
+      );
+    }
+
+    // Create or retrieve Stripe Customer
+    let customerId = account.stripeCustomerId;
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        name: account.name,
+        email: account.email ?? undefined,
+        metadata: {
+          accountId: account.id,
+          userId: session.id,
+        },
+      });
+
+      customerId = customer.id;
+
+      await prisma.account.update({
+        where: { id: account.id },
+        data: { stripeCustomerId: customerId },
+      });
+
+      console.log('Stripe Customer created:', customerId);
+    }
+
+    // Create a SetupIntent attached to the customer
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+      metadata: {
+        accountId: account.id,
+        userId: session.id,
+      },
+    });
+
+    console.log('SetupIntent created:', setupIntent.id, 'for customer:', customerId);
 
     return NextResponse.json({
       clientSecret: setupIntent.client_secret,
+      customerId,
       success: true,
     });
   } catch (error) {
     console.error('Error creating SetupIntent:', error);
     return NextResponse.json(
       { error: 'Failed to create setup intent' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
