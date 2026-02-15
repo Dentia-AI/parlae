@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.decryptCallLogFields = exports.encryptCallLogFields = exports.isEncrypted = exports.decryptField = exports.encryptField = exports.prisma = void;
+exports.decryptCallLogFields = exports.encryptCallLogFields = exports.isEncrypted = exports.decryptField = exports.encryptField = exports.prisma = void 0;
 const client_1 = require("@prisma/client");
 const encryption_1 = require("./encryption");
 

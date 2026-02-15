@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.decryptCallLogFields = exports.encryptCallLogFields = exports.ENCRYPTED_CALL_LOG_FIELDS = exports.decryptField = exports.encryptField = exports.isEncrypted = void;
+exports.decryptCallLogFields = exports.encryptCallLogFields = exports.ENCRYPTED_CALL_LOG_FIELDS = exports.decryptField = exports.encryptField = exports.isEncrypted = void 0;
 
 const crypto = require("crypto");
 
