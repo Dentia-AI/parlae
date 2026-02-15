@@ -160,7 +160,7 @@ export const ENCRYPTED_CALL_LOG_FIELDS = [
 export function encryptCallLogFields<T extends Record<string, any>>(
   data: T,
 ): T {
-  const result = { ...data };
+  const result: Record<string, any> = { ...data };
 
   for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
     if (
@@ -172,7 +172,7 @@ export function encryptCallLogFields<T extends Record<string, any>>(
     }
   }
 
-  return result;
+  return result as T;
 }
 
 /**
@@ -183,7 +183,7 @@ export function decryptCallLogFields<T extends Record<string, any>>(
 ): T {
   if (!data) return data;
 
-  const result = { ...data };
+  const result: Record<string, any> = { ...data };
 
   for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
     if (
@@ -195,5 +195,5 @@ export function decryptCallLogFields<T extends Record<string, any>>(
     }
   }
 
-  return result;
+  return result as T;
 }
