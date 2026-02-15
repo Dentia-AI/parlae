@@ -17,11 +17,11 @@
 
 Configure these at: `https://github.com/Dentia-AI/parlae/settings/secrets/actions`
 
-| Secret Name | Value |
-|-------------|-------|
+| Secret Name | Value (example) |
+|-------------|-----------------|
 | `AWS_REGION` | `us-east-2` |
 | `ECR_REPOSITORY` | `234270344223.dkr.ecr.us-east-2.amazonaws.com` |
-| `AWS_ACCESS_KEY_ID` | `AKIATNC4ZYQP3ETE4JB6` |
+| `AWS_ACCESS_KEY_ID` | Get from `~/.aws/credentials` under `[parlae]` profile |
 | `AWS_SECRET_ACCESS_KEY` | Get from `~/.aws/credentials` under `[parlae]` profile |
 
 ## How to Get Your Secret Access Key
@@ -34,11 +34,11 @@ cat ~/.aws/credentials | grep -A 2 "\[parlae\]"
 The output will show:
 ```
 [parlae]
-aws_access_key_id = AKIATNC4ZYQP3ETE4JB6
+aws_access_key_id = AKIA...yourkey
 aws_secret_access_key = <your-secret-key>
 ```
 
-Copy the `aws_secret_access_key` value into GitHub Secrets.
+Copy both values into GitHub Secrets.
 
 ## Verify GitHub Actions Setup
 
