@@ -5,17 +5,20 @@ import twilio from 'twilio';
 @Injectable()
 export class TwilioMessagingService {
   private readonly logger = new Logger(TwilioMessagingService.name);
-  private twilioClient: ReturnType<typeof twilio>;
+  private twilioClient: ReturnType<typeof twilio> | null;
 
   constructor(private configService: ConfigService) {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
 
     if (!accountSid || !authToken) {
-      throw new Error('Twilio credentials not configured');
+      this.logger.warn('Twilio credentials not configured - SMS functionality will be disabled');
+      this.twilioClient = null;
+      return;
     }
 
     this.twilioClient = twilio(accountSid, authToken);
+    this.logger.log('Twilio messaging service initialized');
   }
 
   /**
@@ -26,6 +29,10 @@ export class TwilioMessagingService {
     accountId: string;
     accountName: string;
   }): Promise<{ sid: string; friendlyName: string }> {
+    if (!this.twilioClient) {
+      throw new Error('Twilio not configured - cannot create messaging service');
+    }
+
     try {
       const friendlyName = `${options.accountName} - Parlae`;
 
@@ -70,6 +77,10 @@ export class TwilioMessagingService {
     messagingServiceSid: string,
     phoneNumberSid: string,
   ): Promise<void> {
+    if (!this.twilioClient) {
+      throw new Error('Twilio not configured - cannot add phone number to service');
+    }
+
     try {
       this.logger.log({
         messagingServiceSid,
@@ -112,6 +123,10 @@ export class TwilioMessagingService {
     phoneNumberSid: string;
     messagingServiceSid: string;
   }> {
+    if (!this.twilioClient) {
+      throw new Error('Twilio not configured - cannot purchase phone number');
+    }
+
     try {
       this.logger.log({
         accountId: options.accountId,
@@ -183,6 +198,11 @@ export class TwilioMessagingService {
     to: string;
     body: string;
   }): Promise<void> {
+    if (!this.twilioClient) {
+      this.logger.warn('Twilio not configured - cannot send SMS');
+      return;
+    }
+
     try {
       await this.twilioClient.messages.create({
         messagingServiceSid: options.messagingServiceSid,
@@ -211,6 +231,10 @@ export class TwilioMessagingService {
    * Useful when an account is deleted
    */
   async deleteMessagingService(messagingServiceSid: string): Promise<void> {
+    if (!this.twilioClient) {
+      throw new Error('Twilio not configured - cannot delete messaging service');
+    }
+
     try {
       this.logger.log({
         messagingServiceSid,
@@ -240,6 +264,10 @@ export class TwilioMessagingService {
    * Useful when an account is deleted or phone number is changed
    */
   async releasePhoneNumber(phoneNumberSid: string): Promise<void> {
+    if (!this.twilioClient) {
+      throw new Error('Twilio not configured - cannot release phone number');
+    }
+
     try {
       this.logger.log({
         phoneNumberSid,
