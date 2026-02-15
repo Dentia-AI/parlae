@@ -55,6 +55,7 @@ jobs:
             --build-arg NEXT_PUBLIC_COGNITO_SOCIAL_PROVIDERS="Google" \
             --build-arg NEXT_PUBLIC_GHL_WIDGET_ID="${{ secrets.GHL_WIDGET_ID }}" \
             --build-arg NEXT_PUBLIC_GHL_LOCATION_ID="${{ secrets.GHL_LOCATION_ID }}" \
+            --build-arg NEXT_PUBLIC_GHL_CALENDAR_ID="${{ secrets.GHL_CALENDAR_ID }}" \
             --build-arg COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}" \
             --build-arg COGNITO_CLIENT_SECRET="${{ secrets.COGNITO_CLIENT_SECRET }}" \
             --build-arg COGNITO_ISSUER="${{ secrets.COGNITO_ISSUER }}" \

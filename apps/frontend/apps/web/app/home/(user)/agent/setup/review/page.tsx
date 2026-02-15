@@ -31,6 +31,11 @@ export default function ReviewPage() {
     voice?: any;
     files?: any[];
   }>({});
+  const [integrations, setIntegrations] = useState<{
+    googleCalendar: boolean;
+    pms: boolean;
+    pmsProvider?: string;
+  }>({ googleCalendar: false, pms: false });
 
   const handleStepClick = (stepIndex: number) => {
     const routes = [
@@ -62,6 +67,25 @@ export default function ReviewPage() {
       voice: voice ? JSON.parse(voice) : null,
       files: files ? JSON.parse(files) : [],
     });
+
+    // Check integration status
+    const checkIntegrations = async () => {
+      try {
+        const response = await fetch('/api/integrations/status');
+        if (response.ok) {
+          const data = await response.json();
+          setIntegrations({
+            googleCalendar: data.googleCalendar ?? false,
+            pms: data.pms ?? false,
+            pmsProvider: data.pmsProvider,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to check integrations:', error);
+      }
+    };
+
+    checkIntegrations();
 
     // Check if payment method is already verified
     const checkPaymentStatus = async () => {
@@ -371,13 +395,34 @@ export default function ReviewPage() {
                         <Trans i18nKey="common:setup.review.integrations" />
                       </h3>
                     </div>
-                    <Card className="bg-muted/50">
-                      <CardContent className="p-3">
-                        <p className="text-xs text-muted-foreground">
-                          <Trans i18nKey="common:setup.review.noIntegrations" />
-                        </p>
-                      </CardContent>
-                    </Card>
+                    {(integrations.googleCalendar || integrations.pms) ? (
+                      <Card className="bg-muted/50">
+                        <CardContent className="p-3 space-y-2">
+                          {integrations.googleCalendar && (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <p className="text-xs font-medium">Google Calendar connected</p>
+                            </div>
+                          )}
+                          {integrations.pms && (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <p className="text-xs font-medium">
+                                PMS connected{integrations.pmsProvider ? ` (${integrations.pmsProvider})` : ''}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card className="bg-muted/50">
+                        <CardContent className="p-3">
+                          <p className="text-xs text-muted-foreground">
+                            <Trans i18nKey="common:setup.review.noIntegrations" />
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
 
                   <Alert>
