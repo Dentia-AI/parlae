@@ -10,6 +10,7 @@ import { getSessionUser } from '@kit/shared/auth';
 import { isAdminUser } from '~/lib/auth/admin';
 import { TemplateActions } from './_components/template-actions';
 import { AssignTemplateForm } from './_components/assign-template-form';
+import { BulkUpgradeDialog } from './_components/bulk-upgrade-dialog';
 
 export const metadata = {
   title: 'Template Details',
@@ -79,6 +80,12 @@ export default async function TemplateDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
+          <BulkUpgradeDialog
+            templateId={template.id}
+            templateName={template.displayName}
+            templateVersion={template.version}
+            clinicCount={template._count.accounts}
+          />
           <Link href={`/admin/agent-templates/${template.id}/duplicate`}>
             <Button variant="outline">
               <Copy className="h-4 w-4 mr-2" />

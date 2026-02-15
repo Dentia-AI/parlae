@@ -9,7 +9,8 @@ import {
   Layers, 
   UserCheck,
   Settings,
-  FileStack
+  FileStack,
+  GitBranch,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
@@ -30,6 +31,11 @@ const navigation = [
     icon: Layers,
   },
   {
+    name: 'Version Overview',
+    href: '/admin/agent-templates/versions',
+    icon: GitBranch,
+  },
+  {
     name: 'Setup Test Agent',
     href: '/admin/setup-vapi',
     icon: Phone,
@@ -46,7 +52,14 @@ export function AdminSidebar() {
         <nav className="space-y-1">
           {navigation.map((item) => {
             const isActive = pathname === item.href || 
-                            (item.href !== '/admin' && pathname.startsWith(item.href));
+                            (item.href !== '/admin' && pathname.startsWith(item.href) &&
+                             // Prevent parent path from matching when a more specific child matches
+                             !navigation.some(
+                               (other) =>
+                                 other.href !== item.href &&
+                                 other.href.startsWith(item.href) &&
+                                 pathname.startsWith(other.href),
+                             ));
             const Icon = item.icon;
             
             return (

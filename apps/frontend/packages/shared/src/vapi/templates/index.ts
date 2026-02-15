@@ -19,3 +19,13 @@ export type {
   TemplateVariables,
   RuntimeConfig,
 } from './template-utils';
+
+export {
+  compareTemplateVersions,
+  isAdditiveUpgrade,
+} from './template-migration';
+export type {
+  BreakingChangeType,
+  MigrationWarning,
+  MigrationReport,
+} from './template-migration';
