@@ -531,11 +531,6 @@ export class NotificationsService {
     newAppointment: AppointmentInfo,
     clinic: ClinicInfo,
   ): Promise<void> {
-    const { getMailer } = await import('@kit/mailers');
-    const { renderAppointmentRescheduleEmail } = await import('@kit/email-templates');
-    
-    const mailer = await getMailer();
-    
     const oldTime = this.formatAppointmentTime(oldAppointment.startTime);
     const newTime = this.formatAppointmentTime(newAppointment.startTime);
     const [oldDate, oldTimeStr] = oldTime.split(' at ');
@@ -592,7 +587,7 @@ export class NotificationsService {
     type: 'booking' | 'cancellation',
     reason?: string,
   ): Promise<void> {
-    // TODO: Implement with @kit/mailers
+    // TODO: Implement clinic notification email template
     this.logger.log({
       to,
       subject: `New Appointment ${type === 'booking' ? 'Booked' : 'Cancelled'} via AI`,
@@ -606,7 +601,7 @@ export class NotificationsService {
     oldAppointment: AppointmentInfo,
     newAppointment: AppointmentInfo,
   ): Promise<void> {
-    // TODO: Implement with @kit/mailers
+    // TODO: Implement clinic reschedule notification template
     this.logger.log({
       to,
       subject: 'Appointment Rescheduled via AI',

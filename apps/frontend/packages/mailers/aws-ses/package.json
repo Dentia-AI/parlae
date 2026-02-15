@@ -1,5 +1,5 @@
 {
-  "name": "@kit/mailers-aws-ses",
+  "name": "@kit/aws-ses",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -11,12 +11,12 @@
   "dependencies": {
     "@aws-sdk/client-ses": "^3.990.0",
     "@kit/mailers-shared": "workspace:*",
-    "nodemailer": "^6.10.1",
+    "nodemailer": "^7.0.10",
     "zod": "^3.25.74"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@types/nodemailer": "^6.4.22",
+    "@types/nodemailer": "7.0.2",
     "eslint": "^9.38.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3"

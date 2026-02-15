@@ -37,18 +37,20 @@ class AwsSesMailer implements Mailer {
     // Create Nodemailer transporter with SES
     this.transporter = nodemailer.createTransport({
       SES: { ses, aws },
-    });
+    } as nodemailer.TransportOptions);
   }
 
   async sendEmail(config: Config) {
-    const contentObject =
-      'text' in config
+    const contentObject: { text?: string; html?: string } =
+      'text' in config && config.text
         ? {
             text: config.text,
           }
-        : {
+        : 'html' in config && config.html
+        ? {
             html: config.html,
-          };
+          }
+        : {};
 
     try {
       const result = await this.transporter.sendMail({
@@ -61,7 +63,7 @@ class AwsSesMailer implements Mailer {
       console.log('Email sent successfully:', result.messageId);
       
       return result;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send email via AWS SES:', error);
       throw new Error(`Failed to send email: ${error.message}`);
     }
