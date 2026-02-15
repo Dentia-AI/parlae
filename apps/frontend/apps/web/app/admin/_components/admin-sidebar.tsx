@@ -11,6 +11,7 @@ import {
   Settings,
   FileStack,
   GitBranch,
+  Receipt,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
@@ -34,6 +35,11 @@ const navigation = [
     name: 'Version Overview',
     href: '/admin/agent-templates/versions',
     icon: GitBranch,
+  },
+  {
+    name: 'Billing Management',
+    href: '/admin/billing',
+    icon: Receipt,
   },
   {
     name: 'Setup Test Agent',

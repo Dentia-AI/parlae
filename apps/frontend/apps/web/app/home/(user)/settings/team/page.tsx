@@ -5,6 +5,7 @@ import { ensureUserProvisioned } from '@kit/shared/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { ProfileAvatar } from '@kit/ui/profile-avatar';
+import { Trans } from '@kit/ui/trans';
 import { Users, UserPlus, Clock, Mail } from 'lucide-react';
 
 import { requireUserInServerComponent } from '~/lib/server/require-user-in-server-component';
@@ -21,10 +22,10 @@ export default function SettingsTeamPage() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Team Members
+              <Trans i18nKey="common:settings.team.title" />
             </CardTitle>
             <CardDescription>
-              Manage your team members and their access levels
+              <Trans i18nKey="common:settings.team.description" />
             </CardDescription>
           </div>
           <InviteEmployeeForm accountId={data.personalAccountId} />
@@ -33,7 +34,7 @@ export default function SettingsTeamPage() {
           {/* Owner */}
           <div className="space-y-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Owner
+              <Trans i18nKey="common:settings.team.owner" />
             </p>
             <div className="flex items-center justify-between rounded-lg border p-4 bg-primary/5 border-primary/20">
               <div className="flex items-center gap-4">
@@ -48,7 +49,9 @@ export default function SettingsTeamPage() {
                   </div>
                 </div>
               </div>
-              <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-0">Owner</Badge>
+              <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-0">
+                <Trans i18nKey="common:settings.team.owner" />
+              </Badge>
             </div>
           </div>
 
@@ -56,7 +59,7 @@ export default function SettingsTeamPage() {
           {data.employees.length > 0 && (
             <div className="mt-6 space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Team ({data.employees.length})
+                <Trans i18nKey="common:settings.team.teamCount" values={{ count: data.employees.length }} />
               </p>
               <div className="space-y-2">
                 {data.employees.map((employee) => (
@@ -92,9 +95,11 @@ export default function SettingsTeamPage() {
           {data.employees.length === 0 && (
             <div className="mt-6 text-center py-8 rounded-lg border border-dashed">
               <UserPlus className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm font-medium">No team members yet</p>
+              <p className="text-sm font-medium">
+                <Trans i18nKey="common:settings.team.noMembers" />
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Invite employees to collaborate on managing your AI receptionist
+                <Trans i18nKey="common:settings.team.noMembersDescription" />
               </p>
             </div>
           )}
@@ -107,10 +112,10 @@ export default function SettingsTeamPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Pending Invitations
+              <Trans i18nKey="common:settings.team.pendingInvitations" />
             </CardTitle>
             <CardDescription>
-              Invitations that haven't been accepted yet
+              <Trans i18nKey="common:settings.team.pendingInvitationsDescription" />
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -127,7 +132,7 @@ export default function SettingsTeamPage() {
                     <div>
                       <div className="text-sm font-medium">{invitation.email}</div>
                       <div className="text-xs text-muted-foreground">
-                        Expires{' '}
+                        <Trans i18nKey="common:settings.team.expires" />{' '}
                         {new Date(invitation.expiresAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -141,7 +146,7 @@ export default function SettingsTeamPage() {
                       {invitation.roleName}
                     </Badge>
                     <Badge variant="secondary" className="text-amber-600 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 border-0">
-                      Pending
+                      <Trans i18nKey="common:settings.team.pending" />
                     </Badge>
                   </div>
                 </div>

@@ -2,44 +2,48 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@kit/ui/utils';
 import { User, Palette, CreditCard, Users } from 'lucide-react';
 
-const settingsTabs = [
-  {
-    label: 'Profile',
-    href: '/home/settings',
-    icon: User,
-    exact: true,
-  },
-  {
-    label: 'Branding',
-    href: '/home/settings/branding',
-    icon: Palette,
-  },
-  {
-    label: 'Billing',
-    href: '/home/settings/billing',
-    icon: CreditCard,
-  },
-  {
-    label: 'Team',
-    href: '/home/settings/team',
-    icon: Users,
-  },
-];
-
 export default function SettingsLayout(props: React.PropsWithChildren) {
   const pathname = usePathname();
+  const { t } = useTranslation();
+
+  const settingsTabs = [
+    {
+      label: t('common:settings.tabs.profile'),
+      href: '/home/settings',
+      icon: User,
+      exact: true,
+    },
+    {
+      label: t('common:settings.tabs.branding'),
+      href: '/home/settings/branding',
+      icon: Palette,
+    },
+    {
+      label: t('common:settings.tabs.billing'),
+      href: '/home/settings/billing',
+      icon: CreditCard,
+    },
+    {
+      label: t('common:settings.tabs.team'),
+      href: '/home/settings/team',
+      icon: Users,
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full">
       {/* Settings Header */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 pt-6 pb-0">
         <div className="max-w-5xl">
-          <h1 className="text-2xl font-bold tracking-tight">Account Settings</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {t('common:settings.title')}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your account, branding, billing, and team
+            {t('common:settings.description')}
           </p>
 
           {/* Tab Navigation */}

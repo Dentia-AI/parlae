@@ -91,6 +91,18 @@ export default function ReviewPage() {
 
     startTransition(async () => {
       try {
+        // Charge the $5 activation fee first
+        const chargeResponse = await fetch('/api/stripe/charge-activation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!chargeResponse.ok) {
+          const chargeResult = await chargeResponse.json();
+          toast.error(chargeResult.error || 'Failed to process activation fee');
+          return;
+        }
+
         // Backend will automatically use an existing Twilio number
         const result = await deployReceptionistAction({
           voice: config.voice,

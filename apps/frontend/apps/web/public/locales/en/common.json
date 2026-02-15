@@ -308,5 +308,48 @@
       "skip": "Skip",
       "finish": "Finish"
     }
+  },
+  "settings": {
+    "title": "Account Settings",
+    "description": "Manage your account, branding, billing, and team",
+    "tabs": {
+      "profile": "Profile",
+      "branding": "Branding",
+      "billing": "Billing",
+      "team": "Team"
+    },
+    "profile": {
+      "title": "Your Profile",
+      "description": "Your personal account details. Authentication is managed through Cognito.",
+      "accountOwner": "Account Owner",
+      "email": "Email",
+      "memberSince": "Member since",
+      "auth": "Auth",
+      "slug": "Slug",
+      "accountDetails": "Account Details",
+      "accountDetailsDescription": "Your workspace information",
+      "accountName": "Account Name",
+      "accountEmail": "Account Email",
+      "accountId": "Account ID",
+      "created": "Created",
+      "notSet": "Not set",
+      "security": "Security",
+      "securityDescription": "Authentication and security settings",
+      "passwordAndAuth": "Password & Authentication",
+      "passwordAndAuthDescription": "Your password and MFA settings are managed through AWS Cognito",
+      "managedByCognito": "Managed by Cognito"
+    },
+    "team": {
+      "title": "Team Members",
+      "description": "Manage your team members and their access levels",
+      "owner": "Owner",
+      "teamCount": "Team ({{count}})",
+      "noMembers": "No team members yet",
+      "noMembersDescription": "Invite employees to collaborate on managing your AI receptionist",
+      "pendingInvitations": "Pending Invitations",
+      "pendingInvitationsDescription": "Invitations that haven't been accepted yet",
+      "expires": "Expires",
+      "pending": "Pending"
+    }
   }
 }
