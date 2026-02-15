@@ -107,8 +107,6 @@
       "uploadSuccess": "uploaded successfully",
       "uploadError": "Failed to upload",
       "filesReady": "file(s) ready for deployment",
-      "fileDeleted": "File deleted successfully",
-      "deleteError": "Failed to delete file",
       "tipTitle": "Tip:",
       "tipItems": {
         "hours": "Business hours and location info",

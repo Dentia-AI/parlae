@@ -11,12 +11,12 @@ export const dynamic = 'force-dynamic';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { fileId: string } }
+  context: { params: Promise<{ fileId: string }> }
 ) {
   const logger = await getLogger();
 
   try {
-    const { fileId } = params;
+    const { fileId } = await context.params;
 
     if (!fileId) {
       return NextResponse.json(
