@@ -225,6 +225,214 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Create appointment event with patient information
+   * Enhanced version for booking appointments via AI
+   */
+  async createAppointmentEvent(
+    accountId: string,
+    appointment: {
+      patient: {
+        firstName: string;
+        lastName: string;
+        phone?: string;
+        email?: string;
+        dateOfBirth?: string;
+      };
+      appointmentType: string;
+      startTime: Date;
+      duration: number;
+      notes?: string;
+      providerId?: string;
+    }
+  ) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true, name: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      // Calculate end time
+      const endTime = new Date(appointment.startTime);
+      endTime.setMinutes(endTime.getMinutes() + appointment.duration);
+
+      // Build event title
+      const summary = `${appointment.appointmentType} - ${appointment.patient.firstName} ${appointment.patient.lastName}`;
+
+      // Build description with patient info and notes
+      let description = `**Patient Information**\n`;
+      description += `Name: ${appointment.patient.firstName} ${appointment.patient.lastName}\n`;
+      if (appointment.patient.phone) {
+        description += `Phone: ${appointment.patient.phone}\n`;
+      }
+      if (appointment.patient.email) {
+        description += `Email: ${appointment.patient.email}\n`;
+      }
+      if (appointment.patient.dateOfBirth) {
+        description += `Date of Birth: ${appointment.patient.dateOfBirth}\n`;
+      }
+      description += `\n**Appointment Details**\n`;
+      description += `Type: ${appointment.appointmentType}\n`;
+      description += `Duration: ${appointment.duration} minutes\n`;
+      if (appointment.providerId) {
+        description += `Provider: ${appointment.providerId}\n`;
+      }
+      if (appointment.notes) {
+        description += `\n**Notes from AI Call**\n${appointment.notes}\n`;
+      }
+      description += `\n📞 Booked via AI Receptionist`;
+
+      // Prepare attendees
+      const attendees = [];
+      if (appointment.patient.email) {
+        attendees.push({ email: appointment.patient.email });
+      }
+
+      const response = await calendar.events.insert({
+        calendarId,
+        requestBody: {
+          summary,
+          description,
+          start: {
+            dateTime: appointment.startTime.toISOString(),
+            timeZone: 'America/Toronto', // TODO: Make this configurable
+          },
+          end: {
+            dateTime: endTime.toISOString(),
+            timeZone: 'America/Toronto',
+          },
+          attendees: attendees.length > 0 ? attendees : undefined,
+          colorId: '9', // Blue color for appointments
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'email', minutes: 24 * 60 }, // 1 day before
+              { method: 'popup', minutes: 60 }, // 1 hour before
+            ],
+          },
+        },
+      });
+
+      this.logger.log({
+        accountId,
+        eventId: response.data.id,
+        patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+        appointmentType: appointment.appointmentType,
+        startTime: appointment.startTime,
+        msg: 'Created appointment event in Google Calendar',
+      });
+
+      return {
+        success: true,
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+      };
+    } catch (error) {
+      this.logger.error('Failed to create appointment event', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update calendar event
+   */
+  async updateEvent(
+    accountId: string,
+    eventId: string,
+    updates: {
+      summary?: string;
+      description?: string;
+      start?: Date;
+      end?: Date;
+    }
+  ) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      const updateData: any = {};
+      if (updates.summary) updateData.summary = updates.summary;
+      if (updates.description) updateData.description = updates.description;
+      if (updates.start) {
+        updateData.start = {
+          dateTime: updates.start.toISOString(),
+          timeZone: 'America/Toronto',
+        };
+      }
+      if (updates.end) {
+        updateData.end = {
+          dateTime: updates.end.toISOString(),
+          timeZone: 'America/Toronto',
+        };
+      }
+
+      const response = await calendar.events.patch({
+        calendarId,
+        eventId,
+        requestBody: updateData,
+      });
+
+      this.logger.log({
+        accountId,
+        eventId,
+        msg: 'Updated calendar event',
+      });
+
+      return {
+        success: true,
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+      };
+    } catch (error) {
+      this.logger.error('Failed to update calendar event', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete calendar event
+   */
+  async deleteEvent(accountId: string, eventId: string) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      await calendar.events.delete({
+        calendarId,
+        eventId,
+      });
+
+      this.logger.log({
+        accountId,
+        eventId,
+        msg: 'Deleted calendar event',
+      });
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      this.logger.error('Failed to delete calendar event', error);
+      throw error;
+    }
+  }
+
+  /**
    * Disconnect Google Calendar
    */
   async disconnect(accountId: string) {

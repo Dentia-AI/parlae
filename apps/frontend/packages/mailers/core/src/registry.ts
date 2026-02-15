@@ -23,4 +23,16 @@ mailerRegistry.register('resend', async () => {
   return createResendMailer();
 });
 
+mailerRegistry.register('aws-ses', async () => {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { createAwsSesMailer } = await import('@kit/mailers-aws-ses');
+
+    return createAwsSesMailer();
+  } else {
+    throw new Error(
+      'AWS SES is not available on the edge runtime. Please use another mailer.',
+    );
+  }
+});
+
 export { mailerRegistry };

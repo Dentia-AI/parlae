@@ -15,6 +15,7 @@ import { PmsModule } from './pms/pms.module';
 import { VapiModule } from './vapi/vapi.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
     VapiModule,
     TwilioModule,
     GoogleCalendarModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

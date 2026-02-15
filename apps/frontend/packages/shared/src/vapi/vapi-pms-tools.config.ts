@@ -74,13 +74,41 @@ export const PMS_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'bookAppointment',
-      description: 'Book a new appointment for a patient. Always check availability first before booking.',
+      description: 'Book a new appointment for a patient. Always check availability first before booking. Collect patient information including name, phone, and email.',
       parameters: {
         type: 'object',
         properties: {
+          patient: {
+            type: 'object',
+            description: 'Patient information - REQUIRED for booking',
+            properties: {
+              firstName: {
+                type: 'string',
+                description: 'Patient\'s first name',
+              },
+              lastName: {
+                type: 'string',
+                description: 'Patient\'s last name',
+              },
+              phone: {
+                type: 'string',
+                description: 'Patient\'s phone number (required for SMS confirmation)',
+              },
+              email: {
+                type: 'string',
+                description: 'Patient\'s email address (optional, for email confirmation)',
+              },
+              dateOfBirth: {
+                type: 'string',
+                format: 'date',
+                description: 'Patient\'s date of birth in YYYY-MM-DD format (optional)',
+              },
+            },
+            required: ['firstName', 'lastName', 'phone'],
+          },
           patientId: {
             type: 'string',
-            description: 'Patient ID from the PMS system. Use searchPatients first if you don\'t have this.',
+            description: 'Patient ID from PMS system (use searchPatients first if available, but not required for Google Calendar)',
           },
           appointmentType: {
             type: 'string',
@@ -97,10 +125,14 @@ export const PMS_TOOLS = [
           },
           notes: {
             type: 'string',
-            description: 'Any special notes or instructions for the appointment (optional)',
+            description: 'Any special notes or instructions collected during the call (optional). Include any preferences, concerns, or special requests the patient mentioned.',
+          },
+          sendConfirmation: {
+            type: 'boolean',
+            description: 'Whether to send SMS and email confirmation to patient. Default: true',
           },
         },
-        required: ['patientId', 'appointmentType', 'startTime', 'duration'],
+        required: ['patient', 'appointmentType', 'startTime', 'duration'],
       },
       server: {
         url: `${BASE_URL}/api/pms/appointments`,
@@ -421,12 +453,27 @@ IMPORTANT GUIDELINES:
 APPOINTMENT BOOKING FLOW:
 1. Greet the patient and ask what they need
 2. If booking: Ask for their name and phone to search for their record
-3. If new patient: Collect basic info (first name, last name, phone, email)
-4. Ask for preferred appointment type (cleaning, exam, etc.)
+3. If new patient OR no PMS connected: Collect patient information:
+   - First name and last name (required)
+   - Phone number (required for SMS confirmation)
+   - Email address (recommended for email confirmation)
+   - Date of birth (optional but helpful)
+4. Ask for preferred appointment type (cleaning, exam, filling, etc.)
 5. Check availability and offer time slots
-6. Confirm the appointment details
-7. Book the appointment
-8. Provide confirmation number and details
+6. Confirm the appointment details with the patient
+7. Book the appointment (system will automatically send confirmations)
+8. Confirm the booking and thank the patient
+
+IMPORTANT PATIENT DATA COLLECTION:
+- ALWAYS collect patient's first name, last name, and phone number
+- Encourage patient to provide email for better communication
+- Take detailed notes during the call - include any preferences, concerns, or special requests
+- These details will be included in the appointment confirmation and calendar event
+
+CONFIRMATION & NOTIFICATIONS:
+- After booking, the system automatically sends SMS and email confirmations to the patient
+- The clinic also receives a notification about the new booking
+- Same applies for cancellations and reschedules
 
 Be warm, professional, and helpful. You're the friendly voice of the practice!
 `;

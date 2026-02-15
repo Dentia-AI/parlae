@@ -7,6 +7,12 @@ import {
   getAccountIdFromVapiContext,
   redactPhi 
 } from '../_lib/pms-utils';
+import {
+  bookGoogleCalendarAppointment,
+  sendBookingConfirmation,
+  extractPatientFromVapiData,
+  extractAppointmentFromVapiData,
+} from '../_lib/google-calendar-utils';
 import { prisma } from '@kit/prisma';
 
 // ============================================================================
@@ -23,14 +29,29 @@ const listAppointmentsSchema = z.object({
   offset: z.number().optional(),
 });
 
+// Patient information schema
+const patientInfoSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  patientId: z.string().optional(),
+});
+
+// Enhanced booking schema with patient info
 const bookAppointmentSchema = z.object({
-  patientId: z.string(),
+  // Patient information (required for Google Calendar fallback)
+  patient: patientInfoSchema.optional(),
+  
+  // Appointment details
+  patientId: z.string().optional(), // Required for PMS, optional for Google Calendar
   providerId: z.string().optional(),
   appointmentType: z.string(),
   startTime: z.string(), // ISO 8601
   duration: z.number(),
   notes: z.string().optional(),
-  sendConfirmation: z.boolean().optional(),
+  sendConfirmation: z.boolean().optional().default(true),
   metadata: z.record(z.any()).optional(),
 });
 
@@ -221,10 +242,12 @@ export async function GET(request: NextRequest) {
  * POST /api/pms/appointments
  * 
  * Book a new appointment
+ * Supports both PMS integration and Google Calendar fallback
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let pmsIntegrationId: string | undefined;
+  let integrationType: 'pms' | 'google_calendar' = 'pms';
   
   try {
     // 1. Authenticate request
@@ -258,75 +281,150 @@ export async function POST(request: NextRequest) {
     
     const appointmentData = validation.data;
     
-    // 3. Get PMS service
+    // 3. Try to get PMS service first
     const pmsService = await getPmsService(accountId!);
     
-    if (!pmsService) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NO_PMS_INTEGRATION', message: 'No PMS integration found' } },
-        { status: 404 }
-      );
-    }
-    
-    // Get integration ID for audit logging
-    const integration = await prisma.pmsIntegration.findFirst({
-      where: { accountId: accountId!, status: 'ACTIVE' },
-    });
-    pmsIntegrationId = integration?.id;
-    
-    // 4. Book appointment
-    const response = await pmsService.bookAppointment({
-      patientId: appointmentData.patientId,
-      providerId: appointmentData.providerId,
-      appointmentType: appointmentData.appointmentType,
-      startTime: new Date(appointmentData.startTime),
-      duration: appointmentData.duration,
-      notes: appointmentData.notes,
-      sendConfirmation: appointmentData.sendConfirmation,
-      metadata: appointmentData.metadata,
-    });
-    
-    // 5. Log access
-    if (pmsIntegrationId) {
-      await logPmsAccess({
-        pmsIntegrationId,
-        action: 'bookAppointment',
-        endpoint: '/api/pms/appointments',
-        method: 'POST',
-        vapiCallId,
-        ipAddress: request.headers.get('x-forwarded-for') || undefined,
-        userAgent: request.headers.get('user-agent') || undefined,
-        requestSummary: JSON.stringify(redactPhi(appointmentData)),
-        responseStatus: response.success ? 201 : 400,
-        responseTime: Date.now() - startTime,
-        phiAccessed: true,
+    // 4a. If PMS is available, use it
+    if (pmsService && appointmentData.patientId) {
+      integrationType = 'pms';
+      
+      // Get integration ID for audit logging
+      const integration = await prisma.pmsIntegration.findFirst({
+        where: { accountId: accountId!, status: 'ACTIVE' },
+      });
+      pmsIntegrationId = integration?.id;
+      
+      // Book via PMS
+      const response = await pmsService.bookAppointment({
         patientId: appointmentData.patientId,
-        success: response.success,
-        errorMessage: response.error?.message,
+        providerId: appointmentData.providerId,
+        appointmentType: appointmentData.appointmentType,
+        startTime: new Date(appointmentData.startTime),
+        duration: appointmentData.duration,
+        notes: appointmentData.notes,
+        sendConfirmation: appointmentData.sendConfirmation,
+        metadata: appointmentData.metadata,
+      });
+      
+      // Log PMS access
+      if (pmsIntegrationId) {
+        await logPmsAccess({
+          pmsIntegrationId,
+          action: 'bookAppointment',
+          endpoint: '/api/pms/appointments',
+          method: 'POST',
+          vapiCallId,
+          ipAddress: request.headers.get('x-forwarded-for') || undefined,
+          userAgent: request.headers.get('user-agent') || undefined,
+          requestSummary: JSON.stringify(redactPhi(appointmentData)),
+          responseStatus: response.success ? 201 : 400,
+          responseTime: Date.now() - startTime,
+          phiAccessed: true,
+          patientId: appointmentData.patientId,
+          success: response.success,
+          errorMessage: response.error?.message,
+        });
+      }
+      
+      // Send confirmation if requested and booking succeeded
+      if (response.success && appointmentData.sendConfirmation && appointmentData.patient) {
+        await sendBookingConfirmation(
+          accountId!,
+          appointmentData.patient,
+          {
+            appointmentType: appointmentData.appointmentType,
+            startTime: new Date(appointmentData.startTime),
+            duration: appointmentData.duration,
+            notes: appointmentData.notes,
+          },
+          'pms',
+        );
+      }
+      
+      return NextResponse.json(response, { 
+        status: response.success ? 201 : 400 
       });
     }
     
-    // 6. Return response
-    return NextResponse.json(response, { 
-      status: response.success ? 201 : 400 
-    });
+    // 4b. If no PMS, try Google Calendar fallback
+    else {
+      integrationType = 'google_calendar';
+      
+      // Check if Google Calendar is connected
+      const account = await prisma.account.findUnique({
+        where: { id: accountId! },
+        select: { googleCalendarConnected: true },
+      });
+      
+      if (!account?.googleCalendarConnected) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: { 
+              code: 'NO_INTEGRATION', 
+              message: 'No PMS or Google Calendar integration found. Please connect one first.' 
+            } 
+          },
+          { status: 404 }
+        );
+      }
+      
+      // Extract patient info from request
+      let patient = appointmentData.patient;
+      if (!patient) {
+        patient = extractPatientFromVapiData(data);
+      }
+      
+      if (!patient) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: { 
+              code: 'MISSING_PATIENT_INFO', 
+              message: 'Patient information is required for Google Calendar booking' 
+            } 
+          },
+          { status: 400 }
+        );
+      }
+      
+      // Book via Google Calendar
+      const response = await bookGoogleCalendarAppointment(
+        accountId!,
+        patient,
+        {
+          appointmentType: appointmentData.appointmentType,
+          startTime: new Date(appointmentData.startTime),
+          duration: appointmentData.duration,
+          notes: appointmentData.notes,
+          providerId: appointmentData.providerId,
+        },
+        vapiCallId,
+      );
+      
+      // Send confirmation if requested and booking succeeded
+      if (response.success && appointmentData.sendConfirmation) {
+        await sendBookingConfirmation(
+          accountId!,
+          patient,
+          {
+            appointmentType: appointmentData.appointmentType,
+            startTime: new Date(appointmentData.startTime),
+            duration: appointmentData.duration,
+            notes: appointmentData.notes,
+          },
+          'google_calendar',
+          response.htmlLink,
+        );
+      }
+      
+      return NextResponse.json(response, { 
+        status: response.success ? 201 : 400 
+      });
+    }
     
   } catch (error: any) {
-    console.error('[PMS] Error in POST /appointments:', error);
-    
-    // Log error
-    if (pmsIntegrationId) {
-      await logPmsAccess({
-        pmsIntegrationId,
-        action: 'bookAppointment',
-        endpoint: '/api/pms/appointments',
-        method: 'POST',
-        responseTime: Date.now() - startTime,
-        phiAccessed: false,
-        success: false,
-        errorMessage: error.message,
-      });
-    }
+    console.error('[PMS/Calendar] Error in POST /appointments:', error);
     
     return NextResponse.json(
       { 

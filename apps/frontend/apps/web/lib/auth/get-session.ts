@@ -9,6 +9,15 @@ export async function getSession() {
 }
 
 /**
+ * Get the current user from session
+ * Returns null if no session exists
+ */
+export async function getUser() {
+  const session = await auth();
+  return session?.user || null;
+}
+
+/**
  * Get the current user session and throw if not authenticated
  * Use this in API routes that require authentication
  */

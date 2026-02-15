@@ -3,6 +3,7 @@ import { z } from 'zod';
 const MAILER_PROVIDERS = [
   'nodemailer',
   'resend',
+  'aws-ses',
   // add more providers here
 ] as const;
 

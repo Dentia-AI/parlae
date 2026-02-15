@@ -1,4 +1,4 @@
-import { CreditCard, User, Users, Settings, Wrench, BarChart3 } from 'lucide-react';
+import { CreditCard, User, Users, Settings, Wrench, BarChart3, Palette } from 'lucide-react';
 import { z } from 'zod';
 
 import { NavigationConfigSchema } from '@kit/ui/navigation-schema';
@@ -44,6 +44,11 @@ const routes = [
         label: 'common:routes.profile',
         path: pathsConfig.app.personalAccountSettings,
         Icon: <User className={iconClasses} />,
+      },
+      {
+        label: 'Email Branding',
+        path: '/home/settings/branding',
+        Icon: <Palette className={iconClasses} />,
       },
       featureFlagsConfig.enablePersonalAccountBilling
         ? {

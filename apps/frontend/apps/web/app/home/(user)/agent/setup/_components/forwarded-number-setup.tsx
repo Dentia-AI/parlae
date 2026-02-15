@@ -47,15 +47,14 @@ export function ForwardedNumberSetup({
           businessName,
         });
 
-        if (result.success && result.twilioNumber) {
-          setTwilioNumber(result.twilioNumber);
+        if (result.success) {
+          // Configuration saved successfully - number will be provisioned after payment
           setSetupComplete(true);
           sessionStorage.setItem('phoneIntegrationMethod', 'forwarded');
           sessionStorage.setItem('phoneNumber', clinicNumber);
-          sessionStorage.setItem('twilioForwardNumber', result.twilioNumber);
-          toast.success('Forwarding number provisioned!');
+          toast.success(result.message || 'Configuration saved successfully!');
         } else {
-          toast.error(result.error || 'Failed to provision number');
+          toast.error(result.error || 'Failed to save configuration');
         }
       } catch (error) {
         toast.error('An error occurred');
@@ -115,112 +114,64 @@ export function ForwardedNumberSetup({
             className="w-full"
           >
             {isProvisioning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Get Forwarding Number
+            Save Configuration
           </Button>
         </div>
       )}
 
-      {/* Step 2: Show Forwarding Instructions */}
-      {setupComplete && twilioNumber && (
+      {/* Step 2: Show Configuration Saved Message */}
+      {setupComplete && (
         <div className="space-y-4">
           <Alert className="border-green-200 bg-green-50">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              <strong>Success!</strong> Your forwarding number is ready. Follow the steps below to complete setup.
+              <strong>Configuration Saved!</strong> Your forwarding setup has been configured.
             </AlertDescription>
           </Alert>
 
-          {/* Forwarding Number Card */}
+          {/* Clinic Number Card */}
           <Card className="border-primary">
             <CardContent className="pt-6">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Forward calls to:</div>
-                    <div className="text-2xl font-bold font-mono">{twilioNumber}</div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => copyNumber(twilioNumber)}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
+                <div>
+                  <div className="text-sm text-muted-foreground">Your clinic number:</div>
+                  <div className="text-2xl font-bold font-mono">{clinicNumber}</div>
                 </div>
+                <Alert className="border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800">
+                    <strong>Next Steps:</strong> A Twilio forwarding number will be provisioned 
+                    when you complete payment and deploy your AI receptionist in the review step.
+                  </AlertDescription>
+                </Alert>
               </div>
             </CardContent>
           </Card>
 
-          {/* Setup Instructions */}
+          {/* What Happens Next */}
           <Alert>
             <Phone className="h-4 w-4" />
             <AlertDescription>
-              <strong>Setup Instructions:</strong>
+              <strong>What happens next:</strong>
               <ol className="list-decimal list-inside mt-3 space-y-2 text-sm">
-                <li>Contact your phone carrier (the company that provides {clinicNumber})</li>
-                <li>Tell them you want to set up <strong>call forwarding</strong></li>
-                <li>Provide them with the forwarding number: <strong className="font-mono">{twilioNumber}</strong></li>
-                <li>Choose when to forward:
-                  <ul className="list-disc list-inside ml-6 mt-1 space-y-1">
-                    <li><strong>Always Forward:</strong> All calls go to AI (recommended for testing)</li>
-                    <li><strong>Forward When Busy:</strong> AI handles overflow calls</li>
-                    <li><strong>Forward No Answer:</strong> AI answers if no one picks up</li>
-                  </ul>
-                </li>
-                <li>Test by calling {clinicNumber} - the AI should answer!</li>
+                <li>Complete the remaining setup steps (knowledge base, integrations)</li>
+                <li>Add payment method in the review step</li>
+                <li>Click "Deploy" - we'll purchase a Twilio number for you</li>
+                <li>You'll receive the forwarding number to set up with your carrier</li>
+                <li>Configure call forwarding from {clinicNumber} to the Twilio number</li>
               </ol>
             </AlertDescription>
           </Alert>
 
-          {/* Common Carriers Quick Links */}
+          {/* Info about call forwarding */}
           <div className="space-y-2">
-            <Label>Quick Setup Links (Common Carriers)</Label>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <a 
-                href="https://www.att.com/support/article/wireless/KM1008728" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                → AT&T Call Forwarding
-              </a>
-              <a 
-                href="https://www.verizon.com/support/call-forwarding-faqs" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                → Verizon Call Forwarding
-              </a>
-              <a 
-                href="https://www.t-mobile.com/support/plans-features/call-forwarding" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                → T-Mobile Call Forwarding
-              </a>
-              <a 
-                href="https://www.sprint.com/en/support/solutions/services/faqs-about-call-forwarding.html" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                → Sprint Call Forwarding
-              </a>
-            </div>
+            <Label>About Call Forwarding</Label>
+            <p className="text-sm text-muted-foreground">
+              After deployment, you'll set up call forwarding with your phone carrier to route 
+              calls from <strong className="font-mono">{clinicNumber}</strong> to your new 
+              Twilio number. This allows the AI to answer calls while you keep your existing number.
+            </p>
           </div>
-
-          {/* Test Call Reminder */}
-          <Alert className="border-blue-200 bg-blue-50">
-            <AlertCircle className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800">
-              <strong>Important:</strong> After setting up forwarding with your carrier, 
-              test it by calling {clinicNumber} from another phone. You should hear your 
-              AI receptionist answer!
-            </AlertDescription>
-          </Alert>
         </div>
       )}
     </div>

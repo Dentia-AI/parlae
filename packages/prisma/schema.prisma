@@ -201,6 +201,16 @@ model Account {
   paymentMethodVerified       Boolean   @default(false) @map("payment_method_verified") // Whether payment method is verified
   paymentMethodVerifiedAt     DateTime? @map("payment_method_verified_at") // When payment method was verified
 
+  // Branding for emails and customer-facing communications
+  brandingLogoUrl             String?   @map("branding_logo_url") // URL to clinic logo
+  brandingPrimaryColor        String?   @map("branding_primary_color") // Hex color code for branding
+  brandingBusinessName        String?   @map("branding_business_name") // Business name for emails (if different from account name)
+  brandingContactEmail        String?   @map("branding_contact_email") // Contact email for patient communications
+  brandingContactPhone        String?   @map("branding_contact_phone") // Contact phone for patient communications
+  brandingAddress             String?   @map("branding_address") // Physical address for emails
+  brandingWebsite             String?   @map("branding_website") // Website URL
+  twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
+
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
   memberships           AccountMembership[]
   billingCustomers      BillingCustomer[]
