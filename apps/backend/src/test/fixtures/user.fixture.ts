@@ -39,6 +39,7 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   googleCalendarTokenExpiry: null,
   googleCalendarId: null,
   googleCalendarEmail: null,
+  stripeCustomerId: null,
   stripePaymentMethodId: null,
   paymentMethodVerified: false,
   paymentMethodVerifiedAt: null,
