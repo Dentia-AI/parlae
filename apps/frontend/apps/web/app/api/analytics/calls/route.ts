@@ -62,7 +62,8 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
 export async function GET(request: NextRequest) {
   try {
     // Require authentication
-    await requireSession();
+    const session = await requireSession();
+    const userId = session.user?.id;
     
     const searchParams = request.nextUrl.searchParams;
     const startDate = searchParams.get('startDate') 
@@ -73,13 +74,24 @@ export async function GET(request: NextRequest) {
       : new Date();
     const agentId = searchParams.get('agentId');
 
-    // Build the where clause
+    // Get user's personal account for scoping
+    const account = userId ? await prisma.account.findFirst({
+      where: { primaryOwnerId: userId, isPersonalAccount: true },
+      select: { id: true },
+    }) : null;
+
+    // Build the where clause - scoped to user's account
     const where: any = {
       callStartedAt: {
         gte: startDate,
         lte: endDate,
       },
     };
+
+    // Scope to account if available
+    if (account) {
+      where.accountId = account.id;
+    }
 
     if (agentId) {
       where.voiceAgentId = agentId;
@@ -163,8 +175,9 @@ export async function GET(request: NextRequest) {
       ? (collectionSuccess / collections._count._all) * 100 
       : 0;
 
-    // Get activity trend (calls per day)
-    const activityTrend = agentId
+    // Get activity trend (calls per day) - scoped to account
+    const accountId = account?.id;
+    const activityTrend = accountId && agentId
       ? await prisma.$queryRaw`
           SELECT 
             DATE(call_started_at) as date,
@@ -172,7 +185,20 @@ export async function GET(request: NextRequest) {
           FROM call_logs
           WHERE call_started_at >= ${startDate}
             AND call_started_at <= ${endDate}
+            AND account_id = ${accountId}
             AND voice_agent_id = ${agentId}
+          GROUP BY DATE(call_started_at)
+          ORDER BY date ASC
+        `
+      : accountId
+      ? await prisma.$queryRaw`
+          SELECT 
+            DATE(call_started_at) as date,
+            COUNT(*)::int as count
+          FROM call_logs
+          WHERE call_started_at >= ${startDate}
+            AND call_started_at <= ${endDate}
+            AND account_id = ${accountId}
           GROUP BY DATE(call_started_at)
           ORDER BY date ASC
         `

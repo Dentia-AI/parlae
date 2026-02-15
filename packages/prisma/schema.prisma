@@ -226,6 +226,7 @@ model Account {
   agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
   pmsIntegrations       PmsIntegration[]
   vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account
+  callLogs              CallLog[] // Call logs for this account
 
   @@map("accounts")
 }
@@ -870,23 +871,29 @@ model KnowledgeBase {
 }
 
 model CallLog {
-  id           String @id @default(uuid())
-  voiceAgentId String @map("voice_agent_id")
+  id           String  @id @default(uuid())
+  accountId    String? @map("account_id") // Direct link to account for easy filtering
+  voiceAgentId String? @map("voice_agent_id") // Optional: may not have agent for webhook-created logs
 
   // Call Details
   ghlCallId   String?     @unique @map("ghl_call_id")
   vapiCallId  String?     @unique @map("vapi_call_id") // Vapi call ID
   phoneNumber String      @map("phone_number")
   callType    CallType    @default(INBOUND) @map("call_type")
-  direction   String      @map("direction") // 'inbound' or 'outbound' (deprecated, use callType)
+  direction   String      @default("inbound") @map("direction") // 'inbound' or 'outbound' (deprecated, use callType)
   duration    Int?        @map("duration") // Duration in seconds
   status      CallStatus  @default(COMPLETED) @map("status")
   outcome     CallOutcome @default(OTHER) @map("outcome") // Primary call outcome
 
-  // Call Content
+  // Call Content (HIPAA: transcript may contain PHI - encrypted at rest via DB encryption)
   transcript   String? @map("transcript") @db.Text
   summary      String? @map("summary") @db.Text
   recordingUrl String? @map("recording_url")
+
+  // Vapi Structured Output - Analysis extracted by AI at end of call
+  structuredData Json? @map("structured_data") // CALL_ANALYSIS_SCHEMA output from Vapi
+  callReason     String? @map("call_reason") // Denormalized from structuredData for filtering
+  urgencyLevel   String? @map("urgency_level") // routine, soon, urgent, emergency
 
   // Lead Information
   contactName    String? @map("contact_name")
@@ -915,15 +922,18 @@ model CallLog {
 
   // Quality & Satisfaction
   callQuality       Int?    @map("call_quality") // 1-5 rating
-  customerSentiment String? @map("customer_sentiment") // positive, neutral, negative
+  customerSentiment String? @map("customer_sentiment") // positive, neutral, negative, anxious, urgent
   aiConfidence      Float?  @map("ai_confidence") // AI confidence score 0-1
 
   // Cost Tracking (for Vapi + Twilio)
   costCents Int? @map("cost_cents") // Total call cost in cents
 
   // Metadata & Actions
-  metadata Json? @map("metadata")
-  actions  Json? @map("actions") // Actions taken during/after call
+  metadata Json? @map("metadata") // Raw Vapi call metadata (phoneNumberId, assistantId, etc.)
+  actions  Json? @map("actions") // Actions taken during/after call (from structuredData.actionsPerformed)
+
+  // HIPAA Audit Trail
+  accessLog Json? @map("access_log") // Records who accessed this PHI record and when
 
   // Timestamps
   callStartedAt DateTime  @map("call_started_at")
@@ -932,8 +942,10 @@ model CallLog {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+  account    Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  voiceAgent VoiceAgent? @relation(fields: [voiceAgentId], references: [id], onDelete: SetNull)
 
+  @@index([accountId])
   @@index([voiceAgentId])
   @@index([callStartedAt])
   @@index([phoneNumber])
@@ -942,6 +954,7 @@ model CallLog {
   @@index([status])
   @@index([campaignId])
   @@index([scheduledAt])
+  @@index([callReason])
   @@map("call_logs")
 }
 

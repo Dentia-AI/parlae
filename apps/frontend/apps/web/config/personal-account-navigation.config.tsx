@@ -1,4 +1,4 @@
-import { CreditCard, User, Users, Settings, Wrench, BarChart3, Palette } from 'lucide-react';
+import { CreditCard, User, Users, Settings, Wrench, BarChart3, Palette, FileText } from 'lucide-react';
 import { z } from 'zod';
 
 import { NavigationConfigSchema } from '@kit/ui/navigation-schema';
@@ -17,6 +17,11 @@ const routes = [
         path: pathsConfig.app.home,
         Icon: <BarChart3 className={iconClasses} />,
         end: true,
+      },
+      {
+        label: 'common:routes.callLogs',
+        path: '/home/call-logs',
+        Icon: <FileText className={iconClasses} />,
       },
       {
         label: 'common:routes.setup',

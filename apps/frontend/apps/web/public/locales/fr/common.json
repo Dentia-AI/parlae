@@ -25,6 +25,7 @@
     "application": "Application",
     "home": "Accueil",
     "dashboard": "Tableau de bord",
+    "callLogs": "Journal d'appels",
     "setup": "Configuration",
     "aiAgents": "Agents IA",
     "advancedSetup": "Configuration avancée",

@@ -25,6 +25,7 @@
     "application": "Application",
     "home": "Home",
     "dashboard": "Dashboard",
+    "callLogs": "Call Logs",
     "setup": "Setup",
     "aiAgents": "AI Agents",
     "advancedSetup": "Advanced Setup",

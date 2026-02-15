@@ -75,10 +75,14 @@ ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "twilio_messaging_service_sid" T
 
 -- ── 3. CALL_LOGS TABLE ──────────────────────────────────────────────────────
 
+ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "account_id" TEXT;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "vapi_call_id" TEXT;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "call_type" "CallType" NOT NULL DEFAULT 'inbound';
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "status" "CallStatus" NOT NULL DEFAULT 'completed';
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "outcome" "CallOutcome" NOT NULL DEFAULT 'other';
+ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "structured_data" JSONB;
+ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "call_reason" TEXT;
+ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "urgency_level" TEXT;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "insurance_verified" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "insurance_provider" TEXT;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "payment_plan_discussed" BOOLEAN NOT NULL DEFAULT false;
@@ -98,6 +102,7 @@ ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "call_quality" INTEGER;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "customer_sentiment" TEXT;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "ai_confidence" DOUBLE PRECISION;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "cost_cents" INTEGER;
+ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "access_log" JSONB;
 ALTER TABLE "call_logs" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- ── 4. AGENT_TEMPLATES TABLE ────────────────────────────────────────────────
@@ -245,11 +250,13 @@ END $$;
 -- ── 5. INDEXES (IF NOT EXISTS) ──────────────────────────────────────────────
 
 CREATE UNIQUE INDEX IF NOT EXISTS "call_logs_vapi_call_id_key" ON "call_logs"("vapi_call_id");
+CREATE INDEX IF NOT EXISTS "call_logs_account_id_idx" ON "call_logs"("account_id");
 CREATE INDEX IF NOT EXISTS "call_logs_call_type_idx" ON "call_logs"("call_type");
 CREATE INDEX IF NOT EXISTS "call_logs_outcome_idx" ON "call_logs"("outcome");
 CREATE INDEX IF NOT EXISTS "call_logs_status_idx" ON "call_logs"("status");
 CREATE INDEX IF NOT EXISTS "call_logs_campaign_id_idx" ON "call_logs"("campaign_id");
 CREATE INDEX IF NOT EXISTS "call_logs_scheduled_at_idx" ON "call_logs"("scheduled_at");
+CREATE INDEX IF NOT EXISTS "call_logs_call_reason_idx" ON "call_logs"("call_reason");
 CREATE INDEX IF NOT EXISTS "agent_templates_category_idx" ON "agent_templates"("category");
 CREATE INDEX IF NOT EXISTS "agent_templates_is_default_idx" ON "agent_templates"("is_default");
 CREATE INDEX IF NOT EXISTS "idx_accounts_phone_integration_method" ON "accounts"("phone_integration_method") WHERE "phone_integration_method" != 'none';
@@ -263,6 +270,17 @@ DO $$ BEGIN
     ) THEN
         ALTER TABLE "accounts" ADD CONSTRAINT "accounts_agent_template_id_fkey"
             FOREIGN KEY ("agent_template_id") REFERENCES "agent_templates"("id")
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'call_logs_account_id_fkey'
+    ) THEN
+        ALTER TABLE "call_logs" ADD CONSTRAINT "call_logs_account_id_fkey"
+            FOREIGN KEY ("account_id") REFERENCES "accounts"("id")
             ON DELETE SET NULL ON UPDATE CASCADE;
     END IF;
 END $$;

@@ -59,14 +59,24 @@ function generateMockRecentCalls(limit: number) {
 export async function GET(request: NextRequest) {
   try {
     // Require authentication
-    await requireSession();
+    const session = await requireSession();
+    const userId = session.user?.id;
     
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
     const agentId = searchParams.get('agentId');
 
+    // Scope to user's account
+    const account = userId ? await prisma.account.findFirst({
+      where: { primaryOwnerId: userId, isPersonalAccount: true },
+      select: { id: true },
+    }) : null;
+
     const where: any = {};
+    if (account) {
+      where.accountId = account.id;
+    }
     if (agentId) {
       where.voiceAgentId = agentId;
     }
@@ -121,6 +131,9 @@ export async function GET(request: NextRequest) {
         paymentPlanAmount: call.paymentPlanAmount,
         transferredToStaff: call.transferredToStaff,
         transferredTo: call.transferredTo,
+        followUpRequired: call.followUpRequired,
+        customerSentiment: call.customerSentiment,
+        callReason: call.callReason,
         summary: call.summary,
         agent: call.voiceAgent,
       })),

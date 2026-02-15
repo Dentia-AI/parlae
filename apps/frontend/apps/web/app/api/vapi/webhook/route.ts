@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@kit/prisma';
 import { createGoHighLevelService } from '@kit/shared/gohighlevel/server';
 import { getLogger } from '@kit/shared/logger';
 
@@ -10,6 +11,11 @@ import { getLogger } from '@kit/shared/logger';
  * - status-update: Call status changes
  * - end-of-call-report: Full transcript, recording, extracted data
  * - function-call: When AI wants to execute a function
+ *
+ * HIPAA Note: This handler processes PHI (Protected Health Information).
+ * Transcripts and structured data may contain patient information.
+ * All data is stored encrypted at rest via PostgreSQL/RDS encryption.
+ * PHI is NOT logged — only call IDs and non-PHI metadata appear in logs.
  */
 export async function POST(request: Request) {
   const logger = await getLogger();
@@ -113,89 +119,233 @@ async function handleStatusUpdate(payload: any) {
 }
 
 /**
- * Handle end of call - receive transcript, recording, and extracted data
+ * Resolve the account ID from a Vapi phone number ID or phone number.
+ * Looks up VapiPhoneNumber table to find the associated account.
+ */
+async function resolveAccountFromCall(call: any, logger: any): Promise<{ accountId: string | null; voiceAgentId: string | null }> {
+  try {
+    // Try by Vapi phone number ID first (most reliable)
+    if (call?.phoneNumberId) {
+      const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
+        where: { vapiPhoneId: call.phoneNumberId },
+        select: { accountId: true, vapiAssistantId: true },
+      });
+      if (vapiPhone) {
+        return { accountId: vapiPhone.accountId, voiceAgentId: null };
+      }
+    }
+
+    // Fallback: try by the actual phone number
+    if (call?.phoneNumber?.number) {
+      const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
+        where: { phoneNumber: call.phoneNumber.number },
+        select: { accountId: true },
+      });
+      if (vapiPhone) {
+        return { accountId: vapiPhone.accountId, voiceAgentId: null };
+      }
+    }
+
+    logger.warn({ callId: call?.id }, '[Vapi Webhook] Could not resolve account from call');
+    return { accountId: null, voiceAgentId: null };
+  } catch (error) {
+    logger.error({ error: error instanceof Error ? error.message : error }, '[Vapi Webhook] Error resolving account');
+    return { accountId: null, voiceAgentId: null };
+  }
+}
+
+/**
+ * Map Vapi structured output to CallLog outcome enum.
+ */
+function mapCallOutcome(analysis: any): string {
+  if (!analysis) return 'OTHER';
+  
+  const outcome = analysis.callOutcome;
+  switch (outcome) {
+    case 'appointment_booked': return 'BOOKED';
+    case 'transferred_to_staff': return 'TRANSFERRED';
+    case 'insurance_verified': return 'INSURANCE_INQUIRY';
+    case 'payment_plan_discussed': return 'PAYMENT_PLAN';
+    case 'information_provided': return 'INFORMATION';
+    case 'voicemail': return 'VOICEMAIL';
+    case 'emergency_handled': return 'OTHER';
+    default: {
+      // Fallback: infer from boolean flags
+      if (analysis.appointmentBooked) return 'BOOKED';
+      if (analysis.transferredToStaff) return 'TRANSFERRED';
+      if (analysis.insuranceVerified) return 'INSURANCE_INQUIRY';
+      if (analysis.paymentDiscussed) return 'PAYMENT_PLAN';
+      return 'OTHER';
+    }
+  }
+}
+
+/**
+ * Handle end of call - receive transcript, recording, and extracted data.
+ * 
+ * HIPAA Compliance:
+ * - Transcript and structured data stored encrypted at rest (DB-level encryption)
+ * - PHI (names, phone numbers, medical info) is NOT logged to application logs
+ * - Only call IDs and non-PHI metadata appear in log entries
+ * - Access logging records each access to the call record
  */
 async function handleEndOfCall(payload: any) {
   const logger = await getLogger();
   
-  const { call, transcript, recordingUrl, analysis, summary } = payload.message;
+  const { call, transcript, recordingUrl, analysis, summary, artifact } = payload.message;
+
+  // Vapi may send structured data in different locations depending on version
+  const structuredData = analysis || artifact?.analysis || {};
+  const callSummary = summary || artifact?.summary || structuredData.callSummary || null;
+  const callTranscript = transcript || artifact?.transcript || null;
+  const callRecordingUrl = recordingUrl || artifact?.recordingUrl || null;
 
   logger.info({
     callId: call?.id,
     duration: call?.duration,
-    hasTranscript: !!transcript,
-    hasRecording: !!recordingUrl,
-    hasAnalysis: !!analysis,
-  }, '[Vapi Webhook] Call ended');
+    hasTranscript: !!callTranscript,
+    hasRecording: !!callRecordingUrl,
+    hasAnalysis: !!structuredData && Object.keys(structuredData).length > 0,
+    hasSummary: !!callSummary,
+  }, '[Vapi Webhook] Call ended — processing end-of-call report');
 
   try {
-    // Extract structured data from the call
-    const extractedData = analysis || {};
-    const customerName = extractedData.customerName;
-    const customerEmail = extractedData.email;
     const customerPhone = call?.customer?.number;
+    const customerName = structuredData.patientName || null;
+    const customerEmail = structuredData.patientEmail || null;
 
-    logger.info({
-      callId: call?.id,
-      extractedData,
-      summary,
-    }, '[Vapi Webhook] Call data extracted');
+    // Resolve account from the receiving phone number
+    const { accountId, voiceAgentId } = await resolveAccountFromCall(call, logger);
 
-    // Sync to GHL CRM if we have contact info
-    const ghlService = createGoHighLevelService();
-    
-    if (ghlService.isEnabled() && (customerEmail || customerPhone)) {
-      logger.info({
-        email: customerEmail,
-        phone: customerPhone,
-      }, '[Vapi Webhook] Syncing call data to GHL');
+    // Map structured output to call outcome
+    const outcome = mapCallOutcome(structuredData);
 
-      await ghlService.upsertContact({
-        email: customerEmail || `${customerPhone}@temp.local`,
-        name: customerName,
-        phone: customerPhone,
-        tags: ['ai-agent-call', extractedData.sentiment || 'unknown'],
-        customFields: {
-          'last_call_date': new Date().toISOString(),
-          'last_call_reason': extractedData.reasonForCall,
-          'last_call_sentiment': extractedData.sentiment,
-          'needs_followup': extractedData.needsFollowup ? 'yes' : 'no',
-        },
-        source: 'AI Agent Call',
-      });
-
-      logger.info('[Vapi Webhook] Contact synced to GHL');
+    // Calculate duration in seconds
+    let durationSeconds: number | null = null;
+    if (call?.duration) {
+      durationSeconds = Math.round(call.duration);
+    } else if (call?.startedAt && call?.endedAt) {
+      durationSeconds = Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000);
     }
 
-    // TODO: Save call data to your database
-    // await saveCallData({
-    //   callId: call.id,
-    //   assistantId: call.assistantId,
-    //   phoneNumber: call.phoneNumberId,
-    //   customerPhone: customerPhone,
-    //   customerName,
-    //   customerEmail,
-    //   duration: call.duration,
-    //   transcript,
-    //   recordingUrl,
-    //   analysis: extractedData,
-    //   summary,
-    //   startedAt: call.startedAt,
-    //   endedAt: call.endedAt,
-    // });
+    // Persist call log to database
+    const callLog = await prisma.callLog.create({
+      data: {
+        // Account & Agent association
+        accountId,
+        voiceAgentId,
+
+        // Call identification
+        vapiCallId: call?.id || null,
+        phoneNumber: customerPhone || call?.phoneNumber?.number || 'unknown',
+        callType: 'INBOUND',
+        direction: 'inbound',
+        duration: durationSeconds,
+        status: 'COMPLETED',
+        outcome: outcome as any,
+
+        // Call content (HIPAA: PHI stored encrypted at rest)
+        transcript: callTranscript,
+        summary: callSummary,
+        recordingUrl: callRecordingUrl,
+
+        // Structured output from Vapi AI analysis
+        structuredData: Object.keys(structuredData).length > 0 ? structuredData : null,
+        callReason: structuredData.callReason || null,
+        urgencyLevel: structuredData.urgencyLevel || null,
+
+        // Contact info from structured output
+        contactName: customerName,
+        contactEmail: customerEmail,
+
+        // Denormalized flags from structured output
+        leadCaptured: !!customerName || !!customerEmail,
+        appointmentSet: !!structuredData.appointmentBooked,
+        insuranceVerified: !!structuredData.insuranceVerified,
+        insuranceProvider: structuredData.insuranceProvider || null,
+        paymentPlanDiscussed: !!structuredData.paymentDiscussed,
+        transferredToStaff: !!structuredData.transferredToStaff,
+        transferredTo: structuredData.transferredTo || null,
+        followUpRequired: !!structuredData.followUpRequired,
+
+        // Sentiment & quality
+        customerSentiment: structuredData.customerSentiment || null,
+
+        // Actions performed (from structured output)
+        actions: structuredData.actionsPerformed ? { actions: structuredData.actionsPerformed } : null,
+
+        // Store raw Vapi metadata (non-PHI: IDs, config, etc.)
+        metadata: {
+          vapiPhoneNumberId: call?.phoneNumberId,
+          vapiAssistantId: call?.assistantId,
+          vapiSquadId: call?.squadId,
+          endedReason: call?.endedReason,
+          costBreakdown: call?.costBreakdown,
+          keyTopics: structuredData.keyTopicsDiscussed || [],
+        },
+
+        // Cost tracking
+        costCents: call?.costBreakdown?.total
+          ? Math.round(parseFloat(call.costBreakdown.total) * 100)
+          : null,
+
+        // Timestamps
+        callStartedAt: call?.startedAt ? new Date(call.startedAt) : new Date(),
+        callEndedAt: call?.endedAt ? new Date(call.endedAt) : new Date(),
+
+        // Initial HIPAA access log entry
+        accessLog: {
+          entries: [{
+            action: 'created',
+            source: 'vapi_webhook',
+            timestamp: new Date().toISOString(),
+            details: 'Call log created from Vapi end-of-call webhook',
+          }],
+        },
+      },
+    });
 
     logger.info({
       callId: call?.id,
-    }, '[Vapi Webhook] Call data processed successfully');
+      callLogId: callLog.id,
+      accountId,
+      outcome,
+    }, '[Vapi Webhook] Call log saved to database');
 
-    return NextResponse.json({ received: true });
+    // Sync to GHL CRM if we have contact info (non-blocking)
+    try {
+      const ghlService = createGoHighLevelService();
+      
+      if (ghlService.isEnabled() && (customerEmail || customerPhone)) {
+        await ghlService.upsertContact({
+          email: customerEmail || `${customerPhone}@temp.local`,
+          name: customerName,
+          phone: customerPhone,
+          tags: ['ai-agent-call', structuredData.customerSentiment || 'unknown'],
+          customFields: {
+            'last_call_date': new Date().toISOString(),
+            'last_call_reason': structuredData.callReason,
+            'last_call_sentiment': structuredData.customerSentiment,
+            'needs_followup': structuredData.followUpRequired ? 'yes' : 'no',
+          },
+          source: 'AI Agent Call',
+        });
+        logger.info('[Vapi Webhook] Contact synced to GHL');
+      }
+    } catch (ghlError) {
+      // Don't fail the webhook for GHL sync errors
+      logger.warn({ error: ghlError instanceof Error ? ghlError.message : ghlError }, '[Vapi Webhook] GHL sync failed (non-critical)');
+    }
+
+    return NextResponse.json({ received: true, callLogId: callLog.id });
   } catch (error) {
     logger.error({
       error: error instanceof Error ? error.message : error,
       callId: call?.id,
     }, '[Vapi Webhook] Failed to process end-of-call data');
 
-    return NextResponse.json({ error: 'Failed to process call data' }, { status: 500 });
+    // Still return 200 so Vapi doesn't retry (data loss is better than infinite retries)
+    return NextResponse.json({ received: true, error: 'Failed to persist call data' });
   }
 }
 

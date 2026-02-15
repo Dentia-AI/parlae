@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
@@ -41,6 +42,7 @@ const outcomeColors: Record<string, string> = {
 };
 
 export function RecentCallsList() {
+  const router = useRouter();
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,7 +106,7 @@ export function RecentCallsList() {
             <Phone className="h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Recent Calls</CardTitle>
           </div>
-          <Button variant="ghost" size="sm" className="gap-1">
+          <Button variant="ghost" size="sm" className="gap-1" onClick={() => router.push('/home/call-logs')}>
             View All
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -121,6 +123,7 @@ export function RecentCallsList() {
             {calls.map((call) => (
               <div
                 key={call.id}
+                onClick={() => router.push(`/home/call-logs/${call.id}`)}
                 className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent transition-colors cursor-pointer"
               >
                 <div className="flex-shrink-0 mt-1">

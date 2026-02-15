@@ -380,6 +380,91 @@ For any medical questions beyond scheduling, transfer to Clinic Information or T
 // Squad member configuration (with placeholders, tools injected at runtime)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shared structured output schema for Vapi end-of-call analysis
+// Applied to all squad members so every call gets structured extraction
+// ---------------------------------------------------------------------------
+
+export const CALL_ANALYSIS_SCHEMA = {
+  type: 'object',
+  properties: {
+    // Patient identification
+    patientName: { type: 'string', description: "Patient's full name as stated during the call" },
+    patientPhone: { type: 'string', description: "Patient's phone number (from call metadata or stated)" },
+    patientEmail: { type: 'string', description: "Patient's email address if provided" },
+    patientId: { type: 'string', description: 'PMS patient ID if found during lookup' },
+    isNewPatient: { type: 'boolean', description: 'Whether a new patient record was created during this call' },
+
+    // Call classification
+    callReason: {
+      type: 'string',
+      enum: [
+        'appointment_booking', 'appointment_cancel', 'appointment_reschedule',
+        'appointment_inquiry', 'insurance_inquiry', 'billing_inquiry',
+        'emergency', 'general_information', 'new_patient_inquiry',
+        'follow_up', 'complaint', 'other',
+      ],
+      description: 'Primary reason for the call',
+    },
+    callOutcome: {
+      type: 'string',
+      enum: [
+        'appointment_booked', 'appointment_cancelled', 'appointment_rescheduled',
+        'information_provided', 'transferred_to_staff', 'emergency_handled',
+        'insurance_verified', 'payment_plan_discussed', 'voicemail', 'unresolved', 'other',
+      ],
+      description: 'Primary outcome of the call',
+    },
+
+    // Appointment details (if applicable)
+    appointmentBooked: { type: 'boolean', description: 'Whether an appointment was successfully booked' },
+    appointmentCancelled: { type: 'boolean', description: 'Whether an appointment was cancelled' },
+    appointmentRescheduled: { type: 'boolean', description: 'Whether an appointment was rescheduled' },
+    appointmentType: { type: 'string', description: 'Type of appointment (cleaning, exam, filling, root-canal, extraction, consultation, cosmetic, emergency)' },
+    appointmentDate: { type: 'string', description: 'Appointment date in YYYY-MM-DD format' },
+    appointmentTime: { type: 'string', description: 'Appointment time in HH:MM format' },
+    providerName: { type: 'string', description: 'Name of the provider/dentist for the appointment' },
+
+    // Insurance & billing
+    insuranceVerified: { type: 'boolean', description: 'Whether insurance was verified during the call' },
+    insuranceProvider: { type: 'string', description: 'Name of the insurance company' },
+    paymentDiscussed: { type: 'boolean', description: 'Whether payment or billing was discussed' },
+    balanceInquiry: { type: 'boolean', description: 'Whether the patient asked about their balance' },
+
+    // Sentiment & quality
+    customerSentiment: {
+      type: 'string',
+      enum: ['very_positive', 'positive', 'neutral', 'negative', 'very_negative', 'anxious', 'urgent'],
+      description: 'Overall sentiment of the caller during the conversation',
+    },
+    urgencyLevel: {
+      type: 'string',
+      enum: ['routine', 'soon', 'urgent', 'emergency'],
+      description: 'Urgency level of the caller\'s need',
+    },
+
+    // Follow-up
+    followUpRequired: { type: 'boolean', description: 'Whether follow-up action is needed' },
+    followUpNotes: { type: 'string', description: 'Description of what follow-up is needed' },
+    transferredToStaff: { type: 'boolean', description: 'Whether the call was transferred to a human staff member' },
+    transferredTo: { type: 'string', description: 'Name or department the call was transferred to' },
+
+    // Summary
+    callSummary: { type: 'string', description: 'Concise 2-3 sentence summary of the call including what was accomplished and any next steps' },
+    keyTopicsDiscussed: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'List of main topics discussed during the call',
+    },
+    actionsPerformed: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'List of actions the AI performed during the call (e.g., "Searched patient by phone", "Booked appointment for cleaning")',
+    },
+  },
+  required: ['callReason', 'callOutcome', 'callSummary', 'customerSentiment'],
+};
+
 export interface SquadMemberTemplate {
   assistant: {
     name: string;
@@ -472,6 +557,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.2,
             backoffSeconds: 1,
           },
+          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'none',
         },
         assistantDestinations: [
@@ -527,6 +613,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.1,
             backoffSeconds: 0.5,
           },
+          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'emergency',
           extraTools: [
             {
@@ -592,6 +679,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.2,
             backoffSeconds: 1,
           },
+          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'clinicInfo',
         },
         assistantDestinations: [
@@ -648,38 +736,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             backoffSeconds: 1,
           },
           toolGroup: 'scheduling',
-          analysisSchema: {
-            type: 'object',
-            properties: {
-              patientName: { type: 'string', description: "Patient's full name" },
-              phoneNumber: { type: 'string', description: "Patient's phone number" },
-              email: { type: 'string', description: "Patient's email" },
-              patientId: { type: 'string', description: 'PMS patient ID if found' },
-              isNewPatient: {
-                type: 'boolean',
-                description: 'Whether a new patient record was created',
-              },
-              appointmentType: { type: 'string', description: 'Type of appointment booked' },
-              appointmentBooked: {
-                type: 'boolean',
-                description: 'Whether an appointment was successfully booked',
-              },
-              appointmentDate: { type: 'string', description: 'Date of booked appointment' },
-              appointmentTime: { type: 'string', description: 'Time of booked appointment' },
-              appointmentCancelled: {
-                type: 'boolean',
-                description: 'Whether an appointment was cancelled',
-              },
-              appointmentRescheduled: {
-                type: 'boolean',
-                description: 'Whether an appointment was rescheduled',
-              },
-              callSummary: {
-                type: 'string',
-                description: 'Brief summary of what was accomplished',
-              },
-            },
-          },
+          analysisSchema: CALL_ANALYSIS_SCHEMA,
         },
         assistantDestinations: [
           {
