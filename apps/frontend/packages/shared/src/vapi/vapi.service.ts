@@ -507,11 +507,11 @@ class VapiService {
   /**
    * Build assistant payload for Vapi API.
    *
-   * IMPORTANT: In modern Vapi API (v2+):
-   * - Function tools go at the ASSISTANT level (`payload.tools`), NOT inside `model.tools`.
+   * Vapi assistant schema:
+   * - Tools (function, transferCall, endCall) go inside `model.tools`.
    *   Each function tool can have its own `server.url` and `server.secret`.
    * - `analysisPlan` goes at the assistant level with `structuredDataPlan.schema`.
-   * - `model` only contains provider, model name, messages, temperature, maxTokens, knowledgeBase.
+   * - `serverUrl` / `serverUrlSecret` go at the assistant level (for lifecycle webhooks).
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
     // Clean voice: strip stability/similarityBoost, map elevenlabs → 11labs
@@ -534,7 +534,7 @@ class VapiService {
         })
       : [];
 
-    // Build model config — tools do NOT go here
+    // Build model config — tools go inside model.tools per Vapi API
     const systemPrompt = config.model?.systemPrompt || config.model?.messages?.[0]?.content || '';
     const modelConfig: Record<string, unknown> = {
       provider: config.model?.provider,
@@ -551,6 +551,11 @@ class VapiService {
       modelConfig.knowledgeBase = config.model.knowledgeBase;
     }
 
+    // Tools go inside model.tools (Vapi rejects assistant-level "tools" property)
+    if (allTools.length > 0) {
+      modelConfig.tools = allTools;
+    }
+
     const payload: Record<string, unknown> = {
       name: config.name,
       voice,
@@ -558,11 +563,6 @@ class VapiService {
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
       recordingEnabled: config.recordingEnabled ?? true,
     };
-
-    // Tools at the ASSISTANT level (not inside model)
-    if (allTools.length > 0) {
-      payload.tools = allTools;
-    }
 
     if (config.firstMessage !== undefined) {
       payload.firstMessage = config.firstMessage;
@@ -585,10 +585,8 @@ class VapiService {
 
     // Analysis plan: support both old `analysisSchema` and new `analysisPlan` object
     if (config.analysisPlan) {
-      // Template-utils now sends the full analysisPlan object
       payload.analysisPlan = config.analysisPlan;
     } else if (config.analysisSchema) {
-      // Legacy: wrap raw schema in the correct Vapi structure
       payload.analysisPlan = {
         structuredDataPlan: {
           enabled: true,
@@ -616,11 +614,13 @@ class VapiService {
 
     try {
       const builtPayload = this.buildAssistantPayload(config);
+      const modelTools = (builtPayload as any).model?.tools;
 
       logger.info({
         name: config.name,
-        hasToolsInPayload: !!(builtPayload as any).tools?.length,
-        toolCountInPayload: (builtPayload as any).tools?.length || 0,
+        hasToolsInModel: !!(modelTools?.length),
+        toolCountInModel: modelTools?.length || 0,
+        toolNamesInModel: modelTools?.map((t: any) => t.function?.name || t.type).slice(0, 10),
         hasAnalysisPlan: !!(builtPayload as any).analysisPlan,
         serverUrl: (builtPayload as any).serverUrl,
       }, '[Vapi] Creating assistant — sending to Vapi API');
