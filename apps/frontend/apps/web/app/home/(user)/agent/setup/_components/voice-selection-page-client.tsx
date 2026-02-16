@@ -32,8 +32,23 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     }
   }, [progress]);
 
-  // Store account info in session storage for other pages
+  // Store account info in session storage for other pages.
+  // If the account changed (e.g. different user logged in), clear stale setup data
+  // to prevent data leaking between users sharing the same browser tab.
   useEffect(() => {
+    const previousAccountId = sessionStorage.getItem('accountId');
+    if (previousAccountId && previousAccountId !== accountId) {
+      const keysToClean = [
+        'phoneNumber',
+        'phoneIntegrationMethod',
+        'phoneIntegrationSettings',
+        'selectedVoice',
+        'knowledgeBaseFiles',
+        'businessName',
+        'accountEmail',
+      ];
+      keysToClean.forEach((key) => sessionStorage.removeItem(key));
+    }
     sessionStorage.setItem('accountId', accountId);
     sessionStorage.setItem('businessName', businessName);
     sessionStorage.setItem('accountEmail', accountEmail);

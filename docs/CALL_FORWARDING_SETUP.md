@@ -18,9 +18,20 @@ AI squad handles the call (or transfers to staff based on rules)
 
 **Key benefit**: The patient's original caller ID (phone number) is preserved through the forwarding chain. Vapi receives it as `call.customer.number` in E.164 format (e.g., `+14165559876`), enabling automatic patient lookup by phone number.
 
-## Recommended Setup: No-Answer + Busy Forwarding
+## Recommended Setup: Forward All Calls + Dedicated Human Line
 
-The recommended configuration combines **no-answer** and **busy** forwarding. This provides the best experience:
+The recommended configuration is **unconditional (all calls) forwarding** combined with a **dedicated human line**:
+
+| Component | Purpose |
+|---|---|
+| **Main clinic number** | Forwards all incoming calls to the AI receptionist |
+| **Dedicated human line** | A separate number (cell, back line) where staff can be reached for emergencies and human transfer requests |
+
+This gives clinics full AI coverage — every call is professionally handled. When a caller asks to speak with a human or there's an emergency, the AI transfers them to the dedicated human line.
+
+### Alternative: No-Answer + Busy Forwarding
+
+For clinics that prefer a gradual approach, no-answer + busy forwarding lets staff answer first. AI only picks up when nobody answers or lines are busy:
 
 | Scenario | What Happens |
 |---|---|
@@ -29,13 +40,22 @@ The recommended configuration combines **no-answer** and **busy** forwarding. Th
 | During hours, staff doesn't pick up | Call forwards to AI after ~15-25 seconds |
 | After hours, nobody answers | Call forwards to AI |
 
-This means the clinic doesn't need to toggle forwarding on/off — it just works automatically.
+With this setup, the main clinic number can be used for human transfers since staff will answer the direct call before the no-answer timer kicks in.
 
 ## Carrier-Specific Instructions
 
 ### Canadian Carriers (Bell, Rogers, Telus, Fido, Koodo, Virgin)
 
-#### No-Answer Forwarding (Recommended)
+#### Unconditional Forwarding (Recommended — All calls go to AI)
+Forward all calls to the AI receptionist:
+1. Pick up the clinic phone
+2. Dial `*72` then the Twilio number (e.g., `*724161234567`)
+3. Wait for confirmation tone
+4. Hang up
+
+**To disable**: Dial `*73`
+
+#### No-Answer Forwarding (Alternative)
 Forwards calls to AI when nobody answers within ~15-25 seconds:
 1. Pick up the clinic phone
 2. Dial `*92` then the Twilio number (e.g., `*924161234567`)
@@ -44,7 +64,7 @@ Forwards calls to AI when nobody answers within ~15-25 seconds:
 
 **To disable**: Dial `*93`
 
-#### Busy Forwarding (Recommended — stack with No-Answer)
+#### Busy Forwarding (Alternative — stack with No-Answer)
 Forwards calls to AI when the clinic line is busy:
 1. Pick up the clinic phone
 2. Dial `*90` then the Twilio number (e.g., `*904161234567`)
@@ -53,18 +73,15 @@ Forwards calls to AI when the clinic line is busy:
 
 **To disable**: Dial `*91`
 
-#### Unconditional Forwarding (All calls go to AI)
-Use this if the clinic wants ALL calls handled by AI (e.g., after-hours only mode):
-1. Pick up the clinic phone
-2. Dial `*72` then the Twilio number (e.g., `*724161234567`)
-3. Wait for confirmation tone
-4. Hang up
-
-**To disable**: Dial `*73`
-
 ### US Carriers (AT&T, Verizon, T-Mobile)
 
-#### No-Answer Forwarding
+#### Unconditional Forwarding (Recommended)
+1. Dial `*21*` then the Twilio number followed by `#` (e.g., `*21*14161234567#`)
+2. Wait for confirmation
+
+**To disable**: Dial `#21#`
+
+#### No-Answer Forwarding (Alternative)
 1. Dial `*61*` then the Twilio number followed by `#` (e.g., `*61*14161234567#`)
 2. Wait for confirmation
 
@@ -75,12 +92,6 @@ Use this if the clinic wants ALL calls handled by AI (e.g., after-hours only mod
 2. Wait for confirmation
 
 **To disable**: Dial `#67#`
-
-#### Unconditional Forwarding
-1. Dial `*21*` then the Twilio number followed by `#` (e.g., `*21*14161234567#`)
-2. Wait for confirmation
-
-**To disable**: Dial `#21#`
 
 ### VoIP / PBX Systems (RingCentral, 8x8, Vonage, Grasshopper, etc.)
 
@@ -114,10 +125,13 @@ When the AI detects an urgent situation (severe pain, emergencies, complex reque
 4. `transferCall` places a direct call to the clinic's staff number
 5. Patient is connected to a human
 
-### Staff Direct Number
-For clinics using **unconditional forwarding** (where all calls go to AI), the clinic should provide a **direct staff line** (cell phone, back office line) that doesn't have forwarding enabled. This prevents a loop where the AI transfers to the clinic, which forwards back to the AI.
+### Dedicated Human Line
 
-For clinics using **no-answer/busy forwarding**, the main clinic number works fine for transfers — if staff are available, they'll answer the direct call from Twilio before the no-answer timer kicks in.
+For clinics using **all-calls forwarding** (recommended), a **dedicated human line** is required. This is a separate phone number (cell phone, back office line, secondary landline) where staff can be reached. It must **not** have forwarding to the AI enabled.
+
+When the AI needs to transfer a call to a human, it uses Vapi's `transferCall` to place a direct outbound PSTN call to this dedicated line, bypassing the forwarding chain entirely.
+
+For clinics using **no-answer/busy forwarding**, a separate human line is optional — the main clinic number works for transfers because staff will answer the direct call before the no-answer timer kicks in.
 
 ## Patient Caller ID
 

@@ -19,6 +19,7 @@ const SetupForwardedNumberSchema = z.object({
   accountId: z.string(),
   clinicNumber: z.string(),
   staffDirectNumber: z.string().optional(),
+  forwardingType: z.enum(['all', 'conditional']).optional().default('all'),
   businessName: z.string(),
 });
 
@@ -117,6 +118,7 @@ export const setupForwardedNumberAction = enhanceAction(
             businessName: data.businessName,
             clinicNumber: data.clinicNumber,
             staffDirectNumber: data.staffDirectNumber || null,
+            forwardingType: data.forwardingType || 'all',
             needsPhoneNumber: true,
             configuredAt: new Date().toISOString(),
           },

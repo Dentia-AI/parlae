@@ -243,10 +243,22 @@ if (
       // Next-Auth will automatically fetch user data from this endpoint
     },
     profile(profile) {
+      // Cognito with Google federation may provide given_name/family_name
+      // instead of (or in addition to) a single "name" field.
+      const p = profile as Record<string, unknown>;
+      const givenName = typeof p.given_name === 'string' ? p.given_name.trim() : '';
+      const familyName = typeof p.family_name === 'string' ? p.family_name.trim() : '';
+      const fullName = typeof p.name === 'string' ? p.name.trim() : '';
+
+      const resolvedName =
+        fullName ||
+        [givenName, familyName].filter(Boolean).join(' ') ||
+        profile.email;
+
       return {
-        id: profile.sub ?? (profile as Record<string, unknown>).username ?? profile.email,
+        id: profile.sub ?? p.username ?? profile.email,
         email: profile.email,
-        name: profile.name ?? profile.email,
+        name: resolvedName,
         image: profile.picture,
       };
     },
@@ -432,15 +444,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === 'cognito' && user?.email) {
         const profileRecord = profile as Record<string, unknown> | null | undefined;
         const profileSub = typeof profileRecord?.sub === 'string' ? profileRecord.sub : undefined;
-        const profileName = typeof profileRecord?.name === 'string' ? (profileRecord.name as string) : undefined;
         const candidateId = (user.id ?? account.providerAccountId ?? profileSub) as string | undefined;
+
+        // Resolve the best display name from multiple possible profile fields
+        const profileName = typeof profileRecord?.name === 'string' ? profileRecord.name.trim() : '';
+        const givenName = typeof profileRecord?.given_name === 'string' ? profileRecord.given_name.trim() : '';
+        const familyName = typeof profileRecord?.family_name === 'string' ? profileRecord.family_name.trim() : '';
+        const compositeName = [givenName, familyName].filter(Boolean).join(' ');
+        const bestName = profileName || compositeName || (typeof user.name === 'string' ? user.name : '');
+
+        // Only use the name if it doesn't look like an email address
+        const resolvedDisplayName = bestName && !bestName.includes('@') ? bestName : undefined;
 
         if (candidateId) {
           try {
             const ensured = await ensureUserProvisioned({
               userId: candidateId,
               email: user.email,
-              displayName: user.name ?? profileName,
+              displayName: resolvedDisplayName ?? user.name,
               cognitoUsername: account.providerAccountId ?? profileSub,
             });
             if (ensured?.user?.id) {

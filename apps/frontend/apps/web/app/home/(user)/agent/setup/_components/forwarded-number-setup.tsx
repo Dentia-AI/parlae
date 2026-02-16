@@ -28,6 +28,8 @@ interface ForwardedNumberSetupProps {
   onSetupStateChange?: (isComplete: boolean) => void;
 }
 
+type ForwardingType = 'all' | 'conditional';
+
 export function ForwardedNumberSetup({
   accountId,
   businessName,
@@ -38,6 +40,7 @@ export function ForwardedNumberSetup({
   const [pending, startTransition] = useTransition();
   const [clinicNumber, setClinicNumber] = useState('');
   const [staffDirectNumber, setStaffDirectNumber] = useState('');
+  const [forwardingType, setForwardingType] = useState<ForwardingType>('all');
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
   const [showCarrierGuide, setShowCarrierGuide] = useState(false);
@@ -55,6 +58,9 @@ export function ForwardedNumberSetup({
           const parsed = JSON.parse(savedSettings);
           if (parsed.staffDirectNumber) {
             setStaffDirectNumber(parsed.staffDirectNumber);
+          }
+          if (parsed.forwardingType) {
+            setForwardingType(parsed.forwardingType);
           }
         } catch {
           // ignore
@@ -77,6 +83,7 @@ export function ForwardedNumberSetup({
           accountId,
           clinicNumber,
           staffDirectNumber: staffDirectNumber || undefined,
+          forwardingType,
           businessName,
         });
 
@@ -89,6 +96,7 @@ export function ForwardedNumberSetup({
             JSON.stringify({
               clinicNumber,
               staffDirectNumber: staffDirectNumber || undefined,
+              forwardingType,
             }),
           );
           toast.success(result.message || 'Configuration saved successfully!');
@@ -146,13 +154,83 @@ export function ForwardedNumberSetup({
             </p>
           </div>
 
-          {/* Staff direct number (optional) */}
+          {/* Forwarding type selector */}
+          <div className="space-y-3">
+            <Label>Forwarding Type</Label>
+            <div className="grid gap-3">
+              {/* All Calls - Recommended */}
+              <label
+                className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+                  forwardingType === 'all'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="forwardingType"
+                  value="all"
+                  checked={forwardingType === 'all'}
+                  onChange={() => setForwardingType('all')}
+                  className="sr-only"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <PhoneForwarded className="h-4 w-4 text-primary" />
+                    <span className="font-medium">Forward All Calls</span>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Every incoming call goes to the AI receptionist. Best for
+                    clinics that want full AI coverage. You&apos;ll provide a
+                    dedicated human line for emergencies and transfer requests.
+                  </p>
+                </div>
+              </label>
+
+              {/* Conditional */}
+              <label
+                className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+                  forwardingType === 'conditional'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="forwardingType"
+                  value="conditional"
+                  checked={forwardingType === 'conditional'}
+                  onChange={() => setForwardingType('conditional')}
+                  className="sr-only"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    <span className="font-medium">
+                      No-Answer &amp; Busy Only
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Staff answers during office hours. AI only picks up when
+                    nobody answers or lines are busy. Good for gradual
+                    adoption.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Human line — required for "all calls", optional for conditional */}
           <div className="space-y-2">
             <Label htmlFor="staffDirectNumber">
-              Staff Direct Line{' '}
-              <span className="text-muted-foreground text-xs font-normal">
-                (optional)
-              </span>
+              Dedicated Human Line{' '}
+              {forwardingType === 'all' ? (
+                <span className="text-destructive">*</span>
+              ) : (
+                <span className="text-muted-foreground text-xs font-normal">
+                  (optional)
+                </span>
+              )}
             </Label>
             <Input
               id="staffDirectNumber"
@@ -163,27 +241,48 @@ export function ForwardedNumberSetup({
               disabled={isProvisioning}
             />
             <p className="text-sm text-muted-foreground">
-              A direct office number, cell phone, or back line where staff can
-              be reached. Used for <strong>emergency transfers</strong> — when
-              the AI detects an urgent situation, it will transfer the caller
-              directly to this number so a human can help.
+              {forwardingType === 'all' ? (
+                <>
+                  A direct number where a human can always be reached (office
+                  back line, cell phone, etc.). When a caller asks to speak
+                  with a human or there&apos;s an emergency, the AI will
+                  transfer the call here.{' '}
+                  <strong>
+                    This must be different from your main number
+                  </strong>{' '}
+                  since all calls on that number are forwarded to AI.
+                </>
+              ) : (
+                <>
+                  A direct office number, cell phone, or back line. Used for{' '}
+                  <strong>emergency transfers</strong> and when a caller asks to
+                  speak with a human. If not provided, transfers will go to your
+                  main clinic number.
+                </>
+              )}
             </p>
           </div>
 
-          <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-            <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
-              <strong>Why a separate staff line?</strong> If your main number
-              has unconditional forwarding to us and the AI tries to transfer an
-              emergency call back to that same number, it would loop. A separate
-              direct line avoids this. If you use no-answer/busy forwarding
-              instead, the main number works fine.
-            </AlertDescription>
-          </Alert>
+          {forwardingType === 'all' && !staffDirectNumber && clinicNumber && (
+            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+              <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
+                <strong>A dedicated human line is required</strong> when
+                forwarding all calls. Since your main number forwards
+                everything to AI, the AI needs a separate number to transfer
+                callers to a real person. This can be a cell phone, back office
+                line, or any number staff can answer.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <Button
             onClick={provisionTwilioNumber}
-            disabled={!clinicNumber || isProvisioning}
+            disabled={
+              !clinicNumber ||
+              isProvisioning ||
+              (forwardingType === 'all' && !staffDirectNumber)
+            }
             className="w-full"
           >
             {isProvisioning && (
@@ -209,13 +308,22 @@ export function ForwardedNumberSetup({
           <Card className="border-primary">
             <CardContent className="pt-6">
               <div className="space-y-3">
-                <div>
-                  <div className="text-sm text-muted-foreground">
-                    Clinic main number:
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Clinic main number:
+                    </div>
+                    <div className="text-2xl font-bold font-mono">
+                      {clinicNumber}
+                    </div>
                   </div>
-                  <div className="text-2xl font-bold font-mono">
-                    {clinicNumber}
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSetupComplete(false)}
+                  >
+                    Edit
+                  </Button>
                 </div>
                 {staffDirectNumber && (
                   <div>
@@ -254,8 +362,10 @@ export function ForwardedNumberSetup({
                   Twilio number
                 </li>
                 <li>
-                  We recommend <strong>no-answer + busy forwarding</strong> so
-                  your staff answers during hours and AI handles the rest
+                  Calls will be handled by your AI receptionist.{' '}
+                  {staffDirectNumber
+                    ? 'Emergency and human transfer requests will be routed to your dedicated human line.'
+                    : 'Human transfer requests will be routed to your main clinic number.'}
                 </li>
               </ol>
             </AlertDescription>
@@ -281,20 +391,16 @@ export function ForwardedNumberSetup({
             </CardHeader>
             {showCarrierGuide && (
               <CardContent className="pt-0 space-y-5 text-sm">
-                {/* Recommended setup */}
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                {/* Overview */}
+                <div className="rounded-lg border p-4">
                   <h4 className="font-semibold mb-2">
-                    Recommended: No-Answer + Busy Forwarding
+                    Carrier Forwarding Codes
                   </h4>
-                  <p className="text-muted-foreground mb-2">
-                    This combo gives you the best experience. Staff answers
-                    during hours. If they&apos;re busy or don&apos;t pick up,
-                    calls automatically go to the AI. After hours, nobody
-                    answers, so AI handles it.
-                  </p>
                   <p className="text-muted-foreground">
-                    Set up <strong>both</strong> types below for complete
-                    coverage.
+                    Use the codes below for your carrier to set up forwarding.
+                    Choose <strong>All Calls</strong> for full AI coverage, or{' '}
+                    <strong>No-Answer / Busy</strong> if staff should answer
+                    first.
                   </p>
                 </div>
 
@@ -305,7 +411,20 @@ export function ForwardedNumberSetup({
                   </h4>
                   <div className="space-y-3">
                     <div className="rounded-md border p-3">
-                      <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                      <div className="font-medium mb-1">
+                        All Calls (Unconditional)
+                      </div>
+                      <p className="text-muted-foreground">
+                        All calls go straight to AI
+                      </p>
+                      <div className="mt-2 font-mono text-xs bg-muted p-2 rounded">
+                        Activate: <strong>*72</strong> + Twilio number
+                        <br />
+                        Disable: <strong>*73</strong>
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="font-medium text-muted-foreground mb-1">
                         No-Answer Forwarding
                       </div>
                       <p className="text-muted-foreground">
@@ -318,7 +437,7 @@ export function ForwardedNumberSetup({
                       </div>
                     </div>
                     <div className="rounded-md border p-3">
-                      <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                      <div className="font-medium text-muted-foreground mb-1">
                         Busy Forwarding
                       </div>
                       <p className="text-muted-foreground">
@@ -328,20 +447,6 @@ export function ForwardedNumberSetup({
                         Activate: <strong>*90</strong> + Twilio number
                         <br />
                         Disable: <strong>*91</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
-                        All Calls (Unconditional)
-                      </div>
-                      <p className="text-muted-foreground">
-                        All calls go straight to AI — use when you want AI to
-                        handle everything
-                      </p>
-                      <div className="mt-2 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*72</strong> + Twilio number
-                        <br />
-                        Disable: <strong>*73</strong>
                       </div>
                     </div>
                   </div>
@@ -354,7 +459,18 @@ export function ForwardedNumberSetup({
                   </h4>
                   <div className="space-y-3">
                     <div className="rounded-md border p-3">
-                      <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                      <div className="font-medium mb-1">
+                        All Calls (Unconditional)
+                      </div>
+                      <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                        Activate: <strong>*21*</strong>Twilio number
+                        <strong>#</strong>
+                        <br />
+                        Disable: <strong>#21#</strong>
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="font-medium text-muted-foreground mb-1">
                         No-Answer Forwarding
                       </div>
                       <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
@@ -365,7 +481,7 @@ export function ForwardedNumberSetup({
                       </div>
                     </div>
                     <div className="rounded-md border p-3">
-                      <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                      <div className="font-medium text-muted-foreground mb-1">
                         Busy Forwarding
                       </div>
                       <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
@@ -373,17 +489,6 @@ export function ForwardedNumberSetup({
                         <strong>#</strong>
                         <br />
                         Disable: <strong>#67#</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
-                        All Calls (Unconditional)
-                      </div>
-                      <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*21*</strong>Twilio number
-                        <strong>#</strong>
-                        <br />
-                        Disable: <strong>#21#</strong>
                       </div>
                     </div>
                   </div>
@@ -402,7 +507,8 @@ export function ForwardedNumberSetup({
                     </li>
                     <li>Add the Twilio number as a forwarding destination</li>
                     <li>
-                      Set rules: no-answer (after X rings) and busy forwarding
+                      Set to forward all calls, or configure no-answer/busy
+                      rules
                     </li>
                     <li>Save and test with a call</li>
                   </ol>
@@ -413,9 +519,9 @@ export function ForwardedNumberSetup({
                   <h4 className="font-semibold mb-2">Traditional Landline</h4>
                   <p className="text-muted-foreground">
                     Contact your phone provider and request{' '}
-                    <strong>no-answer</strong> and{' '}
-                    <strong>busy call forwarding</strong> to the Twilio number.
-                    Most carriers support this for $3-5/month.
+                    <strong>all call forwarding</strong> (or no-answer/busy if
+                    preferred) to the Twilio number. Most carriers support this
+                    for $3-5/month.
                   </p>
                 </div>
               </CardContent>

@@ -97,22 +97,55 @@ export async function ensureUserProvisioned(params: EnsureUserParams, db: Prisma
         },
       });
     } else {
-      // Update user if there are missing fields
+      // Update user if there are missing or email-as-name fields
       const updates: Partial<{ displayName: string; cognitoUsername: string }> = {};
-      
+
+      // Update displayName if:
+      // 1. It's currently empty, OR
+      // 2. It's currently set to the email address (from a previous login that
+      //    didn't have the real name) AND we now have a real name
+      const hasRealName = displayName && !displayName.includes('@');
+      const currentIsEmail =
+        user.displayName &&
+        (user.displayName === email ||
+          user.displayName === params.displayName ||
+          user.displayName.includes('@'));
+
       if (!user.displayName && displayName) {
         updates.displayName = displayName;
+      } else if (currentIsEmail && hasRealName) {
+        updates.displayName = displayName;
       }
-      
+
       if (!user.cognitoUsername && params.cognitoUsername) {
         updates.cognitoUsername = params.cognitoUsername;
       }
-      
+
       if (Object.keys(updates).length > 0) {
         user = await tx.user.update({
           where: { id: user.id },
           data: updates,
         });
+      }
+
+      // Also update the account name if it was set to the email
+      if (updates.displayName) {
+        const personalAccount = await tx.account.findFirst({
+          where: {
+            primaryOwnerId: user.id,
+            isPersonalAccount: true,
+          },
+        });
+
+        if (
+          personalAccount &&
+          (personalAccount.name === email || personalAccount.name.includes('@'))
+        ) {
+          await tx.account.update({
+            where: { id: personalAccount.id },
+            data: { name: updates.displayName },
+          });
+        }
       }
     }
 
