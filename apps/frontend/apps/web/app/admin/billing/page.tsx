@@ -439,7 +439,11 @@ export default function AdminBillingPage() {
       {/* Clinics Table */}
       <Card>
         <CardHeader>
-          <div className="relative">
+          <CardTitle>All Clinics</CardTitle>
+          <CardDescription>
+            Click on a clinic to configure their billing and pricing
+          </CardDescription>
+          <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search clinics by name or email..."

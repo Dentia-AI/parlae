@@ -368,7 +368,7 @@ export default function AdminSquadsPage() {
           <CardContent className="space-y-3">
             {/* Account info */}
             {squad.account && (
-              <div className="bg-muted/50 rounded-md p-3 text-sm">
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
                 <span className="font-medium">Linked Account:</span>{' '}
                 {squad.account.accountName}
                 {squad.account.phoneNumber && (
@@ -400,7 +400,7 @@ export default function AdminSquadsPage() {
               {squad.members.map((member, idx) => (
                 <div
                   key={member.assistantId || idx}
-                  className="flex items-center justify-between p-2 rounded border text-sm"
+                  className="flex items-center justify-between p-3 rounded-lg border text-sm"
                 >
                   <div className="flex items-center gap-3">
                     <Bot className="h-4 w-4 text-muted-foreground" />
@@ -494,7 +494,7 @@ export default function AdminSquadsPage() {
               {standaloneTools.map((tool) => (
                 <div
                   key={tool.id}
-                  className="p-3 rounded border text-sm space-y-1"
+                  className="p-3 rounded-lg border text-sm space-y-1"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{tool.name}</span>
@@ -555,7 +555,7 @@ export default function AdminSquadsPage() {
             {orphanedAssistants.map((assistant) => (
               <div
                 key={assistant.id}
-                className="flex items-center justify-between p-2 rounded border text-sm"
+                className="flex items-center justify-between p-3 rounded-lg border text-sm"
               >
                 <div className="flex items-center gap-3">
                   <Bot className="h-4 w-4 text-muted-foreground" />

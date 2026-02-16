@@ -67,25 +67,25 @@ export default async function AgentTemplatesPage() {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid gap-6">
+      <div className="grid gap-4">
         {templates.map((template) => (
-          <Card key={template.id} className={template.isDefault ? 'border-primary' : ''}>
-            <CardHeader>
+          <Card key={template.id}>
+            <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <CardTitle>{template.displayName}</CardTitle>
-                    <Badge variant="outline" className="font-mono">
+                    <CardTitle className="text-lg">{template.displayName}</CardTitle>
+                    <Badge variant="outline" className="font-mono text-xs">
                       {template.name}
                     </Badge>
                     {template.isDefault && (
-                      <Badge variant="default">
+                      <Badge variant="default" className="text-xs">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         Default
                       </Badge>
                     )}
                     {!template.isActive && (
-                      <Badge variant="secondary">Inactive</Badge>
+                      <Badge variant="secondary" className="text-xs">Inactive</Badge>
                     )}
                   </div>
                   <CardDescription>

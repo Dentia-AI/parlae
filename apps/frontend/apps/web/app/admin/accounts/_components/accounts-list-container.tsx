@@ -6,6 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@kit/ui/input';
 import { Button } from '@kit/ui/button';
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@kit/ui/card';
+import {
   Table,
   TableBody,
   TableCell,
@@ -261,38 +268,40 @@ export function AccountsListContainer({
 
   return (
     <div className="space-y-4">
-      {/* Search Bar and Bulk Actions */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search by account name, email, or owner..."
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        {selectedAccounts.size > 0 && (
-          <Button
-            variant="default"
-            onClick={() => setShowBulkDialog(true)}
-          >
-            <Layers className="h-4 w-4 mr-2" />
-            Assign Template ({selectedAccounts.size})
-          </Button>
-        )}
-      </div>
-
-      {/* Results Summary */}
-      {data && (
-        <div className="text-sm text-muted-foreground">
-          Showing {data.accounts.length} of {data.total} accounts
-        </div>
-      )}
-
       {/* Accounts Table */}
-      <div className="rounded-lg border">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>All Clinics</CardTitle>
+              <CardDescription>
+                {data
+                  ? `Showing ${data.accounts.length} of ${data.total} accounts`
+                  : 'Loading accounts...'}
+              </CardDescription>
+            </div>
+            {selectedAccounts.size > 0 && (
+              <Button
+                variant="default"
+                onClick={() => setShowBulkDialog(true)}
+              >
+                <Layers className="h-4 w-4 mr-2" />
+                Assign Template ({selectedAccounts.size})
+              </Button>
+            )}
+          </div>
+          <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by account name, email, or owner..."
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
@@ -449,7 +458,8 @@ export function AccountsListContainer({
             )}
           </TableBody>
         </Table>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Bulk Assignment Dialog */}
       <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
