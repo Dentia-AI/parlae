@@ -37,6 +37,8 @@ const routes = [
         label: 'common:routes.setup',
         path: '/home/agent',
         Icon: <Bot className={iconClasses} />,
+        collapsible: true,
+        collapsed: true,
         children: [
           {
             label: 'common:routes.agentOverview',

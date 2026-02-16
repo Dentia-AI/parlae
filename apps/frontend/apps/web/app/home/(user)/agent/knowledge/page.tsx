@@ -5,9 +5,6 @@ import { Button } from '@kit/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@kit/ui/card';
 import { Input } from '@kit/ui/input';
 import { Alert, AlertDescription } from '@kit/ui/alert';
@@ -31,6 +28,8 @@ import {
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+import { Trans } from '@kit/ui/trans';
+import { useTranslation } from 'react-i18next';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,52 +51,16 @@ interface CategoryState {
 }
 
 // ---------------------------------------------------------------------------
-// KB Categories — matches template-utils.ts structure for UI only
+// KB Categories — icons and i18n keys
 // ---------------------------------------------------------------------------
 
 const KB_CATEGORIES = [
-  {
-    id: 'clinic-info',
-    label: 'Clinic Information',
-    description: 'Business hours, location, directions, parking, contact details',
-    icon: Building2,
-    examples: ['Hours of operation', 'Address & directions', 'Parking info', 'Phone & email'],
-  },
-  {
-    id: 'services',
-    label: 'Services & Procedures',
-    description: 'Dental services, treatments, pricing information',
-    icon: Stethoscope,
-    examples: ['Service menu & pricing', 'Treatment descriptions', 'Special offers'],
-  },
-  {
-    id: 'insurance',
-    label: 'Insurance & Coverage',
-    description: 'Accepted plans, coverage policies, billing FAQs',
-    icon: ShieldCheck,
-    examples: ['Accepted insurance list', 'Coverage policies', 'Billing procedures'],
-  },
-  {
-    id: 'providers',
-    label: 'Doctors & Providers',
-    description: 'Doctor biographies, specialties, credentials',
-    icon: Users,
-    examples: ['Doctor bios & photos', 'Specialties & certifications', 'Availability schedules'],
-  },
-  {
-    id: 'policies',
-    label: 'Office Policies',
-    description: 'Cancellation rules, new patient requirements, payment terms',
-    icon: ScrollText,
-    examples: ['Cancellation & no-show policy', 'New patient forms', 'Payment terms'],
-  },
-  {
-    id: 'faqs',
-    label: 'FAQs',
-    description: 'Common questions, preparation & aftercare instructions',
-    icon: HelpCircle,
-    examples: ['Common questions', 'Pre-visit preparation', 'Post-procedure care'],
-  },
+  { id: 'clinic-info', labelKey: 'clinicInfo', descKey: 'clinicInfoDesc', examplesKey: 'clinicInfoExamples', icon: Building2 },
+  { id: 'services', labelKey: 'services', descKey: 'servicesDesc', examplesKey: 'servicesExamples', icon: Stethoscope },
+  { id: 'insurance', labelKey: 'insurance', descKey: 'insuranceDesc', examplesKey: 'insuranceExamples', icon: ShieldCheck },
+  { id: 'providers', labelKey: 'providers', descKey: 'providersDesc', examplesKey: 'providersExamples', icon: Users },
+  { id: 'policies', labelKey: 'policies', descKey: 'policiesDesc', examplesKey: 'policiesExamples', icon: ScrollText },
+  { id: 'faqs', labelKey: 'faqs', descKey: 'faqsDesc', examplesKey: 'faqsExamples', icon: HelpCircle },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -106,6 +69,7 @@ const KB_CATEGORIES = [
 
 export default function KnowledgeBaseManagementPage() {
   const csrfToken = useCsrfToken();
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,7 +83,6 @@ export default function KnowledgeBaseManagementPage() {
     return initial;
   });
 
-  // Load existing KB configuration from the API
   const loadKnowledge = useCallback(async () => {
     setLoading(true);
     try {
@@ -155,12 +118,12 @@ export default function KnowledgeBaseManagementPage() {
         }
         return next;
       });
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to load knowledge base');
+    } catch {
+      toast.error(t('common:setup.knowledge.failedToSave'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadKnowledge();
@@ -234,7 +197,7 @@ export default function KnowledgeBaseManagementPage() {
           }));
 
           setHasChanges(true);
-          toast.success(`${file.name} uploaded`);
+          toast.success(`${file.name} ${t('common:setup.knowledge.uploaded')}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           setCategories((prev) => ({
@@ -246,11 +209,11 @@ export default function KnowledgeBaseManagementPage() {
               ),
             },
           }));
-          toast.error(`Failed to upload ${file.name}: ${errorMessage}`);
+          toast.error(`${t('common:setup.knowledge.uploadError')}: ${file.name} — ${errorMessage}`);
         }
       }
     },
-    [csrfToken],
+    [csrfToken, t],
   );
 
   const removeFile = async (catId: string, fileId: string, vapiFileId?: string) => {
@@ -260,9 +223,8 @@ export default function KnowledgeBaseManagementPage() {
           method: 'DELETE',
           headers: { 'x-csrf-token': csrfToken },
         });
-      } catch (error) {
-        console.error('Delete error:', error);
-        toast.error('Failed to delete file');
+      } catch {
+        toast.error(t('common:setup.knowledge.failedToDelete'));
         return;
       }
     }
@@ -275,7 +237,7 @@ export default function KnowledgeBaseManagementPage() {
       },
     }));
     setHasChanges(true);
-    toast.success('File removed');
+    toast.success(t('common:setup.knowledge.fileRemoved'));
   };
 
   const viewFile = async (vapiFileId: string) => {
@@ -289,7 +251,7 @@ export default function KnowledgeBaseManagementPage() {
         window.open(data.url, '_blank');
       }
     } catch {
-      toast.error('Failed to view file');
+      toast.error(t('common:setup.knowledge.failedToView'));
     }
   };
 
@@ -347,10 +309,10 @@ export default function KnowledgeBaseManagementPage() {
       setQueryToolId(result.queryToolId || null);
       setHasChanges(false);
       toast.success(
-        `Knowledge base updated — ${result.totalFiles} file(s) synced to AI agent`,
+        t('common:setup.knowledge.kbUpdated', { count: result.totalFiles }),
       );
     } catch (err: any) {
-      toast.error(err.message || 'Failed to save knowledge base');
+      toast.error(err.message || t('common:setup.knowledge.failedToSave'));
     } finally {
       setSaving(false);
     }
@@ -369,6 +331,10 @@ export default function KnowledgeBaseManagementPage() {
     0,
   );
 
+  const activeCategoryCount = Object.values(categories).filter(
+    (c) => c.files.some((f) => f.status === 'uploaded'),
+  ).length;
+
   if (loading) {
     return (
       <div className="container max-w-4xl py-8 flex items-center justify-center min-h-[400px]">
@@ -382,9 +348,11 @@ export default function KnowledgeBaseManagementPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Knowledge Base</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            <Trans i18nKey="common:setup.knowledge.manageTitle" />
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Upload documents to train your AI receptionist. Changes are synced without recreating your agent.
+            <Trans i18nKey="common:setup.knowledge.manageDescription" />
           </p>
         </div>
         <Button onClick={handleSave} disabled={saving || !hasChanges}>
@@ -393,7 +361,10 @@ export default function KnowledgeBaseManagementPage() {
           ) : (
             <Save className="h-4 w-4 mr-2" />
           )}
-          Save & Update
+          {saving
+            ? <Trans i18nKey="common:setup.knowledge.saving" />
+            : <Trans i18nKey="common:setup.knowledge.saveAndUpdate" />
+          }
         </Button>
       </div>
 
@@ -402,20 +373,21 @@ export default function KnowledgeBaseManagementPage() {
         <div className="text-sm">
           <span className="font-medium text-primary">{totalUploadedFiles}</span>{' '}
           <span className="text-muted-foreground">
-            file{totalUploadedFiles !== 1 ? 's' : ''} across{' '}
-            {Object.values(categories).filter((c) => c.files.some((f) => f.status === 'uploaded')).length}{' '}
-            categories
+            {t('common:setup.knowledge.filesAcrossCategories', {
+              count: totalUploadedFiles,
+              categories: activeCategoryCount,
+            })}
           </span>
         </div>
         {queryToolId && (
           <div className="flex items-center gap-1 text-xs text-green-600">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Query tool active
+            <Trans i18nKey="common:setup.knowledge.queryToolActive" />
           </div>
         )}
         {hasChanges && (
           <div className="ml-auto text-xs text-amber-600 font-medium">
-            Unsaved changes
+            <Trans i18nKey="common:setup.knowledge.unsavedChanges" />
           </div>
         )}
       </div>
@@ -429,7 +401,6 @@ export default function KnowledgeBaseManagementPage() {
 
           return (
             <Card key={cat.id} className="overflow-hidden">
-              {/* Category header — always visible */}
               <button
                 type="button"
                 onClick={() => toggleCategory(cat.id)}
@@ -440,14 +411,18 @@ export default function KnowledgeBaseManagementPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{cat.label}</span>
+                    <span className="text-sm font-semibold">
+                      {t(`common:setup.knowledge.categories.${cat.labelKey}`)}
+                    </span>
                     {uploadedCount > 0 && (
                       <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                        {uploadedCount} file{uploadedCount !== 1 ? 's' : ''}
+                        {uploadedCount}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {t(`common:setup.knowledge.categories.${cat.descKey}`)}
+                  </p>
                 </div>
                 {state.expanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -456,7 +431,6 @@ export default function KnowledgeBaseManagementPage() {
                 )}
               </button>
 
-              {/* Expanded content */}
               {state.expanded && (
                 <CardContent className="pt-1 border-t border-border/30 space-y-3">
                   {/* Drop zone */}
@@ -474,15 +448,17 @@ export default function KnowledgeBaseManagementPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Upload className="h-5 w-5 text-muted-foreground" />
                       <p className="text-xs text-muted-foreground">
-                        Drop files here or{' '}
+                        <Trans i18nKey="common:setup.knowledge.dropOrBrowse" />{' '}
                         <label
                           htmlFor={`kb-file-upload-${cat.id}`}
                           className="text-primary cursor-pointer underline underline-offset-2"
                         >
-                          browse
+                          <Trans i18nKey="common:setup.knowledge.browse" />
                         </label>
                       </p>
-                      <p className="text-[10px] text-muted-foreground/60">PDF, DOC, DOCX, TXT up to 10MB</p>
+                      <p className="text-[10px] text-muted-foreground/60">
+                        <Trans i18nKey="common:setup.knowledge.fileFormats" />
+                      </p>
                       <Input
                         type="file"
                         id={`kb-file-upload-${cat.id}`}
@@ -506,8 +482,8 @@ export default function KnowledgeBaseManagementPage() {
                               <p className="text-[10px] text-muted-foreground">
                                 {formatFileSize(file.size)}
                                 {file.status === 'uploading' && ` • ${file.progress}%`}
-                                {file.status === 'uploaded' && (file.size > 0 ? ' • Uploaded' : '')}
-                                {file.status === 'error' && ' • Failed'}
+                                {file.status === 'uploaded' && file.size > 0 && ` • ${t('common:setup.knowledge.uploaded')}`}
+                                {file.status === 'error' && ` • ${t('common:setup.knowledge.uploadFailed')}`}
                               </p>
                             </div>
                             {file.status === 'uploading' && (
@@ -522,7 +498,6 @@ export default function KnowledgeBaseManagementPage() {
                                 size="sm"
                                 className="h-6 w-6 p-0 flex-shrink-0"
                                 onClick={() => viewFile(file.vapiFileId!)}
-                                title="View file"
                               >
                                 <Eye className="h-3 w-3" />
                               </Button>
@@ -533,7 +508,6 @@ export default function KnowledgeBaseManagementPage() {
                               className="h-6 w-6 p-0 flex-shrink-0"
                               onClick={() => removeFile(cat.id, file.id, file.vapiFileId)}
                               disabled={file.status === 'uploading'}
-                              title="Remove file"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -553,7 +527,8 @@ export default function KnowledgeBaseManagementPage() {
 
                   {/* Example hints */}
                   <div className="text-[10px] text-muted-foreground/60">
-                    Examples: {cat.examples.join(' • ')}
+                    <Trans i18nKey="common:setup.knowledge.examples" />{' '}
+                    {t(`common:setup.knowledge.categories.${cat.examplesKey}`)}
                   </div>
                 </CardContent>
               )}
@@ -565,9 +540,8 @@ export default function KnowledgeBaseManagementPage() {
       {/* Info box */}
       <Alert>
         <AlertDescription className="text-xs">
-          <strong>How it works:</strong> Files across all categories are merged into a single knowledge base
-          for your clinic. When you click <em>Save & Update</em>, the AI agent&apos;s query tool is updated
-          immediately — no need to recreate your agent or squad.
+          <strong><Trans i18nKey="common:setup.knowledge.howItWorksLabel" /></strong>{' '}
+          <Trans i18nKey="common:setup.knowledge.howItWorks" />
         </AlertDescription>
       </Alert>
     </div>

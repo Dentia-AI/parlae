@@ -582,9 +582,9 @@ export default function KnowledgeBasePage() {
 
           {/* Info box */}
           <div className="rounded-xl bg-muted/30 p-4 text-xs text-muted-foreground">
-            <strong className="text-foreground">How it works:</strong> Files across all categories are merged into a
-            single knowledge base for your clinic. Organizing them by category helps keep things tidy — your AI
-            receptionist will search the combined knowledge base for accurate answers. You can skip categories that don&apos;t apply.
+            <strong className="text-foreground">How it works:</strong> Your AI receptionist learns from the documents you upload here.
+            Organizing by category helps keep things tidy. The more relevant information you provide, the better it can
+            answer caller questions. You can skip categories that don&apos;t apply.
           </div>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />
