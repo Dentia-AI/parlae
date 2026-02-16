@@ -1918,6 +1918,97 @@ class VapiService {
 
     return toolIdMap;
   }
+
+  /**
+   * Create or update a single Vapi query tool for a clinic's knowledge base.
+   *
+   * Each clinic gets one query tool named `kb-{accountIdPrefix}` containing
+   * all of their uploaded files. This avoids cross-clinic contamination
+   * (global names would overwrite each other).
+   *
+   * @param accountId - The clinic's account ID (used for namespacing)
+   * @param fileIds - All Vapi file IDs for this clinic (across all categories)
+   * @param version - Template version for description tagging
+   * @param clinicName - Human-readable clinic name for the tool description
+   * @returns { toolId, toolName } or null if no files / creation failed
+   */
+  async ensureClinicQueryTool(
+    accountId: string,
+    fileIds: string[],
+    version: string = 'v2.0',
+    clinicName: string = 'Clinic',
+  ): Promise<{ toolId: string; toolName: string } | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled || fileIds.length === 0) return null;
+
+    const prefix = accountId.slice(0, 8);
+    const toolName = `kb-${prefix}`;
+    const description = `[${version}] Knowledge base for ${clinicName} — clinic info, services, insurance, providers, policies, and FAQs`;
+
+    // Fetch existing tools to check if this clinic already has one
+    const existingTools = await this.listTools();
+    const existing = existingTools.find(
+      (t: any) => t.function?.name === toolName,
+    );
+
+    if (existing) {
+      // Update file IDs if they've changed
+      const existingFileIds: string[] = existing.knowledgeBases?.[0]?.fileIds || [];
+      const fileIdsChanged =
+        JSON.stringify(existingFileIds.sort()) !== JSON.stringify([...fileIds].sort());
+
+      if (fileIdsChanged) {
+        await this.updateTool(existing.id, {
+          knowledgeBases: [{
+            provider: 'google',
+            name: toolName,
+            description,
+            fileIds,
+          }],
+        });
+        logger.info(
+          { accountId: prefix, toolId: existing.id, fileCount: fileIds.length },
+          '[Vapi] Updated clinic query tool file IDs',
+        );
+      } else {
+        logger.info(
+          { accountId: prefix, toolId: existing.id },
+          '[Vapi] Clinic query tool already up to date',
+        );
+      }
+
+      return { toolId: existing.id, toolName };
+    }
+
+    // Create new query tool for this clinic
+    const queryToolPayload = {
+      type: 'query',
+      function: {
+        name: toolName,
+        description,
+      },
+      knowledgeBases: [{
+        provider: 'google',
+        name: toolName,
+        description,
+        fileIds,
+      }],
+    };
+
+    const created = await this.createStandaloneTool(queryToolPayload);
+
+    if (created) {
+      logger.info(
+        { accountId: prefix, toolId: created.id, toolName, fileCount: fileIds.length },
+        '[Vapi] Clinic query tool created',
+      );
+      return { toolId: created.id, toolName };
+    }
+
+    logger.error({ accountId: prefix, toolName }, '[Vapi] Failed to create clinic query tool');
+    return null;
+  }
 }
 
 /**

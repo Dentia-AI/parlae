@@ -1,4 +1,15 @@
-import { BarChart3, FileText, Bot, Wrench, UserCog, ToggleLeft, Sparkles } from 'lucide-react';
+import {
+  BarChart3,
+  FileText,
+  Bot,
+  Wrench,
+  UserCog,
+  ToggleLeft,
+  Sparkles,
+  BookOpen,
+  Phone,
+  Plug2,
+} from 'lucide-react';
 import { z } from 'zod';
 
 import { NavigationConfigSchema } from '@kit/ui/navigation-schema';
@@ -28,9 +39,24 @@ const routes = [
         Icon: <Bot className={iconClasses} />,
         children: [
           {
-            label: 'common:routes.aiAgents',
+            label: 'common:routes.agentOverview',
             path: '/home/agent',
             Icon: <Sparkles className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.knowledgeBase',
+            path: '/home/agent/knowledge',
+            Icon: <BookOpen className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.phoneSettings',
+            path: '/home/agent/phone-settings',
+            Icon: <Phone className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.integrations',
+            path: '/home/agent/integrations',
+            Icon: <Plug2 className={iconClasses} />,
           },
           {
             label: 'common:routes.advancedSetup',

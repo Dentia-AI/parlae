@@ -155,13 +155,39 @@ export async function GET() {
         createdAt: t.createdAt,
       }));
 
+    // Find orphaned accounts — have phoneIntegrationSettings but no matching
+    // Vapi squad. These appear when squad recreation fails after deletion.
+    const activeSquadIds = new Set(vapiSquads.map((s: any) => s.id));
+    const orphanedAccounts = accounts
+      .filter((a) => {
+        const settings = a.phoneIntegrationSettings as any;
+        if (!settings) return false;
+        const squadId = settings.vapiSquadId;
+        // Orphaned if: no squadId at all, or the squadId no longer exists in Vapi
+        return !squadId || !activeSquadIds.has(squadId);
+      })
+      .map((a) => {
+        const settings = a.phoneIntegrationSettings as any;
+        return {
+          accountId: a.id,
+          accountName: a.brandingBusinessName || a.name || a.email,
+          templateVersion: settings?.templateVersion,
+          templateName: settings?.templateName,
+          phoneNumber: settings?.phoneNumber,
+          deletedSquadId: settings?.deletedSquadId || settings?.vapiSquadId,
+          lastRedeployedAt: settings?.lastRedeployedAt,
+        };
+      });
+
     return NextResponse.json({
       squads,
       orphanedAssistants,
+      orphanedAccounts,
       standaloneTools,
       totalSquads: squads.length,
       totalAssistants: vapiAssistants.length,
       totalOrphaned: orphanedAssistants.length,
+      totalOrphanedAccounts: orphanedAccounts.length,
       totalStandaloneTools: standaloneTools.length,
     });
   } catch (error: any) {

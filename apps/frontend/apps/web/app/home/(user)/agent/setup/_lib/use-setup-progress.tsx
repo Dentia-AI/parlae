@@ -10,6 +10,7 @@ import {
   savePhoneProgressAction,
   type VoiceSetupData,
   type KnowledgeBaseFile,
+  type KnowledgeBaseCategoryData,
   type IntegrationsData,
   type PhoneIntegrationData,
 } from '../_actions/setup-progress-actions';
@@ -77,10 +78,20 @@ export function useSetupProgress(accountId: string) {
     },
   });
 
-  // Save knowledge progress mutation
+  // Save knowledge progress mutation (supports both flat and categorized)
   const saveKnowledgeMutation = useMutation({
-    mutationFn: async (files: KnowledgeBaseFile[]) => {
-      const result = await saveKnowledgeProgressAction(accountId, files);
+    mutationFn: async (args: KnowledgeBaseFile[] | { files: KnowledgeBaseFile[]; categorizedFiles?: KnowledgeBaseCategoryData }) => {
+      let files: KnowledgeBaseFile[];
+      let categorizedFiles: KnowledgeBaseCategoryData | undefined;
+
+      if (Array.isArray(args)) {
+        files = args;
+      } else {
+        files = args.files;
+        categorizedFiles = args.categorizedFiles;
+      }
+
+      const result = await saveKnowledgeProgressAction(accountId, files, categorizedFiles);
       if (!result.success) {
         throw new Error(result.error || 'Failed to save knowledge progress');
       }

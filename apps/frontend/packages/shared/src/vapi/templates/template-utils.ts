@@ -34,11 +34,80 @@ export interface TemplateVariables {
   clinicServices?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Knowledge Base Categories
+// ---------------------------------------------------------------------------
+
+/**
+ * Knowledge base categories for organizing clinic documents in the wizard UI.
+ *
+ * Categories are used to help users organize their uploads. At deployment time,
+ * all files across categories are merged into a **single Vapi query tool per
+ * clinic** (named `kb-{accountId-prefix}`). This avoids cross-clinic
+ * contamination while keeping tool count low.
+ */
+export const KB_CATEGORIES = [
+  {
+    id: 'clinic-info',
+    label: 'Clinic Information',
+    description: 'Business hours, location, directions, parking, contact details',
+  },
+  {
+    id: 'services',
+    label: 'Services & Procedures',
+    description: 'Dental services, treatments, pricing information',
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance & Coverage',
+    description: 'Accepted plans, coverage policies, billing FAQs',
+  },
+  {
+    id: 'providers',
+    label: 'Doctors & Providers',
+    description: 'Doctor biographies, specialties, credentials',
+  },
+  {
+    id: 'policies',
+    label: 'Office Policies',
+    description: 'Cancellation rules, new patient requirements, payment terms',
+  },
+  {
+    id: 'faqs',
+    label: 'FAQs',
+    description: 'Common questions, preparation & aftercare instructions',
+  },
+] as const;
+
+export type KBCategoryId = (typeof KB_CATEGORIES)[number]['id'];
+
+/**
+ * Knowledge base files organized by category.
+ * Each key is a category id, value is an array of Vapi file IDs.
+ */
+export interface KnowledgeBaseConfig {
+  [categoryId: string]: string[];
+}
+
+/**
+ * Assistants that should have access to the clinic's knowledge base query tool.
+ */
+export const KB_ASSISTANTS = [
+  'Triage Receptionist',
+  'Clinic Information',
+  'Insurance',
+  'Scheduling',
+  'Payment & Billing',
+];
+
 /** Runtime config injected during squad creation (not stored in template) */
 export interface RuntimeConfig {
   webhookUrl: string;
   webhookSecret?: string;
+  /** @deprecated Use knowledgeBaseConfig instead */
   knowledgeFileIds?: string[];
+  /** Knowledge base files organized by category for query tools */
+  knowledgeBaseConfig?: KnowledgeBaseConfig;
   /** Clinic's original phone number for emergency human transfers (E.164 format) */
   clinicPhoneNumber?: string;
   /**
@@ -57,6 +126,14 @@ export interface RuntimeConfig {
    * properly in the Vapi dashboard.
    */
   vapiCredentialId?: string;
+  /**
+   * Single Vapi query tool ID for this clinic's knowledge base.
+   * Named `kb-{accountId-prefix}` and shared across all assistants that
+   * need KB access. Set by `ensureClinicQueryTool`.
+   */
+  queryToolId?: string;
+  /** Human-readable name of the query tool (for prompt injection). */
+  queryToolName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +262,12 @@ function buildMemberPayload(
     systemPrompt = appendPmsPrompt(systemPrompt, vars);
   }
 
+  // Inject knowledge base query tool instruction for assistants with KB access
+  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
+    const toolName = runtime.queryToolName || 'clinic-kb';
+    systemPrompt += `\n\n## KNOWLEDGE BASE\nYou have access to the clinic's knowledge base through the '${toolName}' query tool. When the caller asks about clinic information, services, insurance, doctors, office policies, hours, pricing, or anything specific to this clinic, use the '${toolName}' tool to search for accurate, verified information. Always prefer knowledge base results over guessing.`;
+  }
+
   // Inject human handoff instruction into ALL assistants when a clinic number is available
   if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
     systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me transfer you to our team right now." and initiate the transfer.`;
@@ -263,12 +346,16 @@ function buildMemberPayload(
     modelConfig.toolIds = standaloneToolIds;
   }
 
-  // Add knowledge base for assistants that need it (Triage + Clinic Info)
-  if (
+  // Add clinic query tool for assistants with KB access
+  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
+    const existing = (modelConfig.toolIds as string[]) || [];
+    modelConfig.toolIds = [...existing, runtime.queryToolId];
+  } else if (
     runtime.knowledgeFileIds &&
     runtime.knowledgeFileIds.length > 0 &&
     (a.name === 'Triage Receptionist' || a.name === 'Clinic Information')
   ) {
+    // Legacy fallback: use model.knowledgeBase if no query tools configured
     modelConfig.knowledgeBase = {
       provider: 'canonical',
       topK: a.name === 'Triage Receptionist' ? 3 : 5,

@@ -80,28 +80,11 @@ export async function POST(request: NextRequest) {
       '[Admin Redeploy] Starting squad re-deployment',
     );
 
-    // STEP 1: Delete old squad if it exists
-    const oldSquadId = phoneIntegrationSettings.vapiSquadId;
-    if (deleteOldSquad && oldSquadId) {
-      try {
-        await vapiService.deleteSquad(oldSquadId);
-        logger.info(
-          { oldSquadId },
-          '[Admin Redeploy] Deleted old squad',
-        );
-      } catch (err: any) {
-        logger.warn(
-          { oldSquadId, error: err?.message },
-          '[Admin Redeploy] Failed to delete old squad (may not exist)',
-        );
-      }
-    }
-
-    // STEP 2: Collect knowledge base file IDs from existing deployment
+    // STEP 1: Collect knowledge base file IDs from existing deployment
     const knowledgeFileIds: string[] =
       phoneIntegrationSettings.knowledgeBaseFileIds || [];
 
-    // STEP 3: Resolve template variables
+    // STEP 2: Resolve template variables
     const templateVars: TemplateVariables = {
       clinicName: businessName,
       clinicHours: setupProgress.businessHours,
@@ -150,13 +133,38 @@ export async function POST(request: NextRequest) {
 
     logger.info({ toolCount: toolIdMap.size }, '[Admin Redeploy] Standalone tools resolved');
 
+    // Ensure single clinic query tool for knowledge base
+    const storedKBConfig = phoneIntegrationSettings?.knowledgeBaseConfig as Record<string, string[]> | undefined;
+    const allKBFileIds: string[] = storedKBConfig
+      ? Object.values(storedKBConfig).flat().filter(Boolean)
+      : knowledgeFileIds;
+
+    let queryToolId: string | undefined;
+    let queryToolName: string | undefined;
+    if (allKBFileIds.length > 0) {
+      const result = await vapiService.ensureClinicQueryTool(
+        account.id,
+        allKBFileIds,
+        DENTAL_CLINIC_TEMPLATE_VERSION,
+        businessName,
+      );
+      if (result) {
+        queryToolId = result.toolId;
+        queryToolName = result.toolName;
+        logger.info({ queryToolId, queryToolName, fileCount: allKBFileIds.length }, '[Admin Redeploy] Clinic query tool resolved');
+      }
+    }
+
     const runtimeConfig: RuntimeConfig = {
       webhookUrl,
       webhookSecret,
-      knowledgeFileIds,
+      knowledgeFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
+      knowledgeBaseConfig: storedKBConfig || undefined,
       clinicPhoneNumber: clinicOriginalNumber,
       toolIdMap,
       vapiCredentialId,
+      queryToolId,
+      queryToolName,
     };
 
     // STEP 4: Load template
@@ -220,7 +228,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // STEP 6: Build and create the squad
+    // STEP 6: Build and create the NEW squad FIRST (swap pattern).
+    // The old squad is only deleted AFTER the new squad is confirmed created,
+    // preventing orphaned accounts when creation fails.
     const squadPayload = buildSquadPayloadFromTemplate(
       templateConfig,
       templateVars,
@@ -232,7 +242,7 @@ export async function POST(request: NextRequest) {
 
     if (!squad) {
       return NextResponse.json(
-        { error: 'Failed to create Vapi squad' },
+        { error: 'Failed to create Vapi squad — old squad was NOT deleted' },
         { status: 500 },
       );
     }
@@ -241,6 +251,20 @@ export async function POST(request: NextRequest) {
       { squadId: squad.id, memberCount: squad.members?.length },
       '[Admin Redeploy] Created new squad',
     );
+
+    // STEP 6b: Delete old squad now that the new one is confirmed
+    const oldSquadId = phoneIntegrationSettings.vapiSquadId;
+    if (deleteOldSquad && oldSquadId && oldSquadId !== squad.id) {
+      try {
+        await vapiService.deleteSquad(oldSquadId);
+        logger.info({ oldSquadId }, '[Admin Redeploy] Deleted old squad');
+      } catch (err: any) {
+        logger.warn(
+          { oldSquadId, error: err?.message },
+          '[Admin Redeploy] Failed to delete old squad (may not exist)',
+        );
+      }
+    }
 
     // STEP 7: Update phone number to point to new squad
     const phoneNumber = phoneIntegrationSettings.phoneNumber;
@@ -334,6 +358,8 @@ export async function POST(request: NextRequest) {
         phoneIntegrationSettings: {
           ...phoneIntegrationSettings,
           vapiSquadId: squad.id,
+          queryToolId,
+          queryToolName,
           templateVersion,
           templateName,
           lastRedeployedAt: new Date().toISOString(),

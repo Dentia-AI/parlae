@@ -17,6 +17,7 @@ import {
 import type {
   TemplateVariables,
   RuntimeConfig,
+  KnowledgeBaseConfig,
 } from '@kit/shared/vapi/templates';
 
 const SetupPhoneSchema = z.object({
@@ -36,6 +37,7 @@ const DeployReceptionistSchema = z.object({
     description: z.string(),
   }),
   files: z.array(z.any()).optional(),
+  knowledgeBaseConfig: z.record(z.array(z.string())).optional(),
 });
 
 const UploadKnowledgeBaseSchema = z.object({
@@ -264,13 +266,17 @@ export const deployReceptionistAction = enhanceAction(
         }
       }
 
-      // STEP 2: Collect knowledge base file IDs
+      // STEP 2: Collect knowledge base file IDs (categorized or flat)
+      const knowledgeBaseConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};
       const knowledgeFileIds: string[] = data.files?.map((f: any) => f.id) || [];
+      const hasCategorizedKB = Object.values(knowledgeBaseConfig).some((ids) => ids && ids.length > 0);
 
       logger.info(
         {
           accountId: account.id,
-          fileCount: knowledgeFileIds.length,
+          legacyFileCount: knowledgeFileIds.length,
+          categorizedKB: hasCategorizedKB,
+          kbCategories: Object.keys(knowledgeBaseConfig).filter((k) => knowledgeBaseConfig[k]?.length > 0),
           hasTemplate: !!account.agentTemplateId,
         },
         '[Receptionist] Building squad from template'
@@ -317,13 +323,38 @@ export const deployReceptionistAction = enhanceAction(
 
       logger.info({ toolCount: toolIdMap.size, hasCredential: !!vapiCredentialId }, '[Agent Setup] Standalone tools resolved');
 
+      // Ensure single clinic query tool for knowledge base
+      // Merge all file IDs across categories into one tool per clinic
+      let queryToolId: string | undefined;
+      let queryToolName: string | undefined;
+      const allKBFileIds: string[] = hasCategorizedKB
+        ? Object.values(knowledgeBaseConfig).flat().filter(Boolean)
+        : knowledgeFileIds;
+
+      if (allKBFileIds.length > 0) {
+        const result = await vapiService.ensureClinicQueryTool(
+          account.id,
+          allKBFileIds,
+          DENTAL_CLINIC_TEMPLATE_VERSION,
+          businessName,
+        );
+        if (result) {
+          queryToolId = result.toolId;
+          queryToolName = result.toolName;
+          logger.info({ queryToolId, queryToolName, fileCount: allKBFileIds.length }, '[Agent Setup] Clinic query tool resolved');
+        }
+      }
+
       const runtimeConfig: RuntimeConfig = {
         webhookUrl,
         webhookSecret,
-        knowledgeFileIds,
+        knowledgeFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
+        knowledgeBaseConfig: hasCategorizedKB ? knowledgeBaseConfig : undefined,
         clinicPhoneNumber: clinicOriginalNumber,
         toolIdMap,
         vapiCredentialId,
+        queryToolId,
+        queryToolName,
       };
 
       // STEP 4: Build the squad from template
@@ -512,7 +543,10 @@ export const deployReceptionistAction = enhanceAction(
             vapiPhoneId: vapiPhone.id,
             voiceConfig: data.voice,
             phoneNumber: phoneNumber,
-            knowledgeBaseFileIds: knowledgeFileIds,
+            knowledgeBaseFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
+            knowledgeBaseConfig: hasCategorizedKB ? knowledgeBaseConfig : undefined,
+            queryToolId,
+            queryToolName,
             templateVersion,
             templateName,
             deployedAt: new Date().toISOString(),

@@ -74,17 +74,29 @@ interface OrphanedAssistant {
   serverUrl: string;
 }
 
+interface OrphanedAccount {
+  accountId: string;
+  accountName: string;
+  templateVersion?: string;
+  templateName?: string;
+  phoneNumber?: string;
+  deletedSquadId?: string;
+  lastRedeployedAt?: string;
+}
+
 export default function AdminSquadsPage() {
   const [loading, setLoading] = useState(true);
   const [squads, setSquads] = useState<Squad[]>([]);
   const [orphanedAssistants, setOrphanedAssistants] = useState<
     OrphanedAssistant[]
   >([]);
+  const [orphanedAccounts, setOrphanedAccounts] = useState<OrphanedAccount[]>([]);
   const [standaloneTools, setStandaloneTools] = useState<StandaloneTool[]>([]);
   const [stats, setStats] = useState({
     totalSquads: 0,
     totalAssistants: 0,
     totalOrphaned: 0,
+    totalOrphanedAccounts: 0,
     totalStandaloneTools: 0,
   });
   const [error, setError] = useState<string | null>(null);
@@ -102,11 +114,13 @@ export default function AdminSquadsPage() {
       const data = await res.json();
       setSquads(data.squads || []);
       setOrphanedAssistants(data.orphanedAssistants || []);
+      setOrphanedAccounts(data.orphanedAccounts || []);
       setStandaloneTools(data.standaloneTools || []);
       setStats({
         totalSquads: data.totalSquads || 0,
         totalAssistants: data.totalAssistants || 0,
         totalOrphaned: data.totalOrphaned || 0,
+        totalOrphanedAccounts: data.totalOrphanedAccounts || 0,
         totalStandaloneTools: data.totalStandaloneTools || 0,
       });
     } catch (err: any) {
@@ -229,7 +243,7 @@ export default function AdminSquadsPage() {
   };
 
   return (
-    <div className="container max-w-7xl py-8 space-y-6">
+    <div className="container max-w-7xl py-8 pb-20 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -476,6 +490,61 @@ export default function AdminSquadsPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* Orphaned Accounts — have settings but no active squad */}
+      {orphanedAccounts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-orange-500" />
+              Accounts Without Squads ({orphanedAccounts.length})
+            </CardTitle>
+            <CardDescription>
+              Accounts that completed setup but lost their squad (failed recreation, manual deletion, etc.)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {orphanedAccounts.map((account) => (
+              <div
+                key={account.accountId}
+                className="flex items-center justify-between p-3 rounded-lg border text-sm"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-medium block truncate">{account.accountName}</span>
+                    <span className="text-xs text-muted-foreground block">
+                      {account.accountId.slice(0, 12)}...
+                      {account.phoneNumber && (
+                        <span className="ml-2">
+                          <Phone className="h-3 w-3 inline mr-0.5" />
+                          {account.phoneNumber}
+                        </span>
+                      )}
+                      {account.templateVersion && (
+                        <span className="ml-2">Template: {account.templateVersion}</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleRedeploy(account.accountId)}
+                  disabled={redeployingId === account.accountId || !!deletingId}
+                >
+                  {redeployingId === account.accountId ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Create Squad
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Standalone Tools */}
       {standaloneTools.length > 0 && (

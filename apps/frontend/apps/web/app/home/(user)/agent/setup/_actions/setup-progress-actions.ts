@@ -23,6 +23,15 @@ export interface KnowledgeBaseFile {
   id: string;
   name: string;
   size?: number;
+  category?: string;
+}
+
+/**
+ * Knowledge base files organized by category.
+ * Each category maps to a separate Vapi query tool.
+ */
+export interface KnowledgeBaseCategoryData {
+  [categoryId: string]: KnowledgeBaseFile[];
 }
 
 export interface IntegrationsData {
@@ -147,9 +156,14 @@ export async function saveVoiceProgressAction(accountId: string, voice: VoiceSet
 }
 
 /**
- * Save knowledge base progress
+ * Save knowledge base progress.
+ * Supports both flat file list (legacy) and categorized files (new).
  */
-export async function saveKnowledgeProgressAction(accountId: string, files: KnowledgeBaseFile[]) {
+export async function saveKnowledgeProgressAction(
+  accountId: string,
+  files: KnowledgeBaseFile[],
+  categorizedFiles?: KnowledgeBaseCategoryData,
+) {
   try {
     // Verify user is authenticated
     const session = await auth();
@@ -160,10 +174,13 @@ export async function saveKnowledgeProgressAction(accountId: string, files: Know
       };
     }
 
-    // Only save if there are files
-    if (!files || files.length === 0) {
+    const hasCategorizedFiles = categorizedFiles &&
+      Object.values(categorizedFiles).some((catFiles) => catFiles && catFiles.length > 0);
+
+    // Only save if there are files in either format
+    if ((!files || files.length === 0) && !hasCategorizedFiles) {
       console.log('[Setup Actions] Skipping knowledge base save - no files provided');
-      return { success: true }; // Success but no save needed
+      return { success: true };
     }
 
     const account = await prisma.account.findUnique({
@@ -175,7 +192,10 @@ export async function saveKnowledgeProgressAction(accountId: string, files: Know
     const updatedProgress = {
       ...currentProgress,
       knowledge: {
-        data: { files },
+        data: {
+          files,
+          ...(hasCategorizedFiles ? { categorizedFiles } : {}),
+        },
         completedAt: new Date().toISOString(),
       },
     };

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/
 import { Stepper } from '@kit/ui/stepper';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Separator } from '@kit/ui/separator';
-import { Loader2, Mic, FileText, Link, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Mic, FileText, Link, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { deployReceptionistAction } from '../_lib/actions';
 import { SetupPaymentForm } from '../_components/setup-payment-form';
@@ -31,6 +31,7 @@ export default function ReviewPage() {
     businessName?: string;
     voice?: any;
     files?: any[];
+    knowledgeBaseConfig?: Record<string, string[]>;
   }>({});
   const [integrations, setIntegrations] = useState<{
     googleCalendar: boolean;
@@ -62,11 +63,14 @@ export default function ReviewPage() {
       return;
     }
 
+    const kbConfigStr = sessionStorage.getItem('knowledgeBaseConfig');
+
     setConfig({
       accountId,
       businessName,
       voice: voice ? JSON.parse(voice) : null,
       files: files ? JSON.parse(files) : [],
+      knowledgeBaseConfig: kbConfigStr ? JSON.parse(kbConfigStr) : undefined,
     });
 
     // Check integration status
@@ -142,6 +146,7 @@ export default function ReviewPage() {
         const result = await deployReceptionistAction({
           voice: config.voice,
           files: config.files || [],
+          knowledgeBaseConfig: config.knowledgeBaseConfig,
         });
 
         if (result.success) {
@@ -150,6 +155,7 @@ export default function ReviewPage() {
           // Clear session storage
           sessionStorage.removeItem('selectedVoice');
           sessionStorage.removeItem('knowledgeBaseFiles');
+          sessionStorage.removeItem('knowledgeBaseConfig');
           sessionStorage.removeItem('accountId');
           sessionStorage.removeItem('businessName');
 
@@ -313,7 +319,7 @@ export default function ReviewPage() {
                   {/* Knowledge Base */}
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <Database className="h-4 w-4 text-muted-foreground" />
                       <h3 className="font-semibold text-sm">
                         <Trans i18nKey="common:setup.review.knowledgeBase" />
                       </h3>
@@ -324,27 +330,55 @@ export default function ReviewPage() {
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-medium">
                               {config.files.length} {t('common:setup.review.filesUploaded')}
+                              {config.knowledgeBaseConfig && (
+                                <span className="text-muted-foreground ml-1">
+                                  across {Object.keys(config.knowledgeBaseConfig).filter((k) => (config.knowledgeBaseConfig![k]?.length || 0) > 0).length} categories
+                                </span>
+                              )}
                             </p>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/home/agent/setup/knowledge`)}
+                              onClick={() => router.push('/home/agent/setup/knowledge')}
                             >
                               <Trans i18nKey="common:setup.review.edit" />
                             </Button>
                           </div>
-                          <div className="space-y-0.5">
-                            {config.files.slice(0, 3).map((file: any) => (
-                              <p key={file.id} className="text-xs text-muted-foreground">
-                                • {file.name}
-                              </p>
-                            ))}
-                            {config.files.length > 3 && (
-                              <p className="text-xs text-muted-foreground">
-                                • {t('common:setup.review.andMore', { count: config.files.length - 3 })}
-                              </p>
-                            )}
-                          </div>
+                          {config.knowledgeBaseConfig ? (
+                            <div className="space-y-1">
+                              {Object.entries(config.knowledgeBaseConfig)
+                                .filter(([, ids]) => ids && ids.length > 0)
+                                .map(([catId, ids]) => {
+                                  const catLabels: Record<string, string> = {
+                                    'clinic-info': 'Clinic Info',
+                                    services: 'Services',
+                                    insurance: 'Insurance',
+                                    providers: 'Providers',
+                                    policies: 'Policies',
+                                    faqs: 'FAQs',
+                                  };
+                                  return (
+                                    <div key={catId} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />
+                                      <span>{catLabels[catId] || catId}: {ids.length} file{ids.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              {config.files.slice(0, 3).map((file: any) => (
+                                <p key={file.id} className="text-xs text-muted-foreground">
+                                  • {file.name}
+                                </p>
+                              ))}
+                              {config.files.length > 3 && (
+                                <p className="text-xs text-muted-foreground">
+                                  • {t('common:setup.review.andMore', { count: config.files.length - 3 })}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     ) : (

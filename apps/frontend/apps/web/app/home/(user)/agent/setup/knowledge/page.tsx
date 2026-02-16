@@ -1,63 +1,171 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@kit/ui/button';
-// Card components replaced with softer section styling
 import { Stepper } from '@kit/ui/stepper';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
-import { Alert, AlertDescription } from '@kit/ui/alert';
-import { Loader2, Upload, File, X, AlertCircle, Eye, Trash2 } from 'lucide-react';
+import {
+  Loader2,
+  Upload,
+  File,
+  AlertCircle,
+  Eye,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+  Stethoscope,
+  ShieldCheck,
+  Users,
+  ScrollText,
+  HelpCircle,
+} from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
-import { uploadKnowledgeBaseAction } from '../_lib/actions';
 import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
 import { useSetupProgress } from '../_lib/use-setup-progress';
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface UploadedFile {
-  id: string; // This will be the Vapi file ID
+  id: string;
   name: string;
   size: number;
   status: 'uploading' | 'uploaded' | 'error';
   progress?: number;
-  vapiFileId?: string; // Store the Vapi file ID
+  vapiFileId?: string;
 }
+
+interface CategoryState {
+  files: UploadedFile[];
+  expanded: boolean;
+  dragActive: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// KB Categories — matches KB_CATEGORIES in template-utils.ts
+// ---------------------------------------------------------------------------
+
+const KB_CATEGORIES = [
+  {
+    id: 'clinic-info',
+    label: 'Clinic Information',
+    description: 'Business hours, location, directions, parking, contact details',
+    icon: Building2,
+    examples: ['Hours of operation', 'Address & directions', 'Parking info', 'Phone & email'],
+  },
+  {
+    id: 'services',
+    label: 'Services & Procedures',
+    description: 'Dental services, treatments, pricing information',
+    icon: Stethoscope,
+    examples: ['Service menu & pricing', 'Treatment descriptions', 'Special offers'],
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance & Coverage',
+    description: 'Accepted plans, coverage policies, billing FAQs',
+    icon: ShieldCheck,
+    examples: ['Accepted insurance list', 'Coverage policies', 'Billing procedures'],
+  },
+  {
+    id: 'providers',
+    label: 'Doctors & Providers',
+    description: 'Doctor biographies, specialties, credentials',
+    icon: Users,
+    examples: ['Doctor bios & photos', 'Specialties & certifications', 'Availability schedules'],
+  },
+  {
+    id: 'policies',
+    label: 'Office Policies',
+    description: 'Cancellation rules, new patient requirements, payment terms',
+    icon: ScrollText,
+    examples: ['Cancellation & no-show policy', 'New patient forms', 'Payment terms'],
+  },
+  {
+    id: 'faqs',
+    label: 'FAQs',
+    description: 'Common questions, preparation & aftercare instructions',
+    icon: HelpCircle,
+    examples: ['Common questions', 'Pre-visit preparation', 'Post-procedure care'],
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const csrfToken = useCsrfToken();
   const { t } = useTranslation();
 
-  const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [pending, startTransition] = useTransition();
-  const [dragActive, setDragActive] = useState(false);
+  const [categories, setCategories] = useState<Record<string, CategoryState>>(() => {
+    const initial: Record<string, CategoryState> = {};
+    for (const cat of KB_CATEGORIES) {
+      initial[cat.id] = { files: [], expanded: false, dragActive: false };
+    }
+    return initial;
+  });
+
   const [isSaving, setIsSaving] = useState(false);
   const [accountId, setAccountId] = useState<string>('');
 
   const { progress, saveKnowledge, isLoading } = useSetupProgress(accountId);
 
   useEffect(() => {
-    // Get accountId from sessionStorage
     const storedAccountId = sessionStorage.getItem('accountId');
     if (storedAccountId) {
       setAccountId(storedAccountId);
     }
   }, []);
 
-  // Load saved knowledge base files from database
+  // Load saved categorized knowledge base files from database
   useEffect(() => {
-    if (progress?.knowledge?.data?.files && Array.isArray(progress.knowledge.data.files)) {
-      const savedFiles: UploadedFile[] = progress.knowledge.data.files.map((file: any) => ({
-        id: file.id,
-        name: file.name,
-        size: file.size,
+    if (!progress?.knowledge?.data) return;
+
+    const data = progress.knowledge.data as any;
+    const categorizedFiles = data.categorizedFiles as Record<string, Array<{ id: string; name: string; size?: number }>> | undefined;
+
+    if (categorizedFiles) {
+      setCategories((prev) => {
+        const next = { ...prev };
+        for (const [catId, files] of Object.entries(categorizedFiles)) {
+          if (next[catId] && Array.isArray(files)) {
+            next[catId] = {
+              ...next[catId],
+              files: files.map((f) => ({
+                id: f.id,
+                name: f.name,
+                size: f.size || 0,
+                status: 'uploaded' as const,
+                vapiFileId: f.id,
+              })),
+            };
+          }
+        }
+        return next;
+      });
+    } else if (data.files && Array.isArray(data.files)) {
+      // Legacy: flat file list — put all files in the first category
+      const legacyFiles: UploadedFile[] = data.files.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        size: f.size || 0,
         status: 'uploaded' as const,
-        vapiFileId: file.id,
+        vapiFileId: f.id,
       }));
-      setFiles(savedFiles);
+      if (legacyFiles.length > 0) {
+        setCategories((prev) => ({
+          ...prev,
+          'clinic-info': { ...prev['clinic-info']!, files: legacyFiles, expanded: true, dragActive: false },
+        }));
+      }
     }
   }, [progress]);
 
@@ -69,156 +177,159 @@ export default function KnowledgeBasePage() {
       '/home/agent/setup/phone',
       '/home/agent/setup/review',
     ];
-    router.push(routes[stepIndex]);
+    router.push(routes[stepIndex]!);
   };
 
-  const handleFileChange = async (selectedFiles: FileList | null) => {
+  const toggleCategory = (catId: string) => {
+    setCategories((prev) => ({
+      ...prev,
+      [catId]: { ...prev[catId]!, expanded: !prev[catId]!.expanded },
+    }));
+  };
+
+  const handleFileUpload = useCallback(async (catId: string, selectedFiles: FileList | null) => {
     if (!selectedFiles || selectedFiles.length === 0) return;
 
-    const newFiles: UploadedFile[] = Array.from(selectedFiles).map(file => ({
+    const newFiles: UploadedFile[] = Array.from(selectedFiles).map((file) => ({
       id: Math.random().toString(36).substring(7),
       name: file.name,
       size: file.size,
-      status: 'uploading',
+      status: 'uploading' as const,
       progress: 0,
     }));
 
-    setFiles(prev => [...prev, ...newFiles]);
+    setCategories((prev) => ({
+      ...prev,
+      [catId]: { ...prev[catId]!, files: [...prev[catId]!.files, ...newFiles] },
+    }));
 
-    // Upload files one by one to Vapi
     for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      const fileId = newFiles[i].id;
+      const file = selectedFiles[i]!;
+      const fileId = newFiles[i]!.id;
 
       try {
-        // Update progress to show uploading
-        setFiles(prev => prev.map(f => 
-          f.id === fileId ? { ...f, progress: 50, status: 'uploading' } : f
-        ));
+        setCategories((prev) => ({
+          ...prev,
+          [catId]: {
+            ...prev[catId]!,
+            files: prev[catId]!.files.map((f) =>
+              f.id === fileId ? { ...f, progress: 50, status: 'uploading' as const } : f,
+            ),
+          },
+        }));
 
-        // Upload to Vapi via API
         const formData = new FormData();
         formData.append('file', file);
 
         const response = await fetch('/api/vapi/upload-file', {
           method: 'POST',
-          headers: {
-            'x-csrf-token': csrfToken,
-          },
+          headers: { 'x-csrf-token': csrfToken },
           body: formData,
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('Upload error:', errorData);
           throw new Error(errorData.error || `Upload failed with status ${response.status}`);
         }
 
         const result = await response.json();
 
-        // Mark as uploaded with Vapi file ID
-        setFiles(prev => prev.map(f => 
-          f.id === fileId 
-            ? { ...f, status: 'uploaded', progress: 100, vapiFileId: result.fileId } 
-            : f
-        ));
+        setCategories((prev) => ({
+          ...prev,
+          [catId]: {
+            ...prev[catId]!,
+            files: prev[catId]!.files.map((f) =>
+              f.id === fileId
+                ? { ...f, status: 'uploaded' as const, progress: 100, vapiFileId: result.fileId }
+                : f,
+            ),
+          },
+        }));
 
-        toast.success(`${file.name} ${t('common:setup.knowledge.uploadSuccess')}`);
+        toast.success(`${file.name} uploaded`);
       } catch (error) {
-        console.error('Upload error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        setFiles(prev => prev.map(f => 
-          f.id === fileId ? { ...f, status: 'error' } : f
-        ));
-        toast.error(`${t('common:setup.knowledge.uploadError')} ${file.name}: ${errorMessage}`);
+        setCategories((prev) => ({
+          ...prev,
+          [catId]: {
+            ...prev[catId]!,
+            files: prev[catId]!.files.map((f) =>
+              f.id === fileId ? { ...f, status: 'error' as const } : f,
+            ),
+          },
+        }));
+        toast.error(`Failed to upload ${file.name}: ${errorMessage}`);
       }
     }
-  };
+  }, [csrfToken]);
 
-  const removeFile = async (fileId: string, vapiFileId?: string) => {
-    if (!vapiFileId) {
-      // File not yet uploaded to Vapi, just remove from UI
-      setFiles(prev => prev.filter(f => f.id !== fileId));
-      return;
-    }
-
-    try {
-      // Delete from Vapi
-      const response = await fetch(`/api/vapi/delete-file/${vapiFileId}`, {
-        method: 'DELETE',
-        headers: {
-          'x-csrf-token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete file from Vapi');
+  const removeFile = async (catId: string, fileId: string, vapiFileId?: string) => {
+    if (vapiFileId) {
+      try {
+        await fetch(`/api/vapi/delete-file/${vapiFileId}`, {
+          method: 'DELETE',
+          headers: { 'x-csrf-token': csrfToken },
+        });
+      } catch (error) {
+        console.error('Delete error:', error);
+        toast.error('Failed to delete file');
+        return;
       }
-
-      // Remove from UI
-      setFiles(prev => prev.filter(f => f.id !== fileId));
-      toast.success(t('common:setup.knowledge.fileDeleted'));
-    } catch (error) {
-      console.error('Delete error:', error);
-      toast.error(t('common:setup.knowledge.deleteError'));
     }
+
+    setCategories((prev) => ({
+      ...prev,
+      [catId]: {
+        ...prev[catId]!,
+        files: prev[catId]!.files.filter((f) => f.id !== fileId),
+      },
+    }));
+    toast.success('File removed');
   };
 
-  const viewFile = async (vapiFileId: string, fileName: string) => {
+  const viewFile = async (vapiFileId: string) => {
     try {
-      // Get file URL from Vapi
       const response = await fetch(`/api/vapi/get-file/${vapiFileId}`, {
-        headers: {
-          'x-csrf-token': csrfToken,
-        },
+        headers: { 'x-csrf-token': csrfToken },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to get file URL');
-      }
-
+      if (!response.ok) throw new Error('Failed to get file URL');
       const data = await response.json();
-      
-      // Open file in new tab
       if (data.url) {
         window.open(data.url, '_blank');
-      } else {
-        toast.error('File URL not available');
       }
-    } catch (error) {
-      console.error('View file error:', error);
+    } catch {
       toast.error('Failed to view file');
     }
   };
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (catId: string, e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    const isEntering = e.type === 'dragenter' || e.type === 'dragover';
+    setCategories((prev) => ({
+      ...prev,
+      [catId]: { ...prev[catId]!, dragActive: isEntering },
+    }));
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (catId: string, e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
-    
+    setCategories((prev) => ({
+      ...prev,
+      [catId]: { ...prev[catId]!, dragActive: false },
+    }));
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileChange(e.dataTransfer.files);
+      handleFileUpload(catId, e.dataTransfer.files);
     }
   };
 
   const handleContinue = async () => {
     const selectedVoice = sessionStorage.getItem('selectedVoice');
-    
     if (!selectedVoice) {
       toast.error(t('common:setup.knowledge.voiceNotFound'));
       return;
     }
-
     if (!accountId) {
       toast.error('Account ID not found. Please start from the beginning.');
       return;
@@ -227,28 +338,44 @@ export default function KnowledgeBasePage() {
     try {
       setIsSaving(true);
 
-      // Get only successfully uploaded files with Vapi file IDs
-      const uploadedFiles = files
-        .filter(f => f.status === 'uploaded' && f.vapiFileId)
-        .map(f => ({
-          id: f.vapiFileId!,
-          name: f.name,
-          size: f.size,
-        }));
+      // Build categorized file data
+      const categorizedFiles: Record<string, Array<{ id: string; name: string; size: number }>> = {};
+      const allFiles: Array<{ id: string; name: string; size: number }> = [];
 
-      // Save to database (saveKnowledge expects array directly, not wrapped in object)
-      await saveKnowledge(uploadedFiles);
+      for (const [catId, catState] of Object.entries(categories)) {
+        const uploaded = catState.files
+          .filter((f) => f.status === 'uploaded' && f.vapiFileId)
+          .map((f) => ({ id: f.vapiFileId!, name: f.name, size: f.size }));
 
-      // Also store in sessionStorage for backward compatibility
-      sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(uploadedFiles));
-      
-      if (uploadedFiles.length > 0) {
-        toast.success(`${uploadedFiles.length} ${t('common:setup.knowledge.filesReady')}`);
+        if (uploaded.length > 0) {
+          categorizedFiles[catId] = uploaded;
+          allFiles.push(...uploaded);
+        }
+      }
+
+      // Save to database (categorized format)
+      await saveKnowledge({
+        files: allFiles,
+        categorizedFiles,
+      });
+
+      // Build knowledgeBaseConfig for sessionStorage (category → fileIds)
+      const knowledgeBaseConfig: Record<string, string[]> = {};
+      for (const [catId, files] of Object.entries(categorizedFiles)) {
+        knowledgeBaseConfig[catId] = files.map((f) => f.id);
+      }
+
+      sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(allFiles));
+      sessionStorage.setItem('knowledgeBaseConfig', JSON.stringify(knowledgeBaseConfig));
+
+      const totalFiles = allFiles.length;
+      if (totalFiles > 0) {
+        toast.success(`${totalFiles} file(s) saved across ${Object.keys(categorizedFiles).length} categories`);
       } else {
         toast.success('Knowledge base progress saved');
       }
-      
-      router.push(`/home/agent/setup/integrations`);
+
+      router.push('/home/agent/setup/integrations');
     } catch (error) {
       console.error('Failed to save knowledge base:', error);
       toast.error('Failed to save knowledge base. Please try again.');
@@ -262,8 +389,13 @@ export default function KnowledgeBasePage() {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
+
+  const totalUploadedFiles = Object.values(categories).reduce(
+    (acc, cat) => acc + cat.files.filter((f) => f.status === 'uploaded').length,
+    0,
+  );
 
   const steps = [
     t('common:setup.steps.voice'),
@@ -275,175 +407,203 @@ export default function KnowledgeBasePage() {
 
   return (
     <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
-      {/* Header - Compact */}
+      {/* Header */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">
           <Trans i18nKey="common:setup.knowledge.title" />
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans i18nKey="common:setup.knowledge.description" />
+          Upload documents to train your AI receptionist. Organize by category for smarter, more targeted responses.
         </p>
       </div>
 
-      {/* Progress Steps - Compact */}
+      {/* Progress Steps */}
       <div className="mb-6 flex-shrink-0">
-        <Stepper
-          steps={steps}
-          currentStep={1}
-          onStepClick={handleStepClick}
-        />
+        <Stepper steps={steps} currentStep={1} onStepClick={handleStepClick} />
       </div>
 
-      {/* Scrollable Content Area with Fade */}
+      {/* Scrollable Content */}
       <div className="flex-1 relative min-h-0">
-        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
-        <div className="rounded-xl bg-card shadow-sm ring-1 ring-border/40 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="px-5 py-4 border-b border-border/30">
-            <h2 className="text-base font-semibold">
-              <Trans i18nKey="common:setup.knowledge.pageTitle" defaults="Step 2: Knowledge Base" />
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              <Trans i18nKey="common:setup.knowledge.cardDescription" defaults="Upload documents about your services, hours, policies, and FAQs" />
-            </p>
-          </div>
-          <div className="p-5 space-y-4">
-            {/* Upload Area */}
-            <div
-              className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                dragActive 
-                  ? 'border-primary bg-primary/5 shadow-sm' 
-                  : 'border-border/50 hover:border-border'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <div className="flex flex-col items-center gap-3">
-                <div className="rounded-full bg-muted p-3">
-                  <Upload className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-base font-medium mb-1">
-                    <Trans i18nKey="common:setup.knowledge.dropFilesHere" />
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    <Trans i18nKey="common:setup.knowledge.supportedFormats" />
-                  </p>
-                </div>
-                <Input
-                  type="file"
-                  id="file-upload"
-                  className="hidden"
-                  multiple
-                  accept=".pdf,.doc,.docx,.txt"
-                  onChange={(e) => handleFileChange(e.target.files)}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                >
-                  <Trans i18nKey="common:setup.knowledge.selectFiles" />
-                </Button>
-              </div>
+        <div className="absolute inset-0 overflow-y-auto space-y-3 pb-4">
+          {/* Summary banner */}
+          {totalUploadedFiles > 0 && (
+            <div className="rounded-lg bg-primary/5 ring-1 ring-primary/20 px-4 py-2.5 text-sm">
+              <span className="font-medium text-primary">{totalUploadedFiles}</span>{' '}
+              <span className="text-muted-foreground">
+                file{totalUploadedFiles !== 1 ? 's' : ''} uploaded across{' '}
+                {Object.values(categories).filter((c) => c.files.some((f) => f.status === 'uploaded')).length}{' '}
+                categories
+              </span>
             </div>
+          )}
 
-            {/* Uploaded Files List */}
-            {files.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  <Trans i18nKey="common:setup.knowledge.uploadedFiles" /> ({files.length})
-                </Label>
-                <div className="space-y-2">
-                  {files.map((file) => (
-                    <div key={file.id} className="rounded-lg bg-muted/30 ring-1 ring-border/30 p-2.5">
-                      <div className="flex items-center gap-2">
-                        <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(file.size)}
-                            {file.status === 'uploading' && ` • ${file.progress}%`}
-                            {file.status === 'uploaded' && ` • ${t('common:setup.knowledge.uploaded')}`}
-                            {file.status === 'error' && ` • ${t('common:setup.knowledge.uploadFailed')}`}
-                          </p>
-                        </div>
-                        {file.status === 'uploading' && (
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                        )}
-                        {file.status === 'error' && (
-                          <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-                        )}
-                        {file.status === 'uploaded' && file.vapiFileId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => viewFile(file.vapiFileId!, file.name)}
-                            className="flex-shrink-0"
-                            title="View file"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(file.id, file.vapiFileId)}
-                          disabled={file.status === 'uploading'}
-                          className="flex-shrink-0"
-                          title="Delete file"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {file.status === 'uploading' && file.progress !== undefined && (
-                        <div className="mt-2 w-full bg-muted rounded-full h-1">
-                          <div
-                            className="bg-primary h-1 rounded-full transition-all"
-                            style={{ width: `${file.progress}%` }}
-                          />
-                        </div>
+          {/* Category sections */}
+          {KB_CATEGORIES.map((cat) => {
+            const state = categories[cat.id]!;
+            const uploadedCount = state.files.filter((f) => f.status === 'uploaded').length;
+            const Icon = cat.icon;
+
+            return (
+              <div
+                key={cat.id}
+                className="rounded-xl bg-card shadow-sm ring-1 ring-border/40 overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-200"
+              >
+                {/* Category header — always visible */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(cat.id)}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+                >
+                  <div className="rounded-lg bg-muted p-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{cat.label}</span>
+                      {uploadedCount > 0 && (
+                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                          {uploadedCount} file{uploadedCount !== 1 ? 's' : ''}
+                        </span>
                       )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
+                  </div>
+                  {state.expanded ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </button>
 
-            <div className="rounded-xl bg-muted/30 p-4">
-              <div className="text-xs">
-                <strong><Trans i18nKey="common:setup.knowledge.tipTitle" /></strong> Upload documents like:
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li><Trans i18nKey="common:setup.knowledge.tipItems.hours" /></li>
-                  <li><Trans i18nKey="common:setup.knowledge.tipItems.services" /></li>
-                  <li><Trans i18nKey="common:setup.knowledge.tipItems.faqs" /></li>
-                  <li><Trans i18nKey="common:setup.knowledge.tipItems.policies" /></li>
-                  <li><Trans i18nKey="common:setup.knowledge.tipItems.insurance" /></li>
-                </ul>
+                {/* Expanded content */}
+                {state.expanded && (
+                  <div className="px-4 pb-4 pt-1 border-t border-border/30 space-y-3">
+                    {/* Drop zone */}
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${
+                        state.dragActive
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-border/50 hover:border-border'
+                      }`}
+                      onDragEnter={(e) => handleDrag(cat.id, e)}
+                      onDragLeave={(e) => handleDrag(cat.id, e)}
+                      onDragOver={(e) => handleDrag(cat.id, e)}
+                      onDrop={(e) => handleDrop(cat.id, e)}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          Drop files here or{' '}
+                          <label
+                            htmlFor={`file-upload-${cat.id}`}
+                            className="text-primary cursor-pointer underline underline-offset-2"
+                          >
+                            browse
+                          </label>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/60">PDF, DOC, DOCX, TXT up to 10MB</p>
+                        <Input
+                          type="file"
+                          id={`file-upload-${cat.id}`}
+                          className="hidden"
+                          multiple
+                          accept=".pdf,.doc,.docx,.txt,.csv,.md,.json,.xml,.yaml"
+                          onChange={(e) => handleFileUpload(cat.id, e.target.files)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Files in this category */}
+                    {state.files.length > 0 && (
+                      <div className="space-y-1.5">
+                        {state.files.map((file) => (
+                          <div key={file.id} className="rounded-lg bg-muted/30 ring-1 ring-border/30 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <File className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{file.name}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {formatFileSize(file.size)}
+                                  {file.status === 'uploading' && ` • ${file.progress}%`}
+                                  {file.status === 'uploaded' && ' • Uploaded'}
+                                  {file.status === 'error' && ' • Failed'}
+                                </p>
+                              </div>
+                              {file.status === 'uploading' && (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />
+                              )}
+                              {file.status === 'error' && (
+                                <AlertCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
+                              )}
+                              {file.status === 'uploaded' && file.vapiFileId && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 flex-shrink-0"
+                                  onClick={() => viewFile(file.vapiFileId!)}
+                                  title="View file"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 flex-shrink-0"
+                                onClick={() => removeFile(cat.id, file.id, file.vapiFileId)}
+                                disabled={file.status === 'uploading'}
+                                title="Remove file"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {file.status === 'uploading' && file.progress !== undefined && (
+                              <div className="mt-1.5 w-full bg-muted rounded-full h-0.5">
+                                <div
+                                  className="bg-primary h-0.5 rounded-full transition-all"
+                                  style={{ width: `${file.progress}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Example docs hint */}
+                    <div className="text-[10px] text-muted-foreground/60">
+                      Examples: {cat.examples.join(' • ')}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            );
+          })}
+
+          {/* Info box */}
+          <div className="rounded-xl bg-muted/30 p-4 text-xs text-muted-foreground">
+            <strong className="text-foreground">How it works:</strong> Files across all categories are merged into a
+            single knowledge base for your clinic. Organizing them by category helps keep things tidy — your AI
+            receptionist will search the combined knowledge base for accurate answers. You can skip categories that don&apos;t apply.
           </div>
         </div>
-        </div>
-        {/* Fade effect at bottom */}
         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />
       </div>
 
-      {/* Navigation - Fixed at bottom */}
+      {/* Navigation */}
       <div className="pt-4 border-t flex-shrink-0 bg-background">
         <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/home/agent/setup`)}
-          >
+          <Button variant="outline" onClick={() => router.push('/home/agent/setup')}>
             <Trans i18nKey="common:setup.navigation.back" />
           </Button>
-          <Button
-            onClick={handleContinue}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : <Trans i18nKey="common:setup.knowledge.continueToIntegrations" />}
+          <Button onClick={handleContinue} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+              </>
+            ) : (
+              <Trans i18nKey="common:setup.knowledge.continueToIntegrations" />
+            )}
           </Button>
         </div>
       </div>

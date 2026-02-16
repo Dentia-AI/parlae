@@ -16,10 +16,14 @@ export {
   dbShapeToTemplate,
   getAllFunctionToolDefinitions,
   prepareToolDefinitionsForCreation,
+  KB_CATEGORIES,
+  KB_ASSISTANTS,
 } from './template-utils';
 export type {
   TemplateVariables,
   RuntimeConfig,
+  KBCategoryId,
+  KnowledgeBaseConfig,
 } from './template-utils';
 
 export {
