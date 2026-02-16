@@ -172,27 +172,29 @@ export default async function AdminPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/setup-vapi">
-          <Card className="cursor-pointer hover:border-primary transition-colors h-full">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-primary/10 p-3">
-                  <Phone className="h-6 w-6 text-primary" />
+        {process.env.NODE_ENV !== 'production' && (
+          <Link href="/admin/setup-vapi">
+            <Card className="cursor-pointer hover:border-primary transition-colors h-full">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-primary/10 p-3">
+                    <Phone className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Setup Test Agent</CardTitle>
+                    <CardDescription>Create a test AI agent</CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle>Setup Test Agent</CardTitle>
-                  <CardDescription>Create a test AI agent</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Vapi + Twilio setup</span>
+                  <ArrowRight className="h-4 w-4" />
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>Vapi + Twilio setup</span>
-                <ArrowRight className="h-4 w-4" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
       </div>
 
       {/* Recent Users */}

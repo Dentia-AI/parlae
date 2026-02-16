@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const navigation = [
   {
     name: 'Dashboard',
@@ -41,11 +43,15 @@ const navigation = [
     href: '/admin/billing',
     icon: Receipt,
   },
-  {
-    name: 'Setup Test Agent',
-    href: '/admin/setup-vapi',
-    icon: Phone,
-  },
+  ...(isDev
+    ? [
+        {
+          name: 'Setup Test Agent',
+          href: '/admin/setup-vapi',
+          icon: Phone,
+        },
+      ]
+    : []),
 ];
 
 export function AdminSidebar() {
