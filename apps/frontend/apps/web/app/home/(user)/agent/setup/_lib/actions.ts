@@ -11,6 +11,8 @@ import {
   dbShapeToTemplate,
   templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import type {
   TemplateVariables,
@@ -298,11 +300,24 @@ export const deployReceptionistAction = enhanceAction(
         ? `${backendUrl}/vapi/webhook`
         : `${frontendUrl}/api/vapi/webhook`;
 
+      const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+
+      // Ensure standalone tools exist in Vapi before building squad
+      const toolDefs = prepareToolDefinitionsForCreation(
+        getAllFunctionToolDefinitions(),
+        webhookUrl,
+        webhookSecret,
+      );
+      const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+
+      logger.info({ toolCount: toolIdMap.size }, '[Agent Setup] Standalone tools resolved');
+
       const runtimeConfig: RuntimeConfig = {
         webhookUrl,
-        webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
+        webhookSecret,
         knowledgeFileIds,
         clinicPhoneNumber: clinicOriginalNumber,
+        toolIdMap,
       };
 
       // STEP 4: Build the squad from template

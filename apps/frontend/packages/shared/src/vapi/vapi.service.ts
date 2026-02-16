@@ -29,8 +29,10 @@ export interface VapiAssistantConfig {
   };
   firstMessage?: string;
   firstMessageMode?: 'assistant-speaks-first' | 'assistant-waits-for-user' | 'assistant-speaks-first-with-model-generated-message';
-  /** Function tools, transferCall tools, etc. — placed at the assistant top level in Vapi API */
+  /** Inline tools (transferCall, endCall) — placed in model.tools */
   tools?: any[];
+  /** Standalone Vapi tool IDs — placed in model.toolIds */
+  toolIds?: string[];
   endCallFunctionEnabled?: boolean;
   recordingEnabled?: boolean;
   serverUrl?: string;
@@ -420,15 +422,18 @@ class VapiService {
 
         if (!assistantId && member.assistant) {
           const assistantConfig = member.assistant;
-          const toolCount = assistantConfig.tools?.length || 0;
+          const inlineToolCount = assistantConfig.tools?.length || 0;
+          const standaloneToolCount = assistantConfig.toolIds?.length || 0;
           const hasAnalysis = !!(assistantConfig.analysisPlan || assistantConfig.analysisSchema);
 
           logger.info({
             assistantName: assistantConfig.name,
-            toolCount,
+            standaloneToolCount,
+            inlineToolCount,
             hasAnalysis,
             serverUrl: assistantConfig.serverUrl,
-            toolNames: assistantConfig.tools?.map((t: any) => t.function?.name || t.type).slice(0, 5),
+            toolIds: assistantConfig.toolIds?.slice(0, 5),
+            inlineToolNames: assistantConfig.tools?.map((t: any) => t.function?.name || t.type).slice(0, 5),
           }, '[Vapi] Creating assistant for squad member');
 
           // Create the assistant via the standalone endpoint (supports full config)
@@ -446,7 +451,8 @@ class VapiService {
           logger.info({
             assistantId,
             assistantName: assistantConfig.name,
-            toolCount,
+            standaloneToolCount,
+            inlineToolCount,
           }, '[Vapi] Assistant created for squad');
         }
 
@@ -508,9 +514,9 @@ class VapiService {
    * Build assistant payload for Vapi API.
    *
    * Vapi assistant schema:
-   * - Tools (function, transferCall, endCall) go inside `model.tools`.
-   *   Each function tool can have its own `server.url` and `server.secret`.
-   * - `analysisPlan` goes at the assistant level with `structuredDataPlan.schema`.
+   * - Standalone tools are referenced via `model.toolIds` (array of Vapi tool IDs).
+   * - Inline tools (transferCall, endCall) go in `model.tools`.
+   * - `analysisPlan` goes at the assistant level.
    * - `serverUrl` / `serverUrlSecret` go at the assistant level (for lifecycle webhooks).
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
@@ -520,21 +526,34 @@ class VapiService {
       voiceId: config.voice?.voiceId,
     };
 
-    // Filter out transferCall tools with invalid E.164 phone numbers
-    const allTools: unknown[] = config.tools && config.tools.length > 0
-      ? config.tools.filter((tool: any) => {
-          if (tool.type === 'transferCall' && tool.destinations) {
-            const validDests = tool.destinations.filter((d: any) =>
+    // Separate tools into standalone (referenced by ID) and inline (transferCall, endCall)
+    const toolIds: string[] = config.toolIds || [];
+    const inlineTools: unknown[] = [];
+
+    if (config.tools && config.tools.length > 0) {
+      for (const tool of config.tools) {
+        const t = tool as any;
+
+        // transferCall and endCall tools are inline (per-assistant, not reusable)
+        if (t.type === 'transferCall') {
+          if (t.destinations) {
+            const validDests = t.destinations.filter((d: any) =>
               d.type !== 'number' || /^\+\d{10,15}$/.test(d.number),
             );
-            if (validDests.length === 0) return false;
-            tool.destinations = validDests;
+            if (validDests.length > 0) {
+              inlineTools.push({ ...t, destinations: validDests });
+            }
+          } else {
+            inlineTools.push(t);
           }
-          return true;
-        })
-      : [];
+        } else if (t.type === 'endCall') {
+          inlineTools.push(t);
+        }
+        // Function tools should be standalone (referenced via toolIds) — skip inline
+      }
+    }
 
-    // Build model config — tools go inside model.tools per Vapi API
+    // Build model config
     const systemPrompt = config.model?.systemPrompt || config.model?.messages?.[0]?.content || '';
     const modelConfig: Record<string, unknown> = {
       provider: config.model?.provider,
@@ -551,9 +570,14 @@ class VapiService {
       modelConfig.knowledgeBase = config.model.knowledgeBase;
     }
 
-    // Tools go inside model.tools (Vapi rejects assistant-level "tools" property)
-    if (allTools.length > 0) {
-      modelConfig.tools = allTools;
+    // Standalone tools referenced by ID
+    if (toolIds.length > 0) {
+      modelConfig.toolIds = toolIds;
+    }
+
+    // Inline tools (transferCall, endCall) in model.tools
+    if (inlineTools.length > 0) {
+      modelConfig.tools = inlineTools;
     }
 
     const payload: Record<string, unknown> = {
@@ -583,7 +607,7 @@ class VapiService {
       payload.stopSpeakingPlan = config.stopSpeakingPlan;
     }
 
-    // Analysis plan: support both old `analysisSchema` and new `analysisPlan` object
+    // Analysis plan
     if (config.analysisPlan) {
       payload.analysisPlan = config.analysisPlan;
     } else if (config.analysisSchema) {
@@ -614,13 +638,14 @@ class VapiService {
 
     try {
       const builtPayload = this.buildAssistantPayload(config);
-      const modelTools = (builtPayload as any).model?.tools;
+      const modelToolIds = (builtPayload as any).model?.toolIds || [];
+      const modelInlineTools = (builtPayload as any).model?.tools || [];
 
       logger.info({
         name: config.name,
-        hasToolsInModel: !!(modelTools?.length),
-        toolCountInModel: modelTools?.length || 0,
-        toolNamesInModel: modelTools?.map((t: any) => t.function?.name || t.type).slice(0, 10),
+        standaloneToolIds: modelToolIds.length,
+        inlineToolCount: modelInlineTools.length,
+        inlineToolTypes: modelInlineTools.map((t: any) => t.type),
         hasAnalysisPlan: !!(builtPayload as any).analysisPlan,
         serverUrl: (builtPayload as any).serverUrl,
       }, '[Vapi] Creating assistant — sending to Vapi API');
@@ -1446,6 +1471,225 @@ class VapiService {
 
       return [];
     }
+  }
+
+  // ==========================================================================
+  // Standalone Tool Management
+  //
+  // Tools created via POST /tool show up in the Vapi dashboard's Tools UI
+  // and can be shared across assistants via model.toolIds.
+  // ==========================================================================
+
+  /**
+   * Create a standalone tool in Vapi.
+   *
+   * Returns the created tool object with `id`.
+   */
+  async createStandaloneTool(toolConfig: Record<string, unknown>): Promise<any | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    try {
+      const toolName = (toolConfig as any).function?.name || 'unknown';
+
+      logger.info({
+        toolName,
+        type: toolConfig.type,
+        hasServer: !!(toolConfig as any).server?.url,
+      }, '[Vapi] Creating standalone tool');
+
+      const response = await fetch(`${this.baseUrl}/tool`, {
+        method: 'POST',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(toolConfig),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+          toolName,
+        }, '[Vapi] Failed to create standalone tool');
+        return null;
+      }
+
+      const tool = await response.json();
+      logger.info({
+        toolId: tool.id,
+        toolName,
+      }, '[Vapi] Standalone tool created');
+
+      return tool;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while creating standalone tool');
+      return null;
+    }
+  }
+
+  /**
+   * List all standalone tools in the Vapi account.
+   */
+  async listTools(): Promise<any[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/tool?limit=200`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to list tools');
+        return [];
+      }
+
+      return await response.json();
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while listing tools');
+      return [];
+    }
+  }
+
+  /**
+   * Delete a standalone tool by ID.
+   */
+  async deleteTool(toolId: string): Promise<boolean> {
+    const logger = await getLogger();
+
+    if (!this.enabled) return false;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/tool/${toolId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        logger.error({ status: response.status, toolId }, '[Vapi] Failed to delete tool');
+        return false;
+      }
+
+      logger.info({ toolId }, '[Vapi] Deleted standalone tool');
+      return true;
+    } catch (error) {
+      logger.error({ error, toolId }, '[Vapi] Exception deleting tool');
+      return false;
+    }
+  }
+
+  /**
+   * Ensure all PMS tools exist as standalone Vapi tool resources.
+   *
+   * Checks existing tools by function name. Creates any that are missing.
+   * Returns a map of function name → Vapi tool ID.
+   *
+   * @param toolDefinitions - Array of tool objects (from vapi-pms-tools.config.ts)
+   * @param version - Version string for naming (e.g., "v1.0")
+   */
+  async ensureStandaloneTools(
+    toolDefinitions: any[],
+    version: string = 'v1.0',
+  ): Promise<Map<string, string>> {
+    const logger = await getLogger();
+    const toolIdMap = new Map<string, string>();
+
+    if (!this.enabled) return toolIdMap;
+
+    // Fetch existing tools to avoid duplicates
+    const existingTools = await this.listTools();
+    const existingByName = new Map<string, any>();
+
+    for (const tool of existingTools) {
+      const funcName = tool.function?.name;
+      if (funcName) {
+        existingByName.set(funcName, tool);
+      }
+    }
+
+    logger.info({
+      existingCount: existingTools.length,
+      requestedCount: toolDefinitions.length,
+    }, '[Vapi] Ensuring standalone tools exist');
+
+    for (const toolDef of toolDefinitions) {
+      const funcName = toolDef.function?.name;
+      if (!funcName) continue;
+
+      // Check if tool already exists with matching function name
+      const existing = existingByName.get(funcName);
+      if (existing) {
+        toolIdMap.set(funcName, existing.id);
+        logger.info({
+          funcName,
+          toolId: existing.id,
+        }, '[Vapi] Tool already exists, reusing');
+        continue;
+      }
+
+      // Create the standalone tool — strip any inline-only fields
+      const standalonePayload: Record<string, unknown> = {
+        type: toolDef.type || 'function',
+        function: {
+          name: funcName,
+          description: `[${version}] ${toolDef.function.description}`,
+          parameters: toolDef.function.parameters,
+        },
+      };
+
+      // Add server config if present
+      if (toolDef.server) {
+        standalonePayload.server = toolDef.server;
+      }
+
+      // Add messages if present
+      if (toolDef.messages && toolDef.messages.length > 0) {
+        standalonePayload.messages = toolDef.messages;
+      }
+
+      // Add async flag
+      if (toolDef.async !== undefined) {
+        standalonePayload.async = toolDef.async;
+      }
+
+      const created = await this.createStandaloneTool(standalonePayload);
+      if (created) {
+        toolIdMap.set(funcName, created.id);
+      } else {
+        logger.error({ funcName }, '[Vapi] Failed to create standalone tool');
+      }
+    }
+
+    logger.info({
+      totalMapped: toolIdMap.size,
+      tools: Object.fromEntries(toolIdMap),
+    }, '[Vapi] Standalone tools resolved');
+
+    return toolIdMap;
   }
 }
 

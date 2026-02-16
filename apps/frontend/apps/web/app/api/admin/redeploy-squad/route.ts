@@ -9,6 +9,8 @@ import {
   dbShapeToTemplate,
   templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import type {
   TemplateVariables,
@@ -129,11 +131,24 @@ export async function POST(request: NextRequest) {
       ? `${backendUrl}/vapi/webhook`
       : `${frontendUrl}/api/vapi/webhook`;
 
+    const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+
+    // Ensure standalone tools exist in Vapi (creates if missing, reuses if found)
+    const toolDefs = prepareToolDefinitionsForCreation(
+      getAllFunctionToolDefinitions(),
+      webhookUrl,
+      webhookSecret,
+    );
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+
+    logger.info({ toolCount: toolIdMap.size }, '[Admin Redeploy] Standalone tools resolved');
+
     const runtimeConfig: RuntimeConfig = {
       webhookUrl,
-      webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
+      webhookSecret,
       knowledgeFileIds,
       clinicPhoneNumber: clinicOriginalNumber,
+      toolIdMap,
     };
 
     // STEP 4: Load template

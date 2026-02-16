@@ -14,6 +14,8 @@ export {
   buildSquadPayloadFromTemplate,
   templateToDbShape,
   dbShapeToTemplate,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from './template-utils';
 export type {
   TemplateVariables,

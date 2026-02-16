@@ -9,6 +9,7 @@ import {
   SCHEDULING_TOOLS,
   EMERGENCY_TOOLS,
   CLINIC_INFO_TOOLS,
+  PMS_TOOLS,
   PMS_SYSTEM_PROMPT_ADDITION,
 } from '../vapi-pms-tools.config';
 
@@ -37,6 +38,14 @@ export interface RuntimeConfig {
   knowledgeFileIds?: string[];
   /** Clinic's original phone number for emergency human transfers (E.164 format) */
   clinicPhoneNumber?: string;
+  /**
+   * Map of function name → Vapi standalone tool ID.
+   *
+   * When provided, function tools are referenced by `model.toolIds` instead
+   * of being embedded inline. This makes them visible in the Vapi Tools UI
+   * and reusable across assistants.
+   */
+  toolIdMap?: Map<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,36 +176,51 @@ function buildMemberPayload(
     systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me transfer you to our team right now." and initiate the transfer.`;
   }
 
-  // Resolve tools and inject the correct webhook URL/secret from runtime config.
-  // This ensures tool server URLs are always correct regardless of when the
-  // tool definitions module was loaded.
+  // Resolve tool definitions from template's toolGroup and extraTools
   const rawTools: unknown[] = [
     ...resolveToolGroup(a.toolGroup),
     ...(a.extraTools ?? []),
   ];
 
-  const tools: unknown[] = rawTools.map((tool: any) => {
-    // Deep-clone to avoid mutating the shared module-level tool definitions
-    const cloned = JSON.parse(JSON.stringify(tool));
+  // Separate function tools (standalone via toolIds) from other inline tools
+  const standaloneToolIds: string[] = [];
+  const inlineTools: unknown[] = [];
 
-    // Inject runtime webhook URL/secret into function tools
-    if (cloned.type === 'function' && runtime.webhookUrl) {
-      cloned.server = {
-        ...cloned.server,
-        url: runtime.webhookUrl,
-        ...(runtime.webhookSecret ? { secret: runtime.webhookSecret } : {}),
-      };
+  if (runtime.toolIdMap && runtime.toolIdMap.size > 0) {
+    // Standalone mode: resolve function tools to Vapi tool IDs
+    for (const tool of rawTools) {
+      const t = tool as any;
+      if (t.type === 'function' && t.function?.name) {
+        const toolId = runtime.toolIdMap.get(t.function.name);
+        if (toolId) {
+          standaloneToolIds.push(toolId);
+        }
+      } else {
+        // Non-function tools (transferCall, endCall) stay inline
+        inlineTools.push(t);
+      }
     }
-
-    return cloned;
-  });
+  } else {
+    // Fallback: embed all tools inline (legacy mode)
+    for (const tool of rawTools) {
+      const cloned = JSON.parse(JSON.stringify(tool));
+      if (cloned.type === 'function' && runtime.webhookUrl) {
+        cloned.server = {
+          ...cloned.server,
+          url: runtime.webhookUrl,
+          ...(runtime.webhookSecret ? { secret: runtime.webhookSecret } : {}),
+        };
+      }
+      inlineTools.push(cloned);
+    }
+  }
 
   // Inject transferCall tool for human handoff when clinic phone is available.
   // ALL assistants get this so the caller can say "let me speak with a human" at any time.
   if (runtime.clinicPhoneNumber) {
     const e164Number = toE164(runtime.clinicPhoneNumber);
     if (e164Number) {
-      tools.push({
+      inlineTools.push({
         type: 'transferCall',
         destinations: [
           {
@@ -219,6 +243,11 @@ function buildMemberPayload(
     temperature: a.model.temperature,
     maxTokens: a.model.maxTokens,
   };
+
+  // Standalone tools referenced by ID (visible in Vapi Tools UI)
+  if (standaloneToolIds.length > 0) {
+    modelConfig.toolIds = standaloneToolIds;
+  }
 
   // Add knowledge base for assistants that need it (Triage + Clinic Info)
   if (
@@ -247,9 +276,14 @@ function buildMemberPayload(
     stopSpeakingPlan: { ...a.stopSpeakingPlan },
   };
 
-  // Add tools if any
-  if (tools.length > 0) {
-    assistantPayload.tools = tools;
+  // Standalone toolIds go in the assistant config for createAssistant to pick up
+  if (standaloneToolIds.length > 0) {
+    assistantPayload.toolIds = standaloneToolIds;
+  }
+
+  // Inline tools (transferCall, endCall, or legacy function tools)
+  if (inlineTools.length > 0) {
+    assistantPayload.tools = inlineTools;
   }
 
   // Add analysis plan if a schema is present.
@@ -442,4 +476,43 @@ export function dbShapeToTemplate(
     category: dbRecord.category,
     members,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Standalone tool helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns deduplicated array of all PMS function tool definitions.
+ *
+ * Pass this to `VapiService.ensureStandaloneTools()` before building the
+ * squad payload to create/find tools in Vapi and get back the toolIdMap.
+ */
+export function getAllFunctionToolDefinitions(): any[] {
+  return PMS_TOOLS;
+}
+
+/**
+ * Inject runtime server config (webhookUrl, webhookSecret) into tool
+ * definitions before creating standalone tools.
+ *
+ * This ensures the standalone tools are created with the correct backend
+ * endpoint — they persist in Vapi and don't get rebuilt every deploy.
+ */
+export function prepareToolDefinitionsForCreation(
+  toolDefs: any[],
+  webhookUrl: string,
+  webhookSecret?: string,
+): any[] {
+  return toolDefs.map((tool) => {
+    const cloned = JSON.parse(JSON.stringify(tool));
+    if (cloned.type === 'function') {
+      cloned.server = {
+        ...cloned.server,
+        url: webhookUrl,
+        ...(webhookSecret ? { secret: webhookSecret } : {}),
+      };
+    }
+    return cloned;
+  });
 }

@@ -8,6 +8,8 @@ import {
   buildSquadPayloadFromTemplate,
   getDentalClinicTemplate,
   compareTemplateVersions,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import type { TemplateVariables, RuntimeConfig, MigrationReport } from '@kit/shared/vapi/templates';
 
@@ -211,6 +213,21 @@ export async function POST(request: NextRequest) {
     const vapiService = createVapiService();
     const templateConfig = dbShapeToTemplate(template as any);
 
+    // Ensure standalone tools exist once (shared across all accounts)
+    const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const bulkWebhookUrl = backendUrl
+      ? `${backendUrl}/vapi/webhook`
+      : `${frontendUrl}/api/vapi/webhook`;
+    const bulkWebhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+
+    const toolDefs = prepareToolDefinitionsForCreation(
+      getAllFunctionToolDefinitions(),
+      bulkWebhookUrl,
+      bulkWebhookSecret,
+    );
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+
     for (const entry of plan) {
       if (entry.status !== 'pending') continue;
 
@@ -246,9 +263,10 @@ export async function POST(request: NextRequest) {
           : `${frontendUrl}/api/vapi/webhook`;
         const runtimeConfig: RuntimeConfig = {
           webhookUrl,
-          webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
+          webhookSecret: bulkWebhookSecret,
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
           clinicPhoneNumber,
+          toolIdMap,
         };
 
         // Build the new squad payload

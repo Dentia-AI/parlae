@@ -8,6 +8,8 @@ import {
   buildSquadPayloadFromTemplate,
   dbShapeToTemplate,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import type {
   TemplateVariables,
@@ -150,10 +152,29 @@ export async function POST(request: Request) {
       ? `${backendUrl}/vapi/webhook`
       : `${frontendUrl}/api/vapi/webhook`;
 
+    const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+
+    // STEP 3b: Ensure standalone tools exist in Vapi
+    // Tools are created once and reused across all squads/assistants.
+    const toolDefs = prepareToolDefinitionsForCreation(
+      getAllFunctionToolDefinitions(),
+      webhookUrl,
+      webhookSecret,
+    );
+    const toolIdMap = await vapiService.ensureStandaloneTools(
+      toolDefs,
+      'v1.0',
+    );
+
+    logger.info({
+      toolCount: toolIdMap.size,
+    }, '[Squad Setup] Standalone tools resolved');
+
     const runtimeConfig: RuntimeConfig = {
       webhookUrl,
-      webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
+      webhookSecret,
       knowledgeFileIds,
+      toolIdMap,
     };
 
     // STEP 4: Create squad based on type

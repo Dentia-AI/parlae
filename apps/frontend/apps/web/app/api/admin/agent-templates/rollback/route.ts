@@ -8,6 +8,8 @@ import {
   getDentalClinicTemplate,
   buildSquadPayloadFromTemplate,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  getAllFunctionToolDefinitions,
+  prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import type { TemplateVariables, RuntimeConfig } from '@kit/shared/vapi/templates';
 
@@ -59,6 +61,20 @@ export async function POST(request: NextRequest) {
     };
 
     const results: RollbackResult[] = [];
+
+    // Ensure standalone tools exist once before the loop
+    const rbBackendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const rbFrontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const rbWebhookUrl = rbBackendUrl
+      ? `${rbBackendUrl}/vapi/webhook`
+      : `${rbFrontendUrl}/api/vapi/webhook`;
+    const rbWebhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+    const toolDefs = prepareToolDefinitionsForCreation(
+      getAllFunctionToolDefinitions(),
+      rbWebhookUrl,
+      rbWebhookSecret,
+    );
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
 
     for (const accountId of accountIds) {
       try {
@@ -187,8 +203,9 @@ export async function POST(request: NextRequest) {
           : `${frontendUrl}/api/vapi/webhook`;
         const runtimeConfig: RuntimeConfig = {
           webhookUrl,
-          webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
+          webhookSecret: rbWebhookSecret,
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
+          toolIdMap,
         };
 
         // Build squad payload

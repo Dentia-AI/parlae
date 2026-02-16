@@ -33,8 +33,20 @@ interface SquadMember {
   assistantName: string;
   hasTools: boolean;
   toolCount: number;
+  standaloneToolCount?: number;
+  inlineToolCount?: number;
+  toolNames?: string[];
+  standaloneToolIds?: string[];
   serverUrl: string;
   hasAnalysisPlan: boolean;
+}
+
+interface StandaloneTool {
+  id: string;
+  name: string;
+  description: string;
+  serverUrl: string;
+  createdAt: string;
 }
 
 interface Squad {
@@ -68,10 +80,12 @@ export default function AdminSquadsPage() {
   const [orphanedAssistants, setOrphanedAssistants] = useState<
     OrphanedAssistant[]
   >([]);
+  const [standaloneTools, setStandaloneTools] = useState<StandaloneTool[]>([]);
   const [stats, setStats] = useState({
     totalSquads: 0,
     totalAssistants: 0,
     totalOrphaned: 0,
+    totalStandaloneTools: 0,
   });
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -88,10 +102,12 @@ export default function AdminSquadsPage() {
       const data = await res.json();
       setSquads(data.squads || []);
       setOrphanedAssistants(data.orphanedAssistants || []);
+      setStandaloneTools(data.standaloneTools || []);
       setStats({
         totalSquads: data.totalSquads || 0,
         totalAssistants: data.totalAssistants || 0,
         totalOrphaned: data.totalOrphaned || 0,
+        totalStandaloneTools: data.totalStandaloneTools || 0,
       });
     } catch (err: any) {
       setError(err.message);
@@ -230,7 +246,7 @@ export default function AdminSquadsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <Users className="h-8 w-8 text-blue-500" />
@@ -247,6 +263,17 @@ export default function AdminSquadsPage() {
               <p className="text-2xl font-bold">{stats.totalAssistants}</p>
               <p className="text-xs text-muted-foreground">
                 Total Assistants
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <Wrench className="h-8 w-8 text-indigo-500" />
+            <div>
+              <p className="text-2xl font-bold">{stats.totalStandaloneTools}</p>
+              <p className="text-xs text-muted-foreground">
+                Standalone Tools
               </p>
             </div>
           </CardContent>
@@ -397,9 +424,15 @@ export default function AdminSquadsPage() {
                       <Badge
                         variant="default"
                         className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                        title={member.toolNames?.join(', ') || ''}
                       >
                         <Wrench className="h-3 w-3 mr-1" />
                         {member.toolCount} tools
+                        {(member.standaloneToolCount ?? 0) > 0 && (
+                          <span className="ml-1 opacity-75">
+                            ({member.standaloneToolCount} standalone)
+                          </span>
+                        )}
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs">
@@ -454,6 +487,68 @@ export default function AdminSquadsPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* Standalone Tools */}
+      {standaloneTools.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-indigo-500" />
+              Standalone Tools ({standaloneTools.length})
+            </CardTitle>
+            <CardDescription>
+              Reusable function tools visible in the Vapi Tools UI
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {standaloneTools.map((tool) => (
+                <div
+                  key={tool.id}
+                  className="p-3 rounded border text-sm space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{tool.name}</span>
+                    <a
+                      href={`https://dashboard.vapi.ai/tools`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    {tool.description}
+                  </p>
+                  {tool.serverUrl && (
+                    <div className="flex items-center gap-1 text-xs">
+                      <Globe className="h-3 w-3" />
+                      <span
+                        className={
+                          isCorrectUrl(tool.serverUrl)
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }
+                      >
+                        {isCorrectUrl(tool.serverUrl) ? (
+                          <CheckCircle className="h-3 w-3 inline mr-1" />
+                        ) : (
+                          <AlertCircle className="h-3 w-3 inline mr-1" />
+                        )}
+                        {new URL(tool.serverUrl).hostname}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    ID: {tool.id.slice(0, 12)}...
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Orphaned Assistants */}
       {orphanedAssistants.length > 0 && (

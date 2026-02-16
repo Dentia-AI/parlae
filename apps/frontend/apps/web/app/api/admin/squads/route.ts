@@ -23,11 +23,20 @@ export async function GET() {
       );
     }
 
-    // Fetch all squads from Vapi
-    const vapiSquads = await vapiService.listSquads();
+    // Fetch all squads, assistants, and standalone tools from Vapi
+    const [vapiSquads, vapiAssistants, vapiTools] = await Promise.all([
+      vapiService.listSquads(),
+      vapiService.listAssistants(),
+      vapiService.listTools(),
+    ]);
 
-    // Fetch all assistants from Vapi
-    const vapiAssistants = await vapiService.listAssistants();
+    // Build a tool ID → tool name map for resolving toolIds references
+    const toolNameMap = new Map<string, string>();
+    for (const tool of vapiTools) {
+      if (tool.id) {
+        toolNameMap.set(tool.id, tool.function?.name || tool.type || 'unknown');
+      }
+    }
 
     // Fetch accounts that have squads linked
     const accounts = await prisma.account.findMany({
@@ -67,32 +76,39 @@ export async function GET() {
       createdAt: squad.createdAt,
       updatedAt: squad.updatedAt,
       memberCount: squad.members?.length || 0,
-      members: (squad.members || []).map((m: any) => ({
-        assistantId: m.assistantId,
-        assistantName:
-          m.assistant?.name ||
-          vapiAssistants.find((a: any) => a.id === m.assistantId)?.name ||
-          'Unknown',
-        hasTools: !!(
-          m.assistant?.tools?.length ||
-          vapiAssistants.find((a: any) => a.id === m.assistantId)?.tools
-            ?.length
-        ),
-        toolCount:
-          m.assistant?.tools?.length ||
-          vapiAssistants.find((a: any) => a.id === m.assistantId)?.tools
-            ?.length ||
-          0,
-        serverUrl:
-          m.assistant?.serverUrl ||
-          vapiAssistants.find((a: any) => a.id === m.assistantId)
-            ?.serverUrl,
-        hasAnalysisPlan: !!(
-          m.assistant?.analysisPlan ||
-          vapiAssistants.find((a: any) => a.id === m.assistantId)
-            ?.analysisPlan
-        ),
-      })),
+      members: (squad.members || []).map((m: any) => {
+        const fullAssistant = vapiAssistants.find((a: any) => a.id === m.assistantId);
+        const assistant = fullAssistant || m.assistant;
+        const model = assistant?.model || {};
+
+        // Inline tools (transferCall, endCall, or legacy function tools)
+        const inlineTools: any[] = model.tools || [];
+        // Standalone tool references
+        const standaloneToolIds: string[] = model.toolIds || [];
+
+        const inlineToolNames = inlineTools
+          .map((t: any) => t.function?.name || t.type)
+          .slice(0, 20);
+        const standaloneToolNames = standaloneToolIds
+          .map((id: string) => toolNameMap.get(id) || `tool:${id.slice(0, 8)}`)
+          .slice(0, 20);
+
+        const allToolNames = [...standaloneToolNames, ...inlineToolNames];
+        const totalTools = standaloneToolIds.length + inlineTools.length;
+
+        return {
+          assistantId: m.assistantId,
+          assistantName: assistant?.name || 'Unknown',
+          hasTools: totalTools > 0,
+          toolCount: totalTools,
+          standaloneToolCount: standaloneToolIds.length,
+          inlineToolCount: inlineTools.length,
+          toolNames: allToolNames,
+          standaloneToolIds,
+          serverUrl: assistant?.serverUrl,
+          hasAnalysisPlan: !!(assistant?.analysisPlan),
+        };
+      }),
       account: squadAccountMap[squad.id] || null,
     }));
 
@@ -106,21 +122,47 @@ export async function GET() {
 
     const orphanedAssistants = vapiAssistants
       .filter((a: any) => !squadAssistantIds.has(a.id))
-      .map((a: any) => ({
-        id: a.id,
-        name: a.name,
-        createdAt: a.createdAt,
-        hasTools: !!(a.tools?.length),
-        toolCount: a.tools?.length || 0,
-        serverUrl: a.serverUrl,
+      .map((a: any) => {
+        const model = a.model || {};
+        const inlineTools: any[] = model.tools || [];
+        const standaloneToolIds: string[] = model.toolIds || [];
+
+        const inlineToolNames = inlineTools.map((t: any) => t.function?.name || t.type);
+        const standaloneToolNames = standaloneToolIds
+          .map((id: string) => toolNameMap.get(id) || `tool:${id.slice(0, 8)}`);
+
+        return {
+          id: a.id,
+          name: a.name,
+          createdAt: a.createdAt,
+          hasTools: (standaloneToolIds.length + inlineTools.length) > 0,
+          toolCount: standaloneToolIds.length + inlineTools.length,
+          standaloneToolCount: standaloneToolIds.length,
+          inlineToolCount: inlineTools.length,
+          toolNames: [...standaloneToolNames, ...inlineToolNames].slice(0, 20),
+          serverUrl: a.serverUrl,
+        };
+      });
+
+    // Summarize standalone tools
+    const standaloneTools = vapiTools
+      .filter((t: any) => t.type === 'function')
+      .map((t: any) => ({
+        id: t.id,
+        name: t.function?.name || 'unnamed',
+        description: t.function?.description || '',
+        serverUrl: t.server?.url || '',
+        createdAt: t.createdAt,
       }));
 
     return NextResponse.json({
       squads,
       orphanedAssistants,
+      standaloneTools,
       totalSquads: squads.length,
       totalAssistants: vapiAssistants.length,
       totalOrphaned: orphanedAssistants.length,
+      totalStandaloneTools: standaloneTools.length,
     });
   } catch (error: any) {
     logger.error(
