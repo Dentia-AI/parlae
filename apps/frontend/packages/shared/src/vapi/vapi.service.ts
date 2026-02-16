@@ -307,7 +307,12 @@ class VapiService {
   }
 
   /**
-   * Create a squad (multi-assistant workflow)
+   * Create a squad (multi-assistant workflow).
+   *
+   * Vapi's squad endpoint does NOT support inline assistants with tools,
+   * analysisSchema, or extra voice properties. So we create each assistant
+   * individually first via /assistant, then assemble the squad using
+   * assistantId references.
    */
   async createSquad(config: VapiSquadConfig): Promise<any | null> {
     const logger = await getLogger();
@@ -323,6 +328,41 @@ class VapiService {
         memberCount: config.members.length,
       }, '[Vapi] Creating squad');
 
+      // Step 1: Create each inline assistant individually
+      const createdAssistantIds: string[] = [];
+      const members: Array<{
+        assistantId: string;
+        assistantDestinations?: any[];
+      }> = [];
+
+      for (const member of config.members) {
+        let assistantId = member.assistantId;
+
+        if (!assistantId && member.assistant) {
+          // Create the assistant via the standalone endpoint (supports full config)
+          const assistant = await this.createAssistant(member.assistant);
+          if (!assistant) {
+            // Cleanup: delete any assistants we already created
+            for (const id of createdAssistantIds) {
+              try { await this.deleteAssistant(id); } catch { /* best effort */ }
+            }
+            throw new Error(`Failed to create assistant: ${member.assistant.name}`);
+          }
+          assistantId = assistant.id;
+          createdAssistantIds.push(assistant.id);
+        }
+
+        if (assistantId) {
+          members.push({
+            assistantId,
+            ...(member.assistantDestinations && {
+              assistantDestinations: member.assistantDestinations,
+            }),
+          });
+        }
+      }
+
+      // Step 2: Create the squad with assistantId references
       const response = await fetch(`${this.baseUrl}/squad`, {
         method: 'POST',
         headers: {
@@ -331,12 +371,7 @@ class VapiService {
         },
         body: JSON.stringify({
           name: config.name,
-          members: config.members.map(member => ({
-            // Use assistantId for existing assistants, assistant for inline configs
-            ...(member.assistantId && { assistantId: member.assistantId }),
-            ...(member.assistant && { assistant: this.buildAssistantPayload(member.assistant) }),
-            ...(member.assistantDestinations && { assistantDestinations: member.assistantDestinations }),
-          })),
+          members,
         }),
       });
 
@@ -354,6 +389,7 @@ class VapiService {
       logger.info({
         squadId: squad.id,
         name: squad.name,
+        assistantIds: createdAssistantIds,
       }, '[Vapi] Successfully created squad');
 
       return squad;
@@ -374,9 +410,15 @@ class VapiService {
    * Build assistant payload for API
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
-    return {
+    // Clean voice: strip stability/similarityBoost which Vapi doesn't accept
+    const voice: Record<string, unknown> = {
+      provider: config.voice.provider === 'elevenlabs' ? '11labs' : config.voice.provider,
+      voiceId: config.voice.voiceId,
+    };
+
+    const payload: Record<string, unknown> = {
       name: config.name,
-      voice: config.voice,
+      voice,
       model: {
         provider: config.model.provider,
         model: config.model.model,
@@ -390,19 +432,38 @@ class VapiService {
           knowledgeBase: config.model.knowledgeBase,
         }),
       },
-      ...(config.firstMessage !== undefined && { firstMessage: config.firstMessage }),
-      ...(config.firstMessageMode && { firstMessageMode: config.firstMessageMode }),
-      ...(config.tools && { tools: config.tools }),
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
       recordingEnabled: config.recordingEnabled ?? true,
-      ...(config.serverUrl && { 
-        serverUrl: config.serverUrl,
-        serverUrlSecret: config.serverUrlSecret,
-      }),
-      ...(config.analysisSchema && { analysisSchema: config.analysisSchema }),
-      ...(config.startSpeakingPlan && { startSpeakingPlan: config.startSpeakingPlan }),
-      ...(config.stopSpeakingPlan && { stopSpeakingPlan: config.stopSpeakingPlan }),
     };
+
+    if (config.firstMessage !== undefined) {
+      payload.firstMessage = config.firstMessage;
+    }
+    if (config.firstMessageMode) {
+      payload.firstMessageMode = config.firstMessageMode;
+    }
+    if (config.tools && config.tools.length > 0) {
+      payload.tools = config.tools;
+    }
+    if (config.serverUrl) {
+      payload.serverUrl = config.serverUrl;
+      payload.serverUrlSecret = config.serverUrlSecret;
+    }
+    if (config.startSpeakingPlan) {
+      payload.startSpeakingPlan = config.startSpeakingPlan;
+    }
+    if (config.stopSpeakingPlan) {
+      payload.stopSpeakingPlan = config.stopSpeakingPlan;
+    }
+
+    // Vapi uses analysisPlan.structuredDataSchema, not analysisSchema
+    if (config.analysisSchema) {
+      payload.analysisPlan = {
+        structuredDataSchema: config.analysisSchema,
+      };
+    }
+
+    return payload;
   }
 
   /**
