@@ -12,6 +12,7 @@ import {
   FileStack,
   GitBranch,
   Receipt,
+  Database,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
@@ -42,6 +43,11 @@ const navigation = [
     name: 'Billing Management',
     href: '/admin/billing',
     icon: Receipt,
+  },
+  {
+    name: 'PMS Integrations',
+    href: '/admin/pms',
+    icon: Database,
   },
   ...(isDev
     ? [
