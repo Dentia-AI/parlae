@@ -24,18 +24,24 @@ export interface VapiAssistantConfig {
       topK?: number;
       fileIds?: string[];
     };
+    /** @deprecated model.messages is used by buildAssistantPayload; prefer systemPrompt */
+    messages?: Array<{ role: string; content: string }>;
   };
   firstMessage?: string;
   firstMessageMode?: 'assistant-speaks-first' | 'assistant-waits-for-user' | 'assistant-speaks-first-with-model-generated-message';
-  tools?: VapiTool[];
+  /** Function tools, transferCall tools, etc. — placed at the assistant top level in Vapi API */
+  tools?: any[];
   endCallFunctionEnabled?: boolean;
   recordingEnabled?: boolean;
   serverUrl?: string;
   serverUrlSecret?: string;
+  /** @deprecated Use analysisPlan instead */
   analysisSchema?: {
     type: 'object';
     properties: Record<string, any>;
   };
+  /** Full Vapi analysisPlan object with structuredDataPlan, summaryPlan, etc. */
+  analysisPlan?: Record<string, unknown>;
   startSpeakingPlan?: {
     waitSeconds?: number;
     smartEndpointingPlan?: { provider: string };
@@ -413,17 +419,35 @@ class VapiService {
         let assistantId = member.assistantId;
 
         if (!assistantId && member.assistant) {
+          const assistantConfig = member.assistant;
+          const toolCount = assistantConfig.tools?.length || 0;
+          const hasAnalysis = !!(assistantConfig.analysisPlan || assistantConfig.analysisSchema);
+
+          logger.info({
+            assistantName: assistantConfig.name,
+            toolCount,
+            hasAnalysis,
+            serverUrl: assistantConfig.serverUrl,
+            toolNames: assistantConfig.tools?.map((t: any) => t.function?.name || t.type).slice(0, 5),
+          }, '[Vapi] Creating assistant for squad member');
+
           // Create the assistant via the standalone endpoint (supports full config)
-          const assistant = await this.createAssistant(member.assistant);
+          const assistant = await this.createAssistant(assistantConfig);
           if (!assistant) {
             // Cleanup: delete any assistants we already created
             for (const id of createdAssistantIds) {
               try { await this.deleteAssistant(id); } catch { /* best effort */ }
             }
-            throw new Error(`Failed to create assistant: ${member.assistant.name}`);
+            throw new Error(`Failed to create assistant: ${assistantConfig.name}`);
           }
           assistantId = assistant.id;
           createdAssistantIds.push(assistant.id);
+
+          logger.info({
+            assistantId,
+            assistantName: assistantConfig.name,
+            toolCount,
+          }, '[Vapi] Assistant created for squad');
         }
 
         if (assistantId) {
@@ -481,17 +505,22 @@ class VapiService {
   }
 
   /**
-   * Build assistant payload for API
+   * Build assistant payload for Vapi API.
+   *
+   * IMPORTANT: In modern Vapi API (v2+):
+   * - Function tools go at the ASSISTANT level (`payload.tools`), NOT inside `model.tools`.
+   *   Each function tool can have its own `server.url` and `server.secret`.
+   * - `analysisPlan` goes at the assistant level with `structuredDataPlan.schema`.
+   * - `model` only contains provider, model name, messages, temperature, maxTokens, knowledgeBase.
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
     // Clean voice: strip stability/similarityBoost, map elevenlabs → 11labs
     const voice: Record<string, unknown> = {
-      provider: config.voice.provider === 'elevenlabs' ? '11labs' : config.voice.provider,
-      voiceId: config.voice.voiceId,
+      provider: config.voice?.provider === 'elevenlabs' ? '11labs' : config.voice?.provider,
+      voiceId: config.voice?.voiceId,
     };
 
-    // ALL tools (function, transferCall, endCall) go inside model.tools
-    // Filter out transferCall tools with invalid E.164 phone numbers to prevent API errors
+    // Filter out transferCall tools with invalid E.164 phone numbers
     const allTools: unknown[] = config.tools && config.tools.length > 0
       ? config.tools.filter((tool: any) => {
           if (tool.type === 'transferCall' && tool.destinations) {
@@ -505,23 +534,21 @@ class VapiService {
         })
       : [];
 
-    // Build model config
+    // Build model config — tools do NOT go here
+    const systemPrompt = config.model?.systemPrompt || config.model?.messages?.[0]?.content || '';
     const modelConfig: Record<string, unknown> = {
-      provider: config.model.provider,
-      model: config.model.model,
+      provider: config.model?.provider,
+      model: config.model?.model,
       messages: [{
         role: 'system',
-        content: config.model.systemPrompt,
+        content: systemPrompt,
       }],
-      temperature: config.model.temperature || 0.7,
-      maxTokens: config.model.maxTokens || 500,
+      temperature: config.model?.temperature || 0.7,
+      maxTokens: config.model?.maxTokens || 500,
     };
 
-    if (config.model.knowledgeBase) {
+    if (config.model?.knowledgeBase) {
       modelConfig.knowledgeBase = config.model.knowledgeBase;
-    }
-    if (allTools.length > 0) {
-      modelConfig.tools = allTools;
     }
 
     const payload: Record<string, unknown> = {
@@ -532,6 +559,11 @@ class VapiService {
       recordingEnabled: config.recordingEnabled ?? true,
     };
 
+    // Tools at the ASSISTANT level (not inside model)
+    if (allTools.length > 0) {
+      payload.tools = allTools;
+    }
+
     if (config.firstMessage !== undefined) {
       payload.firstMessage = config.firstMessage;
     }
@@ -540,6 +572,8 @@ class VapiService {
     }
     if (config.serverUrl) {
       payload.serverUrl = config.serverUrl;
+    }
+    if (config.serverUrlSecret) {
       payload.serverUrlSecret = config.serverUrlSecret;
     }
     if (config.startSpeakingPlan) {
@@ -549,10 +583,20 @@ class VapiService {
       payload.stopSpeakingPlan = config.stopSpeakingPlan;
     }
 
-    // Vapi uses analysisPlan.structuredDataSchema, not analysisSchema
-    if (config.analysisSchema) {
+    // Analysis plan: support both old `analysisSchema` and new `analysisPlan` object
+    if (config.analysisPlan) {
+      // Template-utils now sends the full analysisPlan object
+      payload.analysisPlan = config.analysisPlan;
+    } else if (config.analysisSchema) {
+      // Legacy: wrap raw schema in the correct Vapi structure
       payload.analysisPlan = {
-        structuredDataSchema: config.analysisSchema,
+        structuredDataPlan: {
+          enabled: true,
+          schema: config.analysisSchema,
+          timeoutSeconds: 30,
+        },
+        summaryPlan: { enabled: true },
+        successEvaluationPlan: { enabled: false },
       };
     }
 
@@ -571,9 +615,15 @@ class VapiService {
     }
 
     try {
+      const builtPayload = this.buildAssistantPayload(config);
+
       logger.info({
         name: config.name,
-      }, '[Vapi] Creating assistant');
+        hasToolsInPayload: !!(builtPayload as any).tools?.length,
+        toolCountInPayload: (builtPayload as any).tools?.length || 0,
+        hasAnalysisPlan: !!(builtPayload as any).analysisPlan,
+        serverUrl: (builtPayload as any).serverUrl,
+      }, '[Vapi] Creating assistant — sending to Vapi API');
 
       const response = await fetch(`${this.baseUrl}/assistant`, {
         method: 'POST',
@@ -581,7 +631,7 @@ class VapiService {
           'Authorization': this.getAuthHeader(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(this.buildAssistantPayload(config)),
+        body: JSON.stringify(builtPayload),
       });
 
       if (!response.ok) {

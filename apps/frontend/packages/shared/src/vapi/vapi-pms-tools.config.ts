@@ -20,10 +20,14 @@
 // Tool calls go directly to the NestJS backend API (not through the Next.js frontend).
 // In production: https://api.parlae.ca/vapi/webhook
 // In development: http://localhost:3333/vapi/webhook (or ngrok URL)
+//
+// NOTE: These constants are evaluated at module-load time. For server-side code
+// in Next.js API routes / server actions, env vars are available at this point.
+// The buildMemberPayload() in template-utils.ts also overrides tool server URLs
+// at squad-build time with the RuntimeConfig.webhookUrl to guarantee correctness.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
 const FRONTEND_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || '';
 
-// Prefer backend URL for tool calls; fall back to frontend /api/vapi/webhook
 const WEBHOOK_URL = BACKEND_URL
   ? `${BACKEND_URL}/vapi/webhook`
   : `${FRONTEND_URL}/api/vapi/webhook`;

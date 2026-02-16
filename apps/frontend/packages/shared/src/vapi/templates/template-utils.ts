@@ -167,11 +167,29 @@ function buildMemberPayload(
     systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me transfer you to our team right now." and initiate the transfer.`;
   }
 
-  // Resolve tools
-  const tools: unknown[] = [
+  // Resolve tools and inject the correct webhook URL/secret from runtime config.
+  // This ensures tool server URLs are always correct regardless of when the
+  // tool definitions module was loaded.
+  const rawTools: unknown[] = [
     ...resolveToolGroup(a.toolGroup),
     ...(a.extraTools ?? []),
   ];
+
+  const tools: unknown[] = rawTools.map((tool: any) => {
+    // Deep-clone to avoid mutating the shared module-level tool definitions
+    const cloned = JSON.parse(JSON.stringify(tool));
+
+    // Inject runtime webhook URL/secret into function tools
+    if (cloned.type === 'function' && runtime.webhookUrl) {
+      cloned.server = {
+        ...cloned.server,
+        url: runtime.webhookUrl,
+        ...(runtime.webhookSecret ? { secret: runtime.webhookSecret } : {}),
+      };
+    }
+
+    return cloned;
+  });
 
   // Inject transferCall tool for human handoff when clinic phone is available.
   // ALL assistants get this so the caller can say "let me speak with a human" at any time.
