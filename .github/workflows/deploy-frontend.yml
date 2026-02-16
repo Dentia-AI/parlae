@@ -77,43 +77,13 @@ jobs:
 
       - name: Force ECS deployment
         run: |
-          # Update task definition to use the specific Git SHA tagged image
-          TASK_FAMILY="parlae-frontend"
-          CURRENT_TASK_DEF=$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --region "$AWS_REGION" \
-            --query 'services[0].taskDefinition' \
-            --output text)
-          
-          CURRENT_TASK_JSON=$(aws ecs describe-task-definition \
-            --task-definition "$CURRENT_TASK_DEF" \
-            --region "$AWS_REGION" \
-            --query 'taskDefinition')
-          
-          # Update image in container definitions
-          NEW_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
-          
-          # Register new task definition with updated image
-          NEW_TASK_DEF=$(echo "$CURRENT_TASK_JSON" | jq --arg img "$NEW_IMAGE" \
-            '.containerDefinitions[0].image = $img | 
-             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-          
-          NEW_TASK_ARN=$(aws ecs register-task-definition \
-            --region "$AWS_REGION" \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          
-          echo "✅ Registered new task definition: $NEW_TASK_ARN"
-          echo "   Using image: $NEW_IMAGE"
-          
-          # Update service to use new task definition
+          # The task definition already points to :latest.
+          # --force-new-deployment pulls the fresh :latest image we just pushed.
+          # No new task definition revision needed (matches backend workflow).
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
-            --task-definition "$NEW_TASK_ARN" \
             --force-new-deployment \
             --region "$AWS_REGION"
           
-          echo "✅ Triggered ECS deployment with new image"
+          echo "✅ Triggered ECS deployment (image: ${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${IMAGE_TAG})"
