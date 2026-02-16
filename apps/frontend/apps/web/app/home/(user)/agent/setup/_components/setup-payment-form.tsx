@@ -49,7 +49,6 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
           
           // Get client secret from API route
           try {
-            console.log('Fetching SetupIntent with CSRF token...');
             const response = await fetch('/api/stripe/setup-intent', {
               method: 'POST',
               headers: {
@@ -64,10 +63,8 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
             }
             
             const result = await response.json();
-            console.log('SetupIntent result:', result);
-            
+
             if (result?.clientSecret) {
-              console.log('Got client secret');
               setClientSecret(result.clientSecret);
             } else {
               console.error('No client secret in response');
@@ -192,8 +189,6 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
     setError(null);
 
     try {
-      console.log('Confirming Stripe setup...');
-      
       // Confirm the SetupIntent using the Elements instance
       const { error: confirmError, setupIntent } = await stripeRef.current.confirmSetup({
         elements: elementsRef.current,
@@ -206,12 +201,8 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
         return;
       }
 
-      console.log('SetupIntent confirmed:', setupIntent);
-
       // Save the payment method ID to the account
       if (setupIntent?.payment_method) {
-        console.log('Saving payment method to account...');
-        
         const response = await fetch('/api/stripe/save-payment-method', {
           method: 'POST',
           headers: {
@@ -226,9 +217,6 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
         if (!response.ok) {
           throw new Error(`Failed to save payment method: ${response.statusText}`);
         }
-
-        const result = await response.json();
-        console.log('Payment method saved:', result);
       }
       
       setPaymentCompleted(true);

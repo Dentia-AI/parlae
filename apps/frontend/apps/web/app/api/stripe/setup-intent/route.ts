@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
           where: { id: account.id },
           data: { stripeCustomerId: customerId } as any,
         });
-        console.log('Stripe Customer created:', customerId);
       } catch {
         console.warn('Could not save stripeCustomerId (migration may be pending)');
       }
@@ -97,8 +96,6 @@ export async function POST(request: NextRequest) {
         userId: session.id,
       },
     });
-
-    console.log('SetupIntent created:', setupIntent.id, 'for customer:', customerId);
 
     return NextResponse.json({
       clientSecret: setupIntent.client_secret,

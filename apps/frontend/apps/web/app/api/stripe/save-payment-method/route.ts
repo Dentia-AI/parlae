@@ -31,11 +31,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logger.info(
-      { userId: session.user.id, paymentMethodId },
-      '[Payment] Saving payment method to account'
-    );
-
     // Find the user's personal account
     const account = await prisma.account.findFirst({
       where: {
@@ -71,11 +66,6 @@ export async function POST(request: NextRequest) {
               default_payment_method: paymentMethodId,
             },
           });
-
-          logger.info(
-            { customerId: stripeCustomerId, paymentMethodId },
-            '[Payment] Set as default payment method on Stripe Customer',
-          );
         }
       } catch (stripeErr) {
         logger.warn(
@@ -94,11 +84,6 @@ export async function POST(request: NextRequest) {
         paymentMethodVerifiedAt: new Date(),
       },
     });
-
-    logger.info(
-      { userId: session.user.id, accountId: account.id },
-      '[Payment] Payment method saved successfully'
-    );
 
     return NextResponse.json({
       success: true,
