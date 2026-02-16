@@ -18,12 +18,16 @@ export async function POST(request: Request) {
   const logger = await getLogger();
 
   try {
-    // Verify Vapi webhook signature
-    const signature = request.headers.get('x-vapi-signature');
-    const secret = process.env.VAPI_SERVER_SECRET;
+    // Verify Vapi webhook secret.
+    // Vapi sends the serverUrlSecret in the X-Vapi-Secret header.
+    const vapiSecret = request.headers.get('x-vapi-secret');
+    const expectedSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
-    if (secret && signature) {
-      // TODO: Implement signature verification
+    if (expectedSecret) {
+      if (!vapiSecret || vapiSecret !== expectedSecret) {
+        logger.error('[Vapi Webhook] Invalid or missing x-vapi-secret header');
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     const payload = await request.json();

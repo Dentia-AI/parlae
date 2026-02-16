@@ -34,10 +34,10 @@ export class VapiToolsController {
   async handleToolCall(
     @Param('toolName') toolName: string,
     @Body() body: any,
-    @Headers('x-vapi-signature') signature: string,
+    @Headers('x-vapi-secret') vapiSecret: string,
     @Headers('authorization') authorization: string,
   ) {
-    this.verifyAuth(signature, authorization);
+    this.verifyAuth(vapiSecret, authorization);
     this.logger.log({ toolName }, `Tool call: ${toolName}`);
 
     // Map tool names to service methods
@@ -97,7 +97,7 @@ export class VapiToolsController {
 
   // ============================================================================
   // Auth verification
-  // Accepts either x-vapi-signature header or Bearer token
+  // Accepts either x-vapi-secret header (from Vapi) or Bearer token (from frontend)
   // ============================================================================
 
   private verifyAuth(signature?: string, authorization?: string) {

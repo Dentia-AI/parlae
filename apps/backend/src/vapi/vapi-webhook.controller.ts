@@ -33,7 +33,8 @@ export class VapiWebhookController {
   @Post('webhook')
   async handleWebhook(
     @Body() payload: any,
-    @Headers('x-vapi-signature') signature: string,
+    @Headers('x-vapi-secret') vapiSecret: string,
+    @Headers('authorization') authorization: string,
   ) {
     const messageType = payload?.message?.type;
     const callId = payload?.message?.call?.id;
@@ -42,12 +43,28 @@ export class VapiWebhookController {
       `[Vapi Webhook] Type: ${messageType}, Call ID: ${callId}`,
     );
 
-    // Verify webhook signature
-    const secret =
+    // Verify webhook authentication.
+    // Vapi sends the server.secret (or serverUrlSecret) in the X-Vapi-Secret header.
+    // For credential-based auth, it may come in the Authorization header.
+    const expectedSecret =
       process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
-    if (secret && signature && signature !== secret) {
-      this.logger.error('Invalid webhook signature');
-      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+
+    if (expectedSecret) {
+      const receivedSecret =
+        vapiSecret ||
+        (authorization?.startsWith('Bearer ')
+          ? authorization.slice(7)
+          : undefined);
+
+      if (!receivedSecret) {
+        this.logger.error('[Vapi Webhook] Missing authentication header (x-vapi-secret or Authorization)');
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (receivedSecret !== expectedSecret) {
+        this.logger.error('[Vapi Webhook] Invalid secret — does not match VAPI_WEBHOOK_SECRET');
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
     }
 
     switch (messageType) {

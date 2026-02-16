@@ -12,12 +12,12 @@ import { prisma } from '@kit/prisma';
 // ============================================================================
 
 async function authenticateRequest(request: NextRequest) {
-  const signature = request.headers.get('x-vapi-signature');
+  const signature = request.headers.get('x-vapi-secret');
   
   if (!signature) {
     return { 
       authenticated: false, 
-      error: 'Missing Vapi signature' 
+      error: 'Missing Vapi secret' 
     };
   }
   
@@ -27,7 +27,7 @@ async function authenticateRequest(request: NextRequest) {
   if (!isValid) {
     return { 
       authenticated: false, 
-      error: 'Invalid Vapi signature' 
+      error: 'Invalid Vapi secret' 
     };
   }
   

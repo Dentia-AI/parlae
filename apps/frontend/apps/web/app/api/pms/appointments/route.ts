@@ -75,26 +75,26 @@ const cancelAppointmentSchema = z.object({
 // ============================================================================
 
 async function authenticateRequest(request: NextRequest) {
-  // Get Vapi signature from header
-  const signature = request.headers.get('x-vapi-signature');
+  // Get Vapi secret from header
+  const signature = request.headers.get('x-vapi-secret');
   
   if (!signature) {
     return { 
       authenticated: false, 
-      error: 'Missing Vapi signature' 
+      error: 'Missing Vapi secret' 
     };
   }
   
   // Get request body
   const body = await request.text();
   
-  // Verify signature
+  // Verify secret
   const isValid = verifyVapiSignature(body, signature);
   
   if (!isValid) {
     return { 
       authenticated: false, 
-      error: 'Invalid Vapi signature' 
+      error: 'Invalid Vapi secret' 
     };
   }
   
