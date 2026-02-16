@@ -410,28 +410,40 @@ class VapiService {
    * Build assistant payload for API
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
-    // Clean voice: strip stability/similarityBoost which Vapi doesn't accept
+    // Clean voice: strip stability/similarityBoost, map elevenlabs → 11labs
     const voice: Record<string, unknown> = {
       provider: config.voice.provider === 'elevenlabs' ? '11labs' : config.voice.provider,
       voiceId: config.voice.voiceId,
     };
 
+    // ALL tools (function, transferCall, endCall) go inside model.tools
+    const allTools: unknown[] = config.tools && config.tools.length > 0
+      ? [...config.tools]
+      : [];
+
+    // Build model config
+    const modelConfig: Record<string, unknown> = {
+      provider: config.model.provider,
+      model: config.model.model,
+      messages: [{
+        role: 'system',
+        content: config.model.systemPrompt,
+      }],
+      temperature: config.model.temperature || 0.7,
+      maxTokens: config.model.maxTokens || 500,
+    };
+
+    if (config.model.knowledgeBase) {
+      modelConfig.knowledgeBase = config.model.knowledgeBase;
+    }
+    if (allTools.length > 0) {
+      modelConfig.tools = allTools;
+    }
+
     const payload: Record<string, unknown> = {
       name: config.name,
       voice,
-      model: {
-        provider: config.model.provider,
-        model: config.model.model,
-        messages: [{
-          role: 'system',
-          content: config.model.systemPrompt,
-        }],
-        temperature: config.model.temperature || 0.7,
-        maxTokens: config.model.maxTokens || 500,
-        ...(config.model.knowledgeBase && {
-          knowledgeBase: config.model.knowledgeBase,
-        }),
-      },
+      model: modelConfig,
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
       recordingEnabled: config.recordingEnabled ?? true,
     };
@@ -441,9 +453,6 @@ class VapiService {
     }
     if (config.firstMessageMode) {
       payload.firstMessageMode = config.firstMessageMode;
-    }
-    if (config.tools && config.tools.length > 0) {
-      payload.tools = config.tools;
     }
     if (config.serverUrl) {
       payload.serverUrl = config.serverUrl;
