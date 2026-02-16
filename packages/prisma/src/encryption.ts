@@ -141,59 +141,7 @@ export function decryptField(encryptedValue: string): string {
   }
 }
 
-/**
- * Fields on the CallLog model that contain PHI and should be encrypted.
- *
- * Note: Fields used in WHERE clauses (contactName, contactEmail, phoneNumber)
- * are intentionally NOT encrypted because database-level queries on encrypted
- * columns are not possible. These fields rely on Aurora's storage encryption.
- */
-export const ENCRYPTED_CALL_LOG_FIELDS = [
-  'transcript',
-  'summary',
-  'callNotes',
-] as const;
-
-/**
- * Encrypt all PHI fields in a CallLog data object (for create/update).
- */
-export function encryptCallLogFields<T extends Record<string, any>>(
-  data: T,
-): T {
-  const result: Record<string, any> = { ...data };
-
-  for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
-    if (
-      field in result &&
-      result[field] != null &&
-      typeof result[field] === 'string'
-    ) {
-      result[field] = encryptField(result[field]);
-    }
-  }
-
-  return result as T;
-}
-
-/**
- * Decrypt all PHI fields in a CallLog result object (for reads).
- */
-export function decryptCallLogFields<T extends Record<string, any>>(
-  data: T,
-): T {
-  if (!data) return data;
-
-  const result: Record<string, any> = { ...data };
-
-  for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
-    if (
-      field in result &&
-      result[field] != null &&
-      typeof result[field] === 'string'
-    ) {
-      result[field] = decryptField(result[field]);
-    }
-  }
-
-  return result as T;
-}
+// CallLog encryption helpers have been removed.
+// Call data (transcripts, summaries) is no longer stored locally.
+// All call data is fetched from Vapi API on demand.
+// The generic encryptField/decryptField utilities above are kept for future use.

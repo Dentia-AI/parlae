@@ -144,18 +144,16 @@ export class TwilioVoiceService {
   }
 
   private async getActiveCallsCount(accountId: string): Promise<number> {
-    // TODO: Add VapiCallLog model to schema
+    // Call data is managed by Vapi — active call count would need Vapi API query.
     // const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-    // return this.prisma.vapiCallLog.count({
-    //   where: {
-    //     accountId,
-    //     status: 'in-progress',
+    // Could use vapiService.listCalls({ createdAtGe: oneHourAgo.toISOString() })
+    // to check for active calls, but this is not critical for now.
     //     createdAt: { gte: oneHourAgo },
     //   },
     // });
     
-    // Placeholder: return 0 until VapiCallLog is added
+    // Placeholder: return 0 — would need Vapi API for real count
     return 0;
   }
 

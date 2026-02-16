@@ -26,7 +26,9 @@ export class VapiWebhookController {
    * - function-call: Tool invocations (searchPatients, bookAppointment, etc.)
    * - assistant-request: When a call starts
    * - status-update: Call status changes
-   * - end-of-call-report: Full transcript, recording, structured data
+   * - end-of-call-report: Creates a thin CallReference linking Vapi call to our account
+   *
+   * All call data (transcripts, recordings, analytics) stays in Vapi as the source of truth.
    */
   @Post('webhook')
   async handleWebhook(
@@ -69,8 +71,6 @@ export class VapiWebhookController {
 
   /**
    * Dispatch function-call (tool call) to the appropriate service method.
-   * Vapi sends: { message: { type: "function-call", functionCall: { name, parameters }, call } }
-   * Expected response: { results: [{ toolCallId, result: "..." }] }
    */
   private async handleFunctionCall(payload: any) {
     const functionCall = payload?.message?.functionCall;
@@ -94,7 +94,6 @@ export class VapiWebhookController {
       `[Vapi Tool] ${toolName} with params: ${JSON.stringify(parameters).slice(0, 200)}`,
     );
 
-    // Build a payload that matches what the tools service expects
     const toolPayload = {
       message: payload.message,
       functionCall: { name: toolName, parameters },
@@ -178,172 +177,95 @@ export class VapiWebhookController {
   }
 
   /**
-   * Process end-of-call-report: persist call log with transcript,
-   * summary, structured data, and recording URL.
+   * Process end-of-call-report: create a thin CallReference linking the Vapi call to our account.
+   * All call data (transcript, summary, recording, cost, analytics) stays in Vapi.
    */
   private async handleEndOfCall(payload: any) {
-    const message = payload?.message || {};
-    const call = message.call || {};
-    const analysis = message.analysis || {};
-    const artifact = message.artifact || {};
-
-    const callId = call.id;
-    const transcript = artifact.transcript || message.transcript || '';
-    const summary =
-      analysis.summary ||
-      artifact.summary ||
-      message.summary ||
-      '';
-    const recordingUrl =
-      artifact.recordingUrl || message.recordingUrl || null;
-    const structuredData =
-      analysis.structuredData || artifact.structuredData || {};
-    const costCents = message.cost ? Math.round(message.cost * 100) : null;
+    const call = payload?.message?.call || {};
+    const vapiCallId = call.id;
 
     this.logger.log(
-      `End-of-call for ${callId}: summary=${summary?.slice(0, 80)}..., hasStructuredData=${Object.keys(structuredData).length > 0}`,
+      `End-of-call for ${vapiCallId}`,
     );
 
-    // Resolve account from call metadata
-    const { accountId, voiceAgentId } =
-      await this.resolveAccountFromCall(call);
-
-    // Calculate duration
-    let durationSeconds: number | null = null;
-    if (call.startedAt && call.endedAt) {
-      durationSeconds = Math.round(
-        (new Date(call.endedAt).getTime() -
-          new Date(call.startedAt).getTime()) /
-          1000,
-      );
+    if (!vapiCallId) {
+      this.logger.warn('No call ID in end-of-call report');
+      return { received: true };
     }
 
-    // Map outcome from structured data
-    const outcome = this.mapCallOutcome(structuredData);
+    const accountId = await this.resolveAccountFromCall(call);
+
+    if (!accountId) {
+      this.logger.warn(
+        `Skipping call reference for ${vapiCallId} — no account found`,
+      );
+      return { received: true };
+    }
 
     try {
-      const callLog = await this.prisma.callLog.create({
+      const callRef = await this.prisma.callReference.create({
         data: {
+          vapiCallId,
           accountId,
-          voiceAgentId,
-          vapiCallId: callId || null,
-          phoneNumber:
-            call.customer?.number ||
-            call.phoneNumber?.number ||
-            'unknown',
-          callType: 'INBOUND',
-          direction: 'inbound',
-          duration: durationSeconds,
-          status: 'COMPLETED',
-          outcome: outcome as any,
-          transcript,
-          summary,
-          recordingUrl,
-          structuredData:
-            Object.keys(structuredData).length > 0
-              ? structuredData
-              : undefined,
-          callReason: structuredData.callReason || null,
-          urgencyLevel: structuredData.urgencyLevel || null,
-          contactName: structuredData.patientName || null,
-          contactEmail: structuredData.patientEmail || null,
-          followUpRequired: structuredData.followUpRequired || false,
-          customerSentiment: structuredData.customerSentiment || null,
-          metadata: {
-            vapiCallId: callId,
-            callDurationMs: call.duration,
-            endedReason: call.endedReason,
-            costCents,
-          },
-          accessLog: {
-            entries: [
-              {
-                action: 'created',
-                source: 'vapi-end-of-call',
-                timestamp: new Date().toISOString(),
-              },
-            ],
-          },
         },
       });
 
       this.logger.log(
-        `Call log created: ${callLog.id} for call ${callId}`,
+        `Call reference created: ${callRef.id} for call ${vapiCallId}`,
       );
-      return { received: true, callLogId: callLog.id };
+      return { received: true, callRefId: callRef.id };
     } catch (dbError) {
+      // If duplicate vapiCallId, that's fine
+      if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
+        this.logger.log(`Call reference already exists for ${vapiCallId}`);
+        return { received: true };
+      }
+
       this.logger.error(
-        `Failed to save call log for ${callId}: ${dbError instanceof Error ? dbError.message : dbError}`,
+        `Failed to save call reference for ${vapiCallId}: ${dbError instanceof Error ? dbError.message : dbError}`,
       );
       return { received: true };
     }
   }
 
   /**
-   * Resolve accountId and voiceAgentId from the Vapi call payload.
+   * Resolve accountId from the Vapi call payload.
    * Uses the phone number to look up the VapiPhoneNumber → Account mapping.
    */
-  private async resolveAccountFromCall(
-    call: any,
-  ): Promise<{ accountId: string | null; voiceAgentId: string | null }> {
+  private async resolveAccountFromCall(call: any): Promise<string | null> {
     try {
       const phoneNumberId = call.phoneNumberId;
       const phoneNumber = call.phoneNumber?.number;
 
       if (phoneNumberId) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
-          where: { vapiPhoneNumberId: phoneNumberId },
-          select: { accountId: true, voiceAgentId: true },
+          where: { vapiPhoneId: phoneNumberId },
+          select: { accountId: true },
         });
         if (vapiPhone) {
-          return {
-            accountId: vapiPhone.accountId,
-            voiceAgentId: vapiPhone.voiceAgentId,
-          };
+          return vapiPhone.accountId;
         }
       }
 
       if (phoneNumber) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
           where: { phoneNumber },
-          select: { accountId: true, voiceAgentId: true },
+          select: { accountId: true },
         });
         if (vapiPhone) {
-          return {
-            accountId: vapiPhone.accountId,
-            voiceAgentId: vapiPhone.voiceAgentId,
-          };
+          return vapiPhone.accountId;
         }
       }
 
       this.logger.warn(
         `Could not resolve account for call: phoneNumberId=${phoneNumberId}, phoneNumber=${phoneNumber}`,
       );
-      return { accountId: null, voiceAgentId: null };
+      return null;
     } catch (err) {
       this.logger.error(
         `Error resolving account: ${err instanceof Error ? err.message : err}`,
       );
-      return { accountId: null, voiceAgentId: null };
+      return null;
     }
-  }
-
-  private mapCallOutcome(
-    structuredData: Record<string, any>,
-  ): string {
-    const outcome = structuredData?.callOutcome;
-    const outcomeMap: Record<string, string> = {
-      appointment_booked: 'APPOINTMENT_BOOKED',
-      appointment_cancelled: 'APPOINTMENT_CANCELLED',
-      appointment_rescheduled: 'APPOINTMENT_RESCHEDULED',
-      information_provided: 'INFORMATION_PROVIDED',
-      transferred_to_staff: 'TRANSFERRED',
-      emergency_handled: 'TRANSFERRED',
-      insurance_verified: 'INFORMATION_PROVIDED',
-      payment_plan_discussed: 'INFORMATION_PROVIDED',
-      voicemail: 'VOICEMAIL',
-      unresolved: 'NO_ANSWER',
-    };
-    return outcomeMap[outcome] || 'COMPLETED';
   }
 }

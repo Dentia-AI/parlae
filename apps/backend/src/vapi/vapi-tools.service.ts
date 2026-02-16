@@ -63,11 +63,9 @@ export class VapiToolsService {
       const patientInfo = functionCall.parameters.patientInfo || {};
 
       // Log the transfer request
-      // TODO: Add VapiCallLog model to schema
-      // await this.prisma.vapiCallLog.updateMany({
-      //   where: { callId: call.id },
-      //   data: {
-      //     transferRequested: true,
+      // Call data is managed by Vapi — no local call log to update.
+      // await this.prisma.callReference.findFirst({
+      //   where: { vapiCallId: call.id },
       //     transferReason: reason,
       //     transferSummary: summary,
       //     updatedAt: new Date(),

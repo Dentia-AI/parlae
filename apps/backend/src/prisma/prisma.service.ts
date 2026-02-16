@@ -128,8 +128,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.knowledgeBase;
   }
 
-  get callLog(): PrismaClient['callLog'] {
-    return this.client.callLog;
+  get callReference(): PrismaClient['callReference'] {
+    return this.client.callReference;
   }
 
   // PMS Integration models
@@ -146,10 +146,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.vapiPhoneNumber;
   }
 
-  // TODO: Add these models to Prisma schema
-  // get vapiCallLog(): PrismaClient['vapiCallLog'] {
-  //   return this.client.vapiCallLog;
-  // }
+  // Call data is managed by Vapi API — only thin CallReference stored locally.
 
   // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {
   //   return this.client.vapiSquadTemplate;

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
+import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+import { getLogger } from '@kit/shared/logger';
 
 /**
  * GET /api/call-logs/[id]
- * 
- * Returns full call log details including transcript and structured data.
- * 
- * HIPAA: Requires authentication. Only returns logs for the user's account.
- * Access is recorded in the call log's audit trail.
+ *
+ * Returns full call details fetched from Vapi API.
+ * The [id] parameter is the Vapi call ID.
+ * Access is verified via the CallReference table (account scoping).
  */
 export async function GET(
   request: NextRequest,
@@ -17,13 +18,13 @@ export async function GET(
   try {
     const session = await requireSession();
     const userId = session.user?.id;
-    const { id } = await params;
+    const { id: vapiCallId } = await params;
+    const logger = await getLogger();
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's personal account
     const account = await prisma.account.findFirst({
       where: { primaryOwnerId: userId, isPersonalAccount: true },
       select: { id: true },
@@ -33,142 +34,192 @@ export async function GET(
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    // Fetch call log - scoped to user's account for security
-    const callLog = await prisma.callLog.findFirst({
+    // Verify the call belongs to this account via CallReference
+    const callRef = await prisma.callReference.findFirst({
       where: {
-        id,
+        vapiCallId,
         accountId: account.id,
       },
-      include: {
-        voiceAgent: {
-          select: {
-            id: true,
-            name: true,
-            phoneNumber: true,
-          },
-        },
-      },
     });
 
-    if (!callLog) {
-      return NextResponse.json({ error: 'Call log not found' }, { status: 404 });
+    if (!callRef) {
+      // Fallback: check if any of the account's phone numbers match this call
+      // This handles calls that may not have a CallReference yet
+      const vapiService = createVapiService();
+      const call = await vapiService.getCall(vapiCallId);
+
+      if (!call) {
+        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+      }
+
+      // Verify phone number belongs to this account
+      const phoneNumberId = call.phoneNumberId;
+      if (phoneNumberId) {
+        const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
+          where: { vapiPhoneId: phoneNumberId, accountId: account.id },
+        });
+        if (!vapiPhone) {
+          return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+        }
+      } else {
+        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+      }
+
+      // HIPAA: Log access
+      logger.info({
+        userId,
+        vapiCallId,
+        action: 'viewed_call_detail',
+      }, '[Call Logs] Call detail accessed');
+
+      return NextResponse.json(mapVapiCallToDetail(call));
     }
 
-    // HIPAA: Record access in audit trail
-    const existingLog = (callLog.accessLog as any) || { entries: [] };
-    const updatedAccessLog = {
-      entries: [
-        ...existingLog.entries,
-        {
-          action: 'viewed',
-          userId,
-          timestamp: new Date().toISOString(),
-          details: 'Call log details viewed (including transcript)',
-        },
-      ],
-    };
+    // Fetch full call data from Vapi
+    const vapiService = createVapiService();
+    const call = await vapiService.getCall(vapiCallId);
 
-    // Update access log asynchronously (don't block response)
-    prisma.callLog.update({
-      where: { id },
-      data: { accessLog: updatedAccessLog },
-    }).catch(() => {}); // Non-blocking
+    if (!call) {
+      return NextResponse.json({ error: 'Call not found in Vapi' }, { status: 404 });
+    }
 
-    // Parse structured data for response
-    const structuredData = callLog.structuredData as any;
+    // HIPAA: Log access
+    logger.info({
+      userId,
+      vapiCallId,
+      action: 'viewed_call_detail',
+    }, '[Call Logs] Call detail accessed');
 
-    return NextResponse.json({
-      id: callLog.id,
-      vapiCallId: callLog.vapiCallId,
-      accountId: callLog.accountId,
-      
-      // Call details
-      phoneNumber: callLog.phoneNumber,
-      callType: callLog.callType,
-      direction: callLog.direction,
-      duration: callLog.duration,
-      status: callLog.status,
-      outcome: callLog.outcome,
-      callReason: callLog.callReason,
-      urgencyLevel: callLog.urgencyLevel,
-      
-      // Contact info
-      contactName: callLog.contactName,
-      contactEmail: callLog.contactEmail,
-      
-      // Content (HIPAA: PHI - authenticated access only)
-      transcript: callLog.transcript,
-      summary: callLog.summary,
-      recordingUrl: callLog.recordingUrl,
-      
-      // Structured output from AI analysis
-      structuredData: structuredData ? {
-        patientName: structuredData.patientName,
-        patientPhone: structuredData.patientPhone,
-        patientEmail: structuredData.patientEmail,
-        patientId: structuredData.patientId,
-        isNewPatient: structuredData.isNewPatient,
-        callReason: structuredData.callReason,
-        callOutcome: structuredData.callOutcome,
-        appointmentBooked: structuredData.appointmentBooked,
-        appointmentCancelled: structuredData.appointmentCancelled,
-        appointmentRescheduled: structuredData.appointmentRescheduled,
-        appointmentType: structuredData.appointmentType,
-        appointmentDate: structuredData.appointmentDate,
-        appointmentTime: structuredData.appointmentTime,
-        providerName: structuredData.providerName,
-        insuranceVerified: structuredData.insuranceVerified,
-        insuranceProvider: structuredData.insuranceProvider,
-        paymentDiscussed: structuredData.paymentDiscussed,
-        customerSentiment: structuredData.customerSentiment,
-        urgencyLevel: structuredData.urgencyLevel,
-        followUpRequired: structuredData.followUpRequired,
-        followUpNotes: structuredData.followUpNotes,
-        transferredToStaff: structuredData.transferredToStaff,
-        transferredTo: structuredData.transferredTo,
-        callSummary: structuredData.callSummary,
-        keyTopicsDiscussed: structuredData.keyTopicsDiscussed,
-        actionsPerformed: structuredData.actionsPerformed,
-      } : null,
-      
-      // Flags
-      appointmentSet: callLog.appointmentSet,
-      leadCaptured: callLog.leadCaptured,
-      insuranceVerified: callLog.insuranceVerified,
-      insuranceProvider: callLog.insuranceProvider,
-      paymentPlanDiscussed: callLog.paymentPlanDiscussed,
-      paymentPlanAmount: callLog.paymentPlanAmount,
-      transferredToStaff: callLog.transferredToStaff,
-      transferredTo: callLog.transferredTo,
-      followUpRequired: callLog.followUpRequired,
-      followUpDate: callLog.followUpDate,
-      
-      // Quality
-      customerSentiment: callLog.customerSentiment,
-      aiConfidence: callLog.aiConfidence,
-      callQuality: callLog.callQuality,
-      
-      // Cost
-      costCents: callLog.costCents,
-      
-      // Metadata
-      metadata: callLog.metadata,
-      actions: callLog.actions,
-      callNotes: callLog.callNotes,
-      
-      // Agent info
-      voiceAgent: callLog.voiceAgent,
-      
-      // Timestamps
-      callStartedAt: callLog.callStartedAt,
-      callEndedAt: callLog.callEndedAt,
-      createdAt: callLog.createdAt,
-    });
+    return NextResponse.json(mapVapiCallToDetail(call));
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error('Error fetching call log detail:', error);
     return NextResponse.json({ error: 'Failed to fetch call log' }, { status: 500 });
+  }
+}
+
+/**
+ * Map a full Vapi call to the detail shape the frontend expects.
+ */
+function mapVapiCallToDetail(call: any) {
+  const analysis = call.analysis || {};
+  const structuredData = analysis.structuredData || {};
+  const artifact = call.artifact || {};
+
+  const summary = analysis.summary || call.summary || null;
+  const transcript = artifact.transcript || call.transcript || null;
+  const recordingUrl = artifact.recordingUrl || call.recordingUrl || null;
+
+  let duration: number | null = null;
+  if (call.startedAt && call.endedAt) {
+    duration = Math.round(
+      (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
+    );
+  }
+
+  const outcome = inferOutcome(structuredData);
+
+  return {
+    id: call.id,
+    vapiCallId: call.id,
+
+    phoneNumber: call.customer?.number || call.phoneNumber?.number || 'unknown',
+    callType: call.type === 'outboundPhoneCall' ? 'OUTBOUND' : 'INBOUND',
+    direction: call.type === 'outboundPhoneCall' ? 'outbound' : 'inbound',
+    duration,
+    status: call.status === 'ended' ? 'COMPLETED' : call.status?.toUpperCase() || 'COMPLETED',
+    outcome,
+    callReason: structuredData.callReason || null,
+    urgencyLevel: structuredData.urgencyLevel || null,
+
+    contactName: structuredData.patientName || call.customer?.name || null,
+    contactEmail: structuredData.patientEmail || null,
+
+    transcript,
+    summary,
+    recordingUrl,
+
+    structuredData: Object.keys(structuredData).length > 0 ? {
+      patientName: structuredData.patientName,
+      patientPhone: structuredData.patientPhone,
+      patientEmail: structuredData.patientEmail,
+      patientId: structuredData.patientId,
+      isNewPatient: structuredData.isNewPatient,
+      callReason: structuredData.callReason,
+      callOutcome: structuredData.callOutcome,
+      appointmentBooked: structuredData.appointmentBooked,
+      appointmentCancelled: structuredData.appointmentCancelled,
+      appointmentRescheduled: structuredData.appointmentRescheduled,
+      appointmentType: structuredData.appointmentType,
+      appointmentDate: structuredData.appointmentDate,
+      appointmentTime: structuredData.appointmentTime,
+      providerName: structuredData.providerName,
+      insuranceVerified: structuredData.insuranceVerified,
+      insuranceProvider: structuredData.insuranceProvider,
+      paymentDiscussed: structuredData.paymentDiscussed,
+      customerSentiment: structuredData.customerSentiment,
+      urgencyLevel: structuredData.urgencyLevel,
+      followUpRequired: structuredData.followUpRequired,
+      followUpNotes: structuredData.followUpNotes,
+      transferredToStaff: structuredData.transferredToStaff,
+      transferredTo: structuredData.transferredTo,
+      callSummary: structuredData.callSummary,
+      keyTopicsDiscussed: structuredData.keyTopicsDiscussed,
+      actionsPerformed: structuredData.actionsPerformed,
+    } : null,
+
+    appointmentSet: !!structuredData.appointmentBooked,
+    leadCaptured: !!structuredData.patientName || !!structuredData.patientEmail,
+    insuranceVerified: !!structuredData.insuranceVerified,
+    insuranceProvider: structuredData.insuranceProvider || null,
+    paymentPlanDiscussed: !!structuredData.paymentDiscussed,
+    paymentPlanAmount: null,
+    transferredToStaff: !!structuredData.transferredToStaff,
+    transferredTo: structuredData.transferredTo || null,
+    followUpRequired: !!structuredData.followUpRequired,
+    followUpDate: null,
+
+    customerSentiment: structuredData.customerSentiment || null,
+    aiConfidence: null,
+    callQuality: null,
+
+    costCents: call.cost ? Math.round(call.cost * 100) : null,
+
+    metadata: {
+      vapiPhoneNumberId: call.phoneNumberId,
+      vapiAssistantId: call.assistantId,
+      vapiSquadId: call.squadId,
+      endedReason: call.endedReason,
+      costBreakdown: call.costBreakdown,
+    },
+    actions: structuredData.actionsPerformed ? { actions: structuredData.actionsPerformed } : null,
+    callNotes: null,
+
+    voiceAgent: null,
+
+    callStartedAt: call.startedAt || call.endedAt || new Date().toISOString(),
+    callEndedAt: call.endedAt || null,
+    createdAt: call.startedAt || new Date().toISOString(),
+  };
+}
+
+function inferOutcome(structuredData: Record<string, any>): string {
+  const outcome = structuredData?.callOutcome;
+  switch (outcome) {
+    case 'appointment_booked': return 'BOOKED';
+    case 'transferred_to_staff': return 'TRANSFERRED';
+    case 'insurance_verified': return 'INSURANCE_INQUIRY';
+    case 'payment_plan_discussed': return 'PAYMENT_PLAN';
+    case 'information_provided': return 'INFORMATION';
+    case 'voicemail': return 'VOICEMAIL';
+    default: {
+      if (structuredData?.appointmentBooked) return 'BOOKED';
+      if (structuredData?.transferredToStaff) return 'TRANSFERRED';
+      if (structuredData?.insuranceVerified) return 'INSURANCE_INQUIRY';
+      if (structuredData?.paymentDiscussed) return 'PAYMENT_PLAN';
+      return 'OTHER';
+    }
   }
 }

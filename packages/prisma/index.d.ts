@@ -1,3 +1,3 @@
 export * from './src/index';
 export { prisma } from './src/index';
-export { encryptField, decryptField, isEncrypted, encryptCallLogFields, decryptCallLogFields } from './src/encryption';
+export { encryptField, decryptField, isEncrypted } from './src/encryption';

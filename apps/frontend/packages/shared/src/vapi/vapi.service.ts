@@ -125,19 +125,93 @@ export interface VapiPhoneNumber {
 }
 
 /**
- * Vapi Call
+ * Vapi Call — full shape returned by GET /call/{id}
  */
 export interface VapiCall {
   id: string;
-  assistantId: string;
+  orgId?: string;
+  assistantId?: string;
+  squadId?: string;
   phoneNumberId?: string;
+  type?: 'inboundPhoneCall' | 'outboundPhoneCall' | 'webCall';
   status: 'queued' | 'ringing' | 'in-progress' | 'forwarding' | 'ended';
   startedAt?: string;
   endedAt?: string;
+  endedReason?: string;
+  cost?: number;
+  costBreakdown?: {
+    stt?: number;
+    llm?: number;
+    tts?: number;
+    vapi?: number;
+    total?: number;
+    transport?: number;
+    analysisCostBreakdown?: Record<string, number>;
+  };
+  customer?: {
+    number?: string;
+    name?: string;
+  };
+  phoneNumber?: {
+    id?: string;
+    number?: string;
+  };
+  // Artifact contains transcript, recording, etc.
+  artifact?: {
+    transcript?: string;
+    recordingUrl?: string;
+    messages?: Array<{
+      role: string;
+      message: string;
+      time: number;
+      endTime?: number;
+    }>;
+  };
+  // Analysis contains AI-extracted structured data
+  analysis?: {
+    summary?: string;
+    structuredData?: Record<string, any>;
+    successEvaluation?: string;
+  };
+  // Legacy fields (may appear at top level in some Vapi versions)
   transcript?: string;
   recordingUrl?: string;
-  analysis?: Record<string, any>;
   summary?: string;
+}
+
+/**
+ * Parameters for listing calls from Vapi API
+ */
+export interface VapiListCallsParams {
+  phoneNumberId?: string;
+  assistantId?: string;
+  limit?: number;
+  createdAtGe?: string;
+  createdAtLe?: string;
+  createdAtGt?: string;
+  createdAtLt?: string;
+}
+
+/**
+ * Parameters for Vapi analytics query
+ */
+export interface VapiAnalyticsQuery {
+  queries: Array<{
+    table: 'call';
+    name: string;
+    operations?: Array<{
+      operation: 'sum' | 'avg' | 'count' | 'min' | 'max';
+      column?: string;
+      alias?: string;
+    }>;
+    groupBy?: string[];
+    timeRange?: {
+      start: string;
+      end: string;
+      step?: 'minute' | 'hour' | 'day' | 'week' | 'month';
+      timezone?: string;
+    };
+  }>;
 }
 
 /**
@@ -1192,6 +1266,97 @@ class VapiService {
       }, '[Vapi] Exception while listing files');
 
       return [];
+    }
+  }
+
+  /**
+   * List calls from Vapi with optional filters.
+   * Used for call logs and recent calls pages.
+   */
+  async listCalls(params: VapiListCallsParams = {}): Promise<VapiCall[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return [];
+    }
+
+    try {
+      const searchParams = new URLSearchParams();
+      if (params.phoneNumberId) searchParams.set('phoneNumberId', params.phoneNumberId);
+      if (params.assistantId) searchParams.set('assistantId', params.assistantId);
+      if (params.limit) searchParams.set('limit', params.limit.toString());
+      if (params.createdAtGe) searchParams.set('createdAtGe', params.createdAtGe);
+      if (params.createdAtLe) searchParams.set('createdAtLe', params.createdAtLe);
+      if (params.createdAtGt) searchParams.set('createdAtGt', params.createdAtGt);
+      if (params.createdAtLt) searchParams.set('createdAtLt', params.createdAtLt);
+
+      const url = `${this.baseUrl}/call?${searchParams.toString()}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to list calls');
+        return [];
+      }
+
+      return await response.json();
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while listing calls');
+
+      return [];
+    }
+  }
+
+  /**
+   * Query Vapi analytics endpoint.
+   * POST /analytics
+   */
+  async getCallAnalytics(query: VapiAnalyticsQuery): Promise<any | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(query),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to query analytics');
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while querying analytics');
+
+      return null;
     }
   }
 

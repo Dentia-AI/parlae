@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.decryptCallLogFields = exports.encryptCallLogFields = exports.ENCRYPTED_CALL_LOG_FIELDS = exports.decryptField = exports.encryptField = exports.isEncrypted = void 0;
+exports.decryptField = exports.encryptField = exports.isEncrypted = void 0;
 
 const crypto = require("crypto");
 
@@ -81,30 +81,3 @@ function decryptField(encryptedValue) {
     }
 }
 exports.decryptField = decryptField;
-
-const ENCRYPTED_CALL_LOG_FIELDS = ['transcript', 'summary', 'callNotes'];
-exports.ENCRYPTED_CALL_LOG_FIELDS = ENCRYPTED_CALL_LOG_FIELDS;
-
-function encryptCallLogFields(data) {
-    const result = { ...data };
-    for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
-        if (field in result && result[field] != null && typeof result[field] === 'string') {
-            result[field] = encryptField(result[field]);
-        }
-    }
-    return result;
-}
-exports.encryptCallLogFields = encryptCallLogFields;
-
-function decryptCallLogFields(data) {
-    if (!data)
-        return data;
-    const result = { ...data };
-    for (const field of ENCRYPTED_CALL_LOG_FIELDS) {
-        if (field in result && result[field] != null && typeof result[field] === 'string') {
-            result[field] = decryptField(result[field]);
-        }
-    }
-    return result;
-}
-exports.decryptCallLogFields = decryptCallLogFields;

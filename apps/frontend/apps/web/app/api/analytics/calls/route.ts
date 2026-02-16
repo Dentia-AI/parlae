@@ -1,45 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
+import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+
+import type { VapiCall } from '@kit/shared/vapi/vapi.service';
 
 /**
  * Generate mock analytics data for development
  */
 function generateMockAnalytics(startDate: Date, endDate: Date) {
   const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  
-  // Generate activity trend
+
   const activityTrend = Array.from({ length: days }, (_, i) => {
     const date = new Date(startDate);
     date.setDate(date.getDate() + i);
     return {
       date: date.toISOString().split('T')[0],
-      count: Math.floor(Math.random() * 30) + 10, // 10-40 calls per day
+      count: Math.floor(Math.random() * 30) + 10,
     };
   });
 
   const totalCalls = activityTrend.reduce((sum, day) => sum + day.count, 0);
-  
+
   return {
-    dateRange: {
-      start: startDate,
-      end: endDate,
-    },
+    dateRange: { start: startDate, end: endDate },
     metrics: {
       totalCalls,
-      bookingRate: 78, // 78%
-      avgCallTime: 102, // 1m 42s
-      insuranceVerified: Math.floor(totalCalls * 0.65), // 65%
-      paymentPlans: {
-        count: Math.floor(totalCalls * 0.16), // 16%
-        totalAmount: 4720000, // $47,200
-      },
-      collections: {
-        count: Math.floor(totalCalls * 0.12), // 12%
-        totalAmount: 3280000, // $32,800
-        recovered: 3280000,
-        collectionRate: 89.0,
-      },
+      bookingRate: 78,
+      avgCallTime: 102,
+      insuranceVerified: Math.floor(totalCalls * 0.65),
+      paymentPlans: { count: Math.floor(totalCalls * 0.16), totalAmount: 4720000 },
+      collections: { count: Math.floor(totalCalls * 0.12), totalAmount: 3280000, recovered: 3280000, collectionRate: 89.0 },
     },
     activityTrend,
     outcomesDistribution: [
@@ -53,209 +44,173 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
 
 /**
  * GET /api/analytics/calls
- * Returns aggregated call metrics for the analytics dashboard
+ * Returns aggregated call metrics for the analytics dashboard.
+ * Data is fetched from Vapi API and aggregated server-side.
+ *
  * Query params:
  * - startDate: ISO date string (default: 7 days ago)
  * - endDate: ISO date string (default: now)
- * - agentId: voice agent ID (optional, filter by specific agent)
  */
 export async function GET(request: NextRequest) {
   try {
-    // Require authentication
     const session = await requireSession();
     const userId = session.user?.id;
-    
+
     const searchParams = request.nextUrl.searchParams;
-    const startDate = searchParams.get('startDate') 
+    const startDate = searchParams.get('startDate')
       ? new Date(searchParams.get('startDate')!)
-      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const endDate = searchParams.get('endDate')
       ? new Date(searchParams.get('endDate')!)
       : new Date();
-    const agentId = searchParams.get('agentId');
 
-    // Get user's personal account for scoping
     const account = userId ? await prisma.account.findFirst({
       where: { primaryOwnerId: userId, isPersonalAccount: true },
       select: { id: true },
     }) : null;
 
-    // Build the where clause - scoped to user's account
-    const where: any = {
-      callStartedAt: {
-        gte: startDate,
-        lte: endDate,
-      },
-    };
-
-    // Scope to account if available
-    if (account) {
-      where.accountId = account.id;
+    if (!account) {
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json(generateMockAnalytics(startDate, endDate));
+      }
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    if (agentId) {
-      where.voiceAgentId = agentId;
+    // Get account's phone numbers
+    const phoneNumbers = await prisma.vapiPhoneNumber.findMany({
+      where: { accountId: account.id, isActive: true },
+      select: { vapiPhoneId: true },
+    });
+
+    if (phoneNumbers.length === 0) {
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json(generateMockAnalytics(startDate, endDate));
+      }
+      return NextResponse.json({
+        dateRange: { start: startDate, end: endDate },
+        metrics: {
+          totalCalls: 0, bookingRate: 0, avgCallTime: 0, insuranceVerified: 0,
+          paymentPlans: { count: 0, totalAmount: 0 },
+          collections: { count: 0, totalAmount: 0, recovered: 0, collectionRate: 0 },
+        },
+        activityTrend: [],
+        outcomesDistribution: [],
+      });
     }
 
-    // Get total calls
-    const totalCalls = await prisma.callLog.count({ where });
+    // Fetch calls from Vapi for each phone number in the date range
+    const vapiService = createVapiService();
+    const allCalls: VapiCall[] = [];
 
-    // If no calls and in development, return mock data
-    if (totalCalls === 0 && process.env.NODE_ENV === 'development') {
-      const mockData = generateMockAnalytics(startDate, endDate);
-      return NextResponse.json(mockData);
+    for (const phone of phoneNumbers) {
+      const calls = await vapiService.listCalls({
+        phoneNumberId: phone.vapiPhoneId,
+        limit: 1000,
+        createdAtGe: startDate.toISOString(),
+        createdAtLe: endDate.toISOString(),
+      });
+      allCalls.push(...calls);
     }
 
-    // Get calls by outcome for booking rate calculation
-    const callsByOutcome = await prisma.callLog.groupBy({
-      by: ['outcome'],
-      where,
-      _count: true,
-    });
+    // If no calls, return mock in dev
+    if (allCalls.length === 0 && process.env.NODE_ENV === 'development') {
+      return NextResponse.json(generateMockAnalytics(startDate, endDate));
+    }
 
-    // Calculate booking rate
-    const bookedCalls = callsByOutcome.find(g => g.outcome === 'BOOKED')?._count || 0;
-    const bookingRate = totalCalls > 0 ? (bookedCalls / totalCalls) * 100 : 0;
+    // Compute analytics from the fetched calls
+    const totalCalls = allCalls.length;
 
-    // Get average call time
-    const avgDuration = await prisma.callLog.aggregate({
-      where: {
-        ...where,
-        duration: { not: null },
-      },
-      _avg: {
-        duration: true,
-      },
-    });
+    // Outcomes distribution
+    const outcomeCounts = new Map<string, number>();
+    let bookedCount = 0;
+    let totalDuration = 0;
+    let durationCount = 0;
+    let insuranceVerifiedCount = 0;
+    let paymentPlanCount = 0;
+    let collectionCount = 0;
 
-    const avgCallTime = avgDuration._avg.duration || 0;
+    // Activity trend by day
+    const dailyCounts = new Map<string, number>();
 
-    // Get insurance verified count
-    const insuranceVerified = await prisma.callLog.count({
-      where: {
-        ...where,
-        insuranceVerified: true,
-      },
-    });
+    for (const call of allCalls) {
+      const sd = call.analysis?.structuredData || {};
+      const outcome = inferOutcome(sd);
 
-    // Get payment plans stats
-    const paymentPlans = await prisma.callLog.aggregate({
-      where: {
-        ...where,
-        paymentPlanDiscussed: true,
-      },
-      _sum: {
-        paymentPlanAmount: true,
-      },
-      _count: true,
-    });
+      outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
+      if (outcome === 'BOOKED') bookedCount++;
 
-    // Get collections stats
-    const collections = await prisma.callLog.aggregate({
-      where: {
-        ...where,
-        collectionAttempt: true,
-      },
-      _sum: {
-        collectionAmount: true,
-      },
-      _count: {
-        _all: true,
-      },
-    });
+      // Duration
+      if (call.startedAt && call.endedAt) {
+        const dur = Math.round(
+          (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
+        );
+        totalDuration += dur;
+        durationCount++;
+      }
 
-    const collectionSuccess = await prisma.callLog.count({
-      where: {
-        ...where,
-        collectionSuccess: true,
-      },
-    });
+      // Structured data flags
+      if (sd.insuranceVerified) insuranceVerifiedCount++;
+      if (sd.paymentDiscussed) paymentPlanCount++;
+      if (sd.collectionAttempt) collectionCount++;
 
-    const collectionRate = collections._count._all > 0 
-      ? (collectionSuccess / collections._count._all) * 100 
-      : 0;
+      // Activity trend
+      const dateKey = (call.startedAt || call.endedAt || '').slice(0, 10);
+      if (dateKey) {
+        dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+      }
+    }
 
-    // Get activity trend (calls per day) - scoped to account
-    const accountId = account?.id;
-    const activityTrend = accountId && agentId
-      ? await prisma.$queryRaw`
-          SELECT 
-            DATE(call_started_at) as date,
-            COUNT(*)::int as count
-          FROM call_logs
-          WHERE call_started_at >= ${startDate}
-            AND call_started_at <= ${endDate}
-            AND account_id = ${accountId}
-            AND voice_agent_id = ${agentId}
-          GROUP BY DATE(call_started_at)
-          ORDER BY date ASC
-        `
-      : accountId
-      ? await prisma.$queryRaw`
-          SELECT 
-            DATE(call_started_at) as date,
-            COUNT(*)::int as count
-          FROM call_logs
-          WHERE call_started_at >= ${startDate}
-            AND call_started_at <= ${endDate}
-            AND account_id = ${accountId}
-          GROUP BY DATE(call_started_at)
-          ORDER BY date ASC
-        `
-      : await prisma.$queryRaw`
-          SELECT 
-            DATE(call_started_at) as date,
-            COUNT(*)::int as count
-          FROM call_logs
-          WHERE call_started_at >= ${startDate}
-            AND call_started_at <= ${endDate}
-          GROUP BY DATE(call_started_at)
-          ORDER BY date ASC
-        `;
+    const bookingRate = totalCalls > 0 ? Math.round((bookedCount / totalCalls) * 1000) / 10 : 0;
+    const avgCallTime = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
 
-    // Get call outcomes distribution
-    const outcomesDistribution = callsByOutcome.map(group => ({
-      outcome: group.outcome,
-      count: group._count,
-      percentage: totalCalls > 0 ? (group._count / totalCalls) * 100 : 0,
+    const outcomesDistribution = Array.from(outcomeCounts.entries()).map(([outcome, count]) => ({
+      outcome,
+      count,
+      percentage: totalCalls > 0 ? Math.round((count / totalCalls) * 1000) / 10 : 0,
     }));
 
+    const activityTrend = Array.from(dailyCounts.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     return NextResponse.json({
-      dateRange: {
-        start: startDate,
-        end: endDate,
-      },
+      dateRange: { start: startDate, end: endDate },
       metrics: {
         totalCalls,
-        bookingRate: Math.round(bookingRate * 10) / 10, // Round to 1 decimal
-        avgCallTime: Math.round(avgCallTime), // Round to nearest second
-        insuranceVerified,
-        paymentPlans: {
-          count: paymentPlans._count,
-          totalAmount: paymentPlans._sum.paymentPlanAmount || 0,
-        },
-        collections: {
-          count: collections._count._all,
-          totalAmount: collections._sum.collectionAmount || 0,
-          recovered: collections._sum.collectionAmount || 0,
-          collectionRate: Math.round(collectionRate * 10) / 10,
-        },
+        bookingRate,
+        avgCallTime,
+        insuranceVerified: insuranceVerifiedCount,
+        paymentPlans: { count: paymentPlanCount, totalAmount: 0 },
+        collections: { count: collectionCount, totalAmount: 0, recovered: 0, collectionRate: 0 },
       },
       activityTrend,
       outcomesDistribution,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
     console.error('Error fetching call analytics:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch analytics' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+  }
+}
+
+function inferOutcome(structuredData: Record<string, any>): string {
+  const outcome = structuredData?.callOutcome;
+  switch (outcome) {
+    case 'appointment_booked': return 'BOOKED';
+    case 'transferred_to_staff': return 'TRANSFERRED';
+    case 'insurance_verified': return 'INSURANCE_INQUIRY';
+    case 'payment_plan_discussed': return 'PAYMENT_PLAN';
+    case 'information_provided': return 'INFORMATION';
+    case 'voicemail': return 'VOICEMAIL';
+    default: {
+      if (structuredData?.appointmentBooked) return 'BOOKED';
+      if (structuredData?.transferredToStaff) return 'TRANSFERRED';
+      if (structuredData?.insuranceVerified) return 'INSURANCE_INQUIRY';
+      if (structuredData?.paymentDiscussed) return 'PAYMENT_PLAN';
+      return 'OTHER';
+    }
   }
 }

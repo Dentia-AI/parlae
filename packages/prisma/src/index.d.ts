@@ -4,4 +4,4 @@ declare global {
 }
 export declare const prisma: PrismaClient;
 export * from '@prisma/client';
-export { encryptField, decryptField, isEncrypted, encryptCallLogFields, decryptCallLogFields, } from './encryption';
+export { encryptField, decryptField, isEncrypted } from './encryption';
