@@ -121,7 +121,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
 
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
-        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
+        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
@@ -146,7 +146,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
       </div>
 
       {/* Navigation - Fixed at bottom */}
-      <div className="pt-4 border-t flex-shrink-0 bg-background">
+      <div className="pt-4 border-t border-border/40 flex-shrink-0 bg-background">
         <div className="flex justify-end">
           <Button
             onClick={handleContinue}

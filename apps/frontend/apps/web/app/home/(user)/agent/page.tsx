@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Phone, Settings, BarChart3, FileText, Mic, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
@@ -66,7 +65,7 @@ export default async function ReceptionistDashboardPage() {
       </div>
 
       {/* Status Card */}
-      <Card className={isActive ? 'border-green-200 bg-green-50' : ''}>
+      <Card className={isActive ? 'bg-green-50/50 dark:bg-green-950/20' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -188,7 +187,7 @@ export default async function ReceptionistDashboardPage() {
       {/* Quick Actions */}
       <div>
         <Link href="/home/agent/setup">
-          <Card className="cursor-pointer hover:border-primary transition-colors">
+          <Card className="cursor-pointer hover:shadow-md transition-all duration-200">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="rounded-full bg-primary/10 p-3">
@@ -207,16 +206,14 @@ export default async function ReceptionistDashboardPage() {
       </div>
 
       {/* Test Call */}
-      <Alert>
-        <AlertDescription className="flex items-center justify-between">
-          <span>
-            <strong>Test your AI receptionist:</strong> Call {phoneNumber} to hear how it sounds
-          </span>
-          <Button size="sm" variant="outline">
-            Test Call
-          </Button>
-        </AlertDescription>
-      </Alert>
+      <div className="rounded-xl bg-muted/30 px-5 py-4 flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">
+          <strong className="text-foreground">Test your AI receptionist:</strong> Call {phoneNumber} to hear how it sounds
+        </span>
+        <Button size="sm" variant="outline">
+          Test Call
+        </Button>
+      </div>
     </div>
   );
 }

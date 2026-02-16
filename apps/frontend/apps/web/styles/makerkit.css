@@ -76,3 +76,86 @@ Optimize dropdowns for mobile
 .animate-fade-in-up {
     animation: fadeInUp 0.8s ease-out;
 }
+
+/* ── Global card/border softening ────────────────────────────────────────── */
+/* Make all Shadcn Cards lighter — softer ring instead of hard border */
+[data-slot="card"],
+.card,
+[class*="rounded-lg border bg-card"] {
+    border-color: hsl(var(--border) / 0.4);
+    border-radius: 0.75rem; /* 12px — slightly rounder */
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+}
+
+.dark [data-slot="card"],
+.dark .card,
+.dark [class*="rounded-lg border bg-card"] {
+    border-color: hsl(var(--border) / 0.35);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.15);
+}
+
+/* Softer inner info boxes (rounded-lg border p-4) */
+.rounded-lg.border.p-4,
+.rounded-lg.border.p-3 {
+    border-color: hsl(var(--border) / 0.35);
+}
+
+/* ── Soften Alert components globally ───────────────────────────────────── */
+[role="alert"],
+[data-slot="alert"] {
+    border-color: hsl(var(--border) / 0.35);
+    border-radius: 0.75rem;
+}
+
+/* ── Soften Separator borders ──────────────────────────────────────────── */
+[data-slot="separator"],
+hr.border-border {
+    border-color: hsl(var(--border) / 0.35);
+}
+
+/* ── Page content entrance animations ──────────────────────────────────── */
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.page-enter {
+    animation: page-enter 0.3s ease-out;
+}
+
+/* Staggered list item animation */
+@keyframes stagger-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.stagger-children > * {
+    animation: stagger-in 0.3s ease-out backwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+
+/* ── Light-mode info area tinting ──────────────────────────────────────── */
+/* bg-muted at low opacity was near-invisible against the white background.
+   We slightly darken the light-mode --muted value (96 % → 93 %) so that
+   bg-muted/30 … bg-muted/50 now render a visible subtle grey tint while
+   full bg-muted stays a soft neutral. Dark mode is unchanged. */
+:root:not(.dark) {
+    --muted: 0 0% 93%;
+}

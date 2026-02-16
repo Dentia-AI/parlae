@@ -264,7 +264,49 @@
       "selectedMethod": "Selected Method",
       "submitPortRequest": "Submit Port Request",
       "continueToReview": "Continue to Review",
-      "backToIntegrations": "Back to Integrations"
+      "backToIntegrations": "Back to Integrations",
+      "forwarding": {
+        "headerTitle": "Call Forwarding Setup:",
+        "headerDesc": "The fastest way to get started. Keep your existing number and forward calls to Parlae when you want AI to answer. Patient caller ID is preserved for automatic lookups.",
+        "clinicNumber": "Clinic's Main Phone Number",
+        "clinicNumberHint": "The number patients currently call. You will set up forwarding from this number after deployment.",
+        "forwardingType": "Forwarding Type",
+        "forwardAll": "Forward All Calls",
+        "forwardAllDesc": "Every incoming call goes to the AI receptionist. You'll provide a dedicated human line for emergencies and transfer requests.",
+        "noAnswer": "No-Answer & Busy Only",
+        "noAnswerDesc": "Staff answers during office hours. AI picks up when nobody answers or lines are busy. Good for gradual adoption.",
+        "humanLine": "Dedicated Human Line",
+        "optional": "(optional)",
+        "humanLineDescAll": "A direct number where a human can always be reached (office back line, cell phone, etc.). When a caller asks to speak with a human or there's an emergency, the AI will transfer the call here. Must be different from your main number.",
+        "humanLineDescConditional": "A direct office number, cell phone, or back line for emergency transfers and human requests. If not provided, transfers go to your main clinic number.",
+        "humanLineRequired": "A dedicated human line is required when forwarding all calls. The AI needs a separate number to transfer callers to a real person.",
+        "saveConfig": "Save Configuration",
+        "configSaved": "Configuration Saved!",
+        "configSavedDesc": "Your forwarding setup has been configured.",
+        "clinicMainNumber": "Clinic main number",
+        "edit": "Edit",
+        "add": "Add",
+        "notConfigured": "Not configured",
+        "humanLineInlineHint": "A back line, cell phone, or any number staff can answer for emergency and human transfer requests.",
+        "save": "Save",
+        "requiredLabel": "Required:",
+        "requiredNudge": "Since all calls forward to AI, add a human line so the AI can transfer emergency and human requests.",
+        "recommendedLabel": "Recommended:",
+        "recommendedNudge": "Add a human line so the AI can transfer emergency calls to a real person instead of your main line.",
+        "nextSteps": "Next Steps:",
+        "nextStepsDesc": "A Twilio forwarding number will be provisioned when you complete payment and deploy your AI receptionist in the review step.",
+        "afterDeployment": "After deployment",
+        "step1": "We'll provision a Twilio number and share it with you",
+        "step2Pre": "Set up call forwarding on your carrier from",
+        "step2Post": "to the Twilio number",
+        "step3": "Calls will be handled by your AI receptionist.",
+        "step3HumanLine": "Emergency and human transfer requests will route to your dedicated human line.",
+        "step3NoHumanLine": "Human transfer requests will route to your main clinic number.",
+        "carrierGuide": "How to Set Up Forwarding on Your Carrier",
+        "carrierGuideDesc": "Use the codes below for your carrier. Choose All Calls for full AI coverage, or No-Answer / Busy if staff should answer first.",
+        "canadianCarriers": "Canadian Carriers",
+        "usCarriers": "US Carriers"
+      }
     },
     "review": {
       "title": "Review & Launch",
@@ -322,6 +364,7 @@
       "title": "Your Profile",
       "description": "Your personal account details. Authentication is managed through Cognito.",
       "accountOwner": "Account Owner",
+      "displayName": "Display Name",
       "email": "Email",
       "memberSince": "Member since",
       "auth": "Auth",
@@ -350,6 +393,98 @@
       "pendingInvitationsDescription": "Invitations that haven't been accepted yet",
       "expires": "Expires",
       "pending": "Pending"
+    },
+    "branding": {
+      "infoText": "These settings will be used in all appointment confirmation emails sent to your patients. If not provided, default values will be used.",
+      "title": "Branding Settings",
+      "description": "Configure your clinic's branding for email communications",
+      "logoUrl": "Logo URL",
+      "logoRecommendation": "Recommended: 200x50px PNG with transparent background. Must be publicly accessible URL.",
+      "preview": "Preview:",
+      "logoPreviewAlt": "Logo preview",
+      "logoLoadError": "Failed to load logo. Check the URL.",
+      "primaryColor": "Primary Brand Color",
+      "colorUsage": "Used for buttons and highlights in emails",
+      "businessName": "Business Name (Optional)",
+      "businessNameHint": "Leave blank to use your account name in emails",
+      "contactEmail": "Contact Email",
+      "contactEmailHint": "Email address patients can use to contact you",
+      "contactPhone": "Contact Phone",
+      "contactPhoneHint": "Phone number patients can call for changes or questions",
+      "address": "Physical Address",
+      "addressHint": "Will appear in email footer",
+      "website": "Website",
+      "websiteHint": "Your clinic's website URL",
+      "previewNote": "Your branding will appear in appointment confirmation, cancellation, and reschedule emails sent to patients.",
+      "saveButton": "Save Branding Settings",
+      "saveSuccess": "Branding settings saved successfully!",
+      "saveError": "Failed to save branding settings",
+      "saveErrorGeneric": "An error occurred while saving"
+    }
+  },
+  "features": {
+    "title": "AI Receptionist",
+    "active": "Active",
+    "inactive": "Inactive",
+    "liveMessage": "Your AI receptionist is live. {{count}} features enabled.",
+    "offMessage": "Your AI receptionist is turned off. Enable it to start answering calls.",
+    "featureControls": "Feature Controls",
+    "featureControlsDesc": "Toggle individual features on or off. Changes take effect immediately.",
+    "infoNote": "Core features are enabled by default. Toggle optional features based on your needs. Features marked \"Coming Soon\" are in development.",
+    "comingSoon": "Coming Soon",
+    "categories": {
+      "core": "Core Features",
+      "coreDesc": "Essential AI receptionist capabilities",
+      "communication": "Communication",
+      "communicationDesc": "Patient notifications and outreach",
+      "integration": "Integrations",
+      "integrationDesc": "Connect with external services",
+      "advanced": "Advanced",
+      "advancedDesc": "Coming soon - advanced capabilities"
+    },
+    "aiReceptionist": {
+      "name": "AI Receptionist",
+      "description": "Your AI-powered phone receptionist answers calls, books appointments, and handles patient inquiries 24/7."
+    },
+    "callLogging": {
+      "name": "Call Logging & Analytics",
+      "description": "Track all incoming calls, view transcripts, and monitor AI performance with detailed analytics."
+    },
+    "knowledgeBase": {
+      "name": "Knowledge Base",
+      "description": "Upload documents to train your AI on your services, policies, and FAQs."
+    },
+    "smsConfirmations": {
+      "name": "SMS Confirmations",
+      "description": "Send SMS appointment confirmations and reminders to patients via Twilio."
+    },
+    "emailConfirmations": {
+      "name": "Email Confirmations",
+      "description": "Send branded email confirmations for appointments, cancellations, and reschedules."
+    },
+    "outboundCalls": {
+      "name": "Outbound Calls",
+      "description": "Proactively reach out to patients for appointment reminders, follow-ups, and recall campaigns."
+    },
+    "googleCalendar": {
+      "name": "Google Calendar",
+      "description": "Sync appointments with Google Calendar for real-time availability and booking."
+    },
+    "pmsIntegration": {
+      "name": "PMS Integration",
+      "description": "Connect your Practice Management System for seamless patient and appointment management."
+    },
+    "insuranceVerification": {
+      "name": "Insurance Verification",
+      "description": "Automatically verify patient insurance eligibility and benefits before appointments."
+    },
+    "paymentCollection": {
+      "name": "Payment Collection",
+      "description": "Collect patient payments and co-pays over the phone or via SMS payment links."
+    },
+    "leadManagement": {
+      "name": "Lead Management",
+      "description": "Capture and manage new patient leads from calls, track conversion rates, and automate follow-ups."
     }
   }
 }

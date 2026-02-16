@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
@@ -16,6 +17,9 @@ import {
   PhoneForwarded,
   Shield,
   Info,
+  UserRound,
+  Pencil,
+  Plus,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { setupForwardedNumberAction } from '../_lib/phone-actions';
@@ -37,6 +41,7 @@ export function ForwardedNumberSetup({
   onComplete,
   onSetupStateChange,
 }: ForwardedNumberSetupProps) {
+  const { t } = useTranslation();
   const [pending, startTransition] = useTransition();
   const [clinicNumber, setClinicNumber] = useState('');
   const [staffDirectNumber, setStaffDirectNumber] = useState('');
@@ -44,6 +49,8 @@ export function ForwardedNumberSetup({
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
   const [showCarrierGuide, setShowCarrierGuide] = useState(false);
+  const [editingHumanLine, setEditingHumanLine] = useState(false);
+  const [tempHumanLine, setTempHumanLine] = useState('');
 
   // Load saved state from sessionStorage on mount
   useEffect(() => {
@@ -99,12 +106,12 @@ export function ForwardedNumberSetup({
               forwardingType,
             }),
           );
-          toast.success(result.message || 'Configuration saved successfully!');
+          toast.success(result.message || t('common:setup.phone.forwarding.configSaved'));
         } else {
-          toast.error(result.error || 'Failed to save configuration');
+          toast.error(result.error || t('common:setup.phone.forwarding.saveConfig'));
         }
       } catch (error) {
-        toast.error('An error occurred');
+        toast.error(t('common:setup.phone.forwarding.saveConfig'));
         console.error(error);
       } finally {
         setIsProvisioning(false);
@@ -114,30 +121,70 @@ export function ForwardedNumberSetup({
 
   const handleComplete = () => {
     if (!setupComplete) {
-      toast.error('Please complete the setup first');
+      toast.error(t('common:setup.phone.forwarding.saveConfig'));
       return;
     }
     onComplete();
   };
 
+  const saveHumanLine = () => {
+    setStaffDirectNumber(tempHumanLine);
+    setEditingHumanLine(false);
+
+    // Update sessionStorage
+    const savedSettings = sessionStorage.getItem('phoneIntegrationSettings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        parsed.staffDirectNumber = tempHumanLine || undefined;
+        sessionStorage.setItem(
+          'phoneIntegrationSettings',
+          JSON.stringify(parsed),
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    // Also save to backend
+    startTransition(async () => {
+      try {
+        await setupForwardedNumberAction({
+          accountId,
+          clinicNumber,
+          staffDirectNumber: tempHumanLine || undefined,
+          forwardingType,
+          businessName,
+        });
+        toast.success(
+          tempHumanLine
+            ? t('common:setup.phone.forwarding.save')
+            : t('common:setup.phone.forwarding.save'),
+        );
+      } catch {
+        toast.error(t('common:setup.phone.forwarding.saveConfig'));
+      }
+    });
+  };
+
   return (
-    <div className="space-y-6">
-      <Alert>
-        <PhoneForwarded className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Call Forwarding Setup:</strong> The fastest way to get started.
-          Keep your existing number and forward calls to Parlae when you want AI
-          to answer. Patient caller ID is preserved for automatic lookups.
-        </AlertDescription>
-      </Alert>
+    <div className="space-y-5 animate-in fade-in duration-300">
+      {/* Header info */}
+      <div className="rounded-xl bg-muted/40 p-4 flex items-start gap-3">
+        <PhoneForwarded className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground">
+          <strong className="text-foreground">{t('common:setup.phone.forwarding.headerTitle')}</strong>{' '}
+          {t('common:setup.phone.forwarding.headerDesc')}
+        </div>
+      </div>
 
       {/* Step 1: Enter Clinic Number */}
       {!setupComplete && (
-        <div className="space-y-5">
+        <div className="space-y-5 animate-in slide-in-from-bottom-2 fade-in duration-300">
           {/* Main clinic number */}
           <div className="space-y-2">
             <Label htmlFor="clinicNumber">
-              Clinic&apos;s Main Phone Number{' '}
+              {t('common:setup.phone.forwarding.clinicNumber')}{' '}
               <span className="text-destructive">*</span>
             </Label>
             <Input
@@ -147,88 +194,100 @@ export function ForwardedNumberSetup({
               value={clinicNumber}
               onChange={(e) => setClinicNumber(e.target.value)}
               disabled={isProvisioning}
+              className="h-11"
             />
-            <p className="text-sm text-muted-foreground">
-              The number patients currently call to reach your clinic. You will
-              set up forwarding from this number after deployment.
+            <p className="text-xs text-muted-foreground">
+              {t('common:setup.phone.forwarding.clinicNumberHint')}
             </p>
           </div>
 
           {/* Forwarding type selector */}
-          <div className="space-y-3">
-            <Label>Forwarding Type</Label>
-            <div className="grid gap-3">
-              {/* All Calls - Recommended */}
-              <label
-                className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+          <div className="space-y-4">
+            <Label>{t('common:setup.phone.forwarding.forwardingType')}</Label>
+            <div className="grid gap-2.5">
+              {/* All Calls */}
+              <button
+                type="button"
+                onClick={() => setForwardingType('all')}
+                className={`relative flex items-start gap-3 text-left rounded-xl p-4 transition-all duration-200 ${
                   forwardingType === 'all'
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border hover:border-primary/50'
+                    ? 'bg-primary/[0.06] ring-2 ring-primary shadow-sm'
+                    : 'bg-muted/20 ring-1 ring-border/40 hover:ring-border/70 hover:bg-muted/30'
                 }`}
               >
-                <input
-                  type="radio"
-                  name="forwardingType"
-                  value="all"
-                  checked={forwardingType === 'all'}
-                  onChange={() => setForwardingType('all')}
-                  className="sr-only"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <PhoneForwarded className="h-4 w-4 text-primary" />
-                    <span className="font-medium">Forward All Calls</span>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Every incoming call goes to the AI receptionist. Best for
-                    clinics that want full AI coverage. You&apos;ll provide a
-                    dedicated human line for emergencies and transfer requests.
-                  </p>
+                <div
+                  className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                    forwardingType === 'all'
+                      ? 'border-primary bg-primary'
+                      : 'border-muted-foreground/40'
+                  }`}
+                >
+                  {forwardingType === 'all' && (
+                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                  )}
                 </div>
-              </label>
-
-              {/* Conditional */}
-              <label
-                className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
-                  forwardingType === 'conditional'
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="forwardingType"
-                  value="conditional"
-                  checked={forwardingType === 'conditional'}
-                  onChange={() => setForwardingType('conditional')}
-                  className="sr-only"
-                />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    <span className="font-medium">
-                      No-Answer &amp; Busy Only
+                    <PhoneForwarded
+                      className={`h-4 w-4 ${forwardingType === 'all' ? 'text-primary' : 'text-muted-foreground'}`}
+                    />
+                    <span className="font-medium text-sm">
+                      {t('common:setup.phone.forwarding.forwardAll')}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Staff answers during office hours. AI only picks up when
-                    nobody answers or lines are busy. Good for gradual
-                    adoption.
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                    {t('common:setup.phone.forwarding.forwardAllDesc')}
                   </p>
                 </div>
-              </label>
+              </button>
+
+              {/* Conditional */}
+              <button
+                type="button"
+                onClick={() => setForwardingType('conditional')}
+                className={`relative flex items-start gap-3 text-left rounded-xl p-4 transition-all duration-200 ${
+                  forwardingType === 'conditional'
+                    ? 'bg-primary/[0.06] ring-2 ring-primary shadow-sm'
+                    : 'bg-muted/20 ring-1 ring-border/40 hover:ring-border/70 hover:bg-muted/30'
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                    forwardingType === 'conditional'
+                      ? 'border-primary bg-primary'
+                      : 'border-muted-foreground/40'
+                  }`}
+                >
+                  {forwardingType === 'conditional' && (
+                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Phone
+                      className={`h-4 w-4 ${forwardingType === 'conditional' ? 'text-primary' : 'text-muted-foreground'}`}
+                    />
+                    <span className="font-medium text-sm">
+                      {t('common:setup.phone.forwarding.noAnswer')}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                    {t('common:setup.phone.forwarding.noAnswerDesc')}
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
 
-          {/* Human line — required for "all calls", optional for conditional */}
+          {/* Human line */}
           <div className="space-y-2">
             <Label htmlFor="staffDirectNumber">
-              Dedicated Human Line{' '}
+              {t('common:setup.phone.forwarding.humanLine')}{' '}
               {forwardingType === 'all' ? (
                 <span className="text-destructive">*</span>
               ) : (
                 <span className="text-muted-foreground text-xs font-normal">
-                  (optional)
+                  {t('common:setup.phone.forwarding.optional')}
                 </span>
               )}
             </Label>
@@ -239,41 +298,24 @@ export function ForwardedNumberSetup({
               value={staffDirectNumber}
               onChange={(e) => setStaffDirectNumber(e.target.value)}
               disabled={isProvisioning}
+              className="h-11"
             />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               {forwardingType === 'all' ? (
-                <>
-                  A direct number where a human can always be reached (office
-                  back line, cell phone, etc.). When a caller asks to speak
-                  with a human or there&apos;s an emergency, the AI will
-                  transfer the call here.{' '}
-                  <strong>
-                    This must be different from your main number
-                  </strong>{' '}
-                  since all calls on that number are forwarded to AI.
-                </>
+                t('common:setup.phone.forwarding.humanLineDescAll')
               ) : (
-                <>
-                  A direct office number, cell phone, or back line. Used for{' '}
-                  <strong>emergency transfers</strong> and when a caller asks to
-                  speak with a human. If not provided, transfers will go to your
-                  main clinic number.
-                </>
+                t('common:setup.phone.forwarding.humanLineDescConditional')
               )}
             </p>
           </div>
 
           {forwardingType === 'all' && !staffDirectNumber && clinicNumber && (
-            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-              <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
-                <strong>A dedicated human line is required</strong> when
-                forwarding all calls. Since your main number forwards
-                everything to AI, the AI needs a separate number to transfer
-                callers to a real person. This can be a cell phone, back office
-                line, or any number staff can answer.
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 p-3 flex items-start gap-2.5">
+              <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                {t('common:setup.phone.forwarding.humanLineRequired')}
+              </p>
+            </div>
           )}
 
           <Button
@@ -283,252 +325,320 @@ export function ForwardedNumberSetup({
               isProvisioning ||
               (forwardingType === 'all' && !staffDirectNumber)
             }
-            className="w-full"
+            className="w-full h-11"
           >
             {isProvisioning && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            Save Configuration
+            {t('common:setup.phone.forwarding.saveConfig')}
           </Button>
         </div>
       )}
 
       {/* Step 2: Configuration Saved */}
       {setupComplete && (
-        <div className="space-y-4">
-          <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
-            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-            <AlertDescription className="text-green-800 dark:text-green-200">
-              <strong>Configuration Saved!</strong> Your forwarding setup has
-              been configured.
-            </AlertDescription>
-          </Alert>
+        <div className="space-y-4 animate-in slide-in-from-bottom-2 fade-in duration-300">
+          {/* Success banner */}
+          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 p-3 flex items-center gap-2.5">
+            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+            <span className="text-sm text-green-800 dark:text-green-200">
+              <strong>{t('common:setup.phone.forwarding.configSaved')}</strong> {t('common:setup.phone.forwarding.configSavedDesc')}
+            </span>
+          </div>
 
-          {/* Clinic Number Card */}
-          <Card className="border-primary">
-            <CardContent className="pt-6">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-sm text-muted-foreground">
-                      Clinic main number:
-                    </div>
-                    <div className="text-2xl font-bold font-mono">
-                      {clinicNumber}
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSetupComplete(false)}
-                  >
-                    Edit
-                  </Button>
+          {/* Numbers summary */}
+          <div className="rounded-xl bg-card shadow-sm ring-1 ring-border/50 overflow-hidden">
+            {/* Clinic number */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground mb-0.5">
+                  {t('common:setup.phone.forwarding.clinicMainNumber')}
                 </div>
-                {staffDirectNumber && (
-                  <div>
-                    <div className="text-sm text-muted-foreground">
-                      Staff direct line (for emergency transfers):
-                    </div>
-                    <div className="text-lg font-semibold font-mono">
+                <div className="text-xl font-semibold font-mono tracking-tight">
+                  {clinicNumber}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setSetupComplete(false)}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                {t('common:setup.phone.forwarding.edit')}
+              </Button>
+            </div>
+
+            <div className="border-t border-border/50" />
+
+            {/* Human line section */}
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1.5">
+                    <UserRound className="h-3 w-3" />
+                    {t('common:setup.phone.forwarding.humanLine')}
+                    {forwardingType === 'all' && (
+                      <span className="text-destructive">*</span>
+                    )}
+                  </div>
+                  {staffDirectNumber && !editingHumanLine ? (
+                    <div className="text-lg font-semibold font-mono tracking-tight">
                       {staffDirectNumber}
                     </div>
-                  </div>
+                  ) : !editingHumanLine ? (
+                    <div className="text-sm text-muted-foreground">
+                      {t('common:setup.phone.forwarding.notConfigured')}
+                    </div>
+                  ) : null}
+                </div>
+                {!editingHumanLine && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setTempHumanLine(staffDirectNumber);
+                      setEditingHumanLine(true);
+                    }}
+                  >
+                    {staffDirectNumber ? (
+                      <>
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                        {t('common:setup.phone.forwarding.edit')}
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5 mr-1.5" />
+                        {t('common:setup.phone.forwarding.add')}
+                      </>
+                    )}
+                  </Button>
                 )}
-                <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-                  <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <AlertDescription className="text-blue-800 dark:text-blue-200">
-                    <strong>Next Steps:</strong> A Twilio forwarding number will
-                    be provisioned when you complete payment and deploy your AI
-                    receptionist in the review step.
-                  </AlertDescription>
-                </Alert>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* What Happens Next */}
-          <Alert>
-            <Phone className="h-4 w-4" />
-            <AlertDescription>
-              <strong>After deployment:</strong>
-              <ol className="list-decimal list-inside mt-3 space-y-2 text-sm">
-                <li>
-                  We&apos;ll provision a Twilio number and share it with you
-                </li>
-                <li>
-                  Set up call forwarding on your carrier from{' '}
-                  <strong className="font-mono">{clinicNumber}</strong> to the
-                  Twilio number
-                </li>
-                <li>
-                  Calls will be handled by your AI receptionist.{' '}
-                  {staffDirectNumber
-                    ? 'Emergency and human transfer requests will be routed to your dedicated human line.'
-                    : 'Human transfer requests will be routed to your main clinic number.'}
-                </li>
-              </ol>
-            </AlertDescription>
-          </Alert>
+              {/* Inline edit for human line */}
+              {editingHumanLine && (
+                <div className="mt-2 space-y-2 animate-in slide-in-from-top-1 fade-in duration-200">
+                  <Input
+                    type="tel"
+                    placeholder="+1 (416) 555-5678"
+                    value={tempHumanLine}
+                    onChange={(e) => setTempHumanLine(e.target.value)}
+                    className="h-10"
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('common:setup.phone.forwarding.humanLineInlineHint')}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={saveHumanLine}>
+                      {pending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : null}
+                      {t('common:setup.phone.forwarding.save')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingHumanLine(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Nudge to add human line if missing */}
+              {!staffDirectNumber && !editingHumanLine && (
+                <div className="mt-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                  {forwardingType === 'all' ? (
+                    <>
+                      <strong>{t('common:setup.phone.forwarding.requiredLabel')}</strong> {t('common:setup.phone.forwarding.requiredNudge')}
+                    </>
+                  ) : (
+                    <>
+                      <strong>{t('common:setup.phone.forwarding.recommendedLabel')}</strong> {t('common:setup.phone.forwarding.recommendedNudge')}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Next steps */}
+          <div className="rounded-xl bg-blue-50/60 dark:bg-blue-950/20 p-3.5 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed">
+              <strong>{t('common:setup.phone.forwarding.nextSteps')}</strong> {t('common:setup.phone.forwarding.nextStepsDesc')}
+            </p>
+          </div>
+
+          {/* After deployment */}
+          <div className="rounded-xl bg-muted/30 p-4">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{t('common:setup.phone.forwarding.afterDeployment')}</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1.5 text-xs text-muted-foreground leading-relaxed">
+              <li>
+                {t('common:setup.phone.forwarding.step1')}
+              </li>
+              <li>
+                {t('common:setup.phone.forwarding.step2Pre')}{' '}
+                <strong className="font-mono text-foreground">
+                  {clinicNumber}
+                </strong>{' '}
+                {t('common:setup.phone.forwarding.step2Post')}
+              </li>
+              <li>
+                {t('common:setup.phone.forwarding.step3')}{' '}
+                {staffDirectNumber
+                  ? t('common:setup.phone.forwarding.step3HumanLine')
+                  : t('common:setup.phone.forwarding.step3NoHumanLine')}
+              </li>
+            </ol>
+          </div>
 
           {/* Carrier Setup Guide (collapsible) */}
-          <Card>
-            <CardHeader
-              className="cursor-pointer select-none"
+          <div className="rounded-xl ring-1 ring-border/40 overflow-hidden">
+            <button
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors"
               onClick={() => setShowCarrierGuide(!showCarrierGuide)}
             >
-              <CardTitle className="flex items-center justify-between text-base">
-                <span className="flex items-center gap-2">
-                  <Info className="h-4 w-4" />
-                  How to Set Up Forwarding on Your Carrier
-                </span>
-                {showCarrierGuide ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </CardTitle>
-            </CardHeader>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <Info className="h-4 w-4 text-muted-foreground" />
+                {t('common:setup.phone.forwarding.carrierGuide')}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                  showCarrierGuide ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
             {showCarrierGuide && (
-              <CardContent className="pt-0 space-y-5 text-sm">
-                {/* Overview */}
-                <div className="rounded-lg border p-4">
-                  <h4 className="font-semibold mb-2">
-                    Carrier Forwarding Codes
-                  </h4>
-                  <p className="text-muted-foreground">
-                    Use the codes below for your carrier to set up forwarding.
-                    Choose <strong>All Calls</strong> for full AI coverage, or{' '}
-                    <strong>No-Answer / Busy</strong> if staff should answer
-                    first.
-                  </p>
-                </div>
+              <div className="px-4 pb-4 space-y-4 text-sm animate-in slide-in-from-top-1 fade-in duration-200">
+                <div className="border-t border-border/40 pt-4" />
+
+                <p className="text-xs text-muted-foreground">
+                  {t('common:setup.phone.forwarding.carrierGuideDesc')}
+                </p>
 
                 {/* Canadian carriers */}
                 <div>
-                  <h4 className="font-semibold mb-2">
-                    Canadian Carriers (Bell, Rogers, Telus, Fido, Koodo, Virgin)
+                  <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
+                    {t('common:setup.phone.forwarding.canadianCarriers')}
                   </h4>
-                  <div className="space-y-3">
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium mb-1">
-                        All Calls (Unconditional)
-                      </div>
-                      <p className="text-muted-foreground">
-                        All calls go straight to AI
-                      </p>
-                      <div className="mt-2 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*72</strong> + Twilio number
-                        <br />
-                        Disable: <strong>*73</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-muted-foreground mb-1">
-                        No-Answer Forwarding
-                      </div>
-                      <p className="text-muted-foreground">
-                        Forwards after ~15-25 seconds if nobody answers
-                      </p>
-                      <div className="mt-2 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*92</strong> + Twilio number
-                        <br />
-                        Disable: <strong>*93</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-muted-foreground mb-1">
-                        Busy Forwarding
-                      </div>
-                      <p className="text-muted-foreground">
-                        Forwards when all lines are occupied
-                      </p>
-                      <div className="mt-2 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*90</strong> + Twilio number
-                        <br />
-                        Disable: <strong>*91</strong>
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <CarrierCode
+                      label="All Calls (Unconditional)"
+                      desc="All calls go straight to AI"
+                      activate="*72"
+                      disable="*73"
+                    />
+                    <CarrierCode
+                      label="No-Answer"
+                      desc="Forwards after ~15-25s"
+                      activate="*92"
+                      disable="*93"
+                      muted
+                    />
+                    <CarrierCode
+                      label="Busy"
+                      desc="Forwards when lines occupied"
+                      activate="*90"
+                      disable="*91"
+                      muted
+                    />
                   </div>
                 </div>
 
                 {/* US carriers */}
                 <div>
-                  <h4 className="font-semibold mb-2">
-                    US Carriers (AT&amp;T, Verizon, T-Mobile)
+                  <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
+                    {t('common:setup.phone.forwarding.usCarriers')}
                   </h4>
-                  <div className="space-y-3">
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium mb-1">
-                        All Calls (Unconditional)
-                      </div>
-                      <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*21*</strong>Twilio number
-                        <strong>#</strong>
-                        <br />
-                        Disable: <strong>#21#</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-muted-foreground mb-1">
-                        No-Answer Forwarding
-                      </div>
-                      <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*61*</strong>Twilio number
-                        <strong>#</strong>
-                        <br />
-                        Disable: <strong>#61#</strong>
-                      </div>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <div className="font-medium text-muted-foreground mb-1">
-                        Busy Forwarding
-                      </div>
-                      <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
-                        Activate: <strong>*67*</strong>Twilio number
-                        <strong>#</strong>
-                        <br />
-                        Disable: <strong>#67#</strong>
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <CarrierCode
+                      label="All Calls (Unconditional)"
+                      activate="*21*[number]#"
+                      disable="#21#"
+                    />
+                    <CarrierCode
+                      label="No-Answer"
+                      activate="*61*[number]#"
+                      disable="#61#"
+                      muted
+                    />
+                    <CarrierCode
+                      label="Busy"
+                      activate="*67*[number]#"
+                      disable="#67#"
+                      muted
+                    />
                   </div>
                 </div>
 
                 {/* VoIP */}
                 <div>
-                  <h4 className="font-semibold mb-2">
-                    VoIP / PBX Systems (RingCentral, 8x8, Vonage, Grasshopper)
+                  <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
+                    VoIP / PBX Systems
                   </h4>
-                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
                     <li>Log into your VoIP admin portal</li>
-                    <li>
-                      Navigate to <strong>Call Routing</strong> or{' '}
-                      <strong>Call Forwarding</strong>
-                    </li>
+                    <li>Navigate to Call Routing or Call Forwarding</li>
                     <li>Add the Twilio number as a forwarding destination</li>
-                    <li>
-                      Set to forward all calls, or configure no-answer/busy
-                      rules
-                    </li>
+                    <li>Set to forward all calls, or configure rules</li>
                     <li>Save and test with a call</li>
                   </ol>
                 </div>
 
                 {/* Landline */}
                 <div>
-                  <h4 className="font-semibold mb-2">Traditional Landline</h4>
-                  <p className="text-muted-foreground">
-                    Contact your phone provider and request{' '}
-                    <strong>all call forwarding</strong> (or no-answer/busy if
-                    preferred) to the Twilio number. Most carriers support this
-                    for $3-5/month.
+                  <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
+                    Traditional Landline
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Contact your phone provider and request call forwarding to
+                    the Twilio number. Most carriers support this for $3-5/month.
                   </p>
                 </div>
-              </CardContent>
+              </div>
             )}
-          </Card>
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CarrierCode({
+  label,
+  desc,
+  activate,
+  disable,
+  muted,
+}: {
+  label: string;
+  desc?: string;
+  activate: string;
+  disable: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-3 py-2.5">
+      <div
+        className={`text-xs font-medium ${muted ? 'text-muted-foreground' : ''}`}
+      >
+        {label}
+      </div>
+      {desc && (
+        <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+      )}
+      <div className="mt-1.5 font-mono text-xs text-muted-foreground">
+        On: <strong className="text-foreground">{activate}</strong>
+        {'  '}Off: <strong className="text-foreground">{disable}</strong>
+      </div>
     </div>
   );
 }

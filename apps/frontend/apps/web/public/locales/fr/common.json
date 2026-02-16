@@ -26,12 +26,17 @@
     "home": "Accueil",
     "dashboard": "Tableau de bord",
     "callLogs": "Journal d'appels",
-    "setup": "Configuration",
+    "setup": "Agent IA",
     "aiAgents": "Agents IA",
     "advancedSetup": "Configuration avancée",
+    "manage": "Gérer",
     "settings": "Paramètres",
+    "accountSettings": "Paramètres du compte",
+    "features": "Fonctionnalités",
     "profile": "Profil",
-    "billing": "Facturation"
+    "branding": "Image de marque",
+    "billing": "Facturation",
+    "team": "Équipe"
   },
   "documentation": "Documentation",
   "signedInAs": "Connecté en tant que",
@@ -227,14 +232,14 @@
           "Configuration en minutes",
           "Aucune paperasse requise",
           "Gardez le contrôle total de votre numéro",
-          "Facile à désactiver"
+          "Facile à désactiver",
+          "ID de l'appelant réel préservé"
         ],
         "cons": [
-          "L'ID de l'appelant peut ne pas s'afficher correctement",
-          "Qualité d'appel légèrement inférieure",
-          "Peut entraîner des frais de renvoi"
+          "Peut entraîner des frais de renvoi opérateur",
+          "Codes de configuration dépendants de l'opérateur"
         ],
-        "bestFor": "Tests rapides, configuration temporaire"
+        "bestFor": "La plupart des cliniques — configuration rapide avec ID d'appelant complet"
       },
       "ported": {
         "name": "Portage de numéro",
@@ -259,7 +264,49 @@
       "selectedMethod": "Méthode sélectionnée",
       "submitPortRequest": "Soumettre la demande de portage",
       "continueToReview": "Continuer vers la révision",
-      "backToIntegrations": "Retour aux intégrations"
+      "backToIntegrations": "Retour aux intégrations",
+      "forwarding": {
+        "headerTitle": "Configuration du renvoi d'appel :",
+        "headerDesc": "Le moyen le plus rapide de commencer. Gardez votre numéro existant et renvoyez les appels vers Parlae quand vous souhaitez que l'IA réponde. L'identifiant de l'appelant est préservé pour les recherches automatiques.",
+        "clinicNumber": "Numéro principal de la clinique",
+        "clinicNumberHint": "Le numéro que les patients appellent actuellement. Vous configurerez le renvoi depuis ce numéro après le déploiement.",
+        "forwardingType": "Type de renvoi",
+        "forwardAll": "Renvoyer tous les appels",
+        "forwardAllDesc": "Chaque appel entrant est dirigé vers le réceptionniste IA. Vous fournirez une ligne humaine dédiée pour les urgences et les demandes de transfert.",
+        "noAnswer": "Non-réponse et occupé uniquement",
+        "noAnswerDesc": "Le personnel répond pendant les heures d'ouverture. L'IA prend les appels quand personne ne répond ou quand les lignes sont occupées. Bon pour une adoption progressive.",
+        "humanLine": "Ligne humaine dédiée",
+        "optional": "(optionnel)",
+        "humanLineDescAll": "Un numéro direct où un humain peut toujours être joint (ligne arrière du bureau, cellulaire, etc.). Quand un appelant demande à parler à une personne ou en cas d'urgence, l'IA transfère l'appel ici. Doit être différent de votre numéro principal.",
+        "humanLineDescConditional": "Un numéro direct du bureau, cellulaire ou ligne arrière pour les transferts d'urgence et les demandes humaines. Si non fourni, les transferts iront à votre numéro principal.",
+        "humanLineRequired": "Une ligne humaine dédiée est requise lors du renvoi de tous les appels. L'IA a besoin d'un numéro séparé pour transférer les appelants à une vraie personne.",
+        "saveConfig": "Enregistrer la configuration",
+        "configSaved": "Configuration enregistrée !",
+        "configSavedDesc": "Votre configuration de renvoi a été enregistrée.",
+        "clinicMainNumber": "Numéro principal de la clinique",
+        "edit": "Modifier",
+        "add": "Ajouter",
+        "notConfigured": "Non configuré",
+        "humanLineInlineHint": "Une ligne arrière, cellulaire ou tout numéro que le personnel peut utiliser pour les urgences et les demandes de transfert humain.",
+        "save": "Enregistrer",
+        "requiredLabel": "Requis :",
+        "requiredNudge": "Puisque tous les appels sont renvoyés vers l'IA, ajoutez une ligne humaine pour que l'IA puisse transférer les urgences et les demandes humaines.",
+        "recommendedLabel": "Recommandé :",
+        "recommendedNudge": "Ajoutez une ligne humaine pour que l'IA puisse transférer les appels d'urgence à une vraie personne au lieu de votre ligne principale.",
+        "nextSteps": "Prochaines étapes :",
+        "nextStepsDesc": "Un numéro de renvoi Twilio sera provisionné lorsque vous aurez complété le paiement et déployé votre réceptionniste IA à l'étape de révision.",
+        "afterDeployment": "Après le déploiement",
+        "step1": "Nous provisionnerons un numéro Twilio et le partagerons avec vous",
+        "step2Pre": "Configurez le renvoi d'appel chez votre opérateur depuis",
+        "step2Post": "vers le numéro Twilio",
+        "step3": "Les appels seront traités par votre réceptionniste IA.",
+        "step3HumanLine": "Les urgences et les demandes de transfert humain seront acheminées vers votre ligne humaine dédiée.",
+        "step3NoHumanLine": "Les demandes de transfert humain seront acheminées vers votre numéro principal de clinique.",
+        "carrierGuide": "Comment configurer le renvoi chez votre opérateur",
+        "carrierGuideDesc": "Utilisez les codes ci-dessous pour votre opérateur. Choisissez Tous les appels pour une couverture IA complète, ou Non-réponse / Occupé si le personnel doit répondre en premier.",
+        "canadianCarriers": "Opérateurs canadiens",
+        "usCarriers": "Opérateurs américains"
+      }
     },
     "review": {
       "title": "Révision et lancement",
@@ -302,6 +349,142 @@
       "continue": "Continuer",
       "skip": "Passer",
       "finish": "Terminer"
+    }
+  },
+  "settings": {
+    "title": "Paramètres du compte",
+    "description": "Gérez votre compte, image de marque, facturation et équipe",
+    "tabs": {
+      "profile": "Profil",
+      "branding": "Image de marque",
+      "billing": "Facturation",
+      "team": "Équipe"
+    },
+    "profile": {
+      "title": "Votre profil",
+      "description": "Vos informations de compte personnel. L'authentification est gérée par Cognito.",
+      "accountOwner": "Propriétaire du compte",
+      "displayName": "Nom d'affichage",
+      "email": "Email",
+      "memberSince": "Membre depuis",
+      "auth": "Auth",
+      "slug": "Slug",
+      "accountDetails": "Détails du compte",
+      "accountDetailsDescription": "Informations de votre espace de travail",
+      "accountName": "Nom du compte",
+      "accountEmail": "Email du compte",
+      "accountId": "ID du compte",
+      "created": "Créé",
+      "notSet": "Non défini",
+      "security": "Sécurité",
+      "securityDescription": "Paramètres d'authentification et de sécurité",
+      "passwordAndAuth": "Mot de passe et authentification",
+      "passwordAndAuthDescription": "Votre mot de passe et vos paramètres MFA sont gérés par AWS Cognito",
+      "managedByCognito": "Géré par Cognito"
+    },
+    "team": {
+      "title": "Membres de l'équipe",
+      "description": "Gérez les membres de votre équipe et leurs niveaux d'accès",
+      "owner": "Propriétaire",
+      "teamCount": "Équipe ({{count}})",
+      "noMembers": "Aucun membre d'équipe pour le moment",
+      "noMembersDescription": "Invitez des employés à collaborer à la gestion de votre réceptionniste IA",
+      "pendingInvitations": "Invitations en attente",
+      "pendingInvitationsDescription": "Invitations qui n'ont pas encore été acceptées",
+      "expires": "Expire",
+      "pending": "En attente"
+    },
+    "branding": {
+      "infoText": "Ces paramètres seront utilisés dans tous les courriels de confirmation de rendez-vous envoyés à vos patients. Si non fournis, les valeurs par défaut seront utilisées.",
+      "title": "Paramètres de marque",
+      "description": "Configurez l'image de marque de votre clinique pour les communications par courriel",
+      "logoUrl": "URL du logo",
+      "logoRecommendation": "Recommandé : PNG 200x50px avec fond transparent. Doit être une URL accessible publiquement.",
+      "preview": "Aperçu :",
+      "logoPreviewAlt": "Aperçu du logo",
+      "logoLoadError": "Échec du chargement du logo. Vérifiez l'URL.",
+      "primaryColor": "Couleur principale de marque",
+      "colorUsage": "Utilisée pour les boutons et les accents dans les courriels",
+      "businessName": "Nom de l'entreprise (Optionnel)",
+      "businessNameHint": "Laissez vide pour utiliser le nom de votre compte dans les courriels",
+      "contactEmail": "Courriel de contact",
+      "contactEmailHint": "Adresse courriel que les patients peuvent utiliser pour vous contacter",
+      "contactPhone": "Téléphone de contact",
+      "contactPhoneHint": "Numéro de téléphone que les patients peuvent appeler pour des changements ou des questions",
+      "address": "Adresse physique",
+      "addressHint": "Apparaîtra dans le pied de page des courriels",
+      "website": "Site web",
+      "websiteHint": "URL du site web de votre clinique",
+      "previewNote": "Votre image de marque apparaîtra dans les courriels de confirmation, d'annulation et de reprogrammation de rendez-vous envoyés aux patients.",
+      "saveButton": "Enregistrer les paramètres de marque",
+      "saveSuccess": "Paramètres de marque enregistrés avec succès !",
+      "saveError": "Échec de l'enregistrement des paramètres de marque",
+      "saveErrorGeneric": "Une erreur s'est produite lors de l'enregistrement"
+    }
+  },
+  "features": {
+    "title": "Réceptionniste IA",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "liveMessage": "Votre réceptionniste IA est en ligne. {{count}} fonctionnalités activées.",
+    "offMessage": "Votre réceptionniste IA est désactivé. Activez-le pour commencer à répondre aux appels.",
+    "featureControls": "Contrôle des fonctionnalités",
+    "featureControlsDesc": "Activez ou désactivez les fonctionnalités individuellement. Les changements prennent effet immédiatement.",
+    "infoNote": "Les fonctionnalités principales sont activées par défaut. Activez les fonctionnalités optionnelles selon vos besoins. Les fonctionnalités marquées « Bientôt disponible » sont en développement.",
+    "comingSoon": "Bientôt disponible",
+    "categories": {
+      "core": "Fonctionnalités principales",
+      "coreDesc": "Capacités essentielles du réceptionniste IA",
+      "communication": "Communication",
+      "communicationDesc": "Notifications et sensibilisation des patients",
+      "integration": "Intégrations",
+      "integrationDesc": "Connexion avec les services externes",
+      "advanced": "Avancé",
+      "advancedDesc": "Bientôt disponible — capacités avancées"
+    },
+    "aiReceptionist": {
+      "name": "Réceptionniste IA",
+      "description": "Votre réceptionniste téléphonique alimenté par l'IA répond aux appels, réserve des rendez-vous et gère les demandes des patients 24h/24."
+    },
+    "callLogging": {
+      "name": "Journalisation et analytique des appels",
+      "description": "Suivez tous les appels entrants, consultez les transcriptions et surveillez les performances de l'IA avec des analyses détaillées."
+    },
+    "knowledgeBase": {
+      "name": "Base de connaissances",
+      "description": "Téléchargez des documents pour former votre IA sur vos services, politiques et FAQ."
+    },
+    "smsConfirmations": {
+      "name": "Confirmations par SMS",
+      "description": "Envoyez des confirmations et rappels de rendez-vous par SMS aux patients via Twilio."
+    },
+    "emailConfirmations": {
+      "name": "Confirmations par courriel",
+      "description": "Envoyez des courriels de confirmation personnalisés pour les rendez-vous, annulations et reprogrammations."
+    },
+    "outboundCalls": {
+      "name": "Appels sortants",
+      "description": "Contactez proactivement les patients pour les rappels de rendez-vous, suivis et campagnes de rappel."
+    },
+    "googleCalendar": {
+      "name": "Google Agenda",
+      "description": "Synchronisez les rendez-vous avec Google Agenda pour la disponibilité en temps réel et la réservation."
+    },
+    "pmsIntegration": {
+      "name": "Intégration logiciel de gestion",
+      "description": "Connectez votre système de gestion de cabinet pour une gestion transparente des patients et des rendez-vous."
+    },
+    "insuranceVerification": {
+      "name": "Vérification d'assurance",
+      "description": "Vérifiez automatiquement l'éligibilité et les avantages d'assurance des patients avant les rendez-vous."
+    },
+    "paymentCollection": {
+      "name": "Collecte de paiements",
+      "description": "Collectez les paiements et co-paiements des patients par téléphone ou via des liens de paiement par SMS."
+    },
+    "leadManagement": {
+      "name": "Gestion des prospects",
+      "description": "Capturez et gérez les nouveaux prospects de patients à partir des appels, suivez les taux de conversion et automatisez les suivis."
     }
   }
 }

@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Separator } from '@kit/ui/separator';
 import {
   PhoneCall,
@@ -182,13 +181,13 @@ export default async function PhoneIntegrationSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
+          <div className="mb-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">
               Changing your integration method will require reconfiguring your phone setup.
               Your AI receptionist will be temporarily unavailable during the transition.
-            </AlertDescription>
-          </Alert>
+            </p>
+          </div>
 
           <Link href="/home/agent/setup/phone">
             <Button variant="outline" className="w-full">
@@ -212,7 +211,7 @@ export default async function PhoneIntegrationSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-5 text-sm">
             {/* Recommended setup */}
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div className="rounded-xl ring-1 ring-primary/20 bg-primary/[0.04] p-4">
               <h4 className="font-semibold mb-2">
                 Recommended: No-Answer + Busy Forwarding
               </h4>
@@ -228,31 +227,31 @@ export default async function PhoneIntegrationSettingsPage() {
                 Canadian Carriers (Bell, Rogers, Telus)
               </h4>
               <div className="space-y-3">
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-green-700 dark:text-green-400 mb-1">
                     No-Answer Forwarding
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*92</strong> + {twilioNumber}
                     <br />
                     Disable: <strong>*93</strong>
                   </div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-green-700 dark:text-green-400 mb-1">
                     Busy Forwarding
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*90</strong> + {twilioNumber}
                     <br />
                     Disable: <strong>*91</strong>
                   </div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
                     All Calls (Unconditional)
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*72</strong> + {twilioNumber}
                     <br />
                     Disable: <strong>*73</strong>
@@ -267,31 +266,31 @@ export default async function PhoneIntegrationSettingsPage() {
                 US Carriers (AT&amp;T, Verizon, T-Mobile)
               </h4>
               <div className="space-y-3">
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-green-700 dark:text-green-400 mb-1">
                     No-Answer Forwarding
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*61*</strong>{twilioNumber}<strong>#</strong>
                     <br />
                     Disable: <strong>#61#</strong>
                   </div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-green-700 dark:text-green-400 mb-1">
                     Busy Forwarding
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*67*</strong>{twilioNumber}<strong>#</strong>
                     <br />
                     Disable: <strong>#67#</strong>
                   </div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-xl ring-1 ring-border/30 p-3">
                   <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
                     All Calls (Unconditional)
                   </div>
-                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                  <div className="mt-1 font-mono text-xs bg-muted/50 p-2 rounded-lg">
                     Activate: <strong>*21*</strong>{twilioNumber}<strong>#</strong>
                     <br />
                     Disable: <strong>#21#</strong>

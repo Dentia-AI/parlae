@@ -236,7 +236,7 @@ export default function ReviewPage() {
 
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
-        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
+        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
           
           {/* Payment Section - Shows First, Collapses After Completion */}
           <Collapsible 
@@ -437,11 +437,10 @@ export default function ReviewPage() {
                     )}
                   </div>
 
-                  <Alert>
-                    <AlertDescription className="text-xs">
-                      <strong><Trans i18nKey="common:setup.review.readyToLaunch" /></strong> <Trans i18nKey="common:setup.review.readyToLaunchDesc" />
-                    </AlertDescription>
-                  </Alert>
+                  <div className="rounded-xl bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                    <strong className="text-foreground"><Trans i18nKey="common:setup.review.readyToLaunch" /></strong>{' '}
+                    <Trans i18nKey="common:setup.review.readyToLaunchDesc" />
+                  </div>
                 </CardContent>
               </CollapsibleContent>
             </Card>
@@ -453,7 +452,7 @@ export default function ReviewPage() {
       </div>
 
       {/* Navigation - Fixed at bottom */}
-      <div className="pt-4 border-t flex-shrink-0 bg-background">
+      <div className="pt-4 border-t border-border/40 flex-shrink-0 bg-background">
         <div className="flex justify-between">
           <Button
             variant="outline"

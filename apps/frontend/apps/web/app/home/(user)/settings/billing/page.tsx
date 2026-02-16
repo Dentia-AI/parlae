@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/
 import { Badge } from '@kit/ui/badge';
 import { Button } from '@kit/ui/button';
 import { Slider } from '@kit/ui/slider';
-import { Alert, AlertDescription } from '@kit/ui/alert';
+
+
 import {
   Phone,
   PhoneOutgoing,
@@ -170,16 +171,16 @@ export default function SettingsBillingPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Status Banner */}
       {!billingEnabled && (
-        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
-          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="text-blue-800 dark:text-blue-200">
+        <div className="rounded-xl bg-blue-50/70 dark:bg-blue-950/30 px-4 py-3 flex items-start gap-2.5">
+          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-blue-800 dark:text-blue-200">
             <strong>Billing is currently inactive.</strong> Your account is on a complimentary plan during the setup period.
             Usage-based billing will be activated by your account administrator when ready.
-          </AlertDescription>
-        </Alert>
+          </p>
+        </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-5">
@@ -235,10 +236,10 @@ export default function SettingsBillingPage() {
                     onClick={() => toggleFeature(feature.id)}
                     disabled={feature.comingSoon || !billingEnabled}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg border p-3.5 text-left transition-all',
+                      'flex items-center gap-3 rounded-xl p-3.5 text-left transition-all duration-200',
                       feature.included && !feature.comingSoon
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                        : 'border-border hover:border-muted-foreground/30',
+                        ? 'bg-primary/[0.06] ring-1 ring-primary/30 shadow-sm'
+                        : 'ring-1 ring-border/30 hover:ring-border/50',
                       (feature.comingSoon || !billingEnabled) && 'opacity-50 cursor-not-allowed',
                     )}
                   >
@@ -309,7 +310,7 @@ export default function SettingsBillingPage() {
 
         {/* Right: Pricing Card */}
         <div className="lg:col-span-2">
-          <Card className="sticky top-6 border-2">
+          <Card className="sticky top-6">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

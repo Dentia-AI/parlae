@@ -3,7 +3,7 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useTransition } from 'react';
 import { Button } from '@kit/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
+// Card components replaced with softer section styling
 import { Stepper } from '@kit/ui/stepper';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
@@ -297,22 +297,22 @@ export default function KnowledgeBasePage() {
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
         <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">
+        <div className="rounded-xl bg-card shadow-sm ring-1 ring-border/40 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="px-5 py-4 border-b border-border/30">
+            <h2 className="text-base font-semibold">
               <Trans i18nKey="common:setup.knowledge.pageTitle" defaults="Step 2: Knowledge Base" />
-            </CardTitle>
-            <CardDescription className="text-sm">
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
               <Trans i18nKey="common:setup.knowledge.cardDescription" defaults="Upload documents about your services, hours, policies, and FAQs" />
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </p>
+          </div>
+          <div className="p-5 space-y-4">
             {/* Upload Area */}
             <div
-              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
                 dragActive 
-                  ? 'border-primary bg-primary/5' 
-                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+                  ? 'border-primary bg-primary/5 shadow-sm' 
+                  : 'border-border/50 hover:border-border'
               }`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -357,7 +357,7 @@ export default function KnowledgeBasePage() {
                 </Label>
                 <div className="space-y-2">
                   {files.map((file) => (
-                    <Card key={file.id} className="p-2.5">
+                    <div key={file.id} className="rounded-lg bg-muted/30 ring-1 ring-border/30 p-2.5">
                       <div className="flex items-center gap-2">
                         <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -405,14 +405,14 @@ export default function KnowledgeBasePage() {
                           />
                         </div>
                       )}
-                    </Card>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <Alert>
-              <AlertDescription className="text-xs">
+            <div className="rounded-xl bg-muted/30 p-4">
+              <div className="text-xs">
                 <strong><Trans i18nKey="common:setup.knowledge.tipTitle" /></strong> Upload documents like:
                 <ul className="list-disc list-inside mt-1 space-y-0.5">
                   <li><Trans i18nKey="common:setup.knowledge.tipItems.hours" /></li>
@@ -421,10 +421,10 @@ export default function KnowledgeBasePage() {
                   <li><Trans i18nKey="common:setup.knowledge.tipItems.policies" /></li>
                   <li><Trans i18nKey="common:setup.knowledge.tipItems.insurance" /></li>
                 </ul>
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
+              </div>
+            </div>
+          </div>
+        </div>
         </div>
         {/* Fade effect at bottom */}
         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />

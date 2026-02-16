@@ -37,7 +37,7 @@ export default function SettingsLayout(props: React.PropsWithChildren) {
   return (
     <div className="flex flex-col h-full">
       {/* Settings Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 pt-6 pb-0">
+      <div className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 pt-6 pb-0">
         <div className="max-w-5xl">
           <h1 className="text-2xl font-bold tracking-tight">
             {t('common:settings.title')}
@@ -75,7 +75,7 @@ export default function SettingsLayout(props: React.PropsWithChildren) {
 
       {/* Settings Content */}
       <div className="flex-1 overflow-auto">
-        <div className="max-w-5xl px-6 py-6">
+        <div className="max-w-5xl px-6 py-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           {props.children}
         </div>
       </div>

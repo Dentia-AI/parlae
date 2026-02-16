@@ -3,7 +3,7 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
 import { Button } from '@kit/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
+// Card components no longer used here — cleaner section styling
 import { Stepper } from '@kit/ui/stepper';
 import { PhoneMethodSelector } from '../_components/phone-method-selector';
 import { PortedNumberSetup } from '../_components/ported-number-setup';
@@ -173,24 +173,24 @@ function PhoneSetupContent() {
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
         <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">
+          <div className="rounded-xl bg-card shadow-sm ring-1 ring-border/40 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="px-5 py-4 border-b border-border/30">
+              <h2 className="text-base font-semibold">
                 {!selectedMethod ? (
                   <Trans i18nKey="common:setup.phone.chooseMethod" defaults="Step 4: Choose Integration Method" />
                 ) : (
                   `Setup: ${getMethodName(selectedMethod)}`
                 )}
-              </CardTitle>
-              <CardDescription className="text-sm">
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {!selectedMethod ? (
                   <Trans i18nKey="common:setup.phone.chooseMethodDesc" defaults="Select how you want to connect your phone number" />
                 ) : (
                   <Trans i18nKey="common:setup.phone.setupMethod" defaults="Complete the setup for your selected method" />
                 )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+              </p>
+            </div>
+            <div className="p-5">
             {!selectedMethod ? (
               <PhoneMethodSelector
                 accountId={accountId}
@@ -225,8 +225,8 @@ function PhoneSetupContent() {
                 onSetupStateChange={setIsSetupComplete}
               />
             ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
         {/* Fade effect at bottom */}
         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />

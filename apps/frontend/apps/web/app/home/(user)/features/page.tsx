@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Switch } from '@kit/ui/switch';
-import { Alert, AlertDescription } from '@kit/ui/alert';
 import {
   Phone,
   PhoneOutgoing,
@@ -22,8 +22,8 @@ import {
 
 interface Feature {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   icon: React.ElementType;
   enabled: boolean;
   available: boolean;
@@ -35,8 +35,8 @@ const defaultFeatures: Feature[] = [
   // Core
   {
     id: 'ai-receptionist',
-    name: 'AI Receptionist',
-    description: 'Your AI-powered phone receptionist answers calls, books appointments, and handles patient inquiries 24/7.',
+    nameKey: 'features.aiReceptionist.name',
+    descriptionKey: 'features.aiReceptionist.description',
     icon: Bot,
     enabled: true,
     available: true,
@@ -44,8 +44,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'call-logging',
-    name: 'Call Logging & Analytics',
-    description: 'Track all incoming calls, view transcripts, and monitor AI performance with detailed analytics.',
+    nameKey: 'features.callLogging.name',
+    descriptionKey: 'features.callLogging.description',
     icon: Phone,
     enabled: true,
     available: true,
@@ -53,8 +53,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'knowledge-base',
-    name: 'Knowledge Base',
-    description: 'Upload documents to train your AI on your services, policies, and FAQs.',
+    nameKey: 'features.knowledgeBase.name',
+    descriptionKey: 'features.knowledgeBase.description',
     icon: Brain,
     enabled: true,
     available: true,
@@ -64,8 +64,8 @@ const defaultFeatures: Feature[] = [
   // Communication
   {
     id: 'sms-confirmations',
-    name: 'SMS Confirmations',
-    description: 'Send SMS appointment confirmations and reminders to patients via Twilio.',
+    nameKey: 'features.smsConfirmations.name',
+    descriptionKey: 'features.smsConfirmations.description',
     icon: MessageSquare,
     enabled: true,
     available: true,
@@ -73,8 +73,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'email-confirmations',
-    name: 'Email Confirmations',
-    description: 'Send branded email confirmations for appointments, cancellations, and reschedules.',
+    nameKey: 'features.emailConfirmations.name',
+    descriptionKey: 'features.emailConfirmations.description',
     icon: MessageSquare,
     enabled: true,
     available: true,
@@ -82,8 +82,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'outbound-calls',
-    name: 'Outbound Calls',
-    description: 'Proactively reach out to patients for appointment reminders, follow-ups, and recall campaigns.',
+    nameKey: 'features.outboundCalls.name',
+    descriptionKey: 'features.outboundCalls.description',
     icon: PhoneOutgoing,
     enabled: false,
     available: false,
@@ -94,8 +94,8 @@ const defaultFeatures: Feature[] = [
   // Integrations
   {
     id: 'google-calendar',
-    name: 'Google Calendar',
-    description: 'Sync appointments with Google Calendar for real-time availability and booking.',
+    nameKey: 'features.googleCalendar.name',
+    descriptionKey: 'features.googleCalendar.description',
     icon: Calendar,
     enabled: true,
     available: true,
@@ -103,8 +103,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'pms-integration',
-    name: 'PMS Integration',
-    description: 'Connect your Practice Management System for seamless patient and appointment management.',
+    nameKey: 'features.pmsIntegration.name',
+    descriptionKey: 'features.pmsIntegration.description',
     icon: Zap,
     enabled: true,
     available: true,
@@ -114,8 +114,8 @@ const defaultFeatures: Feature[] = [
   // Advanced
   {
     id: 'insurance-verification',
-    name: 'Insurance Verification',
-    description: 'Automatically verify patient insurance eligibility and benefits before appointments.',
+    nameKey: 'features.insuranceVerification.name',
+    descriptionKey: 'features.insuranceVerification.description',
     icon: Shield,
     enabled: false,
     available: false,
@@ -124,8 +124,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'payment-collection',
-    name: 'Payment Collection',
-    description: 'Collect patient payments and co-pays over the phone or via SMS payment links.',
+    nameKey: 'features.paymentCollection.name',
+    descriptionKey: 'features.paymentCollection.description',
     icon: CreditCard,
     enabled: false,
     available: false,
@@ -134,8 +134,8 @@ const defaultFeatures: Feature[] = [
   },
   {
     id: 'lead-management',
-    name: 'Lead Management',
-    description: 'Capture and manage new patient leads from calls, track conversion rates, and automate follow-ups.',
+    nameKey: 'features.leadManagement.name',
+    descriptionKey: 'features.leadManagement.description',
     icon: Users,
     enabled: false,
     available: false,
@@ -144,26 +144,27 @@ const defaultFeatures: Feature[] = [
   },
 ];
 
-const categoryLabels: Record<string, { label: string; description: string }> = {
+const categoryKeys: Record<string, { labelKey: string; descriptionKey: string }> = {
   core: {
-    label: 'Core Features',
-    description: 'Essential AI receptionist capabilities',
+    labelKey: 'features.categories.core',
+    descriptionKey: 'features.categories.coreDesc',
   },
   communication: {
-    label: 'Communication',
-    description: 'Patient notifications and outreach',
+    labelKey: 'features.categories.communication',
+    descriptionKey: 'features.categories.communicationDesc',
   },
   integration: {
-    label: 'Integrations',
-    description: 'Connect with external services',
+    labelKey: 'features.categories.integration',
+    descriptionKey: 'features.categories.integrationDesc',
   },
   advanced: {
-    label: 'Advanced',
-    description: 'Coming soon - advanced capabilities',
+    labelKey: 'features.categories.advanced',
+    descriptionKey: 'features.categories.advancedDesc',
   },
 };
 
 export default function FeaturesPage() {
+  const { t } = useTranslation();
   const [features, setFeatures] = useState(defaultFeatures);
 
   const toggleFeature = (featureId: string) => {
@@ -184,9 +185,9 @@ export default function FeaturesPage() {
   )?.enabled;
 
   return (
-    <div className="container max-w-5xl py-6 space-y-6">
+    <div className="container max-w-5xl py-6 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Master Control Header */}
-      <Card className={aiReceptionistEnabled ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30' : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30'}>
+      <Card className={aiReceptionistEnabled ? 'bg-green-50/50 dark:bg-green-950/30' : 'bg-red-50/50 dark:bg-red-950/30'}>
         <CardContent className="flex items-center gap-4 p-5">
           <div className={`flex h-12 w-12 items-center justify-center rounded-full flex-shrink-0 ${
             aiReceptionistEnabled
@@ -197,7 +198,7 @@ export default function FeaturesPage() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">AI Receptionist</h1>
+              <h1 className="text-xl font-bold tracking-tight">{t('common:features.title')}</h1>
               <Badge
                 variant="outline"
                 className={aiReceptionistEnabled
@@ -205,13 +206,13 @@ export default function FeaturesPage() {
                   : 'text-red-600 border-red-300 bg-red-100 dark:bg-red-900 dark:text-red-400 dark:border-red-700'
                 }
               >
-                {aiReceptionistEnabled ? 'Active' : 'Inactive'}
+                {aiReceptionistEnabled ? t('common:features.active') : t('common:features.inactive')}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
               {aiReceptionistEnabled
-                ? `Your AI receptionist is live. ${enabledCount} features enabled.`
-                : 'Your AI receptionist is turned off. Enable it to start answering calls.'}
+                ? t('common:features.liveMessage', { count: enabledCount })
+                : t('common:features.offMessage')}
             </p>
           </div>
           <Switch
@@ -224,19 +225,18 @@ export default function FeaturesPage() {
 
       {/* Sub-header */}
       <div>
-        <h2 className="text-lg font-semibold">Feature Controls</h2>
+        <h2 className="text-lg font-semibold">{t('common:features.featureControls')}</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Toggle individual features on or off. Changes take effect immediately.
+          {t('common:features.featureControlsDesc')}
         </p>
       </div>
 
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          Core features are enabled by default. Toggle optional features based on your needs. 
-          Features marked "Coming Soon" are in development.
-        </AlertDescription>
-      </Alert>
+      <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-start gap-2.5">
+        <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {t('common:features.infoNote')}
+        </p>
+      </div>
 
       {categories.map((category) => {
         // Filter out the master AI Receptionist toggle from the category list
@@ -244,26 +244,26 @@ export default function FeaturesPage() {
           (f) => f.category === category && f.id !== 'ai-receptionist',
         );
         if (categoryFeatures.length === 0) return null;
-        const { label, description } = categoryLabels[category]!;
+        const { labelKey, descriptionKey } = categoryKeys[category]!;
 
         return (
           <div key={category}>
             <div className="mb-4">
-              <h2 className="text-lg font-semibold">{label}</h2>
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <h2 className="text-lg font-semibold">{t(`common:${labelKey}`)}</h2>
+              <p className="text-sm text-muted-foreground">{t(`common:${descriptionKey}`)}</p>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-3 stagger-children">
               {categoryFeatures.map((feature) => (
                 <Card
                   key={feature.id}
-                  className={
+                  className={`transition-all duration-200 ${
                     feature.comingSoon
                       ? 'opacity-60'
                       : feature.enabled
-                        ? 'border-primary/20 bg-primary/[0.02]'
+                        ? 'bg-primary/[0.02]'
                         : ''
-                  }
+                  }`}
                 >
                   <CardContent className="flex items-center gap-4 p-4">
                     <div
@@ -278,22 +278,22 @@ export default function FeaturesPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{feature.name}</p>
+                        <p className="text-sm font-medium">{t(`common:${feature.nameKey}`)}</p>
                         {feature.comingSoon && (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            Coming Soon
+                            {t('common:features.comingSoon')}
                           </Badge>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                        {feature.description}
+                        {t(`common:${feature.descriptionKey}`)}
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {feature.enabled && feature.available && (
                         <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800">
-                          Active
+                          {t('common:features.active')}
                         </Badge>
                       )}
                       <Switch

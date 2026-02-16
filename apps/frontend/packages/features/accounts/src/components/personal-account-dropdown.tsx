@@ -94,11 +94,11 @@ export function PersonalAccountDropdown({
         aria-label="Open your profile menu"
         data-test={'account-dropdown-trigger'}
         className={cn(
-          'animate-in group/trigger fade-in focus:outline-primary flex cursor-pointer items-center group-data-[minimized=true]/sidebar:px-0',
+          'animate-in group/trigger fade-in outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 flex cursor-pointer items-center group-data-[minimized=true]/sidebar:px-0',
           className ?? '',
           {
-            ['active:bg-secondary/50 items-center gap-4 rounded-md' +
-            ' hover:bg-secondary border border-dashed p-2 transition-colors']:
+            ['active:bg-muted/60 items-center gap-3 rounded-lg' +
+            ' hover:bg-muted/40 border border-border/60 p-2 transition-colors']:
               showProfileName,
           },
         )}
@@ -120,7 +120,7 @@ export function PersonalAccountDropdown({
           >
             <span
               data-test={'account-dropdown-display-name'}
-              className={'truncate text-sm'}
+              className={'truncate text-sm font-medium'}
             >
               {displayName}
             </span>
@@ -135,7 +135,7 @@ export function PersonalAccountDropdown({
 
           <ChevronsUpDown
             className={
-              'text-muted-foreground mr-1 h-8 group-data-[minimized=true]/sidebar:hidden'
+              'text-muted-foreground mr-1 h-4 w-4 shrink-0 group-data-[minimized=true]/sidebar:hidden'
             }
           />
         </If>

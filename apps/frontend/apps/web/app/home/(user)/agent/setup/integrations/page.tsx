@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Stepper } from '@kit/ui/stepper';
-import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Badge } from '@kit/ui/badge';
 import { Calendar, Clock, Info, Building2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
@@ -260,7 +259,7 @@ export default function IntegrationsPage() {
 
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
-        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4">
+        <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
         
         {/* Show PMS Setup Wizard or Integrations List */}
         {showPmsSetup ? (
@@ -334,12 +333,12 @@ export default function IntegrationsPage() {
               </CardContent>
             </Card>
 
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription className="text-xs">
+            <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
                 <Trans i18nKey="common:setup.integrations.pmsAlertRecommended" />
-              </AlertDescription>
-            </Alert>
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -409,12 +408,12 @@ export default function IntegrationsPage() {
             </Card>
             
             {pmsConnectionStatus !== 'connected' && !googleCalendarConnected && (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
+              <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">
                   <Trans i18nKey="common:setup.integrations.googleCalendarNote" />
-                </AlertDescription>
-              </Alert>
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -426,7 +425,7 @@ export default function IntegrationsPage() {
       </div>
 
       {/* Navigation - Fixed at bottom */}
-      <div className="pt-4 border-t flex-shrink-0 bg-background">
+      <div className="pt-4 border-t border-border/40 flex-shrink-0 bg-background">
         <div className="flex justify-between">
           <Button
             variant="outline"

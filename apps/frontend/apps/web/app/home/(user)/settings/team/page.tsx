@@ -15,7 +15,7 @@ export default function SettingsTeamPage() {
   const data = use(loadTeamData());
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Team Header Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -36,7 +36,7 @@ export default function SettingsTeamPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <Trans i18nKey="common:settings.team.owner" />
             </p>
-            <div className="flex items-center justify-between rounded-lg border p-4 bg-primary/5 border-primary/20">
+            <div className="flex items-center justify-between rounded-xl p-4 bg-primary/5 ring-1 ring-primary/20">
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
                   {data.owner.displayName?.charAt(0).toUpperCase() || 'O'}
@@ -65,7 +65,7 @@ export default function SettingsTeamPage() {
                 {data.employees.map((employee) => (
                   <div
                     key={employee.id}
-                    className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between rounded-xl p-4 ring-1 ring-border/30 hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <ProfileAvatar
@@ -93,7 +93,7 @@ export default function SettingsTeamPage() {
           )}
 
           {data.employees.length === 0 && (
-            <div className="mt-6 text-center py-8 rounded-lg border border-dashed">
+            <div className="mt-6 text-center py-8 rounded-xl ring-1 ring-border/30 ring-dashed">
               <UserPlus className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
               <p className="text-sm font-medium">
                 <Trans i18nKey="common:settings.team.noMembers" />
@@ -123,7 +123,7 @@ export default function SettingsTeamPage() {
               {data.pendingInvitations.map((invitation) => (
                 <div
                   key={invitation.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  className="flex items-center justify-between rounded-xl p-4 ring-1 ring-border/30"
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm">

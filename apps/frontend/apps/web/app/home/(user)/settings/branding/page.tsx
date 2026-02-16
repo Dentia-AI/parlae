@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { toast } from '@kit/ui/sonner';
 import { Loader2, Upload, Eye } from 'lucide-react';
-import { Alert, AlertDescription } from '@kit/ui/alert';
 
 export default function BrandingSettingsPage() {
+  const { t } = useTranslation();
   const [branding, setBranding] = useState({
     logoUrl: '',
     primaryColor: '#3b82f6',
@@ -61,13 +62,13 @@ export default function BrandingSettingsPage() {
       });
 
       if (response.ok) {
-        toast.success('Branding settings saved successfully!');
+        toast.success(t('common:settings.branding.saveSuccess'));
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Failed to save branding settings');
+        toast.error(error.error || t('common:settings.branding.saveError'));
       }
     } catch (error) {
-      toast.error('An error occurred while saving');
+      toast.error(t('common:settings.branding.saveErrorGeneric'));
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -85,25 +86,22 @@ export default function BrandingSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Alert>
-        <AlertDescription>
-          These settings will be used in all appointment confirmation emails sent to your patients. 
-          If not provided, default values will be used.
-        </AlertDescription>
-      </Alert>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+        {t('common:settings.branding.infoText')}
+      </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Branding Settings</CardTitle>
+          <CardTitle>{t('common:settings.branding.title')}</CardTitle>
           <CardDescription>
-            Configure your clinic's branding for email communications
+            {t('common:settings.branding.description')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Logo URL */}
           <div className="space-y-2">
-            <Label htmlFor="logoUrl">Logo URL</Label>
+            <Label htmlFor="logoUrl">{t('common:settings.branding.logoUrl')}</Label>
             <div className="flex gap-2">
               <Input
                 id="logoUrl"
@@ -125,18 +123,18 @@ export default function BrandingSettingsPage() {
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              Recommended: 200x50px PNG with transparent background. Must be publicly accessible URL.
+              {t('common:settings.branding.logoRecommendation')}
             </p>
             {branding.logoUrl && (
               <div className="mt-2 p-4 bg-muted rounded-lg">
-                <p className="text-xs text-muted-foreground mb-2">Preview:</p>
+                <p className="text-xs text-muted-foreground mb-2">{t('common:settings.branding.preview')}</p>
                 <img 
                   src={branding.logoUrl} 
-                  alt="Logo preview" 
+                  alt={t('common:settings.branding.logoPreviewAlt')} 
                   className="h-12 object-contain"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
-                    toast.error('Failed to load logo. Check the URL.');
+                    toast.error(t('common:settings.branding.logoLoadError'));
                   }}
                 />
               </div>
@@ -145,7 +143,7 @@ export default function BrandingSettingsPage() {
 
           {/* Primary Color */}
           <div className="space-y-2">
-            <Label htmlFor="primaryColor">Primary Brand Color</Label>
+            <Label htmlFor="primaryColor">{t('common:settings.branding.primaryColor')}</Label>
             <div className="flex gap-2 items-center">
               <Input
                 id="primaryColor"
@@ -169,13 +167,13 @@ export default function BrandingSettingsPage() {
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              Used for buttons and highlights in emails
+              {t('common:settings.branding.colorUsage')}
             </p>
           </div>
 
           {/* Business Name */}
           <div className="space-y-2">
-            <Label htmlFor="businessName">Business Name (Optional)</Label>
+            <Label htmlFor="businessName">{t('common:settings.branding.businessName')}</Label>
             <Input
               id="businessName"
               placeholder="Your Clinic Name"
@@ -183,13 +181,13 @@ export default function BrandingSettingsPage() {
               onChange={(e) => setBranding({ ...branding, businessName: e.target.value })}
             />
             <p className="text-sm text-muted-foreground">
-              Leave blank to use your account name in emails
+              {t('common:settings.branding.businessNameHint')}
             </p>
           </div>
 
           {/* Contact Email */}
           <div className="space-y-2">
-            <Label htmlFor="contactEmail">Contact Email</Label>
+            <Label htmlFor="contactEmail">{t('common:settings.branding.contactEmail')}</Label>
             <Input
               id="contactEmail"
               type="email"
@@ -198,13 +196,13 @@ export default function BrandingSettingsPage() {
               onChange={(e) => setBranding({ ...branding, contactEmail: e.target.value })}
             />
             <p className="text-sm text-muted-foreground">
-              Email address patients can use to contact you
+              {t('common:settings.branding.contactEmailHint')}
             </p>
           </div>
 
           {/* Contact Phone */}
           <div className="space-y-2">
-            <Label htmlFor="contactPhone">Contact Phone</Label>
+            <Label htmlFor="contactPhone">{t('common:settings.branding.contactPhone')}</Label>
             <Input
               id="contactPhone"
               type="tel"
@@ -213,13 +211,13 @@ export default function BrandingSettingsPage() {
               onChange={(e) => setBranding({ ...branding, contactPhone: e.target.value })}
             />
             <p className="text-sm text-muted-foreground">
-              Phone number patients can call for changes or questions
+              {t('common:settings.branding.contactPhoneHint')}
             </p>
           </div>
 
           {/* Address */}
           <div className="space-y-2">
-            <Label htmlFor="address">Physical Address</Label>
+            <Label htmlFor="address">{t('common:settings.branding.address')}</Label>
             <Input
               id="address"
               placeholder="123 Main St, City, Province A1B 2C3"
@@ -227,13 +225,13 @@ export default function BrandingSettingsPage() {
               onChange={(e) => setBranding({ ...branding, address: e.target.value })}
             />
             <p className="text-sm text-muted-foreground">
-              Will appear in email footer
+              {t('common:settings.branding.addressHint')}
             </p>
           </div>
 
           {/* Website */}
           <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
+            <Label htmlFor="website">{t('common:settings.branding.website')}</Label>
             <Input
               id="website"
               type="url"
@@ -242,25 +240,22 @@ export default function BrandingSettingsPage() {
               onChange={(e) => setBranding({ ...branding, website: e.target.value })}
             />
             <p className="text-sm text-muted-foreground">
-              Your clinic's website URL
+              {t('common:settings.branding.websiteHint')}
             </p>
           </div>
 
           {/* Preview Section */}
           <div className="pt-4">
-            <Alert>
-              <AlertDescription>
-                <strong>Preview:</strong> Your branding will appear in appointment confirmation, 
-                cancellation, and reschedule emails sent to patients.
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              <strong className="text-foreground">{t('common:settings.branding.preview')}</strong> {t('common:settings.branding.previewNote')}
+            </div>
           </div>
 
           {/* Save Button */}
           <div className="flex justify-end pt-4">
             <Button onClick={handleSave} disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Branding Settings
+              {t('common:settings.branding.saveButton')}
             </Button>
           </div>
         </CardContent>
