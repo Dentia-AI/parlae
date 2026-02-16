@@ -288,12 +288,14 @@ export class PmsService {
       this.logger.log(`Received request_key, expires in ${expiresIn} seconds`);
       
       // Step 2: Get authorized practices (contains office_id and secret_key)
+      // Note: authorized_practices requires App-Id/App-Key headers, not Request-Key
       this.logger.log('Fetching authorized practices');
       const practicesResponse = await axios.get(
         'https://api.sikkasoft.com/v4/authorized_practices',
         {
           headers: {
-            'Request-Key': requestKey,
+            'App-Id': systemCredentials.appId,
+            'App-Key': systemCredentials.appKey,
           },
         },
       );
@@ -307,7 +309,7 @@ export class PmsService {
       // Use first practice (most cases will have only one)
       const practice = practices[0];
       
-      this.logger.log(`Found practice: ${practice.practice_name} (${practice.pms_type})`);
+      this.logger.log(`Found practice: ${practice.practice_name} (${practice.practice_management_system})`);
       
       // Calculate token expiry
       const tokenExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
@@ -321,7 +323,7 @@ export class PmsService {
         tokenExpiry: tokenExpiry,
         practiceName: practice.practice_name,
         practiceId: practice.practice_id,
-        pmsType: practice.pms_type || 'Unknown',
+        pmsType: practice.practice_management_system || 'Unknown',
       });
       
       this.logger.log(`Stored credentials in Secrets Manager: ${secretArn}`);
@@ -345,7 +347,7 @@ export class PmsService {
           metadata: {
             secretArn,
             practiceName: practice.practice_name,
-            actualPmsType: practice.pms_type || 'Unknown',
+            actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
           },
           officeId: practice.office_id,
@@ -360,7 +362,7 @@ export class PmsService {
           metadata: {
             secretArn,
             practiceName: practice.practice_name,
-            actualPmsType: practice.pms_type || 'Unknown',
+            actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
           },
           officeId: practice.office_id,
@@ -377,7 +379,7 @@ export class PmsService {
       return {
         success: true,
         practiceName: practice.practice_name,
-        pmsType: practice.pms_type,
+        pmsType: practice.practice_management_system,
         secretArn,
       };
     } catch (error: any) {

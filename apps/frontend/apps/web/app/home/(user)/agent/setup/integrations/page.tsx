@@ -6,7 +6,7 @@ import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Stepper } from '@kit/ui/stepper';
 import { Badge } from '@kit/ui/badge';
-import { Calendar, Clock, Info, Building2, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, Info, Building2, CheckCircle2, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { PmsSetupWizard } from '../_components/pms-setup-wizard';
 import { Trans } from '@kit/ui/trans';
@@ -22,6 +22,9 @@ export default function IntegrationsPage() {
   const [isReady, setIsReady] = useState(false);
   const [showPmsSetup, setShowPmsSetup] = useState(false);
   const [pmsConnectionStatus, setPmsConnectionStatus] = useState<'pending' | 'connected' | 'not_connected'>('pending');
+  const [pmsProviderName, setPmsProviderName] = useState<string | null>(null);
+  const [pmsPracticeName, setPmsPracticeName] = useState<string | null>(null);
+  const [isCheckingPms, setIsCheckingPms] = useState(false);
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [googleCalendarEmail, setGoogleCalendarEmail] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -106,19 +109,40 @@ export default function IntegrationsPage() {
 
   // Check live integration status from the database (PmsIntegration model)
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !accountId) return;
 
     const checkLiveStatus = async () => {
       try {
+        // First check basic status from the integrations API
         const response = await fetch('/api/integrations/status');
         if (response.ok) {
           const data = await response.json();
           
-          // If PMS is connected in the DB, update the UI
+          // If PMS exists in the DB, verify live connection
           if (data.pms) {
             setPmsConnectionStatus('connected');
             if (data.pmsProvider) {
-              setShowPmsSetup(true);
+              setPmsProviderName(data.pmsProvider);
+            }
+
+            // Call connection-status to verify live and get PMS name
+            setIsCheckingPms(true);
+            try {
+              const connRes = await fetch(
+                `/api/pms/connection-status?accountId=${accountId}`,
+              );
+              if (connRes.ok) {
+                const connData = await connRes.json();
+                if (connData.isConnected) {
+                  setPmsConnectionStatus('connected');
+                  if (connData.provider) setPmsProviderName(connData.provider);
+                  if (connData.practiceName) setPmsPracticeName(connData.practiceName);
+                }
+              }
+            } catch {
+              // Non-critical — we already know PMS record exists
+            } finally {
+              setIsCheckingPms(false);
             }
           }
 
@@ -134,7 +158,7 @@ export default function IntegrationsPage() {
     };
 
     checkLiveStatus();
-  }, [isReady]);
+  }, [isReady, accountId]);
 
   if (!isReady) {
     return null;
@@ -317,60 +341,113 @@ export default function IntegrationsPage() {
               <CardTitle className="text-lg">
                 <Trans i18nKey="common:setup.integrations.pmsTitle" />
               </CardTitle>
-              <Badge variant="default" className="bg-green-600 text-xs">
-                <Trans i18nKey="common:setup.integrations.recommended" />
-              </Badge>
+              {pmsConnectionStatus === 'connected' ? (
+                <Badge variant="default" className="bg-green-600 text-xs">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  <Trans i18nKey="common:setup.integrations.connected" />
+                </Badge>
+              ) : (
+                <Badge variant="default" className="bg-green-600 text-xs">
+                  <Trans i18nKey="common:setup.integrations.recommended" />
+                </Badge>
+              )}
             </div>
             <CardDescription className="text-sm">
               <Trans i18nKey="common:setup.integrations.pmsDescription" />
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Card className="border-primary/50 bg-primary/5">
+            <Card className={pmsConnectionStatus === 'connected' ? 'border-green-500/50 bg-green-50/50 dark:bg-green-950/20' : 'border-primary/50 bg-primary/5'}>
               <CardContent className="p-3">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-primary/10 p-2.5">
-                    <Building2 className="h-5 w-5 text-primary" />
+                  <div className={`rounded-lg p-2.5 ${pmsConnectionStatus === 'connected' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-primary/10'}`}>
+                    <Building2 className={`h-5 w-5 ${pmsConnectionStatus === 'connected' ? 'text-green-600 dark:text-green-400' : 'text-primary'}`} />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-sm">
                       <Trans i18nKey="common:setup.integrations.pmsIntegrationTitle" />
                     </h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      <Trans i18nKey="common:setup.integrations.pmsIntegrationDesc" />
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span><Trans i18nKey="common:setup.integrations.appointmentBooking" /></span>
+                    {pmsConnectionStatus === 'connected' ? (
+                      <div className="mt-1">
+                        {isCheckingPms ? (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Verifying connection...
+                          </p>
+                        ) : (
+                          <>
+                            <p className="text-xs text-green-700 dark:text-green-400 font-medium">
+                              {pmsProviderName || 'Connected'}
+                              {pmsPracticeName ? ` — ${pmsPracticeName}` : ''}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span><Trans i18nKey="common:setup.integrations.appointmentBooking" /></span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span><Trans i18nKey="common:setup.integrations.patientLookup" /></span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span><Trans i18nKey="common:setup.integrations.insuranceVerification" /></span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span><Trans i18nKey="common:setup.integrations.paymentProcessing" /></span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span><Trans i18nKey="common:setup.integrations.patientLookup" /></span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span><Trans i18nKey="common:setup.integrations.insuranceVerification" /></span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span><Trans i18nKey="common:setup.integrations.paymentProcessing" /></span>
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          <Trans i18nKey="common:setup.integrations.pmsIntegrationDesc" />
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span><Trans i18nKey="common:setup.integrations.appointmentBooking" /></span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span><Trans i18nKey="common:setup.integrations.patientLookup" /></span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span><Trans i18nKey="common:setup.integrations.insuranceVerification" /></span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span><Trans i18nKey="common:setup.integrations.paymentProcessing" /></span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <Button onClick={handleSetupPms} size="sm">
-                    <Trans i18nKey="common:setup.integrations.connectPMS" />
-                  </Button>
+                  {pmsConnectionStatus === 'connected' ? (
+                    <Button onClick={handleSetupPms} variant="outline" size="sm">
+                      Manage
+                    </Button>
+                  ) : (
+                    <Button onClick={handleSetupPms} size="sm">
+                      <Trans i18nKey="common:setup.integrations.connectPMS" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-start gap-2.5">
-              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                <Trans i18nKey="common:setup.integrations.pmsAlertRecommended" />
-              </p>
-            </div>
+            {pmsConnectionStatus !== 'connected' && (
+              <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  <Trans i18nKey="common:setup.integrations.pmsAlertRecommended" />
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

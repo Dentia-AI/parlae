@@ -2,12 +2,13 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Phone, Settings, FileText, Mic, CheckCircle2, Calendar, Database, XCircle } from 'lucide-react';
+import { Phone, Settings, FileText, Mic, CheckCircle2, Calendar, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { DeployedBanner } from './_components/deployed-banner';
 import { PhoneSetupCard } from './_components/phone-setup-card';
+import { PmsIntegrationCard } from './_components/pms-integration-card';
 
 export const metadata = {
   title: 'AI Agents Dashboard',
@@ -245,49 +246,21 @@ export default async function ReceptionistDashboardPage({
           </Card>
 
           {/* PMS */}
-          <Card>
-            <CardContent className="pt-5">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`rounded-lg p-2 ${pmsIntegration ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'}`}>
-                    <Database className={`h-5 w-5 ${pmsIntegration ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-sm">Practice Management System</h3>
-                    {pmsIntegration ? (
-                      <>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <CheckCircle2 className={`h-3.5 w-3.5 ${pmsIntegration.status === 'ACTIVE' ? 'text-green-600' : 'text-amber-500'}`} />
-                          <span className={`text-xs font-medium ${pmsIntegration.status === 'ACTIVE' ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                            {pmsIntegration.status === 'ACTIVE' ? 'Connected' : pmsIntegration.status === 'SETUP_REQUIRED' ? 'Setup Required' : pmsIntegration.status === 'ERROR' ? 'Error' : 'Inactive'}
-                          </span>
-                        </div>
-                        {(() => {
-                          const meta = pmsIntegration.metadata as any;
-                          const pmsDisplayName = meta?.actualPmsType && meta.actualPmsType !== 'Unknown'
-                            ? meta.actualPmsType
-                            : meta?.practiceName || null;
-                          return pmsDisplayName ? (
-                            <p className="text-xs text-muted-foreground mt-0.5">{pmsDisplayName}</p>
-                          ) : null;
-                        })()}
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Not connected</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <Link href="/home/agent/setup/integrations">
-                  <Button variant="outline" size="sm">
-                    {pmsIntegration ? 'Manage' : 'Connect'}
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+          <PmsIntegrationCard
+            accountId={account?.id || ''}
+            initialStatus={pmsIntegration?.status || null}
+            initialProvider={(() => {
+              const meta = pmsIntegration?.metadata as any;
+              return meta?.actualPmsType && meta.actualPmsType !== 'Unknown'
+                ? meta.actualPmsType
+                : null;
+            })()}
+            initialPracticeName={(() => {
+              const meta = pmsIntegration?.metadata as any;
+              return meta?.practiceName || null;
+            })()}
+            hasIntegration={!!pmsIntegration}
+          />
         </div>
       </div>
 
