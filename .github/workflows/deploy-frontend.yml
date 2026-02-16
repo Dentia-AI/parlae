@@ -87,3 +87,14 @@ jobs:
             --region "$AWS_REGION"
           
           echo "✅ Triggered ECS deployment (image: ${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}:${IMAGE_TAG})"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          echo "Invalidating CloudFront cache..."
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/*" \
+            --region us-east-1
+          echo "✅ CloudFront cache invalidation triggered"
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
