@@ -718,18 +718,388 @@ export const getProvidersTool = {
 };
 
 // ============================================================================
+// Insurance Tools
+// ============================================================================
+
+/**
+ * Add insurance information to a patient record.
+ *
+ * Backend: sikkaService.addPatientInsurance(patientId, insuranceData)
+ *
+ * Used by the Insurance assistant when a patient provides new insurance info.
+ */
+export const addPatientInsuranceTool = {
+  type: 'function' as const,
+  function: {
+    name: 'addPatientInsurance',
+    description: 'Add insurance information to a patient record. Requires the patient ID and insurance details. Use when a patient provides new insurance they want on file.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID from a previous searchPatients call.',
+        },
+        insuranceProvider: {
+          type: 'string',
+          description: 'Insurance company/provider name (e.g., Blue Cross Blue Shield, Aetna, Cigna).',
+        },
+        memberId: {
+          type: 'string',
+          description: 'Insurance member/subscriber ID number.',
+        },
+        groupNumber: {
+          type: 'string',
+          description: 'Insurance group number (if applicable).',
+        },
+        subscriberName: {
+          type: 'string',
+          description: 'Name of the primary subscriber (if different from patient).',
+        },
+        subscriberRelationship: {
+          type: 'string',
+          enum: ['self', 'spouse', 'child', 'other'],
+          description: 'Relationship of the patient to the primary subscriber.',
+        },
+        isPrimary: {
+          type: 'boolean',
+          description: 'Whether this is the primary insurance. Default: true.',
+        },
+      },
+      required: ['patientId', 'insuranceProvider', 'memberId'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 15,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Let me add that insurance information to your record...',
+    },
+    {
+      type: 'request-response-delayed' as const,
+      content: 'Still updating, one moment...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I'm having trouble saving your insurance information right now. Our team will follow up to make sure it's on file.",
+    },
+  ],
+};
+
+/**
+ * Update existing insurance information for a patient.
+ *
+ * Backend: sikkaService.updatePatientInsurance(patientId, insuranceId, updates)
+ */
+export const updatePatientInsuranceTool = {
+  type: 'function' as const,
+  function: {
+    name: 'updatePatientInsurance',
+    description: 'Update existing insurance information for a patient. Use when a patient needs to change their insurance provider, update their member ID, or correct insurance details.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID.',
+        },
+        insuranceId: {
+          type: 'string',
+          description: 'The insurance record ID to update (from getPatientInsurance results).',
+        },
+        insuranceProvider: {
+          type: 'string',
+          description: 'Updated insurance company name.',
+        },
+        memberId: {
+          type: 'string',
+          description: 'Updated member/subscriber ID.',
+        },
+        groupNumber: {
+          type: 'string',
+          description: 'Updated group number.',
+        },
+        subscriberName: {
+          type: 'string',
+          description: 'Updated subscriber name.',
+        },
+        subscriberRelationship: {
+          type: 'string',
+          enum: ['self', 'spouse', 'child', 'other'],
+          description: 'Updated relationship to subscriber.',
+        },
+        isActive: {
+          type: 'boolean',
+          description: 'Set to false to deactivate insurance (e.g., expired coverage).',
+        },
+      },
+      required: ['patientId', 'insuranceId'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 15,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Updating your insurance information...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I wasn't able to update that right now. Our team will follow up.",
+    },
+  ],
+};
+
+/**
+ * Verify insurance coverage and eligibility for a patient.
+ *
+ * Backend: sikkaService.verifyInsuranceCoverage(patientId, options)
+ *
+ * NOTE: This may not be available for all PMS systems. The backend will
+ * return an appropriate message if the feature is not supported.
+ */
+export const verifyInsuranceCoverageTool = {
+  type: 'function' as const,
+  function: {
+    name: 'verifyInsuranceCoverage',
+    description: 'Verify insurance coverage and eligibility for a patient. Checks whether their insurance is active, what services are covered, copay amounts, and remaining benefits. May not be available for all insurance providers.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID.',
+        },
+        serviceType: {
+          type: 'string',
+          enum: ['preventive', 'basic', 'major', 'orthodontic', 'emergency', 'general'],
+          description: 'Type of service to check coverage for. Use "general" for overall eligibility check.',
+        },
+        dateOfService: {
+          type: 'string',
+          description: 'Date to check coverage for (YYYY-MM-DD). Defaults to today.',
+        },
+      },
+      required: ['patientId'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 30,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Let me verify your insurance coverage... this may take a moment.',
+    },
+    {
+      type: 'request-response-delayed' as const,
+      content: 'Still checking with your insurance provider...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I wasn't able to verify coverage electronically right now. Our billing team can check this for you and call you back.",
+    },
+  ],
+};
+
+// ============================================================================
+// Payment & Billing Tools
+// ============================================================================
+
+/**
+ * Get payment history for a patient.
+ *
+ * Backend: sikkaService.getPaymentHistory(patientId, options)
+ */
+export const getPaymentHistoryTool = {
+  type: 'function' as const,
+  function: {
+    name: 'getPaymentHistory',
+    description: 'Get payment history for a patient. Shows past payments, dates, amounts, and payment methods. Use when a patient asks about past payments or needs a receipt.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID.',
+        },
+        startDate: {
+          type: 'string',
+          description: 'Start date for payment history (YYYY-MM-DD). Defaults to 12 months ago.',
+        },
+        endDate: {
+          type: 'string',
+          description: 'End date for payment history (YYYY-MM-DD). Defaults to today.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of records. Default: 10.',
+        },
+      },
+      required: ['patientId'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 15,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Let me pull up your payment history...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I'm having trouble accessing payment records right now. Our billing team can help you with that.",
+    },
+  ],
+};
+
+/**
+ * Process a payment from a patient.
+ *
+ * Backend: paymentService.processPayment(patientId, paymentData)
+ *
+ * IMPORTANT: This is a sensitive operation. The AI should always confirm
+ * the amount before processing and never store card details in logs.
+ */
+export const processPaymentTool = {
+  type: 'function' as const,
+  function: {
+    name: 'processPayment',
+    description: 'Process a payment from a patient. Handles payments for outstanding balances, copays, or treatment costs. Always confirm the amount with the patient before calling this tool. Card details are handled securely and never logged.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID.',
+        },
+        amount: {
+          type: 'number',
+          description: 'Payment amount in dollars (e.g., 150.00).',
+        },
+        paymentMethod: {
+          type: 'string',
+          enum: ['card_on_file', 'new_card', 'bank_transfer', 'payment_link'],
+          description: 'How the patient wants to pay. Use "payment_link" to send a secure link via SMS/email. Use "card_on_file" if they have a card saved.',
+        },
+        description: {
+          type: 'string',
+          description: 'What the payment is for (e.g., "copay for cleaning", "outstanding balance").',
+        },
+        invoiceId: {
+          type: 'string',
+          description: 'Invoice/charge ID if paying a specific invoice.',
+        },
+      },
+      required: ['patientId', 'amount', 'paymentMethod'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 30,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Processing your payment now...',
+    },
+    {
+      type: 'request-response-delayed' as const,
+      content: 'Still processing, please hold...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I wasn't able to process that payment right now. I can send you a secure payment link instead, or our billing team can assist you.",
+    },
+  ],
+};
+
+/**
+ * Create a payment plan for a patient with an outstanding balance.
+ *
+ * Backend: paymentService.createPaymentPlan(patientId, planData)
+ */
+export const createPaymentPlanTool = {
+  type: 'function' as const,
+  function: {
+    name: 'createPaymentPlan',
+    description: 'Set up a payment plan for a patient with an outstanding balance. Creates a structured plan with monthly payments. Use when a patient cannot pay the full amount at once.',
+    parameters: {
+      type: 'object',
+      properties: {
+        patientId: {
+          type: 'string',
+          description: 'The patient ID.',
+        },
+        totalAmount: {
+          type: 'number',
+          description: 'Total amount to be paid over the plan.',
+        },
+        numberOfPayments: {
+          type: 'number',
+          description: 'Number of monthly installments (e.g., 3, 6, 12).',
+        },
+        startDate: {
+          type: 'string',
+          description: 'When the first payment is due (YYYY-MM-DD). Defaults to today.',
+        },
+        downPayment: {
+          type: 'number',
+          description: 'Initial down payment amount, if any.',
+        },
+      },
+      required: ['patientId', 'totalAmount', 'numberOfPayments'],
+    },
+  },
+  async: false,
+  server: {
+    url: WEBHOOK_URL,
+    secret: WEBHOOK_SECRET,
+    timeoutSeconds: 15,
+  },
+  messages: [
+    {
+      type: 'request-start' as const,
+      content: 'Setting up your payment plan...',
+    },
+    {
+      type: 'request-failed' as const,
+      content: "I wasn't able to set up the payment plan right now. Our billing team will reach out to finalize the details.",
+    },
+  ],
+};
+
+// ============================================================================
 // Grouped exports for different assistant types
 // ============================================================================
 
 /**
- * Core scheduling tools - used by the Scheduling assistant
- * Includes all patient and appointment management tools
+ * Scheduling tools - focused on appointment management
+ *
+ * The Scheduling assistant handles booking, cancel, reschedule only.
+ * Patient record management is handled by the Patient Records assistant.
  */
 export const SCHEDULING_TOOLS = [
   searchPatientsTool,
-  getPatientInfoTool,
   createPatientTool,
-  updatePatientTool,
   checkAvailabilityTool,
   bookAppointmentTool,
   rescheduleAppointmentTool,
@@ -752,17 +1122,52 @@ export const EMERGENCY_TOOLS = [
 
 /**
  * Clinic info tools - for the clinic information assistant
- * Patient lookup only (for directing to scheduling)
+ * General clinic/patient lookup (not for updates)
  */
 export const CLINIC_INFO_TOOLS = [
   searchPatientsTool,
   getPatientInfoTool,
-  getPatientInsuranceTool,
   getProvidersTool,
 ];
 
 /**
- * All PMS tools combined
+ * Patient Records tools - for the Patient Records assistant
+ * Handles patient data queries and updates (HIPAA-sensitive health data)
+ */
+export const PATIENT_RECORDS_TOOLS = [
+  searchPatientsTool,
+  getPatientInfoTool,
+  createPatientTool,
+  updatePatientTool,
+  addPatientNoteTool,
+];
+
+/**
+ * Insurance tools - for the Insurance assistant
+ * Handles insurance queries, add/update, and coverage verification
+ */
+export const INSURANCE_TOOLS = [
+  searchPatientsTool,
+  getPatientInsuranceTool,
+  addPatientInsuranceTool,
+  updatePatientInsuranceTool,
+  verifyInsuranceCoverageTool,
+];
+
+/**
+ * Payment & Billing tools - for the Payment assistant
+ * Handles balance inquiries, payment processing, and payment plans
+ */
+export const PAYMENT_TOOLS = [
+  searchPatientsTool,
+  getPatientBalanceTool,
+  getPaymentHistoryTool,
+  processPaymentTool,
+  createPaymentPlanTool,
+];
+
+/**
+ * All PMS tools combined (deduplicated)
  */
 export const PMS_TOOLS = [
   searchPatientsTool,
@@ -778,6 +1183,14 @@ export const PMS_TOOLS = [
   getPatientInsuranceTool,
   getPatientBalanceTool,
   getProvidersTool,
+  // Insurance management
+  addPatientInsuranceTool,
+  updatePatientInsuranceTool,
+  verifyInsuranceCoverageTool,
+  // Payment & billing
+  getPaymentHistoryTool,
+  processPaymentTool,
+  createPaymentPlanTool,
 ];
 
 /**
@@ -800,15 +1213,19 @@ export function addPmsToolsToAssistant(assistantConfig: any) {
 export const PMS_SYSTEM_PROMPT_ADDITION = `
 ## PRACTICE MANAGEMENT SYSTEM ACCESS
 
-You have access to the practice management system (Sikka) and can:
-1. Search for patients by phone number, name, or email
-2. Create new patient records
-3. Check appointment availability by date
-4. Book, reschedule, and cancel appointments
-5. Look up existing appointments
-6. Add notes to patient records
-7. Check insurance and balance information
-8. List providers
+You have access to the following scheduling tools (use exact names):
+- **searchPatients** — Find patient by phone, name, or email
+- **createPatient** — Create a new patient record
+- **checkAvailability** — Check available appointment slots
+- **bookAppointment** — Book an appointment
+- **rescheduleAppointment** — Change an existing appointment time
+- **cancelAppointment** — Cancel an appointment
+- **getAppointments** — Look up existing appointments
+- **addPatientNote** — Add notes to the patient's record
+- **getProviders** — List available providers and specialties
+
+Note: Insurance, billing, and patient record updates are handled by separate specialists.
+If the caller asks about those, transfer them to the appropriate assistant.
 
 ## CRITICAL: AUTOMATIC PATIENT IDENTIFICATION
 
@@ -817,41 +1234,35 @@ The caller's phone number is automatically available from the call metadata: {{c
 **You do NOT need to ask for their phone number.** Use it immediately to search for them.
 
 **Auto-identification flow:**
-1. As soon as you start handling the call, call searchPatients with the caller's phone number ({{call.customer.number}})
+1. Immediately call **searchPatients** with {{call.customer.number}}
 2. If found: Greet them by name — "I see your record, [Name]. How can I help?"
-3. If NOT found by phone: Ask for the name on their account and search again
-4. If still NOT found: This is a new patient — collect first name, last name, and email, then use createPatient (phone is already known from {{call.customer.number}})
-
-**Why auto-phone lookup:**
-- The caller's phone number is already known — no need to ask
-- Phone numbers are unique identifiers in Sikka
-- This makes the experience faster and more professional
-- If they're calling from a different number, they can tell you and you search by name instead
+3. If NOT found by phone: Ask for the name and search again
+4. If still NOT found: New patient — collect first name, last name, and email, then call **createPatient** (phone already known)
 
 ## APPOINTMENT BOOKING FLOW
 
-1. **Auto-identify the patient** (search by {{call.customer.number}} immediately)
-2. **Determine appointment need** — Ask what type of service they need
-3. **Check availability** — Call checkAvailability with the requested date
-4. **Present options** — Offer 2-3 time slots from the results
+1. **Auto-identify** — call **searchPatients** with {{call.customer.number}} immediately
+2. **Determine need** — Ask what type of service they need
+3. **Check availability** — Call **checkAvailability** with the requested date
+4. **Present options** — Offer 2-3 time slots from results
 5. **Confirm details** — Read back: patient name, date, time, service type, provider
-6. **Book** — Call bookAppointment with confirmed details
-7. **Post-booking** — Confirm and add any call notes via addPatientNote
+6. **Book** — Call **bookAppointment** with confirmed details
+7. **Post-booking** — Confirm and add call notes via **addPatientNote**
 
 ## CANCEL/RESCHEDULE FLOW
 
-1. **Auto-identify the patient** (search by {{call.customer.number}})
-2. **Find their appointment** — Call getAppointments with patientId
-3. **Confirm which appointment** — If multiple, ask which one
-4. **For cancel**: Call cancelAppointment, ask for reason, offer to reschedule
-5. **For reschedule**: Check new availability, then call rescheduleAppointment
+1. **Auto-identify** — call **searchPatients** with {{call.customer.number}}
+2. **Find appointment** — Call **getAppointments** with patientId
+3. **Confirm which** — If multiple, ask which one
+4. **For cancel**: Call **cancelAppointment**, ask for reason, offer to reschedule
+5. **For reschedule**: Call **checkAvailability**, then **rescheduleAppointment**
 
 ## NEW PATIENT FLOW
 
-When searchPatients returns no results for the caller's phone:
-1. Tell them: "I don't see an existing record with this number. Let me set one up for you."
+When **searchPatients** returns no results:
+1. "I don't see an existing record with this number. Let me set one up for you."
 2. Ask for: first name, last name (required), and email (recommended)
-3. Call createPatient with their info — the phone number ({{call.customer.number}}) is already known
+3. Call **createPatient** — the phone number is already known
 4. Continue with their appointment request
 
 ## DATA FORMATTING
@@ -863,23 +1274,20 @@ When searchPatients returns no results for the caller's phone:
 ## HIPAA & PRIVACY
 - Never share patient information with unauthorized parties
 - Only access records for the current caller
-- Don't read back sensitive data like balance or full DOB unless the patient asks
-- Note that all PMS access is HIPAA audit-logged
+- Don't read back sensitive data unless the patient asks
+- All PMS access is HIPAA audit-logged
 
 ## GOOGLE CALENDAR FALLBACK
 
-If the clinic does not have a PMS (Practice Management System) connected but has Google Calendar enabled:
-- **Appointment booking, availability, cancel, reschedule, and lookup tools will automatically use Google Calendar** as the scheduling backend.
-- The AI does **not** need to change its behavior — the same tools work seamlessly. The backend handles the fallback automatically.
-- Patient-related tools (searchPatients, createPatient, getPatientInfo, addPatientNote) are **not available** without a PMS. In that case:
-  - Collect the patient's name, phone, and email conversationally
-  - Pass them directly as parameters to bookAppointment (firstName, lastName, phone, email)
-  - The appointment will be saved to Google Calendar with patient details in the event description
-- If the tool response includes "integrationType": "google_calendar", you know it was handled via Calendar rather than PMS
+If the clinic does not have a PMS connected but has Google Calendar enabled:
+- The same scheduling tools work seamlessly — the backend handles the fallback automatically
+- Patient tools (searchPatients, createPatient) are NOT available without a PMS
+- In that case, collect patient info conversationally and pass to **bookAppointment** directly
+- If the tool response includes "integrationType": "google_calendar", it was handled via Calendar
 
 ## ERROR HANDLING
 - If a tool call fails, apologize and try an alternative approach
 - If PMS is down, offer to take information manually for callback
-- If neither PMS nor Google Calendar is connected, inform the caller that scheduling is not set up and offer to take a message
+- If neither PMS nor Google Calendar is connected, offer to take a message
 - Never leave the patient without a resolution path
 `;

@@ -9,6 +9,9 @@ import {
   SCHEDULING_TOOLS,
   EMERGENCY_TOOLS,
   CLINIC_INFO_TOOLS,
+  PATIENT_RECORDS_TOOLS,
+  INSURANCE_TOOLS,
+  PAYMENT_TOOLS,
   PMS_TOOLS,
   PMS_SYSTEM_PROMPT_ADDITION,
 } from '../vapi-pms-tools.config';
@@ -121,6 +124,9 @@ const TOOL_GROUPS: Record<string, unknown[]> = {
   scheduling: SCHEDULING_TOOLS,
   emergency: EMERGENCY_TOOLS,
   clinicInfo: CLINIC_INFO_TOOLS,
+  patientRecords: PATIENT_RECORDS_TOOLS,
+  insurance: INSURANCE_TOOLS,
+  payment: PAYMENT_TOOLS,
   none: [],
 };
 
