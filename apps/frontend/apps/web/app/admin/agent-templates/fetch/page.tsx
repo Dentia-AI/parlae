@@ -1,13 +1,29 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
 import { Textarea } from '@kit/ui/textarea';
 import { Alert, AlertDescription } from '@kit/ui/alert';
-import { Loader2, Download, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Badge } from '@kit/ui/badge';
+import {
+  Loader2,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  ArrowLeft,
+  Bot,
+  Wrench,
+  ArrowRight,
+} from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -24,7 +40,7 @@ export default function FetchTemplateFromSquadPage() {
   const [version, setVersion] = useState('');
   const [category, setCategory] = useState('receptionist');
   const [isDefault, setIsDefault] = useState(false);
-  
+
   const [fetchedData, setFetchedData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -39,15 +55,18 @@ export default function FetchTemplateFromSquadPage() {
 
     startTransition(async () => {
       try {
-        const response = await fetch('/api/admin/agent-templates/fetch-squad', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+        const response = await fetch(
+          '/api/admin/agent-templates/fetch-squad',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-csrf-token': csrfToken,
+            },
+            credentials: 'include',
+            body: JSON.stringify({ squadId: squadId.trim() }),
           },
-          credentials: 'include', // Important: Include credentials for session
-          body: JSON.stringify({ squadId: squadId.trim() }),
-        });
+        );
 
         const result = await response.json();
 
@@ -56,15 +75,20 @@ export default function FetchTemplateFromSquadPage() {
         }
 
         setFetchedData(result);
-        toast.success('Squad fetched successfully');
+        toast.success(
+          `Fetched squad "${result.squadName}" with ${result.assistantCount} assistants`,
+        );
 
         // Auto-populate fields
-        if (!templateName) {
-          const autoName = `${category}-${version || 'v1'}`;
-          setTemplateName(autoName);
+        if (!displayName) {
+          setDisplayName(result.squadName || 'Dental Clinic Receptionist');
+        }
+        if (!version) {
+          setVersion('v1.0');
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
         setFetchError(errorMessage);
         toast.error(`Failed to fetch: ${errorMessage}`);
       }
@@ -86,7 +110,7 @@ export default function FetchTemplateFromSquadPage() {
       try {
         const response = await fetch('/api/admin/agent-templates/create', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'x-csrf-token': csrfToken,
           },
@@ -98,10 +122,10 @@ export default function FetchTemplateFromSquadPage() {
             version: version.trim(),
             category: category.trim(),
             isDefault,
-            squadConfig: fetchedData.squad,
-            assistantConfig: fetchedData.assistant,
-            toolsConfig: fetchedData.tools,
-            modelConfig: fetchedData.model,
+            squadConfig: fetchedData.squadConfig,
+            assistantConfig: fetchedData.assistantConfig,
+            toolsConfig: fetchedData.toolsConfig,
+            modelConfig: fetchedData.modelConfig,
           }),
         });
 
@@ -114,7 +138,8 @@ export default function FetchTemplateFromSquadPage() {
         toast.success('Template created successfully');
         router.push('/admin/agent-templates');
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
         toast.error(`Failed to save: ${errorMessage}`);
       }
     });
@@ -131,9 +156,13 @@ export default function FetchTemplateFromSquadPage() {
       </Link>
 
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Fetch Template from Squad</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Fetch Template from Squad
+        </h1>
         <p className="text-muted-foreground mt-2">
-          Import configuration from an existing Vapi squad
+          Import a live squad configuration from Vapi and save it as a reusable
+          template. Edit the squad in Vapi&apos;s dashboard first, then pull
+          the changes here.
         </p>
       </div>
 
@@ -142,7 +171,8 @@ export default function FetchTemplateFromSquadPage() {
         <CardHeader>
           <CardTitle>Step 1: Fetch Squad Configuration</CardTitle>
           <CardDescription>
-            Enter a Vapi Squad ID to import its configuration
+            Enter a Vapi Squad ID to import its full configuration (all
+            assistants, tools, prompts, routing)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -151,20 +181,30 @@ export default function FetchTemplateFromSquadPage() {
             <div className="flex gap-2">
               <Input
                 id="squadId"
-                placeholder="squad-abc123..."
+                placeholder="8cb850fb-33f7-45ee-9372-a804d6e2dcea"
                 value={squadId}
                 onChange={(e) => setSquadId(e.target.value)}
                 disabled={pending}
+                className="font-mono text-sm"
               />
-              <Button onClick={handleFetch} disabled={pending || !squadId.trim()}>
+              <Button
+                onClick={handleFetch}
+                disabled={pending || !squadId.trim()}
+              >
                 {pending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Download className="h-4 w-4 mr-2" />
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Fetch
+                  </>
                 )}
-                Fetch
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Find the Squad ID in Vapi&apos;s dashboard or in the
+              account&apos;s phoneIntegrationSettings.vapiSquadId
+            </p>
           </div>
 
           {fetchError && (
@@ -175,12 +215,62 @@ export default function FetchTemplateFromSquadPage() {
           )}
 
           {fetchedData && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Successfully fetched squad configuration with {fetchedData.assistantCount || 0} assistant(s)
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-3">
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  Fetched <strong>{fetchedData.squadName}</strong> with{' '}
+                  {fetchedData.assistantCount} assistant(s)
+                </AlertDescription>
+              </Alert>
+
+              {/* Assistant Preview Cards */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Assistants:</h4>
+                <div className="grid gap-2">
+                  {fetchedData.preview?.map((a: any, i: number) => (
+                    <div
+                      key={i}
+                      className="rounded-lg border p-3 text-sm space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Bot className="h-4 w-4 text-primary" />
+                          <span className="font-medium">{a.name}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            {a.model}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {a.voiceProvider}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Wrench className="h-3 w-3" />
+                          Tools: {a.toolGroup}
+                          {a.toolCount !== '0' ? ` ${a.toolCount}` : ''}
+                        </span>
+                        <span>Prompt: {a.promptLength} chars</span>
+                        {a.hasAnalysisSchema && (
+                          <Badge variant="outline" className="text-xs">
+                            Analysis Schema
+                          </Badge>
+                        )}
+                      </div>
+                      {a.destinations.length > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <ArrowRight className="h-3 w-3" />
+                          Routes to: {a.destinations.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -189,9 +279,10 @@ export default function FetchTemplateFromSquadPage() {
       {fetchedData && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 2: Configure Template</CardTitle>
+            <CardTitle>Step 2: Save as Template</CardTitle>
             <CardDescription>
-              Set template metadata and naming
+              Set template metadata. This template can then be bulk-deployed to
+              all clinics.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -202,13 +293,13 @@ export default function FetchTemplateFromSquadPage() {
                 </Label>
                 <Input
                   id="templateName"
-                  placeholder="receptionist-v1"
+                  placeholder="dental-clinic-v1.1"
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
                   disabled={pending}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Alphanumeric identifier (e.g., receptionist-v1, emergency-v2)
+                  Unique identifier (e.g., dental-clinic-v1.1)
                 </p>
               </div>
 
@@ -216,7 +307,7 @@ export default function FetchTemplateFromSquadPage() {
                 <Label htmlFor="displayName">Display Name *</Label>
                 <Input
                   id="displayName"
-                  placeholder="Receptionist v1"
+                  placeholder="Dental Clinic Receptionist v1.1"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   disabled={pending}
@@ -229,7 +320,7 @@ export default function FetchTemplateFromSquadPage() {
                 <Label htmlFor="category">Category *</Label>
                 <select
                   id="category"
-                  className="w-full border rounded-md p-2"
+                  className="w-full border rounded-md p-2 bg-background"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   disabled={pending}
@@ -247,7 +338,7 @@ export default function FetchTemplateFromSquadPage() {
                 <Label htmlFor="version">Version *</Label>
                 <Input
                   id="version"
-                  placeholder="v1"
+                  placeholder="v1.1"
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
                   disabled={pending}
@@ -259,7 +350,7 @@ export default function FetchTemplateFromSquadPage() {
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Describe what this template does and when to use it..."
+                placeholder="Describe changes from previous version..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={pending}

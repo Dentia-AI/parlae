@@ -233,10 +233,17 @@ export async function POST(request: NextRequest) {
           clinicServices: settings.clinicServices,
         };
 
+        // Determine the clinic phone number for human transfer
+        const clinicPhoneNumber =
+          settings.staffDirectNumber ||
+          settings.clinicNumber ||
+          undefined;
+
         const runtimeConfig: RuntimeConfig = {
           webhookUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
           webhookSecret: process.env.VAPI_SERVER_SECRET,
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
+          clinicPhoneNumber,
         };
 
         // Build the new squad payload
