@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { getSessionUser } from '@kit/shared/auth';
 
+const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
+
 /**
  * GET /api/pms/connection-status?accountId=xxx
- * Check the status of a PMS integration connection.
  *
- * Looks across all accounts owned by the authenticated user to find
- * PMS records (they may be linked to a non-personal account).
+ * Verifies the PMS integration is actually working by calling the Sikka API:
+ * 1. Reads credentials from the pms_integrations DB record
+ * 2. Calls Sikka /v4/request_key to verify office_id + secret_key are valid
+ * 3. Calls /v4/authorized_practices to get the actual PMS name
+ * 4. Updates the DB record with fresh tokens and metadata
  */
 export async function GET(request: NextRequest) {
   try {
@@ -49,21 +53,10 @@ export async function GET(request: NextRequest) {
     });
     const allAccountIds = allUserAccounts.map((a) => a.id);
 
-    let pmsIntegration = null;
+    let pmsIntegration: any = null;
     try {
       pmsIntegration = await prisma.pmsIntegration.findFirst({
         where: { accountId: { in: allAccountIds } },
-        select: {
-          id: true,
-          provider: true,
-          providerName: true,
-          status: true,
-          lastSyncAt: true,
-          lastError: true,
-          config: true,
-          features: true,
-          metadata: true,
-        },
         orderBy: { updatedAt: 'desc' },
       });
     } catch {
@@ -78,21 +71,135 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const isConnected = pmsIntegration.status === 'ACTIVE';
+    // Verify Sikka credentials are present
+    const officeId = pmsIntegration.officeId;
+    const secretKey = pmsIntegration.secretKey;
+    const appId = process.env.SIKKA_APP_ID;
+    const appKey = process.env.SIKKA_APP_KEY;
 
-    // Show the actual PMS name from metadata, not "Sikka"
-    const meta = pmsIntegration.metadata as any;
-    const displayProvider = (meta?.actualPmsType && meta.actualPmsType !== 'Unknown')
-      ? meta.actualPmsType
-      : meta?.practiceName || null;
+    if (!officeId || !secretKey) {
+      return NextResponse.json({
+        isConnected: false,
+        status: 'missing_credentials',
+        error: 'PMS credentials incomplete — office_id or secret_key is missing',
+      });
+    }
+
+    if (!appId || !appKey) {
+      return NextResponse.json({
+        isConnected: false,
+        status: 'missing_config',
+        error: 'Sikka system credentials not configured',
+      });
+    }
+
+    // Call Sikka /v4/request_key to verify credentials are live
+    let requestKey: string | null = null;
+    let refreshKey: string | null = null;
+    let tokenExpiry: Date | null = null;
+
+    try {
+      const tokenResponse = await fetch(`${SIKKA_BASE_URL}/request_key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'request_key',
+          office_id: officeId,
+          secret_key: secretKey,
+          app_id: appId,
+          app_key: appKey,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error('[PMS Check] Sikka token request failed:', tokenResponse.status, errorText);
+
+        // Update DB to reflect error
+        await prisma.pmsIntegration.update({
+          where: { id: pmsIntegration.id },
+          data: {
+            status: 'ERROR',
+            lastError: `Token request failed (${tokenResponse.status}): ${errorText.slice(0, 200)}`,
+            updatedAt: new Date(),
+          },
+        });
+
+        return NextResponse.json({
+          isConnected: false,
+          status: 'error',
+          error: `Sikka API returned ${tokenResponse.status} — credentials may be invalid or expired`,
+        });
+      }
+
+      const tokenData = await tokenResponse.json();
+      requestKey = tokenData.request_key;
+      refreshKey = tokenData.refresh_key;
+      const expiresIn = parseInt(tokenData.expires_in) || 86400;
+      tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+    } catch (err) {
+      console.error('[PMS Check] Network error calling Sikka:', err);
+      return NextResponse.json({
+        isConnected: false,
+        status: 'error',
+        error: 'Could not reach Sikka API — network error',
+      });
+    }
+
+    // Call /v4/authorized_practices to get actual PMS name
+    let practiceName: string | null = null;
+    let actualPmsType: string | null = null;
+
+    try {
+      const practicesResponse = await fetch(`${SIKKA_BASE_URL}/authorized_practices`, {
+        method: 'GET',
+        headers: { 'Request-Key': requestKey! },
+      });
+
+      if (practicesResponse.ok) {
+        const practicesData = await practicesResponse.json();
+        const practices = practicesData.items || [];
+        if (practices.length > 0) {
+          practiceName = practices[0].practice_name || null;
+          actualPmsType = practices[0].pms_type || null;
+        }
+      }
+    } catch {
+      // Non-critical — we already verified credentials work
+    }
+
+    // Update DB with fresh tokens, status, and metadata
+    const meta = (pmsIntegration.metadata as any) || {};
+    await prisma.pmsIntegration.update({
+      where: { id: pmsIntegration.id },
+      data: {
+        status: 'ACTIVE',
+        lastSyncAt: new Date(),
+        lastError: null,
+        requestKey: requestKey,
+        refreshKey: refreshKey,
+        tokenExpiry: tokenExpiry,
+        metadata: {
+          ...meta,
+          ...(practiceName ? { practiceName } : {}),
+          ...(actualPmsType ? { actualPmsType } : {}),
+        },
+        updatedAt: new Date(),
+      },
+    });
+
+    // Build display name
+    const displayProvider = (actualPmsType && actualPmsType !== 'Unknown')
+      ? actualPmsType
+      : practiceName || null;
 
     return NextResponse.json({
-      isConnected,
-      status: pmsIntegration.status,
+      isConnected: true,
+      status: 'ACTIVE',
       provider: displayProvider,
-      practiceName: meta?.practiceName || null,
-      lastSync: pmsIntegration.lastSyncAt,
-      error: pmsIntegration.lastError,
+      practiceName: practiceName,
+      pmsType: actualPmsType,
+      lastSync: new Date().toISOString(),
       features: pmsIntegration.features,
     });
   } catch (error) {
