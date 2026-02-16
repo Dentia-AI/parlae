@@ -17,8 +17,16 @@
  * - Check insurance and billing information
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || 'https://your-app.com';
-const WEBHOOK_URL = `${BASE_URL}/api/vapi/webhook`;
+// Tool calls go directly to the NestJS backend API (not through the Next.js frontend).
+// In production: https://api.parlae.ca/vapi/webhook
+// In development: http://localhost:3333/vapi/webhook (or ngrok URL)
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
+const FRONTEND_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+
+// Prefer backend URL for tool calls; fall back to frontend /api/vapi/webhook
+const WEBHOOK_URL = BACKEND_URL
+  ? `${BACKEND_URL}/vapi/webhook`
+  : `${FRONTEND_URL}/api/vapi/webhook`;
 const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET || '';
 
 // ============================================================================

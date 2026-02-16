@@ -740,6 +740,45 @@ class VapiService {
   }
 
   /**
+   * List all squads in the Vapi account
+   */
+  async listSquads(): Promise<any[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/squad`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to list squads');
+        return [];
+      }
+
+      const squads = await response.json();
+      logger.info({ count: squads.length }, '[Vapi] Listed squads');
+      return squads;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while listing squads');
+      return [];
+    }
+  }
+
+  /**
    * Get a squad by ID
    */
   async getSquad(squadId: string): Promise<any | null> {

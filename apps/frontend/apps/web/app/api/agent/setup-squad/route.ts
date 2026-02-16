@@ -141,9 +141,18 @@ export async function POST(request: Request) {
         : businessInfo?.services,
     };
 
+    // Webhook URL should point to the NestJS backend API, not the Next.js frontend.
+    // Backend handles both tool calls and lifecycle events (end-of-call-report).
+    // In production: https://api.parlae.ca/vapi/webhook
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const webhookUrl = backendUrl
+      ? `${backendUrl}/vapi/webhook`
+      : `${frontendUrl}/api/vapi/webhook`;
+
     const runtimeConfig: RuntimeConfig = {
-      webhookUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      webhookSecret: process.env.VAPI_SERVER_SECRET,
+      webhookUrl,
+      webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
       knowledgeFileIds,
     };
 

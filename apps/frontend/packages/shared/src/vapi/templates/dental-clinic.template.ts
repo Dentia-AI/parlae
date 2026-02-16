@@ -500,6 +500,11 @@ export interface SquadMemberTemplate {
       voiceSeconds: number;
       backoffSeconds: number;
     };
+    /**
+     * Vapi analysisPlan — runs at end-of-call to extract structured data & summary.
+     * This maps to Vapi's `analysisPlan.structuredDataPlan.schema`.
+     * We store just the schema here; template-utils wraps it in the full analysisPlan object.
+     */
     analysisSchema?: Record<string, unknown>;
     /** Tool group key — resolved at runtime from SCHEDULING_TOOLS / EMERGENCY_TOOLS / etc. */
     toolGroup: 'scheduling' | 'emergency' | 'clinicInfo' | 'none';

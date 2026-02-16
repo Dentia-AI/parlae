@@ -44,6 +44,12 @@ export async function POST(request: Request) {
     // STEP 1: Create Assistant in Vapi
     logger.info('[Setup Test Agent] Creating assistant in Vapi');
 
+    const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const webhookUrl = backendUrl
+      ? `${backendUrl}/vapi/webhook`
+      : `${frontendUrl}/api/vapi/webhook`;
+
     const assistant = await vapiService.createAssistant({
       name: assistantName,
       voice: {
@@ -71,8 +77,8 @@ You: "Got it, john@example.com. What can I assist you with?"`,
       firstMessage: 'Thank you for calling! This is a test. How can I help you today?',
       firstMessageMode: 'assistant-speaks-first',
       recordingEnabled: true,
-      serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      serverUrlSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl: webhookUrl,
+      serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
       analysisSchema: {
         type: 'object',
         properties: {

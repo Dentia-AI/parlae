@@ -143,7 +143,13 @@ export async function POST(request: Request) {
 
     // STEP 3: Create Vapi AI assistant
     logger.info({ agentName }, '[Agent Setup] Step 3: Creating Vapi assistant');
-    
+
+    const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const webhookUrl = backendUrl
+      ? `${backendUrl}/vapi/webhook`
+      : `${frontendUrl}/api/vapi/webhook`;
+
     const assistant = await vapiService.createAssistant({
       name: agentName,
       voice: {
@@ -175,8 +181,8 @@ export async function POST(request: Request) {
       },
       endCallFunctionEnabled: true,
       recordingEnabled: true,
-      serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      serverUrlSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl: webhookUrl,
+      serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
     });
 
     if (!assistant) {

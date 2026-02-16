@@ -239,9 +239,14 @@ export async function POST(request: NextRequest) {
           settings.clinicNumber ||
           undefined;
 
+        const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+        const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+        const webhookUrl = backendUrl
+          ? `${backendUrl}/vapi/webhook`
+          : `${frontendUrl}/api/vapi/webhook`;
         const runtimeConfig: RuntimeConfig = {
-          webhookUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-          webhookSecret: process.env.VAPI_SERVER_SECRET,
+          webhookUrl,
+          webhookSecret: process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET,
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
           clinicPhoneNumber,
         };

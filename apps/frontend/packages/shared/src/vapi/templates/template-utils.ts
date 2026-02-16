@@ -234,9 +234,23 @@ function buildMemberPayload(
     assistantPayload.tools = tools;
   }
 
-  // Add analysis schema if present
+  // Add analysis plan if a schema is present.
+  // Vapi expects `analysisPlan.structuredDataPlan.schema` (NOT top-level `analysisSchema`).
+  // Also enable summaryPlan so Vapi generates an automatic call summary.
   if (a.analysisSchema) {
-    assistantPayload.analysisSchema = a.analysisSchema;
+    assistantPayload.analysisPlan = {
+      structuredDataPlan: {
+        enabled: true,
+        schema: a.analysisSchema,
+        timeoutSeconds: 30,
+      },
+      summaryPlan: {
+        enabled: true,
+      },
+      successEvaluationPlan: {
+        enabled: false,
+      },
+    };
   }
 
   return {

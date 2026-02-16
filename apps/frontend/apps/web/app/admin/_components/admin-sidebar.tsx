@@ -45,6 +45,11 @@ const navigation = [
     icon: Receipt,
   },
   {
+    name: 'Squad Management',
+    href: '/admin/squads',
+    icon: Phone,
+  },
+  {
     name: 'PMS Integrations',
     href: '/admin/pms',
     icon: Database,
@@ -54,7 +59,7 @@ const navigation = [
         {
           name: 'Setup Test Agent',
           href: '/admin/setup-vapi',
-          icon: Phone,
+          icon: Settings,
         },
       ]
     : []),

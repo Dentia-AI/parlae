@@ -32,6 +32,12 @@ export async function setupTestAgentAction(areaCode: string = '415') {
     logger.info('[Setup Test Agent] Creating assistants in Vapi');
 
     const organizationPrefix = 'Test: Parlae';
+    const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || '';
+    const webhookUrl = backendUrl
+      ? `${backendUrl}/vapi/webhook`
+      : `${frontendUrl}/api/vapi/webhook`;
+    const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
     // Create Receptionist Assistant
     const receptionistAssistant = await vapiService.createAssistant({
@@ -56,8 +62,8 @@ Keep responses short and friendly.`,
       firstMessage: 'Thank you for calling Parlae! How can I help you today?',
       firstMessageMode: 'assistant-speaks-first',
       recordingEnabled: true,
-      serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      serverUrlSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl: webhookUrl,
+      serverUrlSecret: webhookSecret,
     });
 
     if (!receptionistAssistant) {
@@ -95,8 +101,8 @@ Be professional and efficient. Collect: name, phone, email, service type, prefer
       firstMessage: 'Great! I can help you schedule an appointment. Can I get your name please?',
       firstMessageMode: 'assistant-speaks-first',
       recordingEnabled: true,
-      serverUrl: `${process.env.NEXT_PUBLIC_APP_BASE_URL}/api/vapi/webhook`,
-      serverUrlSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl: webhookUrl,
+      serverUrlSecret: webhookSecret,
     });
 
     if (!bookingAssistant) {
