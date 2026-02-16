@@ -423,10 +423,16 @@ class VapiService {
         assistantDestinations?: any[];
       }> = [];
 
-      for (const member of config.members) {
+      for (let memberIdx = 0; memberIdx < config.members.length; memberIdx++) {
+        const member = config.members[memberIdx]!;
         let assistantId = member.assistantId;
 
         if (!assistantId && member.assistant) {
+          // Rate-limit courtesy: wait between assistant creations (skip first)
+          if (memberIdx > 0) {
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+
           const assistantConfig = member.assistant;
           const inlineToolCount = assistantConfig.tools?.length || 0;
           const standaloneToolCount = assistantConfig.toolIds?.length || 0;
@@ -440,6 +446,7 @@ class VapiService {
             serverUrl: assistantConfig.serverUrl,
             toolIds: assistantConfig.toolIds?.slice(0, 5),
             inlineToolNames: assistantConfig.tools?.map((t: any) => t.function?.name || t.type).slice(0, 5),
+            memberIndex: `${memberIdx + 1}/${config.members.length}`,
           }, '[Vapi] Creating assistant for squad member');
 
           // Create the assistant via the standalone endpoint (supports full config)
@@ -687,32 +694,49 @@ class VapiService {
         hasServerSecret: !!serverConfig?.secret,
       }, '[Vapi] Creating assistant — sending to Vapi API');
 
-      const response = await fetch(`${this.baseUrl}/assistant`, {
-        method: 'POST',
-        headers: {
-          'Authorization': this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(builtPayload),
-      });
+      const maxRetries = 3;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(`${this.baseUrl}/assistant`, {
+          method: 'POST',
+          headers: {
+            'Authorization': this.getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(builtPayload),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error({
-          status: response.status,
-          error: errorText,
-        }, '[Vapi] Failed to create assistant');
-        return null;
+        if (response.status === 429 && attempt < maxRetries) {
+          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
+          logger.warn({
+            attempt: attempt + 1,
+            backoffMs,
+            name: config.name,
+          }, '[Vapi] Rate limited creating assistant, retrying after backoff');
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({
+            status: response.status,
+            error: errorText,
+          }, '[Vapi] Failed to create assistant');
+          return null;
+        }
+
+        const assistant = await response.json();
+
+        logger.info({
+          assistantId: assistant.id,
+          name: assistant.name,
+        }, '[Vapi] Successfully created assistant');
+
+        return assistant;
       }
 
-      const assistant = await response.json();
-
-      logger.info({
-        assistantId: assistant.id,
-        name: assistant.name,
-      }, '[Vapi] Successfully created assistant');
-
-      return assistant;
+      logger.error({ name: config.name }, '[Vapi] Exhausted retries creating assistant');
+      return null;
     } catch (error) {
       logger.error({
         error: error instanceof Error ? {
@@ -1530,47 +1554,62 @@ class VapiService {
       return null;
     }
 
-    try {
-      const toolName = (toolConfig as any).function?.name || 'unknown';
+    const toolName = (toolConfig as any).function?.name || 'unknown';
 
-      logger.info({
-        toolName,
-        type: toolConfig.type,
-        hasServer: !!(toolConfig as any).server?.url,
-      }, '[Vapi] Creating standalone tool');
+    logger.info({
+      toolName,
+      type: toolConfig.type,
+      hasServer: !!(toolConfig as any).server?.url,
+    }, '[Vapi] Creating standalone tool');
 
-      const response = await fetch(`${this.baseUrl}/tool`, {
-        method: 'POST',
-        headers: {
-          'Authorization': this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(toolConfig),
-      });
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(`${this.baseUrl}/tool`, {
+          method: 'POST',
+          headers: {
+            'Authorization': this.getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(toolConfig),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error({
-          status: response.status,
-          error: errorText,
+        if (response.status === 429 && attempt < maxRetries) {
+          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
+          logger.warn({ attempt: attempt + 1, backoffMs, toolName }, '[Vapi] Rate limited creating tool, retrying');
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({
+            status: response.status,
+            error: errorText,
+            toolName,
+          }, '[Vapi] Failed to create standalone tool');
+          return null;
+        }
+
+        const tool = await response.json();
+        logger.info({
+          toolId: tool.id,
           toolName,
-        }, '[Vapi] Failed to create standalone tool');
+        }, '[Vapi] Standalone tool created');
+
+        return tool;
+      } catch (error) {
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        logger.error({
+          error: error instanceof Error ? error.message : error,
+        }, '[Vapi] Exception while creating standalone tool');
         return null;
       }
-
-      const tool = await response.json();
-      logger.info({
-        toolId: tool.id,
-        toolName,
-      }, '[Vapi] Standalone tool created');
-
-      return tool;
-    } catch (error) {
-      logger.error({
-        error: error instanceof Error ? error.message : error,
-      }, '[Vapi] Exception while creating standalone tool');
-      return null;
     }
+    return null;
   }
 
   /**
@@ -1684,29 +1723,44 @@ class VapiService {
 
     if (!this.enabled) return null;
 
-    try {
-      const response = await fetch(`${this.baseUrl}/tool/${toolId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(`${this.baseUrl}/tool/${toolId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': this.getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updates),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error({ status: response.status, error: errorText, toolId }, '[Vapi] Failed to update tool');
+        if (response.status === 429 && attempt < maxRetries) {
+          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
+          logger.warn({ attempt: attempt + 1, backoffMs, toolId }, '[Vapi] Rate limited updating tool, retrying');
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({ status: response.status, error: errorText, toolId }, '[Vapi] Failed to update tool');
+          return null;
+        }
+
+        const tool = await response.json();
+        logger.info({ toolId }, '[Vapi] Tool updated');
+        return tool;
+      } catch (error) {
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        logger.error({ error: error instanceof Error ? error.message : error, toolId }, '[Vapi] Exception updating tool');
         return null;
       }
-
-      const tool = await response.json();
-      logger.info({ toolId }, '[Vapi] Tool updated');
-      return tool;
-    } catch (error) {
-      logger.error({ error: error instanceof Error ? error.message : error, toolId }, '[Vapi] Exception updating tool');
-      return null;
     }
+    return null;
   }
 
   /**
@@ -1775,6 +1829,7 @@ class VapiService {
       hasCredentialId: !!credentialId,
     }, '[Vapi] Ensuring standalone tools exist');
 
+    let apiCallCount = 0;
     for (const toolDef of toolDefinitions) {
       const funcName = toolDef.function?.name;
       if (!funcName) continue;
@@ -1787,6 +1842,10 @@ class VapiService {
         // If a credentialId is requested but the existing tool doesn't have it,
         // patch the tool's server config to add the credential.
         if (credentialId && existing.server?.credentialId !== credentialId) {
+          // Rate-limit courtesy: delay between API calls
+          if (apiCallCount > 0 && apiCallCount % 5 === 0) {
+            await new Promise((r) => setTimeout(r, 2000));
+          }
           const serverPatch: Record<string, unknown> = {
             url: toolDef.server?.url || existing.server?.url,
             credentialId,
@@ -1795,6 +1854,7 @@ class VapiService {
             serverPatch.timeoutSeconds = existing.server.timeoutSeconds;
           }
           await this.updateTool(existing.id, { server: serverPatch });
+          apiCallCount++;
           logger.info({ funcName, toolId: existing.id }, '[Vapi] Patched tool with credential');
         }
 
@@ -1837,7 +1897,12 @@ class VapiService {
         standalonePayload.async = toolDef.async;
       }
 
+      // Rate-limit courtesy: delay between API calls
+      if (apiCallCount > 0 && apiCallCount % 5 === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
       const created = await this.createStandaloneTool(standalonePayload);
+      apiCallCount++;
       if (created) {
         toolIdMap.set(funcName, created.id);
         logger.info({ funcName, toolId: created.id }, '[Vapi] Standalone tool created');
