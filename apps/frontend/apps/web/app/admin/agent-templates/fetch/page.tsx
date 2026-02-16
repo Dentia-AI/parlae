@@ -23,11 +23,23 @@ import {
   Bot,
   Wrench,
   ArrowRight,
+  RefreshCw,
+  Plus,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+
+type SaveMode = 'new' | 'update';
+
+interface ExistingTemplate {
+  id: string;
+  name: string;
+  displayName: string;
+  version: string;
+  category: string;
+}
 
 export default function FetchTemplateFromSquadPage() {
   const router = useRouter();
@@ -40,6 +52,11 @@ export default function FetchTemplateFromSquadPage() {
   const [version, setVersion] = useState('');
   const [category, setCategory] = useState('receptionist');
   const [isDefault, setIsDefault] = useState(false);
+
+  const [saveMode, setSaveMode] = useState<SaveMode>('update');
+  const [existingTemplates, setExistingTemplates] = useState<ExistingTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [bumpVersion, setBumpVersion] = useState(false);
 
   const [fetchedData, setFetchedData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -86,6 +103,23 @@ export default function FetchTemplateFromSquadPage() {
         if (!version) {
           setVersion('v1.0');
         }
+
+        // Load existing templates for the "update" option
+        try {
+          const templatesRes = await fetch('/api/admin/agent-templates/list', {
+            credentials: 'include',
+          });
+          const templatesData = await templatesRes.json();
+          if (templatesData.success && templatesData.templates?.length > 0) {
+            setExistingTemplates(templatesData.templates);
+            setSelectedTemplateId(templatesData.templates[0].id);
+            setSaveMode('update');
+          } else {
+            setSaveMode('new');
+          }
+        } catch {
+          setSaveMode('new');
+        }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
@@ -101,41 +135,80 @@ export default function FetchTemplateFromSquadPage() {
       return;
     }
 
-    if (!templateName.trim() || !displayName.trim() || !version.trim()) {
-      toast.error('Please fill in all required fields');
-      return;
+    if (saveMode === 'new') {
+      if (!templateName.trim() || !displayName.trim() || !version.trim()) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+    } else {
+      if (!selectedTemplateId) {
+        toast.error('Please select a template to update');
+        return;
+      }
     }
 
     startTransition(async () => {
       try {
-        const response = await fetch('/api/admin/agent-templates/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            name: templateName.trim(),
-            displayName: displayName.trim(),
-            description: description.trim(),
-            version: version.trim(),
-            category: category.trim(),
-            isDefault,
-            squadConfig: fetchedData.squadConfig,
-            assistantConfig: fetchedData.assistantConfig,
-            toolsConfig: fetchedData.toolsConfig,
-            modelConfig: fetchedData.modelConfig,
-          }),
-        });
+        let response: Response;
+
+        if (saveMode === 'update') {
+          // Update existing template
+          response = await fetch('/api/admin/agent-templates/update', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-csrf-token': csrfToken,
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              templateId: selectedTemplateId,
+              squadConfig: fetchedData.squadConfig,
+              assistantConfig: fetchedData.assistantConfig,
+              toolsConfig: fetchedData.toolsConfig,
+              modelConfig: fetchedData.modelConfig,
+              description: description.trim() || undefined,
+              bumpVersion,
+            }),
+          });
+        } else {
+          // Create new template
+          response = await fetch('/api/admin/agent-templates/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-csrf-token': csrfToken,
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: templateName.trim(),
+              displayName: displayName.trim(),
+              description: description.trim(),
+              version: version.trim(),
+              category: category.trim(),
+              isDefault,
+              squadConfig: fetchedData.squadConfig,
+              assistantConfig: fetchedData.assistantConfig,
+              toolsConfig: fetchedData.toolsConfig,
+              modelConfig: fetchedData.modelConfig,
+            }),
+          });
+        }
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'Failed to create template');
+          throw new Error(result.error || 'Failed to save template');
         }
 
-        toast.success('Template created successfully');
+        if (saveMode === 'update') {
+          const versionMsg = result.previousVersion !== result.newVersion
+            ? ` (${result.previousVersion} → ${result.newVersion})`
+            : '';
+          toast.success(`Template updated successfully${versionMsg}`);
+        } else {
+          toast.success('Template created successfully');
+        }
+
         router.push('/admin/agent-templates');
       } catch (error) {
         const errorMessage =
@@ -275,102 +348,212 @@ export default function FetchTemplateFromSquadPage() {
         </CardContent>
       </Card>
 
-      {/* Step 2: Configure Template */}
+      {/* Step 2: Save Options */}
       {fetchedData && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 2: Save as Template</CardTitle>
+            <CardTitle>Step 2: Save Template</CardTitle>
             <CardDescription>
-              Set template metadata. This template can then be bulk-deployed to
-              all clinics.
+              Update an existing template or create a new one. Updated templates
+              can then be bulk-deployed to all clinics.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="templateName">
-                  Template Name (Internal) *
-                </Label>
-                <Input
-                  id="templateName"
-                  placeholder="dental-clinic-v1.1"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  disabled={pending}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Unique identifier (e.g., dental-clinic-v1.1)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="displayName">Display Name *</Label>
-                <Input
-                  id="displayName"
-                  placeholder="Dental Clinic Receptionist v1.1"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={pending}
-                />
-              </div>
+          <CardContent className="space-y-5">
+            {/* Save Mode Toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              <button
+                type="button"
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  saveMode === 'update'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                }`}
+                onClick={() => setSaveMode('update')}
+                disabled={existingTemplates.length === 0}
+              >
+                <RefreshCw className="h-4 w-4 inline mr-2" />
+                Update Existing Template
+              </button>
+              <button
+                type="button"
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  saveMode === 'new'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                }`}
+                onClick={() => setSaveMode('new')}
+              >
+                <Plus className="h-4 w-4 inline mr-2" />
+                Save as New Template
+              </button>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="category">Category *</Label>
-                <select
-                  id="category"
-                  className="w-full border rounded-md p-2 bg-background"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  disabled={pending}
-                >
-                  <option value="receptionist">Receptionist</option>
-                  <option value="emergency">Emergency</option>
-                  <option value="booking">Booking</option>
-                  <option value="sales">Sales</option>
-                  <option value="support">Support</option>
-                  <option value="other">Other</option>
-                </select>
+            {/* UPDATE EXISTING mode */}
+            {saveMode === 'update' && (
+              <div className="space-y-4">
+                {existingTemplates.length === 0 ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      No existing templates found. Create a new one instead.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="selectTemplate">
+                        Select Template to Update
+                      </Label>
+                      <select
+                        id="selectTemplate"
+                        className="w-full border rounded-md p-2.5 bg-background"
+                        value={selectedTemplateId}
+                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                        disabled={pending}
+                      >
+                        {existingTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.displayName} ({t.version}) — {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="bumpVersion"
+                        checked={bumpVersion}
+                        onChange={(e) => setBumpVersion(e.target.checked)}
+                        disabled={pending}
+                        className="rounded"
+                      />
+                      <Label htmlFor="bumpVersion" className="cursor-pointer">
+                        Auto-bump version number (e.g., v1.0 → v1.1)
+                      </Label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="updateDescription">
+                        Change Description{' '}
+                        <span className="text-muted-foreground font-normal">
+                          (optional)
+                        </span>
+                      </Label>
+                      <Textarea
+                        id="updateDescription"
+                        placeholder="What changed? e.g., Updated scheduling prompt, added new tool..."
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        disabled={pending}
+                        rows={2}
+                      />
+                    </div>
+
+                    <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+                      <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm">
+                        This will overwrite the selected template&apos;s
+                        configuration with the fetched squad data. Existing
+                        clinics on this template won&apos;t be affected until
+                        you run a Bulk Upgrade from the Version Overview page.
+                      </AlertDescription>
+                    </Alert>
+                  </>
+                )}
               </div>
+            )}
 
-              <div className="space-y-2">
-                <Label htmlFor="version">Version *</Label>
-                <Input
-                  id="version"
-                  placeholder="v1.1"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  disabled={pending}
-                />
+            {/* SAVE AS NEW mode */}
+            {saveMode === 'new' && (
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="templateName">
+                      Template Name (Internal) *
+                    </Label>
+                    <Input
+                      id="templateName"
+                      placeholder="dental-clinic-v1.1"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      disabled={pending}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Unique identifier (e.g., dental-clinic-v1.1)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="displayName">Display Name *</Label>
+                    <Input
+                      id="displayName"
+                      placeholder="Dental Clinic Receptionist v1.1"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      disabled={pending}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category *</Label>
+                    <select
+                      id="category"
+                      className="w-full border rounded-md p-2 bg-background"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      disabled={pending}
+                    >
+                      <option value="receptionist">Receptionist</option>
+                      <option value="emergency">Emergency</option>
+                      <option value="booking">Booking</option>
+                      <option value="sales">Sales</option>
+                      <option value="support">Support</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="version">Version *</Label>
+                    <Input
+                      id="version"
+                      placeholder="v1.1"
+                      value={version}
+                      onChange={(e) => setVersion(e.target.value)}
+                      disabled={pending}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Describe what this template does..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={pending}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isDefault"
+                    checked={isDefault}
+                    onChange={(e) => setIsDefault(e.target.checked)}
+                    disabled={pending}
+                    className="rounded"
+                  />
+                  <Label htmlFor="isDefault" className="cursor-pointer">
+                    Set as default template for new clinics
+                  </Label>
+                </div>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe changes from previous version..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={pending}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="isDefault"
-                checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
-                disabled={pending}
-                className="rounded"
-              />
-              <Label htmlFor="isDefault" className="cursor-pointer">
-                Set as default template for new clinics
-              </Label>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -384,8 +567,16 @@ export default function FetchTemplateFromSquadPage() {
           <Button onClick={handleSave} disabled={pending}>
             {pending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : saveMode === 'update' ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Update Template
+              </>
             ) : (
-              'Save Template'
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Save as New Template
+              </>
             )}
           </Button>
         </div>
