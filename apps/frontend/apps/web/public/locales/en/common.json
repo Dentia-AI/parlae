@@ -232,14 +232,14 @@
           "Setup in minutes",
           "No paperwork required",
           "Keep full control of your number",
-          "Easy to disable"
+          "Easy to disable",
+          "Real caller ID preserved"
         ],
         "cons": [
-          "Caller ID may not show correctly",
-          "Slightly lower call quality",
-          "May incur forwarding charges"
+          "May incur carrier forwarding charges",
+          "Carrier-dependent setup codes"
         ],
-        "bestFor": "Quick testing, temporary setup"
+        "bestFor": "Most clinics — fast setup with full caller ID"
       },
       "ported": {
         "name": "Port Number",

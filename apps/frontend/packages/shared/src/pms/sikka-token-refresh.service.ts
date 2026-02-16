@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
 
 /**
  * Sikka Token Refresh Service
@@ -167,24 +166,23 @@ export class SikkaTokenRefreshService {
     officeId: string,
     secretKey: string
   ): Promise<TokenRefreshResult> {
-    const response = await axios.post(
-      `${this.baseUrl}/request_key`,
-      {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(`${this.baseUrl}/request_key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         grant_type: 'request_key',
         office_id: officeId,
         secret_key: secretKey,
         app_id: appId,
         app_key: appKey,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      }
-    );
-    
-    const data = response.data;
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    if (!res.ok) throw new Error(`Sikka API error ${res.status}: ${JSON.stringify(data)}`);
     
     if (!data.request_key || !data.refresh_key) {
       throw new Error('Invalid token response');
@@ -209,23 +207,22 @@ export class SikkaTokenRefreshService {
     appKey: string,
     refreshKey: string
   ): Promise<TokenRefreshResult> {
-    const response = await axios.post(
-      `${this.baseUrl}/request_key`,
-      {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(`${this.baseUrl}/request_key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         grant_type: 'refresh_key',
         refresh_key: refreshKey,
         app_id: appId,
         app_key: appKey,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      }
-    );
-    
-    const data = response.data;
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    if (!res.ok) throw new Error(`Sikka API error ${res.status}: ${JSON.stringify(data)}`);
     
     if (!data.request_key || !data.refresh_key) {
       throw new Error('Invalid token response');

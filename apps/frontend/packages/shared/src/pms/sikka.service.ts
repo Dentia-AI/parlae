@@ -1,4 +1,55 @@
-import axios, { type AxiosInstance } from 'axios';
+// HTTP client helper (replaces axios to avoid bundling issues)
+class HttpClient {
+  private baseURL: string;
+  private timeout: number;
+  private defaultHeaders: Record<string, string>;
+  private requestInterceptor?: () => Promise<Record<string, string>>;
+
+  constructor(opts: { baseURL: string; timeout: number; headers: Record<string, string> }) {
+    this.baseURL = opts.baseURL;
+    this.timeout = opts.timeout;
+    this.defaultHeaders = opts.headers;
+  }
+
+  setRequestInterceptor(fn: () => Promise<Record<string, string>>) {
+    this.requestInterceptor = fn;
+  }
+
+  private async request(method: string, path: string, opts?: { params?: any; data?: any }) {
+    const headers = { ...this.defaultHeaders };
+    if (this.requestInterceptor) {
+      Object.assign(headers, await this.requestInterceptor());
+    }
+    const url = new URL(path, this.baseURL);
+    if (opts?.params) {
+      Object.entries(opts.params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+    try {
+      const res = await fetch(url.toString(), {
+        method,
+        headers,
+        body: opts?.data ? JSON.stringify(opts.data) : undefined,
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { response: { status: res.status, data } });
+      return { data };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  get(path: string, opts?: { params?: any; headers?: Record<string, string> }) { return this.request('GET', path, opts); }
+  post(path: string, data?: any, opts?: { headers?: Record<string, string> }) { return this.request('POST', path, { data }); }
+  patch(path: string, data?: any) { return this.request('PATCH', path, { data }); }
+  delete(path: string, opts?: { data?: any }) { return this.request('DELETE', path, { data: opts?.data }); }
+}
+
+function isHttpError(err: unknown): err is { response: { status: number; data: any } } {
+  return typeof err === 'object' && err !== null && 'response' in err;
+}
 import { BasePmsService } from './pms-service.interface';
 import type {
   Appointment,
@@ -40,7 +91,7 @@ import type {
  * 3. Return result when completed
  */
 export class SikkaPmsService extends BasePmsService {
-  private client: AxiosInstance;
+  private client: HttpClient;
   private readonly baseUrl = 'https://api.sikkasoft.com/v4';
   
   // Credentials
@@ -77,8 +128,7 @@ export class SikkaPmsService extends BasePmsService {
     this.officeId = creds.officeId;
     this.secretKey = creds.secretKey;
     
-    // Initialize HTTP client
-    this.client = axios.create({
+    this.client = new HttpClient({
       baseURL: this.baseUrl,
       timeout: 20000,
       headers: {
@@ -86,14 +136,10 @@ export class SikkaPmsService extends BasePmsService {
         'Accept': 'application/json',
       },
     });
-    
-    // Add request interceptor for automatic token refresh
-    this.client.interceptors.request.use(async (config) => {
+
+    this.client.setRequestInterceptor(async () => {
       await this.ensureValidToken();
-      if (this.requestKey) {
-        config.headers['Request-Key'] = this.requestKey;
-      }
-      return config;
+      return this.requestKey ? { 'Request-Key': this.requestKey } : {};
     });
   }
   
@@ -132,13 +178,14 @@ export class SikkaPmsService extends BasePmsService {
     try {
       console.log('[Sikka] Fetching authorized practices...');
       
-      const response = await axios.get(`${this.baseUrl}/authorized_practices`, {
-        headers: {
-          'App-Id': this.appId,
-          'App-Key': this.appKey,
-        },
-        timeout: 15000,
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`${this.baseUrl}/authorized_practices`, {
+        headers: { 'App-Id': this.appId, 'App-Key': this.appKey },
+        signal: controller.signal,
       });
+      clearTimeout(timer);
+      const response = { data: await res.json() };
       
       const practices = response.data.items || [];
       if (practices.length === 0) {
@@ -167,49 +214,46 @@ export class SikkaPmsService extends BasePmsService {
     try {
       console.log('[Sikka] Getting initial token with request_key grant...');
       
-      const response = await axios.post(
-        `${this.baseUrl}/request_key`,
-        {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(`${this.baseUrl}/request_key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           grant_type: 'request_key',
           office_id: this.officeId,
           secret_key: this.secretKey,
           app_id: this.appId,
           app_key: this.appKey,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000,
-        }
-      );
-      
-      const data = response.data;
-      
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(`Sikka authentication failed (${res.status}): ${JSON.stringify(data)}`);
+      }
+
       if (!data.request_key || !data.refresh_key) {
         throw new Error('Invalid token response from Sikka API');
       }
-      
+
       this.requestKey = data.request_key;
       this.refreshKey = data.refresh_key;
-      
-      // Parse expires_in (e.g., "85603 second(s)")
-      const expiresInSeconds = parseInt(data.expires_in) || 86400; // Default 24 hours
+
+      const expiresInSeconds = parseInt(data.expires_in) || 86400;
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
-      
+
       console.log(`[Sikka] Token obtained successfully, expires in ${expiresInSeconds}s`);
-      
-      // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
-      
+
     } catch (error) {
       console.error('[Sikka] Token request failed:', error);
-      
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const data = error.response?.data;
-        throw new Error(`Sikka authentication failed (${status}): ${JSON.stringify(data)}`);
+
+      if (isHttpError(error)) {
+        throw new Error(`Sikka authentication failed (${error.response.status}): ${JSON.stringify(error.response.data)}`);
       }
-      
+
       throw new Error('Failed to authenticate with Sikka API. Please check your credentials.');
     }
   }
@@ -221,44 +265,42 @@ export class SikkaPmsService extends BasePmsService {
     try {
       console.log('[Sikka] Refreshing token with refresh_key grant...');
       
-      const response = await axios.post(
-        `${this.baseUrl}/request_key`,
-        {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(`${this.baseUrl}/request_key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           grant_type: 'refresh_key',
           refresh_key: this.refreshKey,
           app_id: this.appId,
           app_key: this.appKey,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000,
-        }
-      );
-      
-      const data = response.data;
-      
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw Object.assign(new Error(`HTTP ${res.status}`), { response: { status: res.status, data } });
+      }
+
       if (!data.request_key || !data.refresh_key) {
         throw new Error('Invalid token response from Sikka API');
       }
-      
+
       this.requestKey = data.request_key;
       this.refreshKey = data.refresh_key;
-      
-      // Parse expires_in
+
       const expiresInSeconds = parseInt(data.expires_in) || 86400;
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
-      
+
       console.log(`[Sikka] Token refreshed successfully, expires in ${expiresInSeconds}s`);
-      
-      // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
-      
+
     } catch (error) {
       console.error('[Sikka] Token refresh failed:', error);
-      
-      // If refresh fails, try to get a new token
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+
+      if (isHttpError(error) && error.response.status === 401) {
         console.warn('[Sikka] Refresh key expired, getting new token...');
         await this.getInitialToken();
       } else {
@@ -280,19 +322,18 @@ export class SikkaPmsService extends BasePmsService {
   }> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await axios.get(
-          `${this.baseUrl}/writebacks`,
-          {
-            params: { id: writebackId },
-            headers: {
-              'App-Id': this.appId,
-              'App-Key': this.appKey,
-            },
-            timeout: 10000,
-          }
-        );
-        
-        const writebacks = response.data.items || [];
+        const wbUrl = new URL(`${this.baseUrl}/writebacks`);
+        wbUrl.searchParams.set('id', writebackId);
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10000);
+        const wbRes = await fetch(wbUrl.toString(), {
+          headers: { 'App-Id': this.appId, 'App-Key': this.appKey },
+          signal: ctrl.signal,
+        });
+        clearTimeout(t);
+        const wbData = await wbRes.json();
+
+        const writebacks = wbData.items || [];
         if (writebacks.length === 0) {
           throw new Error(`Writeback ${writebackId} not found`);
         }

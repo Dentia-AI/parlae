@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@kit/shared/auth';
 import { isAdminUser } from '~/lib/auth/admin';
 import { prisma } from '@kit/prisma';
-import axios from 'axios';
 
 const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
 
@@ -116,6 +115,66 @@ export async function POST(request: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function sikkaPost(url: string, body: Record<string, unknown>) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw { status: res.status, data };
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sikkaGet(url: string, token: string, params?: Record<string, string>) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const urlObj = new URL(url);
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => urlObj.searchParams.set(k, v));
+    }
+    const res = await fetch(urlObj.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw { status: res.status, data };
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'data' in error) {
+    return JSON.stringify((error as any).data);
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+// ---------------------------------------------------------------------------
 // Action Handlers
 // ---------------------------------------------------------------------------
 
@@ -129,13 +188,11 @@ async function handleCreate(body: any) {
     );
   }
 
-  // Check if integration already exists
   const existing = await prisma.pmsIntegration.findUnique({
     where: { accountId_provider: { accountId, provider: 'SIKKA' } },
   });
 
   if (existing) {
-    // Update existing
     const updated = await prisma.pmsIntegration.update({
       where: { id: existing.id },
       data: {
@@ -248,19 +305,13 @@ async function handleActivate(body: any) {
   console.log(`[Admin PMS] Activating token for integration ${integrationId}, officeId=${officeId}`);
 
   try {
-    const response = await axios.post(
-      `${SIKKA_BASE_URL}/request_key`,
-      {
-        grant_type: 'request_key',
-        office_id: officeId,
-        secret_key: secretKey,
-        app_id: appId,
-        app_key: appKey,
-      },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
-    );
-
-    const data = response.data;
+    const data = await sikkaPost(`${SIKKA_BASE_URL}/request_key`, {
+      grant_type: 'request_key',
+      office_id: officeId,
+      secret_key: secretKey,
+      app_id: appId,
+      app_key: appKey,
+    });
 
     if (!data.request_key || !data.refresh_key) {
       return NextResponse.json(
@@ -292,10 +343,8 @@ async function handleActivate(body: any) {
       tokenExpiry: tokenExpiry.toISOString(),
       expiresIn: `${expiresIn} seconds`,
     });
-  } catch (error: any) {
-    const errMsg = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : error.message;
+  } catch (error) {
+    const errMsg = extractErrorMessage(error);
 
     await prisma.pmsIntegration.update({
       where: { id: integrationId },
@@ -331,27 +380,20 @@ async function handleTest(body: any) {
   }
 
   try {
-    // Test by fetching authorized_practices
-    const response = await axios.get(`${SIKKA_BASE_URL}/authorized_practices`, {
-      headers: {
-        Authorization: `Bearer ${integration.requestKey}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 15000,
-    });
+    const practices = await sikkaGet(
+      `${SIKKA_BASE_URL}/authorized_practices`,
+      integration.requestKey,
+    );
 
     return NextResponse.json({
       success: true,
       message: 'Connection test successful',
-      practices: response.data,
+      practices,
     });
-  } catch (error: any) {
-    const errMsg = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : error.message;
-
+  } catch (error) {
+    const errMsg = extractErrorMessage(error);
     return NextResponse.json(
-      { error: `Connection test failed: ${errMsg}`, statusCode: error.response?.status },
+      { error: `Connection test failed: ${errMsg}`, statusCode: (error as any)?.status },
       { status: 502 },
     );
   }
@@ -373,14 +415,11 @@ async function handleFetchPatients(body: any) {
   }
 
   try {
-    const response = await axios.get(`${SIKKA_BASE_URL}/patients`, {
-      headers: {
-        Authorization: `Bearer ${integration.requestKey}`,
-        'Content-Type': 'application/json',
-      },
-      params: { limit: 10, offset: 0 },
-      timeout: 15000,
-    });
+    const data = await sikkaGet(
+      `${SIKKA_BASE_URL}/patients`,
+      integration.requestKey,
+      { limit: '10', offset: '0' },
+    );
 
     await prisma.pmsIntegration.update({
       where: { id: integrationId },
@@ -389,14 +428,11 @@ async function handleFetchPatients(body: any) {
 
     return NextResponse.json({
       success: true,
-      count: Array.isArray(response.data) ? response.data.length : (response.data?.data?.length ?? 0),
-      patients: response.data,
+      count: Array.isArray(data) ? data.length : (data?.data?.length ?? 0),
+      patients: data,
     });
-  } catch (error: any) {
-    const errMsg = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : error.message;
-
+  } catch (error) {
+    const errMsg = extractErrorMessage(error);
     return NextResponse.json(
       { error: `Failed to fetch patients: ${errMsg}` },
       { status: 502 },
@@ -420,16 +456,12 @@ async function handleFetchAppointments(body: any) {
   }
 
   try {
-    // Fetch today's and upcoming appointments
-    const today = new Date().toISOString().split('T')[0];
-    const response = await axios.get(`${SIKKA_BASE_URL}/appointments`, {
-      headers: {
-        Authorization: `Bearer ${integration.requestKey}`,
-        'Content-Type': 'application/json',
-      },
-      params: { limit: 10, offset: 0, start_date: today },
-      timeout: 15000,
-    });
+    const today = new Date().toISOString().split('T')[0]!;
+    const data = await sikkaGet(
+      `${SIKKA_BASE_URL}/appointments`,
+      integration.requestKey,
+      { limit: '10', offset: '0', start_date: today },
+    );
 
     await prisma.pmsIntegration.update({
       where: { id: integrationId },
@@ -438,14 +470,11 @@ async function handleFetchAppointments(body: any) {
 
     return NextResponse.json({
       success: true,
-      count: Array.isArray(response.data) ? response.data.length : (response.data?.data?.length ?? 0),
-      appointments: response.data,
+      count: Array.isArray(data) ? data.length : (data?.data?.length ?? 0),
+      appointments: data,
     });
-  } catch (error: any) {
-    const errMsg = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : error.message;
-
+  } catch (error) {
+    const errMsg = extractErrorMessage(error);
     return NextResponse.json(
       { error: `Failed to fetch appointments: ${errMsg}` },
       { status: 502 },

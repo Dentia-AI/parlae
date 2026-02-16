@@ -37,28 +37,6 @@ export function PhoneMethodSelector({
 
   const methods = [
     {
-      id: 'sip' as const,
-      name: t('common:setup.phone.sip.name'),
-      icon: Network,
-      setupTime: t('common:setup.phone.sip.setupTime'),
-      difficulty: t('common:setup.phone.sip.difficulty'),
-      quality: t('common:setup.phone.sip.quality'),
-      recommended: true,
-      description: t('common:setup.phone.sip.description'),
-      pros: [
-        t('common:setup.phone.sip.pros.0'),
-        t('common:setup.phone.sip.pros.1'),
-        t('common:setup.phone.sip.pros.2'),
-        t('common:setup.phone.sip.pros.3'),
-      ],
-      cons: [
-        t('common:setup.phone.sip.cons.0'),
-        t('common:setup.phone.sip.cons.1'),
-        t('common:setup.phone.sip.cons.2'),
-      ],
-      bestFor: t('common:setup.phone.sip.bestFor'),
-    },
-    {
       id: 'forwarded' as const,
       name: t('common:setup.phone.forwarded.name'),
       icon: PhoneForwarded,
@@ -72,13 +50,35 @@ export function PhoneMethodSelector({
         t('common:setup.phone.forwarded.pros.1'),
         t('common:setup.phone.forwarded.pros.2'),
         t('common:setup.phone.forwarded.pros.3'),
+        t('common:setup.phone.forwarded.pros.4'),
       ],
       cons: [
         t('common:setup.phone.forwarded.cons.0'),
         t('common:setup.phone.forwarded.cons.1'),
-        t('common:setup.phone.forwarded.cons.2'),
       ],
       bestFor: t('common:setup.phone.forwarded.bestFor'),
+    },
+    {
+      id: 'sip' as const,
+      name: t('common:setup.phone.sip.name'),
+      icon: Network,
+      setupTime: t('common:setup.phone.sip.setupTime'),
+      difficulty: t('common:setup.phone.sip.difficulty'),
+      quality: t('common:setup.phone.sip.quality'),
+      recommended: false,
+      description: t('common:setup.phone.sip.description'),
+      pros: [
+        t('common:setup.phone.sip.pros.0'),
+        t('common:setup.phone.sip.pros.1'),
+        t('common:setup.phone.sip.pros.2'),
+        t('common:setup.phone.sip.pros.3'),
+      ],
+      cons: [
+        t('common:setup.phone.sip.cons.0'),
+        t('common:setup.phone.sip.cons.1'),
+        t('common:setup.phone.sip.cons.2'),
+      ],
+      bestFor: t('common:setup.phone.sip.bestFor'),
     },
     {
       id: 'ported' as const,

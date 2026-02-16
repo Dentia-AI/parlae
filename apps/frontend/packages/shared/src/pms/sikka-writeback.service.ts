@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
 
 /**
  * Sikka Writeback Tracking Service with Rate Limiting
@@ -125,19 +124,18 @@ export class SikkaWritebackService {
    */
   async checkWritebackStatus(writebackId: string, appId: string, appKey: string): Promise<WritebackStatus | null> {
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/writebacks`,
-        {
-          params: { id: writebackId },
-          headers: {
-            'App-Id': appId,
-            'App-Key': appKey,
-          },
-          timeout: 10000,
-        }
-      );
-      
-      const writebacks = response.data.items || [];
+      const url = new URL(`${this.baseUrl}/writebacks`);
+      url.searchParams.set('id', writebackId);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(url.toString(), {
+        headers: { 'App-Id': appId, 'App-Key': appKey },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const responseData = await res.json();
+
+      const writebacks = responseData.items || [];
       if (writebacks.length === 0) {
         return null;
       }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import axios from 'axios';
 
 const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
 
@@ -12,7 +11,7 @@ const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
  *
  * Security: Protected by a shared CRON_SECRET header.
  * Can be called by:
- *   - AWS EventBridge Scheduler → Lambda → HTTP call
+ *   - AWS EventBridge Scheduler -> Lambda -> HTTP call
  *   - External cron service (e.g., cron-job.org, Vercel Cron)
  *   - Internal self-scheduling timer (see bottom of file)
  *
@@ -21,12 +20,10 @@ const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate cron requests
     const cronSecret = request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret');
     const expectedSecret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET;
 
     if (cronSecret !== expectedSecret) {
-      // Also allow calls from admin users via the admin PMS page
       const isInternal = request.headers.get('x-internal-call') === 'true';
       if (!isInternal) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +42,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find integrations that need token refresh
     const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
     const integrations = await prisma.pmsIntegration.findMany({
@@ -81,52 +77,34 @@ export async function GET(request: NextRequest) {
       try {
         let tokenData: { request_key: string; refresh_key: string; expires_in?: string };
 
-        // Try refresh_key first (faster, no secret_key needed)
         if (integration.refreshKey) {
           try {
-            const refreshRes = await axios.post(
-              `${SIKKA_BASE_URL}/request_key`,
-              {
-                grant_type: 'refresh_key',
-                refresh_key: integration.refreshKey,
-                app_id: appId,
-                app_key: appKey,
-              },
-              { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
-            );
-            tokenData = refreshRes.data;
+            tokenData = await sikkaPost(`${SIKKA_BASE_URL}/request_key`, {
+              grant_type: 'refresh_key',
+              refresh_key: integration.refreshKey,
+              app_id: appId,
+              app_key: appKey,
+            });
           } catch {
-            // Refresh key might be expired, fall back to initial token
             if (!integration.officeId || !integration.secretKey) {
               throw new Error('Refresh failed and no officeId/secretKey for initial token');
             }
-            const initialRes = await axios.post(
-              `${SIKKA_BASE_URL}/request_key`,
-              {
-                grant_type: 'request_key',
-                office_id: integration.officeId,
-                secret_key: integration.secretKey,
-                app_id: appId,
-                app_key: appKey,
-              },
-              { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
-            );
-            tokenData = initialRes.data;
-          }
-        } else if (integration.officeId && integration.secretKey) {
-          // No refresh key, use initial token grant
-          const initialRes = await axios.post(
-            `${SIKKA_BASE_URL}/request_key`,
-            {
+            tokenData = await sikkaPost(`${SIKKA_BASE_URL}/request_key`, {
               grant_type: 'request_key',
               office_id: integration.officeId,
               secret_key: integration.secretKey,
               app_id: appId,
               app_key: appKey,
-            },
-            { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
-          );
-          tokenData = initialRes.data;
+            });
+          }
+        } else if (integration.officeId && integration.secretKey) {
+          tokenData = await sikkaPost(`${SIKKA_BASE_URL}/request_key`, {
+            grant_type: 'request_key',
+            office_id: integration.officeId,
+            secret_key: integration.secretKey,
+            app_id: appId,
+            app_key: appKey,
+          });
         } else {
           throw new Error('No refresh_key or officeId/secretKey available');
         }
@@ -160,11 +138,8 @@ export async function GET(request: NextRequest) {
           success: true,
           newExpiry: tokenExpiry.toISOString(),
         });
-      } catch (error: any) {
-        const errMsg = error.response?.data
-          ? JSON.stringify(error.response.data)
-          : error.message;
-
+      } catch (error: unknown) {
+        const errMsg = extractErrorMessage(error);
         console.error(`[Sikka Cron] Failed to refresh ${integration.id}: ${errMsg}`);
 
         await prisma.pmsIntegration.update({
@@ -201,6 +176,39 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function sikkaPost(url: string, body: Record<string, unknown>) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw { status: res.status, data };
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'data' in error) {
+    return JSON.stringify((error as any).data);
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +254,6 @@ function startBackgroundRefresh() {
   }, REFRESH_INTERVAL_MS);
 }
 
-// Start the timer when this module is first loaded on the server
 if (typeof globalThis !== 'undefined' && typeof window === 'undefined') {
   startBackgroundRefresh();
 }
