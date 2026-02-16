@@ -49,6 +49,14 @@ export interface RuntimeConfig {
    * and reusable across assistants.
    */
   toolIdMap?: Map<string, string>;
+  /**
+   * Vapi Custom Credential ID for server authentication.
+   *
+   * When set, all assistant `server` configs and tool `server` configs
+   * use `credentialId` instead of inline `secret`. This shows credentials
+   * properly in the Vapi dashboard.
+   */
+  vapiCredentialId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +290,11 @@ function buildMemberPayload(
     stopSpeakingPlan: { ...a.stopSpeakingPlan },
   };
 
+  // Pass Vapi credential ID so the assistant uses credential-based auth
+  if (runtime.vapiCredentialId) {
+    assistantPayload.credentialId = runtime.vapiCredentialId;
+  }
+
   // Standalone toolIds go in the assistant config for createAssistant to pick up
   if (standaloneToolIds.length > 0) {
     assistantPayload.toolIds = standaloneToolIds;
@@ -499,25 +512,36 @@ export function getAllFunctionToolDefinitions(): any[] {
 }
 
 /**
- * Inject runtime server config (webhookUrl, webhookSecret) into tool
+ * Inject runtime server config (webhookUrl, webhookSecret or credentialId) into tool
  * definitions before creating standalone tools.
  *
  * This ensures the standalone tools are created with the correct backend
  * endpoint — they persist in Vapi and don't get rebuilt every deploy.
+ *
+ * @param credentialId If provided, tools use credentialId instead of inline secret.
  */
 export function prepareToolDefinitionsForCreation(
   toolDefs: any[],
   webhookUrl: string,
   webhookSecret?: string,
+  credentialId?: string,
 ): any[] {
   return toolDefs.map((tool) => {
     const cloned = JSON.parse(JSON.stringify(tool));
     if (cloned.type === 'function') {
-      cloned.server = {
-        ...cloned.server,
-        url: webhookUrl,
-        ...(webhookSecret ? { secret: webhookSecret } : {}),
-      };
+      if (credentialId) {
+        cloned.server = {
+          url: webhookUrl,
+          credentialId,
+          ...(cloned.server?.timeoutSeconds ? { timeoutSeconds: cloned.server.timeoutSeconds } : {}),
+        };
+      } else {
+        cloned.server = {
+          ...cloned.server,
+          url: webhookUrl,
+          ...(webhookSecret ? { secret: webhookSecret } : {}),
+        };
+      }
     }
     return cloned;
   });

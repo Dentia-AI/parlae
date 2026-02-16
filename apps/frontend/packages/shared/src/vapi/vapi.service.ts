@@ -37,6 +37,12 @@ export interface VapiAssistantConfig {
   recordingEnabled?: boolean;
   serverUrl?: string;
   serverUrlSecret?: string;
+  /**
+   * Vapi Custom Credential ID for server authentication.
+   * When set, Vapi uses this credential (Bearer Token) instead of inline secret.
+   * Created in the Vapi dashboard under Custom Credentials.
+   */
+  credentialId?: string;
   /** @deprecated Use analysisPlan instead */
   analysisSchema?: {
     type: 'object';
@@ -516,8 +522,9 @@ class VapiService {
    * Vapi assistant schema:
    * - Standalone tools are referenced via `model.toolIds` (array of Vapi tool IDs).
    * - Inline tools (transferCall, endCall) go in `model.tools`.
+   * - Function tools also go in `model.tools` as FALLBACK when no standalone toolIds exist.
    * - `analysisPlan` goes at the assistant level.
-   * - `serverUrl` / `serverUrlSecret` go at the assistant level (for lifecycle webhooks).
+   * - `server` object with `url` + `credentialId` for lifecycle webhooks (replaces serverUrl/serverUrlSecret).
    */
   private buildAssistantPayload(config: VapiAssistantConfig) {
     // Clean voice: strip stability/similarityBoost, map elevenlabs → 11labs
@@ -526,7 +533,7 @@ class VapiService {
       voiceId: config.voice?.voiceId,
     };
 
-    // Separate tools into standalone (referenced by ID) and inline (transferCall, endCall)
+    // Separate tools into standalone (referenced by ID) and inline
     const toolIds: string[] = config.toolIds || [];
     const inlineTools: unknown[] = [];
 
@@ -534,7 +541,6 @@ class VapiService {
       for (const tool of config.tools) {
         const t = tool as any;
 
-        // transferCall and endCall tools are inline (per-assistant, not reusable)
         if (t.type === 'transferCall') {
           if (t.destinations) {
             const validDests = t.destinations.filter((d: any) =>
@@ -548,8 +554,16 @@ class VapiService {
           }
         } else if (t.type === 'endCall') {
           inlineTools.push(t);
+        } else if (t.type === 'function') {
+          // Function tools:
+          // - If standalone toolIds are provided, function tools are referenced
+          //   by ID (already in toolIds array) — skip inline.
+          // - If NO toolIds exist (legacy/fallback mode), keep function tools
+          //   inline in model.tools so they still work.
+          if (toolIds.length === 0) {
+            inlineTools.push(t);
+          }
         }
-        // Function tools should be standalone (referenced via toolIds) — skip inline
       }
     }
 
@@ -575,7 +589,7 @@ class VapiService {
       modelConfig.toolIds = toolIds;
     }
 
-    // Inline tools (transferCall, endCall) in model.tools
+    // Inline tools (transferCall, endCall, and function tools in fallback mode)
     if (inlineTools.length > 0) {
       modelConfig.tools = inlineTools;
     }
@@ -594,12 +608,27 @@ class VapiService {
     if (config.firstMessageMode) {
       payload.firstMessageMode = config.firstMessageMode;
     }
+
+    // Server config: prefer credentialId-based `server` object (Vapi best practice).
+    // Falls back to legacy serverUrl/serverUrlSecret if no credentialId.
     if (config.serverUrl) {
-      payload.serverUrl = config.serverUrl;
+      if (config.credentialId) {
+        payload.server = {
+          url: config.serverUrl,
+          credentialId: config.credentialId,
+        };
+      } else if (config.serverUrlSecret) {
+        payload.server = {
+          url: config.serverUrl,
+          secret: config.serverUrlSecret,
+        };
+      } else {
+        payload.server = {
+          url: config.serverUrl,
+        };
+      }
     }
-    if (config.serverUrlSecret) {
-      payload.serverUrlSecret = config.serverUrlSecret;
-    }
+
     if (config.startSpeakingPlan) {
       payload.startSpeakingPlan = config.startSpeakingPlan;
     }
@@ -607,7 +636,7 @@ class VapiService {
       payload.stopSpeakingPlan = config.stopSpeakingPlan;
     }
 
-    // Analysis plan
+    // Analysis plan (structured output)
     if (config.analysisPlan) {
       payload.analysisPlan = config.analysisPlan;
     } else if (config.analysisSchema) {
@@ -640,14 +669,22 @@ class VapiService {
       const builtPayload = this.buildAssistantPayload(config);
       const modelToolIds = (builtPayload as any).model?.toolIds || [];
       const modelInlineTools = (builtPayload as any).model?.tools || [];
+      const serverConfig = (builtPayload as any).server;
+      const analysisPlan = (builtPayload as any).analysisPlan;
 
       logger.info({
         name: config.name,
         standaloneToolIds: modelToolIds.length,
+        standaloneToolIdList: modelToolIds.slice(0, 5),
         inlineToolCount: modelInlineTools.length,
-        inlineToolTypes: modelInlineTools.map((t: any) => t.type),
-        hasAnalysisPlan: !!(builtPayload as any).analysisPlan,
-        serverUrl: (builtPayload as any).serverUrl,
+        inlineToolTypes: modelInlineTools.map((t: any) => t.type || t.function?.name).slice(0, 10),
+        hasAnalysisPlan: !!analysisPlan,
+        hasStructuredDataPlan: !!analysisPlan?.structuredDataPlan,
+        structuredDataEnabled: analysisPlan?.structuredDataPlan?.enabled,
+        summaryEnabled: analysisPlan?.summaryPlan?.enabled,
+        serverUrl: serverConfig?.url,
+        hasCredentialId: !!serverConfig?.credentialId,
+        hasServerSecret: !!serverConfig?.secret,
       }, '[Vapi] Creating assistant — sending to Vapi API');
 
       const response = await fetch(`${this.baseUrl}/assistant`, {
@@ -1573,6 +1610,105 @@ class VapiService {
     }
   }
 
+  // ==========================================================================
+  // Credential Management
+  //
+  // Vapi Custom Credentials (Bearer Token, OAuth, HMAC) are configured in the
+  // dashboard and referenced by ID in server configs.
+  // ==========================================================================
+
+  /**
+   * List all custom credentials in the Vapi account.
+   */
+  async listCredentials(): Promise<any[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) return [];
+
+    try {
+      const response = await fetch(`${this.baseUrl}/credential?limit=100`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ status: response.status, error: errorText }, '[Vapi] Failed to list credentials');
+        return [];
+      }
+
+      return await response.json();
+    } catch (error) {
+      logger.error({ error: error instanceof Error ? error.message : error }, '[Vapi] Exception listing credentials');
+      return [];
+    }
+  }
+
+  /**
+   * Find a credential by name prefix (case-insensitive).
+   *
+   * Useful for auto-detecting the production credential:
+   * ```ts
+   * const cred = await vapiService.findCredentialByName('parlae-production');
+   * ```
+   */
+  async findCredentialByName(namePrefix: string): Promise<{ id: string; name: string } | null> {
+    const logger = await getLogger();
+    const credentials = await this.listCredentials();
+    const lowerPrefix = namePrefix.toLowerCase();
+
+    const match = credentials.find((c: any) =>
+      c.name?.toLowerCase().includes(lowerPrefix),
+    );
+
+    if (match) {
+      logger.info({
+        credentialId: match.id,
+        name: match.name,
+      }, '[Vapi] Found matching credential');
+      return { id: match.id, name: match.name };
+    }
+
+    logger.warn({ namePrefix, totalCredentials: credentials.length }, '[Vapi] No credential found matching name');
+    return null;
+  }
+
+  /**
+   * Update a standalone tool (PATCH /tool/{id}).
+   * Used to add/change credentials or server config.
+   */
+  async updateTool(toolId: string, updates: Record<string, unknown>): Promise<any | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) return null;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/tool/${toolId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ status: response.status, error: errorText, toolId }, '[Vapi] Failed to update tool');
+        return null;
+      }
+
+      const tool = await response.json();
+      logger.info({ toolId }, '[Vapi] Tool updated');
+      return tool;
+    } catch (error) {
+      logger.error({ error: error instanceof Error ? error.message : error, toolId }, '[Vapi] Exception updating tool');
+      return null;
+    }
+  }
+
   /**
    * Delete a standalone tool by ID.
    */
@@ -1610,10 +1746,12 @@ class VapiService {
    *
    * @param toolDefinitions - Array of tool objects (from vapi-pms-tools.config.ts)
    * @param version - Version string for naming (e.g., "v1.0")
+   * @param credentialId - Optional Vapi Custom Credential ID for tool server auth
    */
   async ensureStandaloneTools(
     toolDefinitions: any[],
     version: string = 'v1.0',
+    credentialId?: string,
   ): Promise<Map<string, string>> {
     const logger = await getLogger();
     const toolIdMap = new Map<string, string>();
@@ -1634,6 +1772,7 @@ class VapiService {
     logger.info({
       existingCount: existingTools.length,
       requestedCount: toolDefinitions.length,
+      hasCredentialId: !!credentialId,
     }, '[Vapi] Ensuring standalone tools exist');
 
     for (const toolDef of toolDefinitions) {
@@ -1644,14 +1783,39 @@ class VapiService {
       const existing = existingByName.get(funcName);
       if (existing) {
         toolIdMap.set(funcName, existing.id);
-        logger.info({
-          funcName,
-          toolId: existing.id,
-        }, '[Vapi] Tool already exists, reusing');
+
+        // If a credentialId is requested but the existing tool doesn't have it,
+        // patch the tool's server config to add the credential.
+        if (credentialId && existing.server?.credentialId !== credentialId) {
+          const serverPatch: Record<string, unknown> = {
+            url: toolDef.server?.url || existing.server?.url,
+            credentialId,
+          };
+          if (existing.server?.timeoutSeconds) {
+            serverPatch.timeoutSeconds = existing.server.timeoutSeconds;
+          }
+          await this.updateTool(existing.id, { server: serverPatch });
+          logger.info({ funcName, toolId: existing.id }, '[Vapi] Patched tool with credential');
+        }
+
         continue;
       }
 
-      // Create the standalone tool — strip any inline-only fields
+      // Build server config — prefer credentialId over inline secret
+      let serverConfig: Record<string, unknown> | undefined;
+      if (toolDef.server) {
+        if (credentialId) {
+          serverConfig = {
+            url: toolDef.server.url,
+            credentialId,
+            ...(toolDef.server.timeoutSeconds ? { timeoutSeconds: toolDef.server.timeoutSeconds } : {}),
+          };
+        } else {
+          serverConfig = { ...toolDef.server };
+        }
+      }
+
+      // Create the standalone tool
       const standalonePayload: Record<string, unknown> = {
         type: toolDef.type || 'function',
         function: {
@@ -1661,17 +1825,14 @@ class VapiService {
         },
       };
 
-      // Add server config if present
-      if (toolDef.server) {
-        standalonePayload.server = toolDef.server;
+      if (serverConfig) {
+        standalonePayload.server = serverConfig;
       }
 
-      // Add messages if present
       if (toolDef.messages && toolDef.messages.length > 0) {
         standalonePayload.messages = toolDef.messages;
       }
 
-      // Add async flag
       if (toolDef.async !== undefined) {
         standalonePayload.async = toolDef.async;
       }
@@ -1679,6 +1840,7 @@ class VapiService {
       const created = await this.createStandaloneTool(standalonePayload);
       if (created) {
         toolIdMap.set(funcName, created.id);
+        logger.info({ funcName, toolId: created.id }, '[Vapi] Standalone tool created');
       } else {
         logger.error({ funcName }, '[Vapi] Failed to create standalone tool');
       }

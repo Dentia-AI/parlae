@@ -302,15 +302,20 @@ export const deployReceptionistAction = enhanceAction(
 
       const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
+      // Auto-detect Vapi custom credential for proper auth in dashboard
+      const credential = await vapiService.findCredentialByName('parlae-production');
+      const vapiCredentialId = credential?.id;
+
       // Ensure standalone tools exist in Vapi before building squad
       const toolDefs = prepareToolDefinitionsForCreation(
         getAllFunctionToolDefinitions(),
         webhookUrl,
         webhookSecret,
+        vapiCredentialId,
       );
-      const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+      const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
 
-      logger.info({ toolCount: toolIdMap.size }, '[Agent Setup] Standalone tools resolved');
+      logger.info({ toolCount: toolIdMap.size, hasCredential: !!vapiCredentialId }, '[Agent Setup] Standalone tools resolved');
 
       const runtimeConfig: RuntimeConfig = {
         webhookUrl,
@@ -318,41 +323,46 @@ export const deployReceptionistAction = enhanceAction(
         knowledgeFileIds,
         clinicPhoneNumber: clinicOriginalNumber,
         toolIdMap,
+        vapiCredentialId,
       };
 
       // STEP 4: Build the squad from template
+      // Always prefer the latest built-in template if its version is newer.
       let templateConfig;
       let templateVersion: string;
       let templateName: string;
+      const builtInTemplate = getDentalClinicTemplate();
+      const builtInVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
 
       if (account.agentTemplateId) {
-        // Load from DB template
         const dbTemplate = await prisma.agentTemplate.findUnique({
           where: { id: account.agentTemplateId },
         });
 
-        if (dbTemplate && dbTemplate.isActive) {
+        if (dbTemplate && dbTemplate.isActive && dbTemplate.version >= builtInVersion) {
           templateConfig = dbShapeToTemplate(dbTemplate as any);
           templateVersion = dbTemplate.version;
           templateName = dbTemplate.name;
           logger.info(
-            { templateName, templateVersion },
+            { templateName, templateVersion, memberCount: templateConfig.members.length },
             '[Receptionist] Using DB template'
           );
         } else {
-          // Fallback to built-in
-          templateConfig = getDentalClinicTemplate();
-          templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
-          templateName = templateConfig.name;
-          logger.info('[Receptionist] DB template not found/active, using built-in');
+          templateConfig = builtInTemplate;
+          templateVersion = builtInVersion;
+          templateName = builtInTemplate.name;
+          logger.info({
+            builtInVersion,
+            dbVersion: dbTemplate?.version,
+            memberCount: builtInTemplate.members.length,
+          }, '[Receptionist] Built-in template is newer, using it');
         }
       } else {
-        // Use built-in default template
-        templateConfig = getDentalClinicTemplate();
-        templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
-        templateName = templateConfig.name;
+        templateConfig = builtInTemplate;
+        templateVersion = builtInVersion;
+        templateName = builtInTemplate.name;
         logger.info(
-          { templateName, templateVersion },
+          { templateName, templateVersion, memberCount: templateConfig.members.length },
           '[Receptionist] Using built-in default template'
         );
       }
@@ -442,15 +452,44 @@ export const deployReceptionistAction = enhanceAction(
         '[Receptionist] Phone linked to squad'
       );
 
-      // STEP 7: Ensure the template exists in DB and link it to the account
+      // STEP 7: Ensure the template exists in DB and link it to the account.
+      // Always sync the DB template to the latest built-in version.
       let templateId = account.agentTemplateId;
-      if (!templateId) {
-        const dbShape = templateToDbShape(templateConfig);
+      const dbShape = templateToDbShape(templateConfig);
+
+      if (templateId) {
+        // Account already linked — update the DB record if the version is newer
+        try {
+          const existing = await prisma.agentTemplate.findUnique({ where: { id: templateId } });
+          if (existing && existing.version < templateVersion) {
+            await prisma.agentTemplate.update({
+              where: { id: templateId },
+              data: { ...dbShape, isActive: true },
+            });
+            logger.info(
+              { templateId, oldVersion: existing.version, newVersion: templateVersion },
+              '[Receptionist] Updated DB template to latest version',
+            );
+          }
+        } catch (updateErr: any) {
+          logger.warn({ error: updateErr?.message }, '[Receptionist] Non-fatal: could not update DB template');
+        }
+      } else {
+        // No DB template linked — find or create
         const existingDbTemplate = await prisma.agentTemplate.findFirst({
           where: { name: dbShape.name },
         });
         if (existingDbTemplate) {
           templateId = existingDbTemplate.id;
+          // Also update it if version is newer
+          if (existingDbTemplate.version < templateVersion) {
+            try {
+              await prisma.agentTemplate.update({
+                where: { id: templateId },
+                data: { ...dbShape, isActive: true },
+              });
+            } catch { /* best effort */ }
+          }
         } else {
           const created = await prisma.agentTemplate.create({ data: dbShape });
           templateId = created.id;

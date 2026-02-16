@@ -133,13 +133,20 @@ export async function POST(request: NextRequest) {
 
     const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
+    // Auto-detect Vapi custom credential for proper authentication display in dashboard
+    const credential = await vapiService.findCredentialByName('parlae-production');
+    const vapiCredentialId = credential?.id;
+
+    logger.info({ hasCredential: !!vapiCredentialId, credentialName: credential?.name }, '[Admin Redeploy] Vapi credential lookup');
+
     // Ensure standalone tools exist in Vapi (creates if missing, reuses if found)
     const toolDefs = prepareToolDefinitionsForCreation(
       getAllFunctionToolDefinitions(),
       webhookUrl,
       webhookSecret,
+      vapiCredentialId,
     );
-    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
 
     logger.info({ toolCount: toolIdMap.size }, '[Admin Redeploy] Standalone tools resolved');
 
@@ -149,31 +156,47 @@ export async function POST(request: NextRequest) {
       knowledgeFileIds,
       clinicPhoneNumber: clinicOriginalNumber,
       toolIdMap,
+      vapiCredentialId,
     };
 
     // STEP 4: Load template
+    //
+    // Always prefer the latest built-in template if its version is newer
+    // than the DB template. Admin "recreate" should deploy the latest config.
     let templateConfig;
     let templateVersion: string;
     let templateName: string;
+    const builtInTemplate = getDentalClinicTemplate();
+    const builtInVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
 
     if (account.agentTemplateId) {
       const dbTemplate = await prisma.agentTemplate.findUnique({
         where: { id: account.agentTemplateId },
       });
 
-      if (dbTemplate && dbTemplate.isActive) {
+      if (dbTemplate && dbTemplate.isActive && dbTemplate.version >= builtInVersion) {
+        // DB template is same or newer — use it
         templateConfig = dbShapeToTemplate(dbTemplate as any);
         templateVersion = dbTemplate.version;
         templateName = dbTemplate.name;
+        logger.info({ templateVersion, templateName, memberCount: templateConfig.members.length }, '[Admin Redeploy] Using DB template');
       } else {
-        templateConfig = getDentalClinicTemplate();
-        templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
-        templateName = templateConfig.name;
+        // Built-in template is newer — use it and update the DB record
+        templateConfig = builtInTemplate;
+        templateVersion = builtInVersion;
+        templateName = builtInTemplate.name;
+        logger.info({
+          builtInVersion,
+          dbVersion: dbTemplate?.version,
+          builtInMembers: builtInTemplate.members.length,
+          dbMembers: dbTemplate ? 'outdated' : 'missing',
+        }, '[Admin Redeploy] Built-in template is newer, using it instead of DB template');
       }
     } else {
-      templateConfig = getDentalClinicTemplate();
-      templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
-      templateName = templateConfig.name;
+      templateConfig = builtInTemplate;
+      templateVersion = builtInVersion;
+      templateName = builtInTemplate.name;
+      logger.info({ templateVersion, memberCount: templateConfig.members.length }, '[Admin Redeploy] No DB template, using built-in');
     }
 
     // STEP 5: Apply voice from existing deployment (if any)
@@ -240,18 +263,50 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // STEP 8: Ensure the template exists in DB and link it to the account
+    // STEP 8: Ensure the template exists in DB and link it to the account.
+    //
+    // If the built-in template was used (newer version), update or create
+    // the DB template so future deploys use the latest configuration.
     let templateId = account.agentTemplateId;
+    const dbShape = templateToDbShape(templateConfig);
 
-    if (!templateId) {
+    if (templateId) {
+      // Account already linked to a DB template — update it if we used the built-in
+      try {
+        const existing = await prisma.agentTemplate.findUnique({ where: { id: templateId } });
+        if (existing && existing.version < templateVersion) {
+          await prisma.agentTemplate.update({
+            where: { id: templateId },
+            data: {
+              ...dbShape,
+              isActive: true,
+            },
+          });
+          logger.info(
+            { templateId, oldVersion: existing.version, newVersion: templateVersion },
+            '[Admin Redeploy] Updated DB template to latest version',
+          );
+        }
+      } catch (updateErr: any) {
+        logger.warn({ error: updateErr?.message }, '[Admin Redeploy] Non-fatal: could not update DB template');
+      }
+    } else {
       // No DB template linked — upsert the built-in template
-      const dbShape = templateToDbShape(templateConfig);
       const existingTemplate = await prisma.agentTemplate.findFirst({
         where: { name: dbShape.name },
       });
 
       if (existingTemplate) {
         templateId = existingTemplate.id;
+        // Also update it if version is newer
+        if (existingTemplate.version < templateVersion) {
+          try {
+            await prisma.agentTemplate.update({
+              where: { id: templateId },
+              data: { ...dbShape, isActive: true },
+            });
+          } catch { /* best effort */ }
+        }
       } else {
         const created = await prisma.agentTemplate.create({
           data: dbShape,

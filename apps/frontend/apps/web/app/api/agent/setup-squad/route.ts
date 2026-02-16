@@ -154,20 +154,27 @@ export async function POST(request: Request) {
 
     const webhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
+    // Auto-detect Vapi custom credential for proper auth in dashboard
+    const credential = await vapiService.findCredentialByName('parlae-production');
+    const vapiCredentialId = credential?.id;
+
     // STEP 3b: Ensure standalone tools exist in Vapi
     // Tools are created once and reused across all squads/assistants.
     const toolDefs = prepareToolDefinitionsForCreation(
       getAllFunctionToolDefinitions(),
       webhookUrl,
       webhookSecret,
+      vapiCredentialId,
     );
     const toolIdMap = await vapiService.ensureStandaloneTools(
       toolDefs,
       'v1.0',
+      vapiCredentialId,
     );
 
     logger.info({
       toolCount: toolIdMap.size,
+      hasCredential: !!vapiCredentialId,
     }, '[Squad Setup] Standalone tools resolved');
 
     const runtimeConfig: RuntimeConfig = {
@@ -175,6 +182,7 @@ export async function POST(request: Request) {
       webhookSecret,
       knowledgeFileIds,
       toolIdMap,
+      vapiCredentialId,
     };
 
     // STEP 4: Create squad based on type
@@ -341,6 +349,9 @@ async function resolveDentalClinicSquad(
   let templateVersion: string;
   let templateName: string;
 
+  const builtInTemplate = getDentalClinicTemplate();
+  const builtInVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
+
   if (templateId) {
     // ── Load template from database ──────────────────────────────────────
     logger.info({ templateId }, '[Squad Setup] Loading template from database');
@@ -357,23 +368,38 @@ async function resolveDentalClinicSquad(
       throw new Error(`Template ${templateId} is not active`);
     }
 
-    templateConfig = dbShapeToTemplate(dbTemplate as any);
-    templateVersion = dbTemplate.version;
-    templateName = dbTemplate.name;
+    // Prefer built-in if it has a newer version
+    if (dbTemplate.version >= builtInVersion) {
+      templateConfig = dbShapeToTemplate(dbTemplate as any);
+      templateVersion = dbTemplate.version;
+      templateName = dbTemplate.name;
 
-    logger.info({
-      templateName,
-      templateVersion,
-    }, '[Squad Setup] Using DB template');
+      logger.info({
+        templateName,
+        templateVersion,
+        memberCount: templateConfig.members.length,
+      }, '[Squad Setup] Using DB template');
+    } else {
+      templateConfig = builtInTemplate;
+      templateVersion = builtInVersion;
+      templateName = builtInTemplate.name;
+
+      logger.info({
+        builtInVersion,
+        dbVersion: dbTemplate.version,
+        memberCount: builtInTemplate.members.length,
+      }, '[Squad Setup] Built-in template is newer, using it');
+    }
   } else {
     // ── Use built-in default template ────────────────────────────────────
-    templateConfig = getDentalClinicTemplate();
-    templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
-    templateName = templateConfig.name;
+    templateConfig = builtInTemplate;
+    templateVersion = builtInVersion;
+    templateName = builtInTemplate.name;
 
     logger.info({
       templateName,
       templateVersion,
+      memberCount: builtInTemplate.members.length,
     }, '[Squad Setup] Using built-in default template');
   }
 

@@ -69,12 +69,18 @@ export async function POST(request: NextRequest) {
       ? `${rbBackendUrl}/vapi/webhook`
       : `${rbFrontendUrl}/api/vapi/webhook`;
     const rbWebhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
+
+    // Auto-detect Vapi custom credential
+    const credential = await vapiService.findCredentialByName('parlae-production');
+    const vapiCredentialId = credential?.id;
+
     const toolDefs = prepareToolDefinitionsForCreation(
       getAllFunctionToolDefinitions(),
       rbWebhookUrl,
       rbWebhookSecret,
+      vapiCredentialId,
     );
-    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
 
     for (const accountId of accountIds) {
       try {
@@ -206,6 +212,7 @@ export async function POST(request: NextRequest) {
           webhookSecret: rbWebhookSecret,
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
           toolIdMap,
+          vapiCredentialId,
         };
 
         // Build squad payload

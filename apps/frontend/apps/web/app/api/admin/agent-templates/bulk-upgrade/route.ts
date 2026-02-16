@@ -221,12 +221,17 @@ export async function POST(request: NextRequest) {
       : `${frontendUrl}/api/vapi/webhook`;
     const bulkWebhookSecret = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
+    // Auto-detect Vapi custom credential
+    const credential = await vapiService.findCredentialByName('parlae-production');
+    const vapiCredentialId = credential?.id;
+
     const toolDefs = prepareToolDefinitionsForCreation(
       getAllFunctionToolDefinitions(),
       bulkWebhookUrl,
       bulkWebhookSecret,
+      vapiCredentialId,
     );
-    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0');
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
 
     for (const entry of plan) {
       if (entry.status !== 'pending') continue;
@@ -267,6 +272,7 @@ export async function POST(request: NextRequest) {
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
           clinicPhoneNumber,
           toolIdMap,
+          vapiCredentialId,
         };
 
         // Build the new squad payload
