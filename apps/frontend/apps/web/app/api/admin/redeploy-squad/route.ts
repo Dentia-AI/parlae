@@ -7,6 +7,7 @@ import {
   getDentalClinicTemplate,
   buildSquadPayloadFromTemplate,
   dbShapeToTemplate,
+  templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
 } from '@kit/shared/vapi/templates';
 import type {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     await requireAdmin();
 
     const body = await request.json();
-    const { accountId, deleteOldSquad = true } = body;
+    const { accountId, deleteOldSquad = true, phoneIntegrationMethod: methodOverride } = body;
 
     if (!accountId) {
       return NextResponse.json(
@@ -218,10 +219,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // STEP 8: Update account DB
+    // STEP 8: Ensure the template exists in DB and link it to the account
+    let templateId = account.agentTemplateId;
+
+    if (!templateId) {
+      // No DB template linked — upsert the built-in template
+      const dbShape = templateToDbShape(templateConfig);
+      const existingTemplate = await prisma.agentTemplate.findFirst({
+        where: { name: dbShape.name },
+      });
+
+      if (existingTemplate) {
+        templateId = existingTemplate.id;
+      } else {
+        const created = await prisma.agentTemplate.create({
+          data: dbShape,
+        });
+        templateId = created.id;
+        logger.info(
+          { templateId, name: dbShape.name },
+          '[Admin Redeploy] Created built-in template in DB',
+        );
+      }
+    }
+
+    // STEP 9: Update account DB
+    // Determine the correct phoneIntegrationMethod — prefer override, then infer from settings
+    const resolvedMethod =
+      methodOverride ||
+      (phoneIntegrationSettings.clinicNumber ? 'forwarded' : account.phoneIntegrationMethod) ||
+      account.phoneIntegrationMethod;
+
     await prisma.account.update({
       where: { id: account.id },
       data: {
+        phoneIntegrationMethod: resolvedMethod,
+        agentTemplateId: templateId,
         phoneIntegrationSettings: {
           ...phoneIntegrationSettings,
           vapiSquadId: squad.id,

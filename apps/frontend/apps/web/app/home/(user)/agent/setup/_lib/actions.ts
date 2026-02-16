@@ -9,6 +9,7 @@ import {
   getDentalClinicTemplate,
   buildSquadPayloadFromTemplate,
   dbShapeToTemplate,
+  templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
 } from '@kit/shared/vapi/templates';
 import type {
@@ -343,7 +344,22 @@ export const deployReceptionistAction = enhanceAction(
         '[Receptionist] Phone linked to squad'
       );
 
-      // STEP 7: Update account with full Vapi configuration
+      // STEP 7: Ensure the template exists in DB and link it to the account
+      let templateId = account.agentTemplateId;
+      if (!templateId) {
+        const dbShape = templateToDbShape(templateConfig);
+        const existingDbTemplate = await prisma.agentTemplate.findFirst({
+          where: { name: dbShape.name },
+        });
+        if (existingDbTemplate) {
+          templateId = existingDbTemplate.id;
+        } else {
+          const created = await prisma.agentTemplate.create({ data: dbShape });
+          templateId = created.id;
+        }
+      }
+
+      // STEP 8: Update account with full Vapi configuration
       // Preserve the user's chosen phone integration method (forwarded, ported, sip)
       const existingMethod = account.phoneIntegrationMethod && account.phoneIntegrationMethod !== 'none'
         ? account.phoneIntegrationMethod
@@ -352,6 +368,7 @@ export const deployReceptionistAction = enhanceAction(
         where: { id: account.id },
         data: {
           phoneIntegrationMethod: existingMethod,
+          agentTemplateId: templateId,
           phoneIntegrationSettings: {
             ...(phoneIntegrationSettings || {}),
             vapiSquadId: squad.id,

@@ -123,13 +123,15 @@ export function ProfileSettingsClient({ user, account }: ProfileSettingsClientPr
                 <p className="text-sm font-medium">{account.email || t('common:settings.profile.notSet')}</p>
               </div>
               <div className="rounded-lg border p-4 space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('common:settings.profile.accountId')}</p>
-                <p className="text-sm font-medium font-mono text-xs">{account.id}</p>
-              </div>
-              <div className="rounded-lg border p-4 space-y-1">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('common:settings.profile.created')}</p>
                 <p className="text-sm font-medium">{memberSince}</p>
               </div>
+              {account.slug && (
+                <div className="rounded-lg border p-4 space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('common:settings.profile.slug')}</p>
+                  <p className="text-sm font-medium font-mono">{account.slug}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

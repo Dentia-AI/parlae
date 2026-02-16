@@ -162,14 +162,20 @@ function buildMemberPayload(
     systemPrompt = appendPmsPrompt(systemPrompt, vars);
   }
 
+  // Inject human handoff instruction into ALL assistants when a clinic number is available
+  if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
+    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me transfer you to our team right now." and initiate the transfer.`;
+  }
+
   // Resolve tools
   const tools: unknown[] = [
     ...resolveToolGroup(a.toolGroup),
     ...(a.extraTools ?? []),
   ];
 
-  // Inject transferCall tool for Emergency Transfer when clinic phone is available
-  if (a.name === 'Emergency Transfer' && runtime.clinicPhoneNumber) {
+  // Inject transferCall tool for human handoff when clinic phone is available.
+  // ALL assistants get this so the caller can say "let me speak with a human" at any time.
+  if (runtime.clinicPhoneNumber) {
     const e164Number = toE164(runtime.clinicPhoneNumber);
     if (e164Number) {
       tools.push({
@@ -178,9 +184,9 @@ function buildMemberPayload(
           {
             type: 'number',
             number: e164Number,
-            message: 'Transferring to the clinic for immediate assistance.',
+            message: 'Transferring you to the clinic now. One moment please.',
             description:
-              'Transfer to the clinic front desk for any emergency or urgent matter that needs human attention',
+              'Transfer to the clinic staff when the caller asks to speak with a human, or for any emergency or urgent matter',
           },
         ],
       });

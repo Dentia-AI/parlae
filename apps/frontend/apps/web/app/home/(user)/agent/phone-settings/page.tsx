@@ -1,52 +1,92 @@
-'use client';
-
-import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Separator } from '@kit/ui/separator';
-import { 
-  PhoneCall, 
-  PhoneForwarded, 
+import {
+  PhoneCall,
+  PhoneForwarded,
   Network,
   Settings,
   CheckCircle2,
   AlertCircle,
-  Copy
+  Copy,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
+import { loadUserWorkspace } from '../../_lib/server/load-user-workspace';
+import { prisma } from '@kit/prisma';
 
-async function PhoneSettingsContent() {
-  // TODO: Fetch actual phone settings from database
-  const phoneSettings = {
-    method: 'forwarded' as const, // or 'ported' | 'sip'
-    phoneNumber: '+1 (555) 123-4567',
-    twilioNumber: '+1 (647) 555-9999',
-    status: 'active',
-    setupDate: '2024-02-07',
-  };
+export const metadata = {
+  title: 'Phone Integration Settings',
+};
 
-  const methodInfo = {
-    ported: {
-      name: 'Ported Number',
-      icon: PhoneCall,
-      description: 'Your number is fully transferred to our system',
-    },
-    forwarded: {
-      name: 'Call Forwarding',
-      icon: PhoneForwarded,
-      description: 'Calls are forwarded from your existing number',
-    },
-    sip: {
-      name: 'SIP Trunk',
-      icon: Network,
-      description: 'Connected via your PBX system',
-    },
-  };
+const methodInfo = {
+  ported: {
+    name: 'Ported Number',
+    icon: PhoneCall,
+    description: 'Your number is fully transferred to our system',
+  },
+  forwarded: {
+    name: 'Call Forwarding',
+    icon: PhoneForwarded,
+    description: 'Calls are forwarded from your existing number',
+  },
+  sip: {
+    name: 'SIP Trunk',
+    icon: Network,
+    description: 'Connected via your PBX system',
+  },
+} as const;
 
-  const currentMethod = methodInfo[phoneSettings.method];
+export default async function PhoneIntegrationSettingsPage() {
+  const workspace = await loadUserWorkspace();
+
+  if (!workspace) {
+    redirect('/auth/sign-in');
+  }
+
+  const account = workspace.workspace.id
+    ? await prisma.account.findUnique({
+        where: { id: workspace.workspace.id },
+        select: {
+          id: true,
+          phoneIntegrationMethod: true,
+          phoneIntegrationSettings: true,
+          brandingContactPhone: true,
+        },
+      })
+    : null;
+
+  if (!account || !account.phoneIntegrationMethod || account.phoneIntegrationMethod === 'none') {
+    redirect('/home/agent/setup/phone');
+  }
+
+  const method = account.phoneIntegrationMethod as keyof typeof methodInfo;
+  const settings = (account.phoneIntegrationSettings as any) ?? {};
+  const currentMethod = methodInfo[method] || methodInfo.forwarded;
   const Icon = currentMethod.icon;
+
+  const clinicNumber = settings.clinicNumber || account.brandingContactPhone || 'Not set';
+  const twilioNumber = settings.phoneNumber || 'Pending provisioning';
+  const staffDirectNumber = settings.staffDirectNumber || null;
+  const setupDate = settings.configuredAt
+    ? new Date(settings.configuredAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : settings.deployedAt
+      ? new Date(settings.deployedAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : null;
+  const isActive = !!settings.vapiSquadId;
 
   return (
     <div className="container max-w-4xl py-8 space-y-6">
@@ -70,10 +110,14 @@ async function PhoneSettingsContent() {
                 <CardDescription>{currentMethod.description}</CardDescription>
               </div>
             </div>
-            <Badge variant="default" className="bg-green-600">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Active
-            </Badge>
+            {isActive ? (
+              <Badge variant="default" className="bg-green-600">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Active
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Inactive</Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -81,36 +125,51 @@ async function PhoneSettingsContent() {
           <div className="space-y-4">
             <div>
               <div className="text-sm text-muted-foreground mb-1">Your Clinic Number</div>
-              <div className="text-2xl font-bold font-mono">{phoneSettings.phoneNumber}</div>
+              <div className="text-2xl font-bold font-mono">{clinicNumber}</div>
             </div>
 
-            {phoneSettings.method === 'forwarded' && (
+            {method === 'forwarded' && (
               <>
                 <Separator />
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Forwarding To</div>
+                  <div className="text-sm text-muted-foreground mb-1">Forwarding To (Twilio)</div>
                   <div className="flex items-center gap-2">
-                    <div className="text-lg font-mono">{phoneSettings.twilioNumber}</div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(phoneSettings.twilioNumber);
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <div className="text-lg font-mono">{twilioNumber}</div>
                   </div>
+                </div>
+              </>
+            )}
+
+            {method === 'ported' && (
+              <>
+                <Separator />
+                <div>
+                  <div className="text-sm text-muted-foreground mb-1">Vapi Phone Number</div>
+                  <div className="text-lg font-mono">{twilioNumber}</div>
+                </div>
+              </>
+            )}
+
+            {staffDirectNumber && (
+              <>
+                <Separator />
+                <div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Staff Direct Line (Emergency Transfers)
+                  </div>
+                  <div className="text-lg font-mono">{staffDirectNumber}</div>
                 </div>
               </>
             )}
           </div>
 
           {/* Setup Date */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Settings className="h-4 w-4" />
-            Setup completed on {phoneSettings.setupDate}
-          </div>
+          {setupDate && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Settings className="h-4 w-4" />
+              Setup completed on {setupDate}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -126,7 +185,7 @@ async function PhoneSettingsContent() {
           <Alert className="mb-4">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Changing your integration method will require reconfiguring your phone setup. 
+              Changing your integration method will require reconfiguring your phone setup.
               Your AI receptionist will be temporarily unavailable during the transition.
             </AlertDescription>
           </Alert>
@@ -140,33 +199,105 @@ async function PhoneSettingsContent() {
       </Card>
 
       {/* Method-Specific Instructions */}
-      {phoneSettings.method === 'forwarded' && (
+      {method === 'forwarded' && (
         <Card>
           <CardHeader>
-            <CardTitle>Call Forwarding Instructions</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              Call Forwarding Instructions
+            </CardTitle>
             <CardDescription>
-              How to enable or disable call forwarding
+              How to set up forwarding on your carrier
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <h4 className="font-medium">To Enable Forwarding:</h4>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Call your phone carrier</li>
-                <li>Request call forwarding to {phoneSettings.twilioNumber}</li>
-                <li>Test by calling {phoneSettings.phoneNumber}</li>
-              </ol>
+          <CardContent className="space-y-5 text-sm">
+            {/* Recommended setup */}
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <h4 className="font-semibold mb-2">
+                Recommended: No-Answer + Busy Forwarding
+              </h4>
+              <p className="text-muted-foreground">
+                Set up both types for complete coverage. Staff answers during hours. If busy or
+                no answer, calls go to AI. After hours, nobody answers, so AI handles it.
+              </p>
             </div>
 
-            <Separator />
+            {/* Canadian carriers */}
+            <div>
+              <h4 className="font-semibold mb-2">
+                Canadian Carriers (Bell, Rogers, Telus)
+              </h4>
+              <div className="space-y-3">
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                    No-Answer Forwarding
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*92</strong> + {twilioNumber}
+                    <br />
+                    Disable: <strong>*93</strong>
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                    Busy Forwarding
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*90</strong> + {twilioNumber}
+                    <br />
+                    Disable: <strong>*91</strong>
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    All Calls (Unconditional)
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*72</strong> + {twilioNumber}
+                    <br />
+                    Disable: <strong>*73</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <div className="space-y-2">
-              <h4 className="font-medium">To Disable Forwarding:</h4>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Call your phone carrier</li>
-                <li>Request to disable call forwarding</li>
-                <li>Calls will go directly to your clinic again</li>
-              </ol>
+            {/* US carriers */}
+            <div>
+              <h4 className="font-semibold mb-2">
+                US Carriers (AT&amp;T, Verizon, T-Mobile)
+              </h4>
+              <div className="space-y-3">
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                    No-Answer Forwarding
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*61*</strong>{twilioNumber}<strong>#</strong>
+                    <br />
+                    Disable: <strong>#61#</strong>
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+                    Busy Forwarding
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*67*</strong>{twilioNumber}<strong>#</strong>
+                    <br />
+                    Disable: <strong>#67#</strong>
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    All Calls (Unconditional)
+                  </div>
+                  <div className="mt-1 font-mono text-xs bg-muted p-2 rounded">
+                    Activate: <strong>*21*</strong>{twilioNumber}<strong>#</strong>
+                    <br />
+                    Disable: <strong>#21#</strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -184,21 +315,11 @@ async function PhoneSettingsContent() {
           <div className="space-y-2 text-sm">
             <p>Contact our support team:</p>
             <div className="space-y-1">
-              <div>📧 Email: support@yourcompany.com</div>
-              <div>📞 Phone: 1-800-SUPPORT</div>
-              <div>💬 Live Chat: Available Mon-Fri 9AM-5PM</div>
+              <div>Email: support@parlae.ca</div>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-export default function PhoneIntegrationSettingsPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <PhoneSettingsContent />
-    </Suspense>
   );
 }
