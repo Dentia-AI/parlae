@@ -52,6 +52,22 @@ export async function POST(request: NextRequest) {
       apiVersion: '2024-12-18.acacia',
     });
 
+    const customerId = (account as any).stripeCustomerId as string | undefined;
+
+    // Ensure payment method is attached to the customer
+    if (customerId) {
+      try {
+        await stripe.paymentMethods.attach(account.stripePaymentMethodId, {
+          customer: customerId,
+        });
+      } catch (attachErr: any) {
+        // Ignore if already attached (error code: resource_already_exists)
+        if (attachErr?.code !== 'resource_already_exists') {
+          console.error('PaymentMethod attach error:', attachErr?.message);
+        }
+      }
+    }
+
     // Pull installation fee from admin-configured billing config, fall back to env/default
     const publicData = (account.publicData as Record<string, unknown>) ?? {};
     const billingConfig = publicData.billingConfig as Record<string, unknown> | undefined;
@@ -64,7 +80,7 @@ export async function POST(request: NextRequest) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: activationFeeCents,
       currency: 'cad',
-      customer: (account as any).stripeCustomerId ?? undefined,
+      customer: customerId,
       payment_method: account.stripePaymentMethodId,
       confirm: true,
       off_session: true,
