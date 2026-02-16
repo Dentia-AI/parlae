@@ -79,12 +79,12 @@ export default function IntegrationsPage() {
     }
   }, [router, searchParams, t]);
 
-  // Load saved integrations progress from database
+  // Load saved integrations progress from database AND check actual PMS status
   useEffect(() => {
     if (progress?.integrations?.data) {
       const savedData = progress.integrations.data;
       
-      // Restore PMS connection status
+      // Restore PMS connection status from saved progress
       if (savedData.pmsConnected) {
         setPmsConnectionStatus('connected');
       } else if (savedData.skipped) {
@@ -103,6 +103,38 @@ export default function IntegrationsPage() {
       }
     }
   }, [progress]);
+
+  // Check live integration status from the database (PmsIntegration model)
+  useEffect(() => {
+    if (!isReady) return;
+
+    const checkLiveStatus = async () => {
+      try {
+        const response = await fetch('/api/integrations/status');
+        if (response.ok) {
+          const data = await response.json();
+          
+          // If PMS is connected in the DB, update the UI
+          if (data.pms) {
+            setPmsConnectionStatus('connected');
+            if (data.pmsProvider) {
+              setShowPmsSetup(true);
+            }
+          }
+
+          // If Google Calendar is connected in the DB, update the UI
+          if (data.googleCalendar) {
+            setGoogleCalendarConnected(true);
+            setGoogleCalendarEmail(data.googleCalendarEmail || null);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check live integration status:', error);
+      }
+    };
+
+    checkLiveStatus();
+  }, [isReady]);
 
   if (!isReady) {
     return null;

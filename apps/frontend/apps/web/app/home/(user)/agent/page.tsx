@@ -31,6 +31,7 @@ export default async function ReceptionistDashboardPage({
         where: { id: workspace.workspace.id },
         select: {
           id: true,
+          primaryOwnerId: true,
           phoneIntegrationMethod: true,
           phoneIntegrationSettings: true,
           googleCalendarConnected: true,
@@ -39,12 +40,20 @@ export default async function ReceptionistDashboardPage({
       })
     : null;
 
-  // Check PMS integration from the PmsIntegration model
+  // Check PMS integration from the PmsIntegration model.
+  // PMS records may be linked to any account owned by this user (personal or
+  // non-personal), so we query across all of them.
   let pmsIntegration: { provider: string; providerName: string | null; status: string } | null = null;
-  if (account?.id) {
+  if (account?.primaryOwnerId) {
     try {
+      const allUserAccounts = await prisma.account.findMany({
+        where: { primaryOwnerId: account.primaryOwnerId },
+        select: { id: true },
+      });
+      const allAccountIds = allUserAccounts.map((a) => a.id);
+
       pmsIntegration = await prisma.pmsIntegration.findFirst({
-        where: { accountId: account.id },
+        where: { accountId: { in: allAccountIds } },
         select: {
           provider: true,
           providerName: true,
@@ -247,13 +256,13 @@ export default async function ReceptionistDashboardPage({
                     {pmsIntegration ? (
                       <>
                         <div className="flex items-center gap-1.5 mt-1">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                          <span className="text-xs text-green-700 dark:text-green-400 font-medium">
-                            {pmsIntegration.status === 'ACTIVE' ? 'Connected' : pmsIntegration.status}
+                          <CheckCircle2 className={`h-3.5 w-3.5 ${pmsIntegration.status === 'ACTIVE' ? 'text-green-600' : 'text-amber-500'}`} />
+                          <span className={`text-xs font-medium ${pmsIntegration.status === 'ACTIVE' ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {pmsIntegration.status === 'ACTIVE' ? 'Connected' : pmsIntegration.status === 'SETUP_REQUIRED' ? 'Setup Required' : pmsIntegration.status === 'ERROR' ? 'Error' : 'Inactive'}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {pmsIntegration.providerName || pmsIntegration.provider}
+                        <p className="text-xs text-muted-foreground mt-0.5 capitalize">
+                          {(pmsIntegration.providerName || pmsIntegration.provider).toLowerCase()}
                         </p>
                       </>
                     ) : (
