@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation';
 
 import { getSessionUser } from '@kit/shared/auth';
-import { PageBody } from '@kit/ui/page';
-import { PageHeader } from '@kit/ui/page-header';
 import { Trans } from '@kit/ui/trans';
 
 import { isAdmin } from '~/lib/auth/is-admin';
@@ -40,26 +38,29 @@ export default async function AdminAccountsPage({
   const params = await searchParams;
 
   return (
-    <>
-      <PageHeader
-        title={<Trans i18nKey={'admin:accountsTitle'} defaults={'All Accounts'} />}
-        description={
-          <Trans
-            i18nKey={'admin:accountsDescription'}
-            defaults={'Search and manage all user accounts. Click impersonate to view the app as any user.'}
-          />
-        }
-      />
+    <div className="container max-w-7xl py-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            <Trans i18nKey={'admin:accountsTitle'} defaults={'All Accounts'} />
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            <Trans
+              i18nKey={'admin:accountsDescription'}
+              defaults={'Search and manage all user accounts. Click impersonate to view the app as any user.'}
+            />
+          </p>
+        </div>
+      </div>
 
-      <PageBody>
-        <AccountsListContainer
-          initialSearch={params.search}
-          initialPage={params.page ? parseInt(params.page, 10) : 1}
-          initialSortBy={params.sortBy}
-          initialSortOrder={params.sortOrder}
-        />
-      </PageBody>
-    </>
+      <AccountsListContainer
+        initialSearch={params.search}
+        initialPage={params.page ? parseInt(params.page, 10) : 1}
+        initialSortBy={params.sortBy}
+        initialSortOrder={params.sortOrder}
+      />
+    </div>
   );
 }
 

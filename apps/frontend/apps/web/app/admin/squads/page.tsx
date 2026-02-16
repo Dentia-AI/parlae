@@ -229,11 +229,12 @@ export default function AdminSquadsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="container max-w-7xl py-8 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Vapi Squad Management</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-3xl font-bold tracking-tight">Vapi Squad Management</h1>
+          <p className="text-muted-foreground mt-2">
             View, delete, and recreate squads and assistants
           </p>
         </div>
@@ -246,47 +247,35 @@ export default function AdminSquadsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Users className="h-8 w-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.totalSquads}</p>
-              <p className="text-xs text-muted-foreground">Squads</p>
-            </div>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-blue-600">{stats.totalSquads}</div>
+            <p className="text-sm text-muted-foreground">Squads</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Bot className="h-8 w-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.totalAssistants}</p>
-              <p className="text-xs text-muted-foreground">
-                Total Assistants
-              </p>
-            </div>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-green-600">{stats.totalAssistants}</div>
+            <p className="text-sm text-muted-foreground">
+              Total Assistants
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Wrench className="h-8 w-8 text-indigo-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.totalStandaloneTools}</p>
-              <p className="text-xs text-muted-foreground">
-                Standalone Tools
-              </p>
-            </div>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-indigo-600">{stats.totalStandaloneTools}</div>
+            <p className="text-sm text-muted-foreground">
+              Standalone Tools
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <AlertCircle className="h-8 w-8 text-yellow-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.totalOrphaned}</p>
-              <p className="text-xs text-muted-foreground">
-                Orphaned Assistants
-              </p>
-            </div>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-yellow-600">{stats.totalOrphaned}</div>
+            <p className="text-sm text-muted-foreground">
+              Orphaned Assistants
+            </p>
           </CardContent>
         </Card>
       </div>

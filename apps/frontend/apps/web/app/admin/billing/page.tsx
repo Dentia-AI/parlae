@@ -180,7 +180,7 @@ export default function AdminBillingPage() {
   // Detail view for a selected clinic
   if (selectedClinic) {
     return (
-      <div className="container max-w-4xl py-8 space-y-6">
+      <div className="container max-w-7xl py-8 space-y-6">
         <button
           onClick={() => setSelectedClinic(null)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -191,10 +191,10 @@ export default function AdminBillingPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-3xl font-bold tracking-tight">
               {selectedClinic.accountName}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-2">
               {selectedClinic.accountEmail || 'No email'}
             </p>
           </div>
@@ -408,13 +408,14 @@ export default function AdminBillingPage() {
 
   // List view
   return (
-    <div className="container max-w-6xl py-8 space-y-6">
+    <div className="container max-w-7xl py-8 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight">
             Billing Management
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-2">
             Manage billing configuration and pricing for each clinic
           </p>
         </div>
@@ -435,20 +436,20 @@ export default function AdminBillingPage() {
         </AlertDescription>
       </Alert>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search clinics by name or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
       {/* Clinics Table */}
       <Card>
-        <CardContent className="p-0">
+        <CardHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search clinics by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -478,7 +479,7 @@ export default function AdminBillingPage() {
                   <TableRow key={clinic.accountId}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{clinic.accountName}</p>
+                        <p className="font-medium text-sm">{clinic.accountName}</p>
                         <p className="text-xs text-muted-foreground">
                           {clinic.accountEmail || 'No email'}
                         </p>
@@ -493,15 +494,15 @@ export default function AdminBillingPage() {
                         {clinic.billingEnabled ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono text-sm">
                       {clinic.billingConfig
                         ? `$${clinic.billingConfig.basePricePerLocation}`
-                        : '-'}
+                        : '–'}
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono text-sm">
                       {clinic.billingConfig
                         ? `$${clinic.billingConfig.installationFee}`
-                        : '-'}
+                        : '–'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

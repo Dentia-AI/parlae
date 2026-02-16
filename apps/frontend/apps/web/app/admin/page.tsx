@@ -5,7 +5,6 @@ import { prisma } from '@kit/prisma';
 import { getSessionUser } from '@kit/shared/auth';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
-import { Heading } from '@kit/ui/heading';
 import { Trans } from '@kit/ui/trans';
 
 import { impersonateUserAction, stopImpersonationAction } from './actions';
@@ -74,14 +73,14 @@ export default async function AdminPage() {
   const isImpersonating = Boolean(impersonatorId);
 
   return (
-    <div className={'container space-y-8 py-10'}>
-      <div className={'flex items-center justify-between'}>
-        <div className={'space-y-1'}>
-          <Heading level={2}>
+    <div className="container max-w-7xl py-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
             <Trans i18nKey={'admin:dashboardTitle'} defaults={'Admin Console'} />
-          </Heading>
-
-          <p className={'text-muted-foreground text-sm'}>
+          </h1>
+          <p className="text-muted-foreground mt-2">
             <Trans
               i18nKey={'admin:dashboardSubtitle'}
               defaults={'Manage users, accounts, and AI agent configurations.'}
@@ -99,35 +98,35 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Total Users</CardDescription>
+          <CardContent className="pt-6 text-center">
             <div className="text-3xl font-bold">{stats.totalUsers}</div>
-          </CardHeader>
+            <p className="text-sm text-muted-foreground">Total Users</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Total Accounts</CardDescription>
-            <div className="text-3xl font-bold">{stats.totalAccounts}</div>
-          </CardHeader>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-green-600">{stats.totalAccounts}</div>
+            <p className="text-sm text-muted-foreground">Total Accounts</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Agent Templates</CardDescription>
-            <div className="text-3xl font-bold">{stats.totalTemplates}</div>
-          </CardHeader>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-blue-600">{stats.totalTemplates}</div>
+            <p className="text-sm text-muted-foreground">Agent Templates</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Active Templates</CardDescription>
-            <div className="text-3xl font-bold">{stats.activeTemplates}</div>
-          </CardHeader>
+          <CardContent className="pt-6 text-center">
+            <div className="text-3xl font-bold text-purple-600">{stats.activeTemplates}</div>
+            <p className="text-sm text-muted-foreground">Active Templates</p>
+          </CardContent>
         </Card>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/admin/accounts">
           <Card className="cursor-pointer hover:border-primary transition-colors h-full">
             <CardHeader>

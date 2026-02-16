@@ -231,28 +231,21 @@ export default function AdminPmsPage() {
 
   if (loading) {
     return (
-      <div className="container max-w-5xl py-8 flex items-center justify-center min-h-[400px]">
+      <div className="container max-w-7xl py-8 flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="container max-w-5xl py-8 space-y-6">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Admin
-      </Link>
-
+    <div className="container max-w-7xl py-8 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             PMS Integrations
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-2">
             Manage Sikka PMS connections, activate tokens, and test API access.
           </p>
         </div>

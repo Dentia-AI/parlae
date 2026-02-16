@@ -50,7 +50,7 @@ export default async function AgentTemplatesPage() {
             Manage AI agent configurations and versions
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Link href="/admin/agent-templates/fetch">
             <Button variant="outline">
               <Copy className="h-4 w-4 mr-2" />
