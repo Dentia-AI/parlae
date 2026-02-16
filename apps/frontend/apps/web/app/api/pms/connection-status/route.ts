@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
           lastError: true,
           config: true,
           features: true,
+          metadata: true,
         },
         orderBy: { updatedAt: 'desc' },
       });
@@ -79,10 +80,17 @@ export async function GET(request: NextRequest) {
 
     const isConnected = pmsIntegration.status === 'ACTIVE';
 
+    // Show the actual PMS name from metadata, not "Sikka"
+    const meta = pmsIntegration.metadata as any;
+    const displayProvider = (meta?.actualPmsType && meta.actualPmsType !== 'Unknown')
+      ? meta.actualPmsType
+      : meta?.practiceName || null;
+
     return NextResponse.json({
       isConnected,
       status: pmsIntegration.status,
-      provider: pmsIntegration.providerName || pmsIntegration.provider,
+      provider: displayProvider,
+      practiceName: meta?.practiceName || null,
       lastSync: pmsIntegration.lastSyncAt,
       error: pmsIntegration.lastError,
       features: pmsIntegration.features,

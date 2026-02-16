@@ -43,7 +43,7 @@ export default async function ReceptionistDashboardPage({
   // Check PMS integration from the PmsIntegration model.
   // PMS records may be linked to any account owned by this user (personal or
   // non-personal), so we query across all of them.
-  let pmsIntegration: { provider: string; providerName: string | null; status: string } | null = null;
+  let pmsIntegration: { provider: string; providerName: string | null; status: string; metadata: any } | null = null;
   if (account?.primaryOwnerId) {
     try {
       const allUserAccounts = await prisma.account.findMany({
@@ -58,6 +58,7 @@ export default async function ReceptionistDashboardPage({
           provider: true,
           providerName: true,
           status: true,
+          metadata: true,
         },
         orderBy: { updatedAt: 'desc' },
       });
@@ -261,9 +262,15 @@ export default async function ReceptionistDashboardPage({
                             {pmsIntegration.status === 'ACTIVE' ? 'Connected' : pmsIntegration.status === 'SETUP_REQUIRED' ? 'Setup Required' : pmsIntegration.status === 'ERROR' ? 'Error' : 'Inactive'}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 capitalize">
-                          {(pmsIntegration.providerName || pmsIntegration.provider).toLowerCase()}
-                        </p>
+                        {(() => {
+                          const meta = pmsIntegration.metadata as any;
+                          const pmsDisplayName = meta?.actualPmsType && meta.actualPmsType !== 'Unknown'
+                            ? meta.actualPmsType
+                            : meta?.practiceName || null;
+                          return pmsDisplayName ? (
+                            <p className="text-xs text-muted-foreground mt-0.5">{pmsDisplayName}</p>
+                          ) : null;
+                        })()}
                       </>
                     ) : (
                       <div className="flex items-center gap-1.5 mt-1">

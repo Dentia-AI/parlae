@@ -52,13 +52,19 @@ export async function GET(request: NextRequest) {
           provider: true,
           providerName: true,
           status: true,
+          metadata: true,
         },
         orderBy: { updatedAt: 'desc' },
       });
 
       if (pmsIntegration) {
         pmsConnected = true;
-        pmsProvider = pmsIntegration.providerName || pmsIntegration.provider;
+        // Show the actual PMS name (e.g. "Dentrix", "Eaglesoft") from metadata,
+        // not "Sikka" which is just the middleware. Fall back to nothing.
+        const meta = pmsIntegration.metadata as any;
+        pmsProvider = (meta?.actualPmsType && meta.actualPmsType !== 'Unknown')
+          ? meta.actualPmsType
+          : meta?.practiceName || null;
         pmsStatus = pmsIntegration.status;
       }
     } catch {
