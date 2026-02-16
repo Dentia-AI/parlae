@@ -47,6 +47,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if activation fee was already charged
+    const phoneSettings = (account.phoneIntegrationSettings as Record<string, any>) ?? {};
+    if (phoneSettings.activationFeePaid === true) {
+      return NextResponse.json({
+        success: true,
+        alreadyPaid: true,
+        message: 'Activation fee was already charged',
+      });
+    }
+
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(secretKey, {
       apiVersion: '2024-12-18.acacia',
@@ -96,6 +106,24 @@ export async function POST(request: NextRequest) {
       paymentIntent.status === 'succeeded' ||
       paymentIntent.status === 'processing'
     ) {
+      // Record that activation fee was paid so we don't charge again
+      try {
+        const existingSettings = (account.phoneIntegrationSettings as Record<string, any>) ?? {};
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            phoneIntegrationSettings: {
+              ...existingSettings,
+              activationFeePaid: true,
+              activationFeePaymentIntentId: paymentIntent.id,
+              activationFeePaidAt: new Date().toISOString(),
+            },
+          },
+        });
+      } catch (dbErr) {
+        console.error('Failed to record activation fee payment:', dbErr);
+      }
+
       return NextResponse.json({
         success: true,
         paymentIntentId: paymentIntent.id,

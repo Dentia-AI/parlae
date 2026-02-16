@@ -45,7 +45,15 @@ export default async function ReceptionistDashboardPage() {
 
   const phoneNumber = integrationSettings?.phoneNumber || '+1 (555) 555-1234';
   const voiceConfig = integrationSettings?.voiceConfig;
-  const isActive = account?.phoneIntegrationMethod === 'ported';
+  const isActive = !!integrationSettings?.vapiSquadId;
+
+  const integrationMethodLabels: Record<string, string> = {
+    forwarded: 'Call Forwarding',
+    ported: 'Ported Number',
+    sip: 'SIP Trunk',
+    none: 'Not Configured',
+  };
+  const integrationLabel = integrationMethodLabels[account?.phoneIntegrationMethod || 'none'] || account?.phoneIntegrationMethod || 'Not Configured';
 
   return (
     <div className="container max-w-6xl py-8 space-y-6">
@@ -103,7 +111,7 @@ export default async function ReceptionistDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Integration</p>
-                <p className="font-semibold capitalize">{account?.phoneIntegrationMethod || 'None'}</p>
+                <p className="font-semibold">{integrationLabel}</p>
               </div>
             </div>
             <Link href="/home/agent/phone-settings">

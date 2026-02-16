@@ -133,6 +133,7 @@ export const deployReceptionistAction = enhanceAction(
           id: true,
           name: true,
           email: true,
+          phoneIntegrationMethod: true,
           phoneIntegrationSettings: true,
           paymentMethodVerified: true,
           stripePaymentMethodId: true,
@@ -334,10 +335,14 @@ export const deployReceptionistAction = enhanceAction(
       );
 
       // STEP 7: Update account with full Vapi configuration
+      // Preserve the user's chosen phone integration method (forwarded, ported, sip)
+      const existingMethod = account.phoneIntegrationMethod && account.phoneIntegrationMethod !== 'none'
+        ? account.phoneIntegrationMethod
+        : 'forwarded';
       await prisma.account.update({
         where: { id: account.id },
         data: {
-          phoneIntegrationMethod: 'ported',
+          phoneIntegrationMethod: existingMethod,
           phoneIntegrationSettings: {
             ...(phoneIntegrationSettings || {}),
             vapiSquadId: squad.id,

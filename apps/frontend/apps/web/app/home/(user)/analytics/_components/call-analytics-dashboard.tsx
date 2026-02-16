@@ -157,7 +157,9 @@ export function CallAnalyticsDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.totalCalls.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-green-600">+23%</span> from previous period
+              {data.metrics.totalCalls > 0
+                ? `${data.metrics.totalCalls} in selected period`
+                : 'No calls yet'}
             </p>
           </CardContent>
         </Card>
@@ -267,7 +269,7 @@ export function CallAnalyticsDashboard() {
               {data.metrics.collections.collectionRate}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {data.metrics.collections.count > 0 ? `+12%` : '--'}
+              {data.metrics.collections.count > 0 ? `${data.metrics.collections.count} collected` : '--'}
             </p>
           </CardContent>
         </Card>
