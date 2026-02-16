@@ -153,15 +153,22 @@ export async function GET(request: NextRequest) {
     try {
       const practicesResponse = await fetch(`${SIKKA_BASE_URL}/authorized_practices`, {
         method: 'GET',
-        headers: { 'Request-Key': requestKey! },
+        headers: {
+          'App-Id': appId,
+          'App-Key': appKey,
+        },
       });
 
       if (practicesResponse.ok) {
         const practicesData = await practicesResponse.json();
         const practices = practicesData.items || [];
-        if (practices.length > 0) {
-          practiceName = practices[0].practice_name || null;
-          actualPmsType = practices[0].pms_type || null;
+        // Find the matching practice by office_id
+        const matchedPractice = practices.find(
+          (p: any) => p.office_id === officeId,
+        ) || practices[0];
+        if (matchedPractice) {
+          practiceName = matchedPractice.practice_name || null;
+          actualPmsType = matchedPractice.practice_management_system || null;
         }
       }
     } catch {
