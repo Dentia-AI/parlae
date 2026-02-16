@@ -40,6 +40,33 @@ export interface RuntimeConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Phone number helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalise a phone number to E.164 format (+1XXXXXXXXXX).
+ * Returns `null` if the number cannot be normalised.
+ */
+function toE164(raw: string): string | null {
+  // Strip everything except digits and a leading +
+  const cleaned = raw.replace(/[^\d+]/g, '');
+
+  // Already E.164
+  if (/^\+1\d{10}$/.test(cleaned)) return cleaned;
+
+  // Has +, but not +1XXXXXXXXXX — might be another country, still E.164
+  if (/^\+\d{10,15}$/.test(cleaned)) return cleaned;
+
+  // 11 digits starting with 1 (e.g. 14165551234)
+  if (/^1\d{10}$/.test(cleaned)) return `+${cleaned}`;
+
+  // 10 digits (e.g. 4165551234) — assume North American
+  if (/^\d{10}$/.test(cleaned)) return `+1${cleaned}`;
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Placeholder hydration
 // ---------------------------------------------------------------------------
 
@@ -143,18 +170,21 @@ function buildMemberPayload(
 
   // Inject transferCall tool for Emergency Transfer when clinic phone is available
   if (a.name === 'Emergency Transfer' && runtime.clinicPhoneNumber) {
-    tools.push({
-      type: 'transferCall',
-      destinations: [
-        {
-          type: 'number',
-          number: runtime.clinicPhoneNumber,
-          message: 'Transferring to the clinic for immediate assistance.',
-          description:
-            'Transfer to the clinic front desk for any emergency or urgent matter that needs human attention',
-        },
-      ],
-    });
+    const e164Number = toE164(runtime.clinicPhoneNumber);
+    if (e164Number) {
+      tools.push({
+        type: 'transferCall',
+        destinations: [
+          {
+            type: 'number',
+            number: e164Number,
+            message: 'Transferring to the clinic for immediate assistance.',
+            description:
+              'Transfer to the clinic front desk for any emergency or urgent matter that needs human attention',
+          },
+        ],
+      });
+    }
   }
 
   // Build model config

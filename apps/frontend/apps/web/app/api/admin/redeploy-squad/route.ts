@@ -115,6 +115,11 @@ export async function POST(request: NextRequest) {
       account.brandingContactPhone ||
       undefined;
 
+    logger.info(
+      { clinicOriginalNumber, staffDirect: phoneIntegrationSettings.staffDirectNumber, clinicNum: phoneIntegrationSettings.clinicNumber, brandingPhone: account.brandingContactPhone },
+      '[Admin Redeploy] Resolved clinic phone for emergency transfers',
+    );
+
     const webhookBaseUrl =
       process.env.NEXT_PUBLIC_APP_BASE_URL || 'https://app.parlae.ca';
     const runtimeConfig: RuntimeConfig = {

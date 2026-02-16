@@ -417,8 +417,18 @@ class VapiService {
     };
 
     // ALL tools (function, transferCall, endCall) go inside model.tools
+    // Filter out transferCall tools with invalid E.164 phone numbers to prevent API errors
     const allTools: unknown[] = config.tools && config.tools.length > 0
-      ? [...config.tools]
+      ? config.tools.filter((tool: any) => {
+          if (tool.type === 'transferCall' && tool.destinations) {
+            const validDests = tool.destinations.filter((d: any) =>
+              d.type !== 'number' || /^\+\d{10,15}$/.test(d.number),
+            );
+            if (validDests.length === 0) return false;
+            tool.destinations = validDests;
+          }
+          return true;
+        })
       : [];
 
     // Build model config
