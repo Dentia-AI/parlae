@@ -86,7 +86,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create a SetupIntent attached to the customer
+    // Create a SetupIntent attached to the customer.
+    // Note: Stripe Link may show browser-cached cards from other sessions.
+    // This is by design — Link requires a verification code before use, so
+    // a different user cannot charge the original card without verification.
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
       payment_method_types: ['card'],

@@ -2,23 +2,30 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Phone, Settings, BarChart3, FileText, Mic, CheckCircle2 } from 'lucide-react';
+import { Phone, Settings, FileText, Mic, CheckCircle2, Calendar, Database, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
+import { DeployedBanner } from './_components/deployed-banner';
+import { PhoneSetupCard } from './_components/phone-setup-card';
 
 export const metadata = {
   title: 'AI Agents Dashboard',
 };
 
-export default async function ReceptionistDashboardPage() {
+export default async function ReceptionistDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deployed?: string }>;
+}) {
+  const params = await searchParams;
   const workspace = await loadUserWorkspace();
 
   if (!workspace) {
     redirect('/auth/sign-in');
   }
 
-  // Get the personal account details with phone integration
+  // Get the personal account details with phone integration and integrations
   const account = workspace.workspace.id 
     ? await prisma.account.findUnique({
         where: { id: workspace.workspace.id },
@@ -26,9 +33,29 @@ export default async function ReceptionistDashboardPage() {
           id: true,
           phoneIntegrationMethod: true,
           phoneIntegrationSettings: true,
+          googleCalendarConnected: true,
+          googleCalendarEmail: true,
         },
       })
     : null;
+
+  // Check PMS integration from the PmsIntegration model
+  let pmsIntegration: { provider: string; providerName: string | null; status: string } | null = null;
+  if (account?.id) {
+    try {
+      pmsIntegration = await prisma.pmsIntegration.findFirst({
+        where: { accountId: account.id },
+        select: {
+          provider: true,
+          providerName: true,
+          status: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+    } catch {
+      // Table may not exist yet
+    }
+  }
 
   // Check if receptionist is fully configured
   // Must have method != 'none' AND have vapiSquadId in settings
@@ -56,6 +83,11 @@ export default async function ReceptionistDashboardPage() {
 
   return (
     <div className="container max-w-6xl py-8 space-y-6">
+      {/* Deployment success banner */}
+      {params.deployed === 'true' && (
+        <DeployedBanner phoneNumber={phoneNumber} />
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">AI Agents</h1>
@@ -95,31 +127,10 @@ export default async function ReceptionistDashboardPage() {
 
       {/* Configuration */}
       <div className="grid md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Phone className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Phone Setup</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm text-muted-foreground">Phone Number</p>
-                <p className="font-mono font-semibold">{phoneNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Integration</p>
-                <p className="font-semibold">{integrationLabel}</p>
-              </div>
-            </div>
-            <Link href="/home/agent/phone-settings">
-              <Button variant="outline" size="sm" className="w-full mt-4">
-                Manage Phone
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <PhoneSetupCard
+          phoneNumber={phoneNumber}
+          integrationLabel={integrationLabel}
+        />
 
         <Card>
           <CardHeader>
@@ -182,8 +193,88 @@ export default async function ReceptionistDashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Activity - Removed from here, moved to dashboard */}
-      
+      {/* Integrations */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Integrations</h2>
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Google Calendar */}
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-lg p-2 ${account?.googleCalendarConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'}`}>
+                    <Calendar className={`h-5 w-5 ${account?.googleCalendarConnected ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm">Google Calendar</h3>
+                    {account?.googleCalendarConnected ? (
+                      <>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                          <span className="text-xs text-green-700 dark:text-green-400 font-medium">Connected</span>
+                        </div>
+                        {account.googleCalendarEmail && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{account.googleCalendarEmail}</p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Not connected</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Link href="/home/agent/setup/integrations">
+                  <Button variant="outline" size="sm">
+                    {account?.googleCalendarConnected ? 'Manage' : 'Connect'}
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* PMS */}
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-lg p-2 ${pmsIntegration ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'}`}>
+                    <Database className={`h-5 w-5 ${pmsIntegration ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm">Practice Management System</h3>
+                    {pmsIntegration ? (
+                      <>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                          <span className="text-xs text-green-700 dark:text-green-400 font-medium">
+                            {pmsIntegration.status === 'ACTIVE' ? 'Connected' : pmsIntegration.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {pmsIntegration.providerName || pmsIntegration.provider}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Not connected</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Link href="/home/agent/setup/integrations">
+                  <Button variant="outline" size="sm">
+                    {pmsIntegration ? 'Manage' : 'Connect'}
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Quick Actions */}
       <div>
         <Link href="/home/agent/setup">

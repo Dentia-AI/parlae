@@ -21,8 +21,7 @@ export default function ReviewPage() {
   const { t } = useTranslation();
   const csrfToken = useCsrfToken();
   const [pending, startTransition] = useTransition();
-  const [deployed, setDeployed] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  
   const [paymentCompleted, setPaymentCompleted] = useState(false);
   const [paymentSectionOpen, setPaymentSectionOpen] = useState(true);
   const [reviewSectionOpen, setReviewSectionOpen] = useState(false);
@@ -146,8 +145,6 @@ export default function ReviewPage() {
         });
 
         if (result.success) {
-          setDeployed(true);
-          setPhoneNumber(result.phoneNumber || 'Provisioned');
           toast.success(t('common:setup.review.deploySuccess'));
           
           // Clear session storage
@@ -155,6 +152,10 @@ export default function ReviewPage() {
           sessionStorage.removeItem('knowledgeBaseFiles');
           sessionStorage.removeItem('accountId');
           sessionStorage.removeItem('businessName');
+
+          // Redirect to AI Agent dashboard with deployed flag
+          router.push('/home/agent?deployed=true');
+          return;
         } else {
           toast.error(result.error || t('common:setup.review.deployError'));
         }
@@ -164,46 +165,6 @@ export default function ReviewPage() {
       }
     });
   };
-
-  const handleGoToDashboard = () => {
-    router.push('/home/agent');
-  };
-
-  if (deployed) {
-    return (
-      <div className="container max-w-4xl py-8">
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="pt-6">
-            <div className="text-center space-y-4">
-              <div className="flex justify-center">
-                <div className="rounded-full bg-green-100 p-4">
-                  <CheckCircle2 className="h-12 w-12 text-green-600" />
-                </div>
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-green-900">
-                  <Trans i18nKey="common:setup.review.live.title" />
-                </h2>
-                <p className="text-green-700 mt-2">
-                  <Trans i18nKey="common:setup.review.live.description" />
-                </p>
-                {phoneNumber && (
-                  <p className="text-sm text-green-600 mt-2">
-                    <Trans i18nKey="common:setup.review.live.phoneNumber" /> {phoneNumber}
-                  </p>
-                )}
-              </div>
-              <div className="pt-4">
-                <Button onClick={handleGoToDashboard} size="lg">
-                  <Trans i18nKey="common:setup.review.live.goToDashboard" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   const steps = [
     t('common:setup.steps.voice'),

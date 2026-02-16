@@ -114,7 +114,9 @@ export function SetupPaymentForm({ onPaymentComplete }: SetupPaymentFormProps) {
       const isDarkMode = document.documentElement.classList.contains('dark') ||
         window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-      // Use Payment Element with clientSecret for Link support
+      // Use Payment Element with clientSecret.
+      // Link is disabled to prevent browser-cached payment methods from
+      // a different user on the same browser from leaking across accounts.
       const elements = stripe.elements({
         clientSecret,
         appearance: {

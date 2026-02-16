@@ -171,18 +171,95 @@ export const deployReceptionistAction = enhanceAction(
       // STEP 1: Get or provision a real Twilio phone number
       const { createTwilioService } = await import('@kit/shared/twilio/server');
       const twilioService = createTwilioService();
-      
+
       let phoneNumber: string;
-      const existingNumbers = await twilioService.listNumbers();
-      
-      if (existingNumbers.length > 0) {
-        phoneNumber = existingNumbers[0].phoneNumber;
+
+      // Check if this account already has a phone number assigned
+      const currentSettings = account.phoneIntegrationSettings as any;
+      if (currentSettings?.phoneNumber) {
+        phoneNumber = currentSettings.phoneNumber;
         logger.info(
           { phoneNumber, accountId: account.id },
-          '[Receptionist] Using existing Twilio phone number'
+          '[Receptionist] Re-using previously assigned phone number'
         );
       } else {
-        throw new Error('No Twilio phone numbers available. Please contact support.');
+        // Find an unassigned Twilio number.
+        // First, get all numbers already assigned to ANY account.
+        const assignedAccounts = await prisma.account.findMany({
+          where: {
+            phoneIntegrationSettings: { not: undefined },
+          },
+          select: {
+            id: true,
+            phoneIntegrationSettings: true,
+          },
+        });
+
+        const assignedNumbers = new Set<string>();
+        for (const acc of assignedAccounts) {
+          const settings = acc.phoneIntegrationSettings as any;
+          if (settings?.phoneNumber) {
+            assignedNumbers.add(settings.phoneNumber);
+          }
+        }
+
+        // Also check VapiPhoneNumber table
+        try {
+          const vapiPhoneRecords = await prisma.vapiPhoneNumber.findMany({
+            select: { phoneNumber: true },
+          });
+          for (const rec of vapiPhoneRecords) {
+            assignedNumbers.add(rec.phoneNumber);
+          }
+        } catch {
+          // Table may not exist yet
+        }
+
+        const existingNumbers = await twilioService.listNumbers();
+        const unassignedNumber = existingNumbers.find(
+          (n: any) => !assignedNumbers.has(n.phoneNumber)
+        );
+
+        if (unassignedNumber) {
+          phoneNumber = unassignedNumber.phoneNumber;
+          logger.info(
+            { phoneNumber, accountId: account.id },
+            '[Receptionist] Using unassigned Twilio phone number'
+          );
+        } else {
+          // All existing numbers are taken — search for and purchase a new one
+          logger.info(
+            { accountId: account.id },
+            '[Receptionist] All Twilio numbers assigned, purchasing a new one'
+          );
+          try {
+            const availableNumbers = await twilioService.searchAvailableNumbers('US', 'Local', {
+              voiceEnabled: true,
+              limit: 1,
+            });
+            if (!availableNumbers || availableNumbers.length === 0) {
+              throw new Error('No phone numbers available for purchase');
+            }
+            const purchased = await twilioService.purchaseNumber({
+              phoneNumber: availableNumbers[0]!.phoneNumber,
+              friendlyName: `Parlae - ${businessName}`,
+            });
+            if (!purchased) {
+              throw new Error('Purchase returned null');
+            }
+            phoneNumber = purchased.phoneNumber;
+            logger.info(
+              { phoneNumber, accountId: account.id },
+              '[Receptionist] Purchased new Twilio phone number'
+            );
+          } catch (purchaseError) {
+            logger.error(
+              { error: purchaseError, accountId: account.id },
+              '[Receptionist] Failed to purchase Twilio number'
+            );
+            throw new Error('No Twilio phone numbers available and failed to purchase a new one. Please contact support.');
+          }
+        }
       }
 
       // STEP 2: Collect knowledge base file IDs
@@ -449,5 +526,152 @@ export const uploadKnowledgeBaseAction = enhanceAction(
   {
     auth: true,
     schema: UploadKnowledgeBaseSchema,
+  }
+);
+
+/**
+ * Change the Twilio phone number for a deployed agent.
+ *
+ * 1. Searches for and purchases a new Twilio number
+ * 2. Imports it into Vapi (or updates the existing Vapi phone)
+ * 3. Links it to the current squad
+ * 4. Updates account settings
+ */
+const ChangePhoneNumberSchema = z.object({});
+
+export const changePhoneNumberAction = enhanceAction(
+  async (_data, user) => {
+    const logger = await getLogger();
+    const vapiService = createVapiService();
+
+    logger.info({ userId: user.id }, '[Receptionist] Changing phone number');
+
+    try {
+      const account = await prisma.account.findFirst({
+        where: { primaryOwnerId: user.id },
+        select: {
+          id: true,
+          name: true,
+          phoneIntegrationSettings: true,
+          brandingBusinessName: true,
+        },
+      });
+
+      if (!account) {
+        throw new Error('Account not found');
+      }
+
+      const settings = account.phoneIntegrationSettings as any;
+      if (!settings?.vapiSquadId) {
+        throw new Error('No deployed agent found. Please deploy first.');
+      }
+
+      const businessName = account.brandingBusinessName || account.name;
+
+      // Search for a new Twilio number
+      const { createTwilioService } = await import('@kit/shared/twilio/server');
+      const twilioService = createTwilioService();
+
+      const availableNumbers = await twilioService.searchAvailableNumbers('US', 'Local', {
+        voiceEnabled: true,
+        limit: 1,
+      });
+
+      if (!availableNumbers || availableNumbers.length === 0) {
+        throw new Error('No phone numbers available for purchase. Please try again later.');
+      }
+
+      const purchased = await twilioService.purchaseNumber({
+        phoneNumber: availableNumbers[0]!.phoneNumber,
+        friendlyName: `Parlae - ${businessName}`,
+      });
+
+      if (!purchased) {
+        throw new Error('Failed to purchase phone number');
+      }
+
+      const newPhoneNumber = purchased.phoneNumber;
+      logger.info(
+        { newPhoneNumber, accountId: account.id },
+        '[Receptionist] Purchased new phone number'
+      );
+
+      // Import new number to Vapi and link to squad
+      const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID!;
+      const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN!;
+
+      // Check if number already exists in Vapi
+      const vapiPhoneNumbers = await vapiService.listPhoneNumbers();
+      const existingVapiPhone = vapiPhoneNumbers.find(
+        (p: any) => p.number === newPhoneNumber
+      );
+
+      let vapiPhone;
+
+      if (existingVapiPhone) {
+        vapiPhone = await vapiService.updatePhoneNumber(
+          existingVapiPhone.id,
+          settings.vapiSquadId,
+          true
+        );
+      } else {
+        vapiPhone = await vapiService.importPhoneNumber(
+          newPhoneNumber,
+          twilioAccountSid,
+          twilioAuthToken,
+          settings.vapiSquadId,
+          true
+        );
+      }
+
+      if (!vapiPhone) {
+        throw new Error('Failed to import phone number to Vapi');
+      }
+
+      // Unlink old number from Vapi squad (optional cleanup)
+      if (settings.vapiPhoneId && settings.vapiPhoneId !== vapiPhone.id) {
+        try {
+          await vapiService.updatePhoneNumber(settings.vapiPhoneId, null, false);
+        } catch {
+          logger.warn('[Receptionist] Could not unlink old Vapi phone number');
+        }
+      }
+
+      // Update account settings
+      await prisma.account.update({
+        where: { id: account.id },
+        data: {
+          phoneIntegrationSettings: {
+            ...settings,
+            vapiPhoneId: vapiPhone.id,
+            phoneNumber: newPhoneNumber,
+          },
+        },
+      });
+
+      logger.info(
+        { accountId: account.id, oldPhone: settings.phoneNumber, newPhone: newPhoneNumber },
+        '[Receptionist] Phone number changed successfully'
+      );
+
+      return {
+        success: true,
+        phoneNumber: newPhoneNumber,
+      };
+    } catch (error) {
+      logger.error(
+        { error, userId: user.id },
+        '[Receptionist] Failed to change phone number'
+      );
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to change phone number',
+      };
+    }
+  },
+  {
+    auth: true,
+    schema: ChangePhoneNumberSchema,
   }
 );

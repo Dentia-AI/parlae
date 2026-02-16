@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         isPersonalAccount: true,
       },
       select: {
+        id: true,
         googleCalendarConnected: true,
         googleCalendarEmail: true,
         setupProgress: true,
@@ -31,16 +32,39 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    // Check PMS from setupProgress
+    // Check PMS from setupProgress (legacy) AND from PmsIntegration model
     const progress = (account.setupProgress as Record<string, any>) ?? {};
-    const pmsConnected = !!progress.pmsProvider || !!progress.pmsConnected;
-    const pmsProvider = progress.pmsProvider as string | undefined;
+    let pmsConnected = !!progress.pmsProvider || !!progress.pmsConnected;
+    let pmsProvider = progress.pmsProvider as string | undefined;
+    let pmsStatus: string | undefined;
+
+    // Also check the PmsIntegration table (the real source of truth)
+    try {
+      const pmsIntegration = await prisma.pmsIntegration.findFirst({
+        where: { accountId: account.id },
+        select: {
+          provider: true,
+          providerName: true,
+          status: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (pmsIntegration) {
+        pmsConnected = true;
+        pmsProvider = pmsIntegration.providerName || pmsIntegration.provider;
+        pmsStatus = pmsIntegration.status;
+      }
+    } catch {
+      // PmsIntegration table may not exist yet
+    }
 
     return NextResponse.json({
       googleCalendar: account.googleCalendarConnected,
       googleCalendarEmail: account.googleCalendarEmail,
       pms: pmsConnected,
       pmsProvider: pmsProvider,
+      pmsStatus: pmsStatus,
     });
   } catch (error) {
     console.error('Error fetching integration status:', error);
