@@ -205,8 +205,10 @@ export const deployReceptionistAction = enhanceAction(
         clinicServices: setupProgress.servicesOffered,
       };
 
-      // Determine the clinic's original phone number for emergency transfers
+      // Determine the phone number for emergency human transfers.
+      // Prefer the staff direct line (no forwarding loop risk), fall back to clinic number.
       const clinicOriginalNumber =
+        phoneIntegrationSettings?.staffDirectNumber ||
         phoneIntegrationSettings?.clinicNumber ||
         account.brandingContactPhone ||
         undefined;

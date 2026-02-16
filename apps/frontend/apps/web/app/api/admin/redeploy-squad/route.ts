@@ -107,8 +107,10 @@ export async function POST(request: NextRequest) {
       clinicServices: setupProgress.servicesOffered,
     };
 
-    // Determine clinic's original phone number for emergency human transfers
+    // Determine the phone number for emergency human transfers.
+    // Prefer the staff direct line (no forwarding loop risk), fall back to clinic number.
     const clinicOriginalNumber =
+      phoneIntegrationSettings.staffDirectNumber ||
       phoneIntegrationSettings.clinicNumber ||
       account.brandingContactPhone ||
       undefined;

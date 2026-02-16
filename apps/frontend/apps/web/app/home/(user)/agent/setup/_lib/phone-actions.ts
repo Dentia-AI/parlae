@@ -18,6 +18,7 @@ const SetupPortedNumberSchema = z.object({
 const SetupForwardedNumberSchema = z.object({
   accountId: z.string(),
   clinicNumber: z.string(),
+  staffDirectNumber: z.string().optional(),
   businessName: z.string(),
 });
 
@@ -115,7 +116,8 @@ export const setupForwardedNumberAction = enhanceAction(
           phoneIntegrationSettings: {
             businessName: data.businessName,
             clinicNumber: data.clinicNumber,
-            needsPhoneNumber: true, // Flag that we need to purchase a number during deployment
+            staffDirectNumber: data.staffDirectNumber || null,
+            needsPhoneNumber: true,
             configuredAt: new Date().toISOString(),
           },
         },
