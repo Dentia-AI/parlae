@@ -35,6 +35,8 @@ export interface RuntimeConfig {
   webhookUrl: string;
   webhookSecret?: string;
   knowledgeFileIds?: string[];
+  /** Clinic's original phone number for emergency human transfers (E.164 format) */
+  clinicPhoneNumber?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,22 @@ function buildMemberPayload(
     ...resolveToolGroup(a.toolGroup),
     ...(a.extraTools ?? []),
   ];
+
+  // Inject transferCall tool for Emergency Transfer when clinic phone is available
+  if (a.name === 'Emergency Transfer' && runtime.clinicPhoneNumber) {
+    tools.push({
+      type: 'transferCall',
+      destinations: [
+        {
+          type: 'number',
+          number: runtime.clinicPhoneNumber,
+          message: 'Transferring to the clinic for immediate assistance.',
+          description:
+            'Transfer to the clinic front desk for any emergency or urgent matter that needs human attention',
+        },
+      ],
+    });
+  }
 
   // Build model config
   const modelConfig: Record<string, unknown> = {

@@ -205,11 +205,18 @@ export const deployReceptionistAction = enhanceAction(
         clinicServices: setupProgress.servicesOffered,
       };
 
+      // Determine the clinic's original phone number for emergency transfers
+      const clinicOriginalNumber =
+        phoneIntegrationSettings?.clinicNumber ||
+        account.brandingContactPhone ||
+        undefined;
+
       const webhookBaseUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || 'https://app.parlae.ca';
       const runtimeConfig: RuntimeConfig = {
         webhookUrl: `${webhookBaseUrl}/api/vapi/webhook`,
         webhookSecret: process.env.VAPI_SERVER_SECRET,
         knowledgeFileIds,
+        clinicPhoneNumber: clinicOriginalNumber,
       };
 
       // STEP 4: Build the squad from template
