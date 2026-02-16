@@ -8,8 +8,10 @@ import { getLogger } from '@kit/shared/logger';
 export interface VapiAssistantConfig {
   name: string;
   voice: {
-    provider: '11labs' | 'playht' | 'azure' | 'deepgram' | 'openai' | 'cartesia' | 'rime-ai';
+    provider: '11labs' | 'elevenlabs' | 'playht' | 'azure' | 'deepgram' | 'openai' | 'cartesia' | 'rime-ai';
     voiceId: string;
+    stability?: number;
+    similarityBoost?: number;
   };
   model: {
     provider: 'openai' | 'anthropic' | 'groq';
@@ -24,7 +26,7 @@ export interface VapiAssistantConfig {
     };
   };
   firstMessage?: string;
-  firstMessageMode?: 'assistant-speaks-first' | 'assistant-waits-for-user';
+  firstMessageMode?: 'assistant-speaks-first' | 'assistant-waits-for-user' | 'assistant-speaks-first-with-model-generated-message';
   tools?: VapiTool[];
   endCallFunctionEnabled?: boolean;
   recordingEnabled?: boolean;
@@ -33,6 +35,15 @@ export interface VapiAssistantConfig {
   analysisSchema?: {
     type: 'object';
     properties: Record<string, any>;
+  };
+  startSpeakingPlan?: {
+    waitSeconds?: number;
+    smartEndpointingPlan?: { provider: string };
+  };
+  stopSpeakingPlan?: {
+    numWords?: number;
+    voiceSeconds?: number;
+    backoffSeconds?: number;
   };
 }
 
@@ -379,7 +390,7 @@ class VapiService {
           knowledgeBase: config.model.knowledgeBase,
         }),
       },
-      ...(config.firstMessage && { firstMessage: config.firstMessage }),
+      ...(config.firstMessage !== undefined && { firstMessage: config.firstMessage }),
       ...(config.firstMessageMode && { firstMessageMode: config.firstMessageMode }),
       ...(config.tools && { tools: config.tools }),
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
@@ -389,6 +400,8 @@ class VapiService {
         serverUrlSecret: config.serverUrlSecret,
       }),
       ...(config.analysisSchema && { analysisSchema: config.analysisSchema }),
+      ...(config.startSpeakingPlan && { startSpeakingPlan: config.startSpeakingPlan }),
+      ...(config.stopSpeakingPlan && { stopSpeakingPlan: config.stopSpeakingPlan }),
     };
   }
 

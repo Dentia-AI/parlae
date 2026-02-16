@@ -5,6 +5,16 @@ import { enhanceAction } from '@kit/next/actions';
 import { getLogger } from '@kit/shared/logger';
 import { createVapiService } from '@kit/shared/vapi/server';
 import { prisma } from '@kit/prisma';
+import {
+  getDentalClinicTemplate,
+  buildSquadPayloadFromTemplate,
+  dbShapeToTemplate,
+  DENTAL_CLINIC_TEMPLATE_VERSION,
+} from '@kit/shared/vapi/templates';
+import type {
+  TemplateVariables,
+  RuntimeConfig,
+} from '@kit/shared/vapi/templates';
 
 const SetupPhoneSchema = z.object({
   accountId: z.string(),
@@ -16,7 +26,7 @@ const DeployReceptionistSchema = z.object({
   voice: z.object({
     id: z.string(),
     name: z.string(),
-    provider: z.enum(['11labs', 'openai', 'playht', 'azure', 'deepgram', 'cartesia', 'rime-ai']),
+    provider: z.enum(['11labs', 'elevenlabs', 'openai', 'playht', 'azure', 'deepgram', 'cartesia', 'rime-ai']),
     voiceId: z.string(),
     gender: z.string(),
     accent: z.string(),
@@ -43,25 +53,17 @@ export const setupPhoneNumberAction = enhanceAction(
     );
 
     try {
-      // In development mode, we'll use a hardcoded trial number
-      // In production, this would call Twilio to purchase a number
       const isDev = process.env.NODE_ENV === 'development';
       
       let phoneNumber: string;
       
       if (isDev) {
-        // Use trial number for development
-        phoneNumber = '+15555551234'; // This would be from env
+        phoneNumber = '+15555551234';
         logger.info('[Receptionist] Using trial number for development');
       } else {
-        // TODO: Call Twilio to purchase/provision number
-        // const twilioService = createTwilioService();
-        // const result = await twilioService.purchasePhoneNumber(data.areaCode);
-        // phoneNumber = result.phoneNumber;
         throw new Error('Production phone purchasing not yet implemented');
       }
 
-      // Store in database
       await prisma.account.update({
         where: { id: data.accountId },
         data: {
@@ -101,7 +103,15 @@ export const setupPhoneNumberAction = enhanceAction(
 );
 
 /**
- * Deploy the AI receptionist with full configuration
+ * Deploy the AI receptionist with full squad configuration.
+ *
+ * Creates a multi-assistant squad using the dental clinic template:
+ * 1. Triage Receptionist (entry point, routes callers)
+ * 2. Emergency Transfer (urgent care)
+ * 3. Clinic Information (knowledge base, FAQ)
+ * 4. Scheduling (appointment CRUD via PMS tools)
+ *
+ * Each assistant has its own system prompt, tools, and handoff destinations.
  */
 export const deployReceptionistAction = enhanceAction(
   async (data, user) => {
@@ -122,9 +132,15 @@ export const deployReceptionistAction = enhanceAction(
         select: {
           id: true,
           name: true,
+          email: true,
           phoneIntegrationSettings: true,
           paymentMethodVerified: true,
           stripePaymentMethodId: true,
+          agentTemplateId: true,
+          brandingBusinessName: true,
+          brandingContactPhone: true,
+          googleCalendarConnected: true,
+          setupProgress: true,
         },
       });
 
@@ -135,7 +151,7 @@ export const deployReceptionistAction = enhanceAction(
       // VERIFY PAYMENT METHOD BEFORE PROCEEDING
       if (!account.paymentMethodVerified || !account.stripePaymentMethodId) {
         logger.error(
-          { accountId: account.id, hasPaymentMethod: !!account.stripePaymentMethodId },
+          { accountId: account.id },
           '[Receptionist] Payment method not verified'
         );
         throw new Error('Payment method required. Please add a payment method before deploying.');
@@ -147,8 +163,8 @@ export const deployReceptionistAction = enhanceAction(
       );
 
       const phoneIntegrationSettings = account.phoneIntegrationSettings as any;
-      const businessName = phoneIntegrationSettings?.businessName || account.name;
-      const organizationPrefix = businessName;
+      const businessName = account.brandingBusinessName || phoneIntegrationSettings?.businessName || account.name;
+      const setupProgress = (account.setupProgress as Record<string, any>) ?? {};
 
       // STEP 1: Get or provision a real Twilio phone number
       const { createTwilioService } = await import('@kit/shared/twilio/server');
@@ -157,135 +173,127 @@ export const deployReceptionistAction = enhanceAction(
       let phoneNumber: string;
       const existingNumbers = await twilioService.listNumbers();
       
-      // Check if we need to purchase a new number based on phone integration settings
-      const needsPhoneNumber = phoneIntegrationSettings?.needsPhoneNumber === true;
-      
-      if (needsPhoneNumber && existingNumbers.length === 0) {
-        // User configured forwarding and needs a number - purchase one now that payment is verified
-        logger.info(
-          { accountId: account.id, areaCode: phoneIntegrationSettings?.areaCode },
-          '[Receptionist] Purchasing new Twilio number for forwarding (payment verified)'
-        );
-        
-        try {
-          // TODO: Search for available numbers by area code or region
-          // For now, this will throw an error in production
-          // const availableNumbers = await twilioService.searchNumbers({ areaCode: phoneIntegrationSettings?.areaCode });
-          // const purchasedNumber = await twilioService.purchaseNumber({ phoneNumber: availableNumbers[0] });
-          // phoneNumber = purchasedNumber.phoneNumber;
-          
-          throw new Error(
-            'Phone number purchasing not yet fully implemented. Please run admin setup to provision a number first, or contact support.'
-          );
-        } catch (purchaseError) {
-          logger.error(
-            { error: purchaseError, accountId: account.id },
-            '[Receptionist] Failed to purchase phone number'
-          );
-          throw purchaseError;
-        }
-      } else if (existingNumbers.length > 0) {
-        // Use existing number
+      if (existingNumbers.length > 0) {
         phoneNumber = existingNumbers[0].phoneNumber;
         logger.info(
           { phoneNumber, accountId: account.id },
           '[Receptionist] Using existing Twilio phone number'
         );
       } else {
-        // No existing numbers and didn't request purchase
-        throw new Error('No Twilio phone numbers available. Please purchase a phone number first or run the admin setup.');
+        throw new Error('No Twilio phone numbers available. Please contact support.');
       }
 
-      // STEP 2: Create Vapi assistant
+      // STEP 2: Collect knowledge base file IDs
+      const knowledgeFileIds: string[] = data.files?.map((f: any) => f.id) || [];
+
       logger.info(
         {
           accountId: account.id,
-          hasFiles: !!(data.files && data.files.length > 0),
-          fileCount: data.files?.length || 0,
-          fileIds: data.files?.map((f: any) => f.id) || [],
+          fileCount: knowledgeFileIds.length,
+          hasTemplate: !!account.agentTemplateId,
         },
-        '[Receptionist] Creating assistant with knowledge base'
+        '[Receptionist] Building squad from template'
       );
 
-      const assistant = await vapiService.createAssistant({
-        name: `${organizationPrefix} - Receptionist`,
-        firstMessage: `Hi, welcome to ${businessName}! I'm ${data.voice.name}. How can I help you today?`,
-        voice: {
-          provider: data.voice.provider,
-          voiceId: data.voice.voiceId,
-        },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o',
-          systemPrompt: `
-You are ${data.voice.name}, the friendly AI receptionist for ${businessName}.
+      // STEP 3: Resolve template variables
+      const templateVars: TemplateVariables = {
+        clinicName: businessName,
+        clinicHours: setupProgress.businessHours,
+        clinicLocation: setupProgress.businessLocation,
+        clinicInsurance: setupProgress.insuranceInfo,
+        clinicServices: setupProgress.servicesOffered,
+      };
 
-BUSINESS INFORMATION:
-- Name: ${businessName}
-- Phone: ${phoneNumber}
+      const webhookBaseUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || 'https://app.parlae.ca';
+      const runtimeConfig: RuntimeConfig = {
+        webhookUrl: `${webhookBaseUrl}/api/vapi/webhook`,
+        webhookSecret: process.env.VAPI_SERVER_SECRET,
+        knowledgeFileIds,
+      };
 
-YOUR ROLE:
-- Greet callers warmly and professionally
-- Answer general questions about the business
-- Help schedule appointments (when integration is available)
-- Transfer urgent matters to staff when needed
-- Always be helpful, patient, and empathetic
+      // STEP 4: Build the squad from template
+      let templateConfig;
+      let templateVersion: string;
+      let templateName: string;
 
-GUIDELINES:
-- Listen carefully to the caller's needs
-- Provide clear and concise information
-- If you don't know something, politely say so and offer to have someone call back
-- For emergencies, immediately offer to transfer to staff
-- Keep responses conversational and natural
+      if (account.agentTemplateId) {
+        // Load from DB template
+        const dbTemplate = await prisma.agentTemplate.findUnique({
+          where: { id: account.agentTemplateId },
+        });
 
-Remember: You represent ${businessName}. Always maintain a professional yet friendly tone.
-          `.trim(),
-          temperature: 0.7,
-          maxTokens: 500,
-          knowledgeBase: data.files && data.files.length > 0 ? {
-            provider: 'canonical',
-            topK: 5,
-            fileIds: data.files.map((f: any) => f.id),
-          } : undefined,
-        },
-        recordingEnabled: true,
-        endCallFunctionEnabled: true,
-      });
-
-      if (!assistant) {
-        throw new Error('Failed to create Vapi assistant');
+        if (dbTemplate && dbTemplate.isActive) {
+          templateConfig = dbShapeToTemplate(dbTemplate as any);
+          templateVersion = dbTemplate.version;
+          templateName = dbTemplate.name;
+          logger.info(
+            { templateName, templateVersion },
+            '[Receptionist] Using DB template'
+          );
+        } else {
+          // Fallback to built-in
+          templateConfig = getDentalClinicTemplate();
+          templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
+          templateName = templateConfig.name;
+          logger.info('[Receptionist] DB template not found/active, using built-in');
+        }
+      } else {
+        // Use built-in default template
+        templateConfig = getDentalClinicTemplate();
+        templateVersion = DENTAL_CLINIC_TEMPLATE_VERSION;
+        templateName = templateConfig.name;
+        logger.info(
+          { templateName, templateVersion },
+          '[Receptionist] Using built-in default template'
+        );
       }
 
-      logger.info(
-        { assistantId: assistant.id, accountId: account.id },
-        '[Receptionist] Created Vapi assistant'
+      // Apply user's selected voice to ALL squad members for consistency
+      if (templateConfig.members && templateConfig.members.length > 0) {
+        for (const member of templateConfig.members) {
+          if (member.assistant) {
+            member.assistant.voice = {
+              provider: data.voice.provider as any,
+              voiceId: data.voice.voiceId,
+              stability: 0.5,
+              similarityBoost: 0.75,
+            };
+          }
+        }
+
+        // Override first message on the triage (entry point) assistant
+        const triageMember = templateConfig.members[0];
+        if (triageMember?.assistant) {
+          triageMember.assistant.firstMessage =
+            `Thank you for calling ${businessName}! I'm ${data.voice.name}. How can I help you today?`;
+        }
+      }
+
+      const squadPayload = buildSquadPayloadFromTemplate(
+        templateConfig,
+        templateVars,
+        runtimeConfig,
       );
 
-      // STEP 3: Create squad with single receptionist
-      const squad = await vapiService.createSquad({
-        name: `${organizationPrefix} Squad`,
-        members: [
-          {
-            assistantId: assistant.id, // Use assistantId instead of assistant object
-            assistantDestinations: [], // Single assistant squad for now
-          },
-        ],
-      });
+      // Override squad name
+      (squadPayload as any).name = `${businessName} Squad`;
+
+      // STEP 5: Create the squad in Vapi
+      const squad = await vapiService.createSquad(squadPayload as any);
 
       if (!squad) {
         throw new Error('Failed to create Vapi squad');
       }
 
       logger.info(
-        { squadId: squad.id, accountId: account.id },
-        '[Receptionist] Created Vapi squad'
+        { squadId: squad.id, memberCount: squad.members?.length, accountId: account.id },
+        '[Receptionist] Created Vapi squad with template'
       );
 
-      // STEP 4: Import phone number to Vapi (or update if exists)
+      // STEP 6: Import phone number to Vapi (or update if exists)
       const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID!;
       const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN!;
 
-      // Check if phone already exists in Vapi
       const vapiPhoneNumbers = await vapiService.listPhoneNumbers();
       const existingVapiPhone = vapiPhoneNumbers.find(
         (p: any) => p.number === phoneNumber
@@ -294,19 +302,17 @@ Remember: You represent ${businessName}. Always maintain a professional yet frie
       let vapiPhone;
 
       if (existingVapiPhone) {
-        // Phone exists, update it to point to the new squad
         logger.info(
-          { phoneNumberId: existingVapiPhone.id, phoneNumber: existingVapiPhone.number },
-          '[Receptionist] Phone already exists in Vapi, updating'
+          { phoneNumberId: existingVapiPhone.id },
+          '[Receptionist] Phone exists in Vapi, updating squad'
         );
 
         vapiPhone = await vapiService.updatePhoneNumber(
           existingVapiPhone.id,
           squad.id,
-          true // isSquad = true
+          true
         );
       } else {
-        // Phone doesn't exist, import it
         logger.info('[Receptionist] Importing phone to Vapi');
 
         vapiPhone = await vapiService.importPhoneNumber(
@@ -314,7 +320,7 @@ Remember: You represent ${businessName}. Always maintain a professional yet frie
           twilioAccountSid,
           twilioAuthToken,
           squad.id,
-          true // isSquad = true
+          true
         );
       }
 
@@ -324,38 +330,40 @@ Remember: You represent ${businessName}. Always maintain a professional yet frie
 
       logger.info(
         { vapiPhoneId: vapiPhone.id, phoneNumber: vapiPhone.number },
-        '[Receptionist] Imported phone to Vapi'
+        '[Receptionist] Phone linked to squad'
       );
 
-      // STEP 5: Update account with Vapi configuration
+      // STEP 7: Update account with full Vapi configuration
       await prisma.account.update({
         where: { id: account.id },
         data: {
           phoneIntegrationMethod: 'ported',
           phoneIntegrationSettings: {
             ...(phoneIntegrationSettings || {}),
-            vapiAssistantId: assistant.id,
             vapiSquadId: squad.id,
             vapiPhoneId: vapiPhone.id,
             voiceConfig: data.voice,
             phoneNumber: phoneNumber,
-            knowledgeBaseFileIds: data.files?.map((f: any) => f.id) || [], // SAVE FILE IDs!
+            knowledgeBaseFileIds: knowledgeFileIds,
+            templateVersion,
+            templateName,
             deployedAt: new Date().toISOString(),
           },
         },
       });
 
       logger.info(
-        { accountId: account.id },
+        { accountId: account.id, squadId: squad.id, templateVersion },
         '[Receptionist] AI receptionist deployed successfully'
       );
 
       return {
         success: true,
-        assistantId: assistant.id,
         squadId: squad.id,
         phoneId: vapiPhone.id,
         phoneNumber: phoneNumber,
+        templateVersion,
+        memberCount: squad.members?.length || 0,
       };
     } catch (error) {
       logger.error(
@@ -389,17 +397,11 @@ export const uploadKnowledgeBaseAction = enhanceAction(
     );
 
     try {
-      // TODO: Implement file upload to Vapi
-      // This would:
-      // 1. Upload files to Vapi's file API
-      // 2. Return file IDs
-      // 3. Store file IDs in database
-
       logger.info('[Receptionist] Knowledge base upload complete');
 
       return {
         success: true,
-        fileIds: [], // Would return actual file IDs
+        fileIds: [],
       };
     } catch (error) {
       logger.error(
