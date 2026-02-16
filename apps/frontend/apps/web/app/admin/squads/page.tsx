@@ -26,6 +26,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
+import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 interface SquadMember {
   assistantId: string;
@@ -75,6 +76,7 @@ export default function AdminSquadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const csrfToken = useCsrfToken();
 
   const fetchSquads = useCallback(async () => {
     setLoading(true);
@@ -118,7 +120,11 @@ export default function AdminSquadsPage() {
     try {
       const res = await fetch('/api/admin/squads', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
         body: JSON.stringify({ squadId, deleteAssistants }),
       });
 
@@ -143,7 +149,11 @@ export default function AdminSquadsPage() {
     try {
       const res = await fetch('/api/admin/squads', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
         body: JSON.stringify({ squadId: null, assistantIds: [assistantId] }),
       });
 
@@ -170,7 +180,11 @@ export default function AdminSquadsPage() {
     try {
       const res = await fetch('/api/admin/redeploy-squad', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
         body: JSON.stringify({ accountId, deleteOldSquad: true }),
       });
 
