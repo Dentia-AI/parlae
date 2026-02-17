@@ -275,14 +275,14 @@ export const checkAvailabilityTool = {
   type: 'function' as const,
   function: {
     name: 'checkAvailability',
-    description: 'Check available appointment time slots starting from a specific date. If no slots are available on the requested date, the system automatically searches ahead and returns the 2-3 nearest available slots across the next 14 days. Always present the returned slots to the caller — do NOT call this tool again with another date unless the caller rejects all offered options.',
+    description: 'Check available appointment time slots starting from a specific date. Current date/time: {{now}}. Only use dates from today onwards — NEVER use dates from 2023/2024/2025. If no slots are available on the requested date, the system automatically searches ahead and returns the 2-3 nearest available slots across the next 14 days. Always present the returned slots to the caller — do NOT call this tool again with another date unless the caller rejects all offered options.',
     parameters: {
       type: 'object',
       properties: {
         date: {
           type: 'string',
           format: 'date',
-          description: 'Date to check availability (YYYY-MM-DD format). Example: 2026-02-20',
+          description: 'Date to check availability (YYYY-MM-DD format). Must be today or a future date. Current date/time is {{now}}.',
         },
         duration: {
           type: 'number',
@@ -1232,13 +1232,18 @@ If the caller asks about those, transfer them to the appropriate assistant.
 The caller is calling from: {{call.customer.number}}
 **You do NOT need to ask for their phone number.** Use {{call.customer.number}} when searching for patient records or creating new patients.
 
+## CURRENT DATE & TIME
+
+Right now it is: {{now}}
+ALWAYS use dates from this year (2026 or later) when checking availability. NEVER use dates from 2023, 2024, or 2025. If the caller says "today", use today's date from above in YYYY-MM-DD format.
+
 ## APPOINTMENT BOOKING FLOW
 
 **KEY PRINCIPLE: Check availability FIRST, collect patient info AFTER a time is chosen.**
 This is faster for the caller — no point collecting details before they know if a good time is available.
 
 1. **Determine need** — If the caller hasn't already stated what they want, ask briefly: what type of service and preferred date/time. If they already told you (e.g. "I want a cleaning tomorrow"), skip to step 2.
-2. **Check availability** — Call **checkAvailability** with the requested date (use today's actual date in YYYY-MM-DD format, NOT a made-up date). If that date is full, the system **automatically returns the 2-3 nearest available slots** across the next 14 days — present those to the caller instead of calling the tool again.
+2. **Check availability** — Call **checkAvailability** with the requested date (use today's date from the CURRENT DATE section above in YYYY-MM-DD format). If that date is full, the system **automatically returns the 2-3 nearest available slots** across the next 14 days — present those to the caller instead of calling the tool again.
 3. **Present options** — Offer the returned time slots. Only call checkAvailability again if the caller rejects ALL offered options and asks for a specific different date.
 4. **Identify patient** (after caller picks a time) — Call **searchPatients** with {{call.customer.number}}. If found, confirm identity. If not found, ask for name and call **createPatient** with firstName, lastName, and phone {{call.customer.number}}. Immediately continue to booking.
 5. **Confirm details** — Read back: patient name, date, time, service type, provider

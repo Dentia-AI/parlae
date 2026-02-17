@@ -233,28 +233,39 @@ export class VapiWebhookController {
 
     try {
       const result = await handler(toolPayload);
+      const resultStr =
+        typeof result === 'string' ? result : JSON.stringify(result);
+
+      this.logger.log(
+        `[Vapi Tool Response] ${toolName} | ${resultStr.slice(0, 500)}`,
+      );
+
       return {
         results: [
           {
             toolCallId,
-            result:
-              typeof result === 'string' ? result : JSON.stringify(result),
+            result: resultStr,
           },
         ],
       };
     } catch (error) {
       const errMsg =
         error instanceof Error ? error.message : 'Tool execution failed';
-      this.logger.error(`Tool ${toolName} failed: ${errMsg}`);
+      const errorResult = JSON.stringify({
+        error: errMsg,
+        message:
+          "I'm having trouble with that right now. Let me take your information and someone will follow up.",
+      });
+
+      this.logger.error(
+        `[Vapi Tool Response] ${toolName} ERROR | ${errorResult.slice(0, 500)}`,
+      );
+
       return {
         results: [
           {
             toolCallId,
-            result: JSON.stringify({
-              error: errMsg,
-              message:
-                "I'm having trouble with that right now. Let me take your information and someone will follow up.",
-            }),
+            result: errorResult,
           },
         ],
       };
