@@ -188,16 +188,17 @@ export async function GET(request: NextRequest) {
 
           if (queryResult.name === 'callMetrics' && queryResult.result?.length > 0) {
             const metrics = queryResult.result[0];
-            totalCalls = metrics.totalCalls || 0;
-            avgDurationSeconds = Math.round(metrics.avgDuration || 0);
-            totalCost = Math.round((metrics.totalCost || 0) * 100) / 100;
+            // Vapi analytics returns strings — coerce to numbers
+            totalCalls = Number(metrics.totalCalls) || 0;
+            avgDurationSeconds = Math.round(Number(metrics.avgDuration) || 0);
+            totalCost = Math.round((Number(metrics.totalCost) || 0) * 100) / 100;
             console.log('[Analytics] callMetrics:', { totalCalls, avgDurationSeconds, totalCost });
           }
 
           if (queryResult.name === 'dailyTrend' && queryResult.result?.length > 0) {
             activityTrend = queryResult.result.map((row: any) => ({
               date: (row.date || row.timestamp || '').toString().slice(0, 10),
-              count: row.count || 0,
+              count: Number(row.count) || 0,
             })).filter((r: any) => r.date);
             console.log('[Analytics] dailyTrend entries:', activityTrend.length, 'sample:', activityTrend.slice(0, 3));
           }
