@@ -214,16 +214,72 @@ export class VapiToolsService {
       
       const slots = result.data || [];
 
+      if (slots.length > 0) {
+        return {
+          result: {
+            success: true,
+            availableSlots: slots.map((slot) => ({
+              date: params.date,
+              time: slot.startTime,
+              provider: slot.providerName,
+            })),
+            message: `We have ${slots.length} available slot(s) on ${params.date}. Which time works best for you?`,
+          },
+        };
+      }
+
+      // No slots on the requested date — try the next several days via PMS
+      this.logger.log({
+        date: params.date,
+        msg: '[PMS] No slots on requested date, scanning next days',
+      });
+
+      const nearestSlots: Array<{ date: string; time: string; provider?: string }> = [];
+
+      for (let dayOffset = 1; dayOffset <= 14 && nearestSlots.length < 3; dayOffset++) {
+        const nextDate = new Date(`${params.date}T00:00:00`);
+        nextDate.setDate(nextDate.getDate() + dayOffset);
+        const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+        try {
+          const nextResult = await sikkaService.checkAvailability({
+            date: nextDateStr,
+            appointmentType: params.appointmentType || params.type,
+            duration: params.duration || 30,
+            providerId: params.providerId,
+          });
+
+          if (nextResult.success && nextResult.data && nextResult.data.length > 0) {
+            nearestSlots.push({
+              date: nextDateStr,
+              time: nextResult.data[0].startTime.toISOString(),
+              provider: nextResult.data[0].providerName,
+            });
+          }
+        } catch {
+          // Skip failed day and continue
+        }
+      }
+
+      if (nearestSlots.length > 0) {
+        return {
+          result: {
+            success: true,
+            requestedDate: params.date,
+            requestedDateAvailable: false,
+            availableSlots: nearestSlots,
+            message: `Unfortunately ${params.date} is fully booked. The nearest available times are: ${nearestSlots.map((s) => `${s.date} at ${s.time}`).join(', ')}. Would any of those work?`,
+          },
+        };
+      }
+
       return {
         result: {
           success: true,
-          availableSlots: slots.map((slot) => ({
-            time: slot.startTime,
-            provider: slot.providerName,
-          })),
-          message: slots.length > 0 
-            ? `We have ${slots.length} available slots on ${params.date}`
-            : `No availability on ${params.date}. Let me check other dates.`,
+          requestedDate: params.date,
+          requestedDateAvailable: false,
+          availableSlots: [],
+          message: `We don't have any availability in the next two weeks. Would you like me to take your information and have someone call you when a slot opens up?`,
         },
       };
     } catch (error) {
@@ -1455,7 +1511,13 @@ export class VapiToolsService {
   }
 
   /**
-   * Fallback: Check availability via Google Calendar free/busy
+   * Fallback: Check availability via Google Calendar free/busy.
+   *
+   * Strategy:
+   * 1. Check the requested date first.
+   * 2. If no slots on that date, automatically scan ahead up to 14 days
+   *    and return the 2-3 earliest available slots across those days.
+   * This ensures the AI always has concrete options to offer the caller.
    */
   private async checkAvailabilityViaGoogleCalendar(
     phoneRecord: any,
@@ -1473,41 +1535,99 @@ export class VapiToolsService {
 
     this.logger.log({
       accountId,
-      msg: '[GCal Fallback] Checking availability via Google Calendar',
+      msg: '[GCal] Checking availability via Google Calendar',
     });
 
     try {
       const date = params.date; // Expected: YYYY-MM-DD
       const duration = params.duration || 30;
 
-      const result = await this.googleCalendar.checkFreeBusy(
+      // First, check the specific requested date
+      const dayResult = await this.googleCalendar.checkFreeBusy(
         accountId,
         date,
         duration,
       );
 
-      if (!result.success) {
+      if (!dayResult.success) {
         throw new Error('Failed to check calendar availability');
       }
 
-      const slots = result.availableSlots || [];
+      const daySlots = dayResult.availableSlots || [];
 
+      if (daySlots.length > 0) {
+        // Slots found on the requested date — return them
+        return {
+          result: {
+            success: true,
+            integrationType: 'google_calendar',
+            requestedDate: date,
+            availableSlots: daySlots.map((slot) => ({
+              date,
+              time: slot.startTime,
+              endTime: slot.endTime,
+            })),
+            message: `We have ${daySlots.length} available time window(s) on ${date}. Which time works best for you?`,
+          },
+        };
+      }
+
+      // No slots on the requested date — scan ahead to find nearest openings
+      this.logger.log({
+        accountId,
+        date,
+        msg: '[GCal] No slots on requested date, scanning next 14 days',
+      });
+
+      const nextDay = new Date(`${date}T00:00:00`);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = nextDay.toISOString().slice(0, 10);
+
+      const multiResult = await this.googleCalendar.findNextAvailableSlots(
+        accountId,
+        nextDayStr,
+        duration,
+        3,  // find 3 options
+        14, // look up to 14 days ahead
+      );
+
+      const nextSlots = multiResult.slots || [];
+
+      if (nextSlots.length > 0) {
+        const slotDescriptions = nextSlots.map((s) => {
+          const d = new Date(s.startTime);
+          return `${s.date} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+        });
+
+        return {
+          result: {
+            success: true,
+            integrationType: 'google_calendar',
+            requestedDate: date,
+            requestedDateAvailable: false,
+            availableSlots: nextSlots.map((slot) => ({
+              date: slot.date,
+              time: slot.startTime,
+              endTime: slot.endTime,
+            })),
+            message: `Unfortunately ${date} is fully booked. The next available times are: ${slotDescriptions.join(', ')}. Would any of those work for you?`,
+          },
+        };
+      }
+
+      // No slots found at all in the next 14 days
       return {
         result: {
           success: true,
           integrationType: 'google_calendar',
-          availableSlots: slots.map((slot) => ({
-            time: slot.startTime,
-            endTime: slot.endTime,
-          })),
-          message:
-            slots.length > 0
-              ? `We have ${slots.length} available time window(s) on ${date}.`
-              : `No availability on ${date}. Let me check other dates.`,
+          requestedDate: date,
+          requestedDateAvailable: false,
+          availableSlots: [],
+          message: `We don't have any availability in the next two weeks. Would you like me to take your information and have someone call you when a slot opens up?`,
         },
       };
     } catch (error) {
-      this.logger.error({ accountId, error, msg: '[GCal Fallback] Failed to check availability' });
+      this.logger.error({ accountId, error, msg: '[GCal] Failed to check availability' });
       return {
         error: 'Availability check failed',
         message: "Let me transfer you to our scheduling team.",

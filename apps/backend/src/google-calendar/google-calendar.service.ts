@@ -578,6 +578,68 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Find the next available appointment slots across multiple days.
+   * Starts from `startDate` and scans up to `maxDaysToSearch` days forward,
+   * returning as soon as `targetSlots` discrete slots are found.
+   *
+   * Each "slot" is the earliest available window on a given day that fits
+   * the requested duration — giving the caller concrete options like
+   * "Tomorrow at 10am, Wednesday at 2pm, or Friday at 9am".
+   */
+  async findNextAvailableSlots(
+    accountId: string,
+    startDate: string, // YYYY-MM-DD
+    durationMinutes: number = 30,
+    targetSlots: number = 3,
+    maxDaysToSearch: number = 14,
+  ) {
+    const collectedSlots: Array<{
+      date: string;
+      startTime: string;
+      endTime: string;
+    }> = [];
+
+    const current = new Date(`${startDate}T00:00:00`);
+
+    for (let day = 0; day < maxDaysToSearch; day++) {
+      const dateStr = current.toISOString().slice(0, 10);
+
+      try {
+        const result = await this.checkFreeBusy(accountId, dateStr, durationMinutes);
+
+        if (result.success && result.availableSlots.length > 0) {
+          // Take the first available window on this day
+          const firstSlot = result.availableSlots[0];
+          collectedSlots.push({
+            date: dateStr,
+            startTime: firstSlot.startTime,
+            endTime: firstSlot.endTime,
+          });
+
+          if (collectedSlots.length >= targetSlots) break;
+        }
+      } catch {
+        // Skip days that fail (e.g. API rate limit) and continue
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    this.logger.log({
+      accountId,
+      startDate,
+      daysSearched: Math.min(maxDaysToSearch, collectedSlots.length > 0 ? maxDaysToSearch : maxDaysToSearch),
+      slotsFound: collectedSlots.length,
+      msg: 'Multi-day availability search complete',
+    });
+
+    return {
+      success: true,
+      slots: collectedSlots,
+    };
+  }
+
+  /**
    * Check if Google Calendar is connected for a given account
    */
   async isConnectedForAccount(accountId: string): Promise<boolean> {

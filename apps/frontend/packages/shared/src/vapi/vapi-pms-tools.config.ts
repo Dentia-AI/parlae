@@ -275,7 +275,7 @@ export const checkAvailabilityTool = {
   type: 'function' as const,
   function: {
     name: 'checkAvailability',
-    description: 'Check available appointment time slots for a specific date. Use this before booking to show patients what times are open. Returns a list of available time slots with provider information.',
+    description: 'Check available appointment time slots starting from a specific date. If no slots are available on the requested date, the system automatically searches ahead and returns the 2-3 nearest available slots across the next 14 days. Always present the returned slots to the caller — do NOT call this tool again with another date unless the caller rejects all offered options.',
     parameters: {
       type: 'object',
       properties: {
@@ -304,7 +304,7 @@ export const checkAvailabilityTool = {
   server: {
     url: WEBHOOK_URL,
     secret: WEBHOOK_SECRET,
-    timeoutSeconds: 20,
+    timeoutSeconds: 30,
   },
   messages: [
     {
@@ -313,7 +313,7 @@ export const checkAvailabilityTool = {
     },
     {
       type: 'request-response-delayed' as const,
-      content: 'Still checking availability, one moment...',
+      content: "I'm searching for the best available times for you, just a moment...",
     },
     {
       type: 'request-failed' as const,
@@ -1216,7 +1216,7 @@ export const PMS_SYSTEM_PROMPT_ADDITION = `
 You have access to the following scheduling tools (use exact names):
 - **searchPatients** — Find patient by phone, name, or email
 - **createPatient** — Create a new patient record
-- **checkAvailability** — Check available appointment slots
+- **checkAvailability** — Check available slots (auto-finds nearest openings if requested date is full)
 - **bookAppointment** — Book an appointment
 - **rescheduleAppointment** — Change an existing appointment time
 - **cancelAppointment** — Cancel an appointment
@@ -1244,8 +1244,8 @@ The caller's phone number is automatically available from the call metadata.
 
 1. **Auto-identify** — call **searchPatients** with the caller's phone number immediately
 2. **Determine need** — Ask what type of service they need
-3. **Check availability** — Call **checkAvailability** with the requested date (use today's actual date in YYYY-MM-DD format, NOT a made-up date)
-4. **Present options** — Offer 2-3 time slots from results
+3. **Check availability** — Call **checkAvailability** with the requested date (use today's actual date in YYYY-MM-DD format, NOT a made-up date). If that date is full, the system **automatically returns the 2-3 nearest available slots** across the next 14 days — present those to the caller instead of calling the tool again.
+4. **Present options** — Offer the returned time slots. Only call checkAvailability again if the caller rejects ALL offered options and asks for a specific different date.
 5. **Confirm details** — Read back: patient name, date, time, service type, provider
 6. **Book** — Call **bookAppointment** with confirmed details
 7. **Post-booking** — Confirm and add call notes via **addPatientNote**
@@ -1287,7 +1287,7 @@ When running in Google Calendar mode:
 - **searchPatients** will return no results (no patient database) — this is expected
 - **createPatient** will note the patient info and return success — proceed to booking
 - **bookAppointment** will create a Google Calendar event with all patient details in the event notes
-- **checkAvailability** will check the Google Calendar free/busy schedule
+- **checkAvailability** will check the Google Calendar free/busy schedule. If the requested date is full, it automatically scans ahead up to 14 days and returns the 2-3 nearest available slots. Present those options to the caller — do NOT call checkAvailability again unless the caller rejects all options.
 - Always include firstName, lastName, phone, and any notes when calling **bookAppointment** so the details appear in the calendar event
 
 ## ERROR HANDLING
