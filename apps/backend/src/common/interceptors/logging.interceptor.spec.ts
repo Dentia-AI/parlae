@@ -2,6 +2,31 @@ import { ExecutionContext, CallHandler } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { LoggingInterceptor } from './logging.interceptor';
 
+/**
+ * Parse the single-line log message produced by the interceptor.
+ * Format: "[METHOD] /url STATUS DURATIONms | {json}"
+ * Error:  "[METHOD] /url ERROR DURATIONms | {json}"
+ */
+function parseLogMessage(message: string) {
+  const pipeIndex = message.indexOf(' | ');
+  const prefix = pipeIndex >= 0 ? message.slice(0, pipeIndex) : message;
+  const jsonPart = pipeIndex >= 0 ? message.slice(pipeIndex + 3) : '{}';
+
+  const json = JSON.parse(jsonPart);
+  const durationMatch = prefix.match(/(\d+)ms/);
+  const methodMatch = prefix.match(/\[(\w+)\]/);
+  const urlMatch = prefix.match(/\]\s+(\S+)/);
+  const statusMatch = prefix.match(/\]\s+\S+\s+(\d+)\s+\d+ms/);
+
+  return {
+    ...json,
+    method: methodMatch ? methodMatch[1] : undefined,
+    url: urlMatch ? urlMatch[1] : undefined,
+    statusCode: statusMatch ? parseInt(statusMatch[1], 10) : undefined,
+    duration: durationMatch ? `${durationMatch[1]}ms` : undefined,
+  };
+}
+
 describe('LoggingInterceptor', () => {
   let interceptor: LoggingInterceptor;
   let mockExecutionContext: ExecutionContext;
@@ -73,11 +98,11 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         next: () => {
-          const logCall = logSpy.mock.calls[0];
-          const logContext = logCall[1];
-          
-          expect(logContext).toHaveProperty('duration');
-          expect(logContext.duration).toMatch(/\d+ms/);
+          const logMessage = logSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(logMessage);
+
+          expect(parsed.duration).toBeDefined();
+          expect(parsed.duration).toMatch(/\d+ms/);
           done();
         },
       });
@@ -97,9 +122,10 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         next: () => {
-          const logContext = logSpy.mock.calls[0][1];
-          
-          expect(logContext).toMatchObject({
+          const logMessage = logSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(logMessage);
+
+          expect(parsed).toMatchObject({
             method: 'POST',
             url: '/api/users',
             statusCode: 201,
@@ -123,7 +149,7 @@ describe('LoggingInterceptor', () => {
           expect(errorSpy).toHaveBeenCalled();
           expect(errorSpy.mock.calls[0][0]).toContain('[GET]');
           expect(errorSpy.mock.calls[0][0]).toContain('/test');
-          expect(errorSpy.mock.calls[0][0]).toContain('Error');
+          expect(errorSpy.mock.calls[0][0]).toContain('ERROR');
           expect(errorSpy.mock.calls[0][0]).toContain('ms');
           done();
         },
@@ -139,16 +165,17 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         error: () => {
-          const errorContext = errorSpy.mock.calls[0][1];
-          
-          expect(errorContext).toMatchObject({
+          const errorMessage = errorSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(errorMessage);
+
+          expect(parsed).toMatchObject({
             method: 'GET',
             url: '/test',
             error: 'Database connection failed',
             ip: '127.0.0.1',
             userAgent: 'test-agent',
           });
-          expect(errorContext.duration).toMatch(/\d+ms/);
+          expect(parsed.duration).toMatch(/\d+ms/);
           done();
         },
       });
@@ -163,8 +190,9 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         error: () => {
-          const errorContext = errorSpy.mock.calls[0][1];
-          expect(errorContext.error).toBe('string error');
+          const errorMessage = errorSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(errorMessage);
+          expect(parsed.error).toBe('string error');
           done();
         },
       });
@@ -179,8 +207,9 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         next: () => {
-          const logContext = logSpy.mock.calls[0][1];
-          expect(logContext.userAgent).toBe('');
+          const logMessage = logSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(logMessage);
+          expect(parsed.userAgent).toBe('');
           done();
         },
       });
@@ -194,13 +223,14 @@ describe('LoggingInterceptor', () => {
 
       result$.subscribe({
         next: () => {
-          const logContext = logSpy.mock.calls[0][1];
-          const durationMatch = logContext.duration.match(/(\d+)ms/);
-          
+          const logMessage = logSpy.mock.calls[0][0];
+          const parsed = parseLogMessage(logMessage);
+          const durationMatch = parsed.duration.match(/(\d+)ms/);
+
           expect(durationMatch).toBeTruthy();
           const duration = parseInt(durationMatch![1], 10);
           expect(duration).toBeGreaterThanOrEqual(0);
-          expect(duration).toBeLessThan(1000); // Should complete in less than 1 second
+          expect(duration).toBeLessThan(1000);
           done();
         },
       });
@@ -228,7 +258,7 @@ describe('LoggingInterceptor', () => {
       result$.subscribe({
         next: (data) => {
           expect(data).toEqual(testData);
-          expect(data).toBe(testData); // Same reference
+          expect(data).toBe(testData);
           done();
         },
       });
@@ -283,6 +313,21 @@ describe('LoggingInterceptor', () => {
         jest.clearAllMocks();
       });
     });
+
+    it('should skip logging for health check paths', (done) => {
+      mockRequest.url = '/health';
+      mockCallHandler.handle = jest.fn().mockReturnValue(of({ status: 'ok' }));
+      const logSpy = jest.spyOn(interceptor['logger'], 'log');
+
+      const result$ = interceptor.intercept(mockExecutionContext, mockCallHandler);
+
+      result$.subscribe({
+        next: (data) => {
+          expect(data).toEqual({ status: 'ok' });
+          expect(logSpy).not.toHaveBeenCalled();
+          done();
+        },
+      });
+    });
   });
 });
-

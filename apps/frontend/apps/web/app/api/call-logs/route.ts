@@ -114,11 +114,23 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const search = searchParams.get('search');
 
-    // Get account's phone numbers from VapiPhoneNumber
-    const phoneNumbers = await prisma.vapiPhoneNumber.findMany({
+    // Get account's phone numbers from VapiPhoneNumber table
+    let phoneNumbers = await prisma.vapiPhoneNumber.findMany({
       where: { accountId: account.id, isActive: true },
       select: { vapiPhoneId: true },
     });
+
+    // Fallback: if no VapiPhoneNumber records, try phoneIntegrationSettings
+    if (phoneNumbers.length === 0) {
+      const fullAccount = await prisma.account.findUnique({
+        where: { id: account.id },
+        select: { phoneIntegrationSettings: true },
+      });
+      const settings = fullAccount?.phoneIntegrationSettings as any;
+      if (settings?.vapiPhoneId) {
+        phoneNumbers = [{ vapiPhoneId: settings.vapiPhoneId }];
+      }
+    }
 
     if (phoneNumbers.length === 0) {
       return NextResponse.json({

@@ -207,25 +207,56 @@ export interface VapiListCallsParams {
 }
 
 /**
- * Parameters for Vapi analytics query
+ * Parameters for Vapi analytics query.
+ * Matches the full POST /analytics API spec.
  */
 export interface VapiAnalyticsQuery {
   queries: Array<{
-    table: 'call';
+    table: 'call' | 'subscription';
     name: string;
-    operations?: Array<{
-      operation: 'sum' | 'avg' | 'count' | 'min' | 'max';
-      column?: string;
+    operations: Array<{
+      operation: 'sum' | 'avg' | 'count' | 'min' | 'max' | 'history';
+      column: string;
       alias?: string;
     }>;
-    groupBy?: string[];
+    groupBy?: Array<
+      'type' | 'assistantId' | 'endedReason' | 'analysis.successEvaluation' | 'status'
+    >;
+    groupByVariableValue?: Array<{ key: string }>;
     timeRange?: {
       start: string;
       end: string;
-      step?: 'minute' | 'hour' | 'day' | 'week' | 'month';
+      step?: 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
       timezone?: string;
     };
   }>;
+}
+
+/**
+ * Vapi Structured Output — created via POST /structured-output
+ */
+export interface VapiStructuredOutput {
+  id: string;
+  orgId: string;
+  name: string;
+  description?: string;
+  schema: Record<string, any>;
+  assistantIds?: string[];
+  workflowIds?: string[];
+  compliancePlan?: { forceStoreOnHipaaEnabled?: boolean };
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for creating a Vapi Structured Output
+ */
+export interface CreateStructuredOutputParams {
+  name: string;
+  schema: Record<string, any>;
+  description?: string;
+  assistantIds?: string[];
+  compliancePlan?: { forceStoreOnHipaaEnabled?: boolean };
 }
 
 /**
@@ -1492,6 +1523,258 @@ class VapiService {
         error: error instanceof Error ? error.message : error,
       }, '[Vapi] Exception while querying analytics');
 
+      return null;
+    }
+  }
+
+  // ==========================================================================
+  // Structured Output Management
+  //
+  // Standalone structured outputs created via POST /structured-output appear in
+  // the Vapi dashboard Analysis tab and are linked to assistants by ID.
+  // ==========================================================================
+
+  /**
+   * Create a standalone structured output in Vapi.
+   * POST /structured-output
+   */
+  async createStructuredOutput(
+    params: CreateStructuredOutputParams,
+  ): Promise<VapiStructuredOutput | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    try {
+      logger.info({
+        name: params.name,
+        assistantCount: params.assistantIds?.length || 0,
+      }, '[Vapi] Creating structured output');
+
+      const response = await fetch(`${this.baseUrl}/structured-output`, {
+        method: 'POST',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+          name: params.name,
+        }, '[Vapi] Failed to create structured output');
+        return null;
+      }
+
+      const output = await response.json();
+
+      logger.info({
+        structuredOutputId: output.id,
+        name: output.name,
+      }, '[Vapi] Successfully created structured output');
+
+      return output;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while creating structured output');
+
+      return null;
+    }
+  }
+
+  /**
+   * Update a structured output.
+   * PATCH /structured-output/{id}
+   */
+  async updateStructuredOutput(
+    id: string,
+    updates: Partial<CreateStructuredOutputParams>,
+  ): Promise<VapiStructuredOutput | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    try {
+      logger.info({
+        structuredOutputId: id,
+        hasSchemaUpdate: !!updates.schema,
+        assistantCount: updates.assistantIds?.length,
+      }, '[Vapi] Updating structured output');
+
+      const response = await fetch(`${this.baseUrl}/structured-output/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+          id,
+        }, '[Vapi] Failed to update structured output');
+        return null;
+      }
+
+      const output = await response.json();
+
+      logger.info({
+        structuredOutputId: output.id,
+        name: output.name,
+      }, '[Vapi] Successfully updated structured output');
+
+      return output;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+        id,
+      }, '[Vapi] Exception while updating structured output');
+
+      return null;
+    }
+  }
+
+  /**
+   * List all structured outputs in the Vapi account.
+   * GET /structured-output
+   */
+  async listStructuredOutputs(): Promise<VapiStructuredOutput[]> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/structured-output?limit=100`, {
+        method: 'GET',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({
+          status: response.status,
+          error: errorText,
+        }, '[Vapi] Failed to list structured outputs');
+        return [];
+      }
+
+      return await response.json();
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception while listing structured outputs');
+
+      return [];
+    }
+  }
+
+  /**
+   * Ensure the call analysis structured output exists and is linked to the given assistants.
+   *
+   * Idempotent: finds an existing output by name prefix (`parlae-dental-call-analysis`)
+   * or creates a new one. Updates the linked assistantIds if they've changed.
+   *
+   * @param assistantIds - The IDs of assistants in the squad
+   * @param schema - The JSON Schema for call analysis extraction
+   * @param version - Template version for naming (e.g., "v2.3")
+   * @returns The structured output ID, or null on failure
+   */
+  async ensureCallAnalysisOutput(
+    assistantIds: string[],
+    schema: Record<string, any>,
+    version: string = 'v2.3',
+  ): Promise<string | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return null;
+    }
+
+    const namePrefix = 'parlae-dental-call-analysis';
+    const targetName = `${namePrefix}-${version}`;
+
+    try {
+      // Check for existing structured output with matching name prefix
+      const existingOutputs = await this.listStructuredOutputs();
+      const existing = existingOutputs.find(
+        (o) => o.name.startsWith(namePrefix),
+      );
+
+      if (existing) {
+        // Check if assistant IDs need updating
+        const currentIds = new Set(existing.assistantIds || []);
+        const needsUpdate =
+          existing.name !== targetName ||
+          assistantIds.some((id) => !currentIds.has(id));
+
+        if (needsUpdate) {
+          const mergedIds = [...new Set([...(existing.assistantIds || []), ...assistantIds])];
+          const updated = await this.updateStructuredOutput(existing.id, {
+            name: targetName,
+            schema,
+            assistantIds: mergedIds,
+            description: `Extracts call outcomes, patient info, and actions for dental clinic calls (${version})`,
+          });
+
+          if (updated) {
+            logger.info({
+              structuredOutputId: updated.id,
+              assistantCount: mergedIds.length,
+            }, '[Vapi] Updated existing call analysis structured output');
+            return updated.id;
+          }
+        }
+
+        logger.info({
+          structuredOutputId: existing.id,
+        }, '[Vapi] Existing call analysis structured output is up to date');
+        return existing.id;
+      }
+
+      // Create new structured output
+      const created = await this.createStructuredOutput({
+        name: targetName,
+        description: `Extracts call outcomes, patient info, and actions for dental clinic calls (${version})`,
+        schema,
+        assistantIds,
+        compliancePlan: { forceStoreOnHipaaEnabled: false },
+      });
+
+      if (created) {
+        logger.info({
+          structuredOutputId: created.id,
+          assistantCount: assistantIds.length,
+        }, '[Vapi] Created call analysis structured output');
+        return created.id;
+      }
+
+      logger.error('[Vapi] Failed to create call analysis structured output');
+      return null;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+      }, '[Vapi] Exception in ensureCallAnalysisOutput');
       return null;
     }
   }

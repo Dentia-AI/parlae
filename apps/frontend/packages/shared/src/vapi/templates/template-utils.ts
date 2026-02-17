@@ -401,24 +401,18 @@ You are multilingual. Detect the language the caller is speaking and respond in 
     assistantPayload.tools = inlineTools;
   }
 
-  // Add analysis plan if a schema is present.
-  // Vapi expects `analysisPlan.structuredDataPlan.schema` (NOT top-level `analysisSchema`).
-  // Also enable summaryPlan so Vapi generates an automatic call summary.
-  if (a.analysisSchema) {
-    assistantPayload.analysisPlan = {
-      structuredDataPlan: {
-        enabled: true,
-        schema: a.analysisSchema,
-        timeoutSeconds: 30,
-      },
-      summaryPlan: {
-        enabled: true,
-      },
-      successEvaluationPlan: {
-        enabled: false,
-      },
-    };
-  }
+  // Analysis plan: enable summaryPlan for automatic call summaries.
+  // Structured data extraction is now handled by standalone Vapi Structured Outputs
+  // (created via POST /structured-output and linked to assistants by ID).
+  // See ensureCallAnalysisOutput() in vapi.service.ts.
+  assistantPayload.analysisPlan = {
+    summaryPlan: {
+      enabled: true,
+    },
+    successEvaluationPlan: {
+      enabled: false,
+    },
+  };
 
   return {
     assistant: assistantPayload,

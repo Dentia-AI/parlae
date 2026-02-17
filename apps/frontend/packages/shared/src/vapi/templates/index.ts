@@ -3,6 +3,7 @@ export {
   DENTAL_CLINIC_TEMPLATE_NAME,
   DENTAL_CLINIC_TEMPLATE_VERSION,
   DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME,
+  CALL_ANALYSIS_SCHEMA,
 } from './dental-clinic.template';
 export type {
   DentalClinicTemplateConfig,

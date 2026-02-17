@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.2';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.1';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.3';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.3';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)
@@ -858,7 +858,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.2,
             backoffSeconds: 1,
           },
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'none',
         },
         assistantDestinations: [
@@ -930,7 +929,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.1,
             backoffSeconds: 0.5,
           },
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'emergency',
           // Note: transferCall with 911 is not possible via Vapi (not valid E.164).
           // The system prompt instructs the AI to tell callers to hang up and dial 911.
@@ -976,7 +974,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceSeconds: 0.2,
             backoffSeconds: 1,
           },
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
           toolGroup: 'clinicInfo',
         },
         assistantDestinations: [
@@ -1049,7 +1046,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             backoffSeconds: 1,
           },
           toolGroup: 'scheduling',
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
         },
         assistantDestinations: [
           {
@@ -1121,7 +1117,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             backoffSeconds: 1,
           },
           toolGroup: 'patientRecords',
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
         },
         assistantDestinations: [
           {
@@ -1187,7 +1182,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             backoffSeconds: 1,
           },
           toolGroup: 'insurance',
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
         },
         assistantDestinations: [
           {
@@ -1253,7 +1247,6 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             backoffSeconds: 1,
           },
           toolGroup: 'payment',
-          analysisSchema: CALL_ANALYSIS_SCHEMA,
         },
         assistantDestinations: [
           {

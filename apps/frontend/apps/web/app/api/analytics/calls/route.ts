@@ -3,7 +3,7 @@ import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
 
-import type { VapiCall } from '@kit/shared/vapi/vapi.service';
+import type { VapiCall, VapiAnalyticsQuery } from '@kit/shared/vapi/vapi.service';
 
 /**
  * Generate mock analytics data for development
@@ -28,6 +28,7 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
       totalCalls,
       bookingRate: 78,
       avgCallTime: 102,
+      totalCost: 0,
       insuranceVerified: Math.floor(totalCalls * 0.65),
       paymentPlans: { count: Math.floor(totalCalls * 0.16), totalAmount: 4720000 },
       collections: { count: Math.floor(totalCalls * 0.12), totalAmount: 3280000, recovered: 3280000, collectionRate: 89.0 },
@@ -44,8 +45,10 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
 
 /**
  * GET /api/analytics/calls
- * Returns aggregated call metrics for the analytics dashboard.
- * Data is fetched from Vapi API and aggregated server-side.
+ *
+ * Hybrid analytics approach:
+ * 1. Vapi POST /analytics API for aggregate metrics (total calls, avg duration, cost, daily trend)
+ * 2. Vapi GET /call (limited) for structured output analysis (outcomes, insurance, payments)
  *
  * Query params:
  * - startDate: ISO date string (default: 7 days ago)
@@ -76,102 +79,207 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    // Get account's phone numbers
-    const phoneNumbers = await prisma.vapiPhoneNumber.findMany({
+    // Get account's phone numbers from VapiPhoneNumber table
+    let phoneNumbers = await prisma.vapiPhoneNumber.findMany({
       where: { accountId: account.id, isActive: true },
       select: { vapiPhoneId: true },
     });
+
+    // Fallback: if no VapiPhoneNumber records, try phoneIntegrationSettings
+    if (phoneNumbers.length === 0) {
+      const fullAccount = await prisma.account.findUnique({
+        where: { id: account.id },
+        select: { phoneIntegrationSettings: true },
+      });
+      const settings = fullAccount?.phoneIntegrationSettings as any;
+      if (settings?.vapiPhoneId) {
+        phoneNumbers = [{ vapiPhoneId: settings.vapiPhoneId }];
+      }
+    }
+
+    const emptyResponse = {
+      dateRange: { start: startDate, end: endDate },
+      metrics: {
+        totalCalls: 0, bookingRate: 0, avgCallTime: 0, totalCost: 0, insuranceVerified: 0,
+        paymentPlans: { count: 0, totalAmount: 0 },
+        collections: { count: 0, totalAmount: 0, recovered: 0, collectionRate: 0 },
+      },
+      activityTrend: [],
+      outcomesDistribution: [],
+    };
 
     if (phoneNumbers.length === 0) {
       if (process.env.NODE_ENV === 'development') {
         return NextResponse.json(generateMockAnalytics(startDate, endDate));
       }
-      return NextResponse.json({
-        dateRange: { start: startDate, end: endDate },
-        metrics: {
-          totalCalls: 0, bookingRate: 0, avgCallTime: 0, insuranceVerified: 0,
-          paymentPlans: { count: 0, totalAmount: 0 },
-          collections: { count: 0, totalAmount: 0, recovered: 0, collectionRate: 0 },
-        },
-        activityTrend: [],
-        outcomesDistribution: [],
-      });
+      return NextResponse.json(emptyResponse);
     }
 
-    // Fetch calls from Vapi for each phone number in the date range
     const vapiService = createVapiService();
-    const allCalls: VapiCall[] = [];
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+    // -----------------------------------------------------------------------
+    // PART 1: Vapi Analytics API for aggregate metrics
+    // Uses POST /analytics for efficient server-side aggregation
+    // -----------------------------------------------------------------------
+    const analyticsQuery: VapiAnalyticsQuery = {
+      queries: [
+        {
+          table: 'call',
+          name: 'callMetrics',
+          timeRange: {
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+            timezone,
+          },
+          operations: [
+            { operation: 'count', column: 'id', alias: 'totalCalls' },
+            { operation: 'avg', column: 'duration', alias: 'avgDuration' },
+            { operation: 'sum', column: 'cost', alias: 'totalCost' },
+          ],
+        },
+        {
+          table: 'call',
+          name: 'dailyTrend',
+          timeRange: {
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+            step: 'day',
+            timezone,
+          },
+          operations: [
+            { operation: 'count', column: 'id', alias: 'count' },
+          ],
+        },
+        {
+          table: 'call',
+          name: 'byStatus',
+          groupBy: ['status'],
+          timeRange: {
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+            timezone,
+          },
+          operations: [
+            { operation: 'count', column: 'id', alias: 'count' },
+          ],
+        },
+      ],
+    };
+
+    const analyticsResult = await vapiService.getCallAnalytics(analyticsQuery);
+
+    // Parse analytics API results
+    let totalCalls = 0;
+    let avgDurationSeconds = 0;
+    let totalCost = 0;
+    let activityTrend: Array<{ date: string; count: number }> = [];
+
+    if (analyticsResult && Array.isArray(analyticsResult)) {
+      for (const queryResult of analyticsResult) {
+        if (queryResult.name === 'callMetrics' && queryResult.result?.length > 0) {
+          const metrics = queryResult.result[0];
+          totalCalls = metrics.totalCalls || 0;
+          avgDurationSeconds = Math.round(metrics.avgDuration || 0);
+          totalCost = Math.round((metrics.totalCost || 0) * 100) / 100;
+        }
+
+        if (queryResult.name === 'dailyTrend' && queryResult.result?.length > 0) {
+          activityTrend = queryResult.result.map((row: any) => ({
+            date: row.date ? row.date.slice(0, 10) : '',
+            count: row.count || 0,
+          })).filter((r: any) => r.date);
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // PART 2: Fetch recent calls for structured output analysis
+    // Only fetches the most recent calls (limited) to extract outcomes, insurance, etc.
+    // This avoids pulling all calls into memory for large volumes.
+    // -----------------------------------------------------------------------
+    const MAX_CALLS_FOR_OUTCOMES = 500;
+    const recentCalls: VapiCall[] = [];
 
     for (const phone of phoneNumbers) {
       const calls = await vapiService.listCalls({
         phoneNumberId: phone.vapiPhoneId,
-        limit: 1000,
+        limit: MAX_CALLS_FOR_OUTCOMES,
         createdAtGe: startDate.toISOString(),
         createdAtLe: endDate.toISOString(),
       });
-      allCalls.push(...calls);
+      recentCalls.push(...calls);
     }
 
-    // If no calls, return mock in dev
-    if (allCalls.length === 0 && process.env.NODE_ENV === 'development') {
-      return NextResponse.json(generateMockAnalytics(startDate, endDate));
+    // If analytics API returned 0 calls but we have recent calls, use their count
+    if (totalCalls === 0 && recentCalls.length > 0) {
+      totalCalls = recentCalls.length;
     }
 
-    // Compute analytics from the fetched calls
-    const totalCalls = allCalls.length;
+    // If analytics API didn't return trends, compute from recent calls
+    if (activityTrend.length === 0 && recentCalls.length > 0) {
+      const dailyCounts = new Map<string, number>();
+      for (const call of recentCalls) {
+        const dateKey = (call.startedAt || call.endedAt || '').slice(0, 10);
+        if (dateKey) {
+          dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+        }
+      }
+      activityTrend = Array.from(dailyCounts.entries())
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
 
-    // Outcomes distribution
+    // Compute outcome metrics from structured data in recent calls
     const outcomeCounts = new Map<string, number>();
     let bookedCount = 0;
-    let totalDuration = 0;
-    let durationCount = 0;
     let insuranceVerifiedCount = 0;
     let paymentPlanCount = 0;
     let collectionCount = 0;
+    let fallbackDuration = 0;
+    let fallbackDurationCount = 0;
 
-    // Activity trend by day
-    const dailyCounts = new Map<string, number>();
-
-    for (const call of allCalls) {
+    for (const call of recentCalls) {
       const sd = call.analysis?.structuredData || {};
       const outcome = inferOutcome(sd);
 
       outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
       if (outcome === 'BOOKED') bookedCount++;
 
-      // Duration
-      if (call.startedAt && call.endedAt) {
-        const dur = Math.round(
-          (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
-        );
-        totalDuration += dur;
-        durationCount++;
-      }
-
-      // Structured data flags
       if (sd.insuranceVerified) insuranceVerifiedCount++;
       if (sd.paymentDiscussed) paymentPlanCount++;
       if (sd.collectionAttempt) collectionCount++;
 
-      // Activity trend
-      const dateKey = (call.startedAt || call.endedAt || '').slice(0, 10);
-      if (dateKey) {
-        dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+      // Fallback duration calculation if analytics API didn't provide it
+      if (avgDurationSeconds === 0 && call.startedAt && call.endedAt) {
+        const dur = Math.round(
+          (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
+        );
+        fallbackDuration += dur;
+        fallbackDurationCount++;
       }
     }
 
-    const bookingRate = totalCalls > 0 ? Math.round((bookedCount / totalCalls) * 1000) / 10 : 0;
-    const avgCallTime = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
+    // Use analytics API duration if available, otherwise fall back to computed
+    const avgCallTime = avgDurationSeconds > 0
+      ? avgDurationSeconds
+      : (fallbackDurationCount > 0 ? Math.round(fallbackDuration / fallbackDurationCount) : 0);
+
+    const sampleSize = recentCalls.length;
+    const bookingRate = sampleSize > 0
+      ? Math.round((bookedCount / sampleSize) * 1000) / 10
+      : 0;
 
     const outcomesDistribution = Array.from(outcomeCounts.entries()).map(([outcome, count]) => ({
       outcome,
       count,
-      percentage: totalCalls > 0 ? Math.round((count / totalCalls) * 1000) / 10 : 0,
+      percentage: sampleSize > 0 ? Math.round((count / sampleSize) * 1000) / 10 : 0,
     }));
 
-    const activityTrend = Array.from(dailyCounts.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    // If no calls at all, return mock in dev
+    if (totalCalls === 0 && recentCalls.length === 0 && process.env.NODE_ENV === 'development') {
+      return NextResponse.json(generateMockAnalytics(startDate, endDate));
+    }
 
     return NextResponse.json({
       dateRange: { start: startDate, end: endDate },
@@ -179,6 +287,7 @@ export async function GET(request: NextRequest) {
         totalCalls,
         bookingRate,
         avgCallTime,
+        totalCost,
         insuranceVerified: insuranceVerifiedCount,
         paymentPlans: { count: paymentPlanCount, totalAmount: 0 },
         collections: { count: collectionCount, totalAmount: 0, recovered: 0, collectionRate: 0 },

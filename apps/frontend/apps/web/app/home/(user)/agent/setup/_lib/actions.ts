@@ -11,6 +11,7 @@ import {
   dbShapeToTemplate,
   templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  CALL_ANALYSIS_SCHEMA,
   getAllFunctionToolDefinitions,
   prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
@@ -595,6 +596,77 @@ export const deployReceptionistAction = enhanceAction(
         },
       });
 
+      // STEP 9: Ensure VapiPhoneNumber record exists (needed for call logs + analytics)
+      try {
+        await prisma.vapiPhoneNumber.upsert({
+          where: { vapiPhoneId: vapiPhone.id },
+          update: {
+            accountId: account.id,
+            phoneNumber,
+            vapiSquadId: squad.id,
+            isActive: true,
+          },
+          create: {
+            accountId: account.id,
+            vapiPhoneId: vapiPhone.id,
+            phoneNumber,
+            vapiSquadId: squad.id,
+            name: 'Main Line',
+            isActive: true,
+          },
+        });
+        logger.info({ vapiPhoneId: vapiPhone.id }, '[Receptionist] VapiPhoneNumber record ensured');
+      } catch (phoneRecordErr: any) {
+        logger.warn({ error: phoneRecordErr?.message }, '[Receptionist] Non-fatal: could not upsert VapiPhoneNumber');
+      }
+
+      // STEP 10: Ensure standalone structured output is created and linked to squad assistants
+      try {
+        const assistantIds = (squad.members || [])
+          .map((m: any) => m.assistantId)
+          .filter(Boolean) as string[];
+
+        if (assistantIds.length > 0) {
+          const structuredOutputId = await vapiService.ensureCallAnalysisOutput(
+            assistantIds,
+            CALL_ANALYSIS_SCHEMA,
+            templateVersion,
+          );
+
+          if (structuredOutputId) {
+            await prisma.account.update({
+              where: { id: account.id },
+              data: {
+                phoneIntegrationSettings: {
+                  ...(phoneIntegrationSettings || {}),
+                  vapiSquadId: squad.id,
+                  vapiPhoneId: vapiPhone.id,
+                  voiceConfig: data.voice,
+                  phoneNumber: phoneNumber,
+                  knowledgeBaseFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
+                  knowledgeBaseConfig: hasCategorizedKB ? knowledgeBaseConfig : undefined,
+                  queryToolId,
+                  queryToolName,
+                  templateVersion,
+                  templateName,
+                  structuredOutputId,
+                  deployedAt: new Date().toISOString(),
+                },
+              },
+            });
+            logger.info(
+              { structuredOutputId, assistantCount: assistantIds.length },
+              '[Receptionist] Structured output linked to squad assistants',
+            );
+          }
+        }
+      } catch (soErr: any) {
+        logger.warn(
+          { error: soErr?.message },
+          '[Receptionist] Non-fatal: could not ensure structured output',
+        );
+      }
+
       logger.info(
         { accountId: account.id, squadId: squad.id, templateVersion },
         '[Receptionist] AI receptionist deployed successfully'
@@ -793,6 +865,37 @@ export const changePhoneNumberAction = enhanceAction(
           },
         },
       });
+
+      // Deactivate old VapiPhoneNumber and create new one
+      if (settings.vapiPhoneId) {
+        try {
+          await prisma.vapiPhoneNumber.updateMany({
+            where: { vapiPhoneId: settings.vapiPhoneId },
+            data: { isActive: false },
+          });
+        } catch { /* best effort */ }
+      }
+      try {
+        await prisma.vapiPhoneNumber.upsert({
+          where: { vapiPhoneId: vapiPhone.id },
+          update: {
+            accountId: account.id,
+            phoneNumber: newPhoneNumber,
+            vapiSquadId: settings.vapiSquadId || null,
+            isActive: true,
+          },
+          create: {
+            accountId: account.id,
+            vapiPhoneId: vapiPhone.id,
+            phoneNumber: newPhoneNumber,
+            vapiSquadId: settings.vapiSquadId || null,
+            name: 'Main Line',
+            isActive: true,
+          },
+        });
+      } catch (err: any) {
+        logger.warn({ error: err?.message }, '[Receptionist] Non-fatal: could not upsert VapiPhoneNumber on change');
+      }
 
       logger.info(
         { accountId: account.id, oldPhone: settings.phoneNumber, newPhone: newPhoneNumber },

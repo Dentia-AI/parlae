@@ -9,6 +9,7 @@ import {
   dbShapeToTemplate,
   templateToDbShape,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  CALL_ANALYSIS_SCHEMA,
   getAllFunctionToolDefinitions,
   prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
@@ -369,6 +370,78 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // STEP 10: Ensure VapiPhoneNumber record exists (needed for call logs + analytics)
+    if (phoneNumber) {
+      try {
+        const vapiPhoneNumbers2 = await vapiService.listPhoneNumbers();
+        const matchedPhone = vapiPhoneNumbers2.find((p: any) => p.number === phoneNumber);
+        if (matchedPhone) {
+          await prisma.vapiPhoneNumber.upsert({
+            where: { vapiPhoneId: matchedPhone.id },
+            update: {
+              accountId: account.id,
+              phoneNumber,
+              vapiSquadId: squad.id,
+              isActive: true,
+            },
+            create: {
+              accountId: account.id,
+              vapiPhoneId: matchedPhone.id,
+              phoneNumber,
+              vapiSquadId: squad.id,
+              name: 'Main Line',
+              isActive: true,
+            },
+          });
+          logger.info({ vapiPhoneId: matchedPhone.id }, '[Admin Redeploy] VapiPhoneNumber record ensured');
+        }
+      } catch (phoneRecordErr: any) {
+        logger.warn({ error: phoneRecordErr?.message }, '[Admin Redeploy] Non-fatal: could not upsert VapiPhoneNumber');
+      }
+    }
+
+    // STEP 11: Ensure standalone structured output is created and linked to squad assistants
+    try {
+      const assistantIds = (squad.members || [])
+        .map((m: any) => m.assistantId)
+        .filter(Boolean) as string[];
+
+      if (assistantIds.length > 0) {
+        const structuredOutputId = await vapiService.ensureCallAnalysisOutput(
+          assistantIds,
+          CALL_ANALYSIS_SCHEMA,
+          templateVersion,
+        );
+
+        if (structuredOutputId) {
+          await prisma.account.update({
+            where: { id: account.id },
+            data: {
+              phoneIntegrationSettings: {
+                ...phoneIntegrationSettings,
+                vapiSquadId: squad.id,
+                queryToolId,
+                queryToolName,
+                templateVersion,
+                templateName,
+                structuredOutputId,
+                lastRedeployedAt: new Date().toISOString(),
+              },
+            },
+          });
+          logger.info(
+            { structuredOutputId, assistantCount: assistantIds.length },
+            '[Admin Redeploy] Structured output linked to squad assistants',
+          );
+        }
+      }
+    } catch (soErr: any) {
+      logger.warn(
+        { error: soErr?.message },
+        '[Admin Redeploy] Non-fatal: could not ensure structured output',
+      );
+    }
 
     logger.info(
       { accountId, squadId: squad.id, templateVersion },
