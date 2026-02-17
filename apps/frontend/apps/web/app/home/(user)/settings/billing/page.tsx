@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 import { toast } from '@kit/ui/sonner';
+import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 /**
  * Parlae Billing Page
@@ -60,6 +61,7 @@ const INCLUDED_BADGES = [
 ];
 
 export default function SettingsBillingPage() {
+  const csrfToken = useCsrfToken();
   const [locations, setLocations] = useState(1);
   const [features, setFeatures] = useState(defaultFeatures);
   const [callVolume, setCallVolume] = useState(500);
@@ -155,7 +157,11 @@ export default function SettingsBillingPage() {
       const selectedFeatures = features.filter((f) => f.included).map((f) => f.id);
       const response = await fetch('/api/stripe/save-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
         body: JSON.stringify({ locations, features: selectedFeatures, estimatedCallVolume: callVolume, currency }),
       });
       if (response.ok) {

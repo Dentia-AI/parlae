@@ -8,9 +8,11 @@ import { Label } from '@kit/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { toast } from '@kit/ui/sonner';
 import { Loader2, Upload, Eye } from 'lucide-react';
+import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 export default function BrandingSettingsPage() {
   const { t } = useTranslation();
+  const csrfToken = useCsrfToken();
   const [branding, setBranding] = useState({
     logoUrl: '',
     primaryColor: '#3b82f6',
@@ -57,7 +59,11 @@ export default function BrandingSettingsPage() {
     try {
       const response = await fetch('/api/account/branding', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
         body: JSON.stringify(branding),
       });
 
