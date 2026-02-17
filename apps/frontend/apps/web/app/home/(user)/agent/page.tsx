@@ -166,7 +166,7 @@ export default async function ReceptionistDashboardPage({
                     </p>
                   </div>
                 </div>
-                <Link href="/home/agent/setup">
+                <Link href="/home/agent/setup?manage=true">
                   <Button variant="outline" size="sm" className="w-full">
                     Change Voice
                   </Button>
@@ -175,7 +175,7 @@ export default async function ReceptionistDashboardPage({
             ) : (
               <div>
                 <p className="text-sm text-muted-foreground mb-4">No voice configured</p>
-                <Link href="/home/agent/setup">
+                <Link href="/home/agent/setup?manage=true">
                   <Button variant="outline" size="sm">
                     Configure Voice
                   </Button>

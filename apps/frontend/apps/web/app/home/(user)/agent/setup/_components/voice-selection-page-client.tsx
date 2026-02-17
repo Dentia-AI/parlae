@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Input } from '@kit/ui/input';
@@ -12,20 +12,25 @@ import { toast } from '@kit/ui/sonner';
 import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
 import { useSetupProgress } from '../_lib/use-setup-progress';
+import { updateVoiceAction } from '../_lib/actions';
+import { ArrowLeft, Loader2, Save } from 'lucide-react';
 
 interface VoiceSelectionPageClientProps {
   accountId: string;
   businessName: string;
   accountEmail: string;
   savedClinicName?: string;
+  manage?: boolean;
+  vapiSquadId?: string;
 }
 
-export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName }: VoiceSelectionPageClientProps) {
+export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName, manage = false, vapiSquadId }: VoiceSelectionPageClientProps) {
   const router = useRouter();
   const { t } = useTranslation();
   const [selectedVoice, setSelectedVoice] = useState<any>(null);
   const [clinicName, setClinicName] = useState(savedClinicName || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isPending, startTransition] = useTransition();
   
   const { progress, saveVoice, isLoading } = useSetupProgress(accountId);
 
@@ -39,10 +44,12 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     }
   }, [progress]);
 
-  // Store account info in session storage for other pages.
+  // Store account info in session storage for other pages (wizard mode only).
   // If the account changed (e.g. different user logged in), clear stale setup data
   // to prevent data leaking between users sharing the same browser tab.
   useEffect(() => {
+    if (manage) return;
+
     const previousAccountId = sessionStorage.getItem('accountId');
     if (previousAccountId && previousAccountId !== accountId) {
       const keysToClean = [
@@ -60,7 +67,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     sessionStorage.setItem('accountId', accountId);
     sessionStorage.setItem('businessName', businessName);
     sessionStorage.setItem('accountEmail', accountEmail);
-  }, [accountId, businessName, accountEmail]);
+  }, [accountId, businessName, accountEmail, manage]);
 
   const handleStepClick = (stepIndex: number) => {
     const routes = [
@@ -70,7 +77,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
       '/home/agent/setup/phone',
       '/home/agent/setup/review',
     ];
-    router.push(routes[stepIndex]);
+    router.push(routes[stepIndex]!);
   };
 
   const handleContinue = async () => {
@@ -103,6 +110,39 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     }
   };
 
+  const handleSaveVoice = () => {
+    if (!clinicName.trim()) {
+      toast.error(t('common:setup.voice.enterClinicName', 'Please enter your clinic or business name'));
+      return;
+    }
+    if (!selectedVoice) {
+      toast.error(t('common:setup.voice.selectVoice'));
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await updateVoiceAction({
+          accountId,
+          voice: selectedVoice,
+          clinicName: clinicName.trim(),
+        });
+
+        if (result.success) {
+          toast.success(
+            `Voice updated on ${result.assistantsUpdated} assistant${result.assistantsUpdated === 1 ? '' : 's'}`,
+          );
+          router.push('/home/agent');
+        } else {
+          toast.error(result.error || 'Failed to update voice');
+        }
+      } catch (error) {
+        console.error('Failed to update voice:', error);
+        toast.error('Failed to update voice. Please try again.');
+      }
+    });
+  };
+
   const steps = [
     t('common:setup.steps.voice'),
     t('common:setup.steps.knowledge'),
@@ -111,26 +151,34 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     t('common:setup.steps.review'),
   ];
 
+  const saving = isSaving || isPending;
+
   return (
     <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
-      {/* Header - Compact */}
+      {/* Header */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">
-          <Trans i18nKey="common:setup.title" />
+          {manage
+            ? <Trans i18nKey="common:setup.voice.manageTitle" defaults="Change Voice" />
+            : <Trans i18nKey="common:setup.title" />}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans i18nKey="common:setup.subtitle" />
+          {manage
+            ? <Trans i18nKey="common:setup.voice.manageSubtitle" defaults="Update the voice for your AI receptionist. Changes apply to all agents immediately." />
+            : <Trans i18nKey="common:setup.subtitle" />}
         </p>
       </div>
 
-      {/* Progress Steps - Compact */}
-      <div className="mb-6 flex-shrink-0">
-        <Stepper
-          steps={steps}
-          currentStep={0}
-          onStepClick={handleStepClick}
-        />
-      </div>
+      {/* Progress Steps - Wizard mode only */}
+      {!manage && (
+        <div className="mb-6 flex-shrink-0">
+          <Stepper
+            steps={steps}
+            currentStep={0}
+            onStepClick={handleStepClick}
+          />
+        </div>
+      )}
 
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
@@ -187,14 +235,40 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
 
       {/* Navigation - Fixed at bottom */}
       <div className="pt-4 border-t border-border/40 flex-shrink-0 bg-background">
-        <div className="flex justify-end">
-          <Button
-            onClick={handleContinue}
-            disabled={!selectedVoice || !clinicName.trim() || isSaving}
-          >
-            {isSaving ? 'Saving...' : <Trans i18nKey="common:setup.voice.continueToKnowledge" />}
-          </Button>
-        </div>
+        {manage ? (
+          <div className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/home/agent')}
+              disabled={saving}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              <Trans i18nKey="common:setup.voice.backToOverview" defaults="Back to Overview" />
+            </Button>
+            <Button
+              onClick={handleSaveVoice}
+              disabled={!selectedVoice || !clinicName.trim() || saving}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {saving
+                ? <Trans i18nKey="common:setup.voice.saving" defaults="Saving..." />
+                : <Trans i18nKey="common:setup.voice.saveVoice" defaults="Save Voice" />}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button
+              onClick={handleContinue}
+              disabled={!selectedVoice || !clinicName.trim() || saving}
+            >
+              {saving ? 'Saving...' : <Trans i18nKey="common:setup.voice.continueToKnowledge" />}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

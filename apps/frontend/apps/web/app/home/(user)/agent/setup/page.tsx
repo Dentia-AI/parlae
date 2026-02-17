@@ -7,7 +7,14 @@ export const metadata = {
   title: 'AI Receptionist Setup - Voice Selection',
 };
 
-export default async function ReceptionistSetupPage() {
+export default async function ReceptionistSetupPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const manage = params.manage === 'true';
+
   const workspace = await loadUserWorkspace();
 
   if (!workspace) {
@@ -33,6 +40,9 @@ export default async function ReceptionistSetupPage() {
     redirect('/auth/sign-in');
   }
 
+  const integrationSettings = account.phoneIntegrationSettings as Record<string, unknown> | null;
+  const vapiSquadId = (integrationSettings?.vapiSquadId as string) || '';
+
   // Allow accessing setup even if already configured (for editing)
   // Don't redirect if already has receptionist
 
@@ -42,6 +52,8 @@ export default async function ReceptionistSetupPage() {
       businessName={account.name}
       accountEmail={account.email || ''}
       savedClinicName={account.brandingBusinessName || ''}
+      manage={manage}
+      vapiSquadId={vapiSquadId}
     />
   );
 }

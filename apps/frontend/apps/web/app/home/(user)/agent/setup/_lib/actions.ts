@@ -941,3 +941,149 @@ export const changePhoneNumberAction = enhanceAction(
     schema: ChangePhoneNumberSchema,
   }
 );
+
+/**
+ * Update voice on all live squad assistants and persist to DB.
+ *
+ * Used from the standalone "Change Voice" page (manage mode) so the user
+ * can change the voice without re-running the full wizard/deploy flow.
+ */
+const UpdateVoiceSchema = z.object({
+  accountId: z.string(),
+  voice: z.object({
+    id: z.string(),
+    name: z.string(),
+    provider: z.enum(['11labs', 'elevenlabs', 'openai', 'playht', 'azure', 'deepgram', 'cartesia', 'rime-ai']),
+    voiceId: z.string(),
+    gender: z.string(),
+    accent: z.string(),
+    description: z.string(),
+  }),
+  clinicName: z.string().min(1),
+});
+
+export const updateVoiceAction = enhanceAction(
+  async (data, user) => {
+    const logger = await getLogger();
+    const vapiService = createVapiService();
+
+    logger.info(
+      { userId: user.id, accountId: data.accountId, voiceName: data.voice.name },
+      '[Voice Update] Starting live voice update',
+    );
+
+    try {
+      const account = await prisma.account.findUnique({
+        where: { id: data.accountId },
+        select: {
+          id: true,
+          phoneIntegrationSettings: true,
+        },
+      });
+
+      if (!account) {
+        return { success: false, error: 'Account not found' };
+      }
+
+      const settings = (account.phoneIntegrationSettings as Record<string, unknown>) || {};
+      const vapiSquadId = settings.vapiSquadId as string | undefined;
+
+      if (!vapiSquadId) {
+        return { success: false, error: 'No deployed squad found. Please complete the setup wizard first.' };
+      }
+
+      // Fetch squad to get all assistant IDs
+      const squad = await vapiService.getSquad(vapiSquadId);
+
+      if (!squad || !squad.members) {
+        return { success: false, error: 'Could not fetch squad from Vapi' };
+      }
+
+      const assistantIds = (squad.members as any[])
+        .map((m: any) => m.assistantId || m.assistant?.id)
+        .filter(Boolean) as string[];
+
+      if (assistantIds.length === 0) {
+        return { success: false, error: 'No assistants found in squad' };
+      }
+
+      // Update voice on all assistants in parallel
+      const voicePayload = {
+        provider: data.voice.provider,
+        voiceId: data.voice.voiceId,
+      };
+
+      const results = await Promise.allSettled(
+        assistantIds.map((id) =>
+          vapiService.updateAssistant(id, { voice: voicePayload } as any),
+        ),
+      );
+
+      const succeeded = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+      const failed = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value)).length;
+
+      logger.info(
+        { succeeded, failed, total: assistantIds.length },
+        '[Voice Update] Vapi assistant voice updates complete',
+      );
+
+      if (succeeded === 0) {
+        return { success: false, error: 'Failed to update voice on any assistant' };
+      }
+
+      // Persist voice config and clinic name to DB
+      const updatedSettings = {
+        ...settings,
+        voiceConfig: {
+          id: data.voice.id,
+          name: data.voice.name,
+          provider: data.voice.provider,
+          voiceId: data.voice.voiceId,
+          gender: data.voice.gender,
+          accent: data.voice.accent,
+          description: data.voice.description,
+        },
+      };
+
+      const updateData: Record<string, unknown> = {
+        phoneIntegrationSettings: updatedSettings,
+      };
+
+      if (data.clinicName) {
+        updateData.brandingBusinessName = data.clinicName;
+      }
+
+      await prisma.account.update({
+        where: { id: account.id },
+        data: updateData as any,
+      });
+
+      revalidatePath('/home/agent');
+
+      logger.info(
+        { accountId: account.id, voiceName: data.voice.name, assistantsUpdated: succeeded },
+        '[Voice Update] Voice updated successfully',
+      );
+
+      return {
+        success: true,
+        assistantsUpdated: succeeded,
+        assistantsFailed: failed,
+      };
+    } catch (error) {
+      logger.error(
+        { error, userId: user.id },
+        '[Voice Update] Failed to update voice',
+      );
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update voice',
+      };
+    }
+  },
+  {
+    auth: true,
+    schema: UpdateVoiceSchema,
+  },
+);
