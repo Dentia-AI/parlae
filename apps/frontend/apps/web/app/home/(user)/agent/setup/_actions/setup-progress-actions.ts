@@ -124,21 +124,30 @@ export async function saveVoiceProgressAction(accountId: string, voice: VoiceSet
     });
 
     const currentProgress = (account?.setupProgress as any) || {};
+    const clinicName = (voice as any).clinicName;
     const updatedProgress = {
       ...currentProgress,
       voice: {
         data: voice,
+        clinicName: clinicName || currentProgress?.voice?.clinicName,
         completedAt: new Date().toISOString(),
       },
     };
 
+    const updateData: Record<string, unknown> = {
+      setupProgress: updatedProgress,
+      setupLastStep: 'voice',
+      updatedAt: new Date(),
+    };
+
+    // Persist clinic name to the account's branding field
+    if (clinicName) {
+      updateData.brandingBusinessName = clinicName;
+    }
+
     await prisma.account.update({
       where: { id: accountId },
-      data: {
-        setupProgress: updatedProgress,
-        setupLastStep: 'voice',
-        updatedAt: new Date(),
-      },
+      data: updateData as any,
     });
 
     revalidatePath('/home/agent/setup');

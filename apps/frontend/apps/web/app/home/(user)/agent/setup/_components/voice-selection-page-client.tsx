@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
+import { Input } from '@kit/ui/input';
+import { Label } from '@kit/ui/label';
 import { Stepper } from '@kit/ui/stepper';
 import { VoiceSelectionForm } from './voice-selection-form';
 import { toast } from '@kit/ui/sonner';
@@ -15,12 +17,14 @@ interface VoiceSelectionPageClientProps {
   accountId: string;
   businessName: string;
   accountEmail: string;
+  savedClinicName?: string;
 }
 
-export function VoiceSelectionPageClient({ accountId, businessName, accountEmail }: VoiceSelectionPageClientProps) {
+export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName }: VoiceSelectionPageClientProps) {
   const router = useRouter();
   const { t } = useTranslation();
   const [selectedVoice, setSelectedVoice] = useState<any>(null);
+  const [clinicName, setClinicName] = useState(savedClinicName || '');
   const [isSaving, setIsSaving] = useState(false);
   
   const { progress, saveVoice, isLoading } = useSetupProgress(accountId);
@@ -29,6 +33,9 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
   useEffect(() => {
     if (progress?.voice?.data) {
       setSelectedVoice(progress.voice.data);
+    }
+    if (progress?.voice?.clinicName) {
+      setClinicName(progress.voice.clinicName);
     }
   }, [progress]);
 
@@ -46,6 +53,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
         'knowledgeBaseFiles',
         'businessName',
         'accountEmail',
+        'clinicName',
       ];
       keysToClean.forEach((key) => sessionStorage.removeItem(key));
     }
@@ -66,6 +74,10 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
   };
 
   const handleContinue = async () => {
+    if (!clinicName.trim()) {
+      toast.error(t('common:setup.voice.enterClinicName', 'Please enter your clinic or business name'));
+      return;
+    }
     if (!selectedVoice) {
       toast.error(t('common:setup.voice.selectVoice'));
       return;
@@ -74,17 +86,18 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
     try {
       setIsSaving(true);
       
-      // Save to database
-      await saveVoice(selectedVoice);
+      // Save voice + clinic name to database
+      await saveVoice({ ...selectedVoice, clinicName: clinicName.trim() });
       
       // Also store in session storage for backward compatibility
       sessionStorage.setItem('selectedVoice', JSON.stringify(selectedVoice));
+      sessionStorage.setItem('clinicName', clinicName.trim());
       
-      toast.success('Voice selection saved');
+      toast.success('Saved');
       router.push(`/home/agent/setup/knowledge`);
     } catch (error) {
       console.error('Failed to save voice selection:', error);
-      toast.error('Failed to save voice selection. Please try again.');
+      toast.error('Failed to save. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -122,6 +135,33 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
         <div className="absolute inset-0 overflow-y-auto space-y-4 pb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {/* Clinic Name */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">
+                <Trans i18nKey="common:setup.clinicName.title" defaults="Your Clinic" />
+              </CardTitle>
+              <CardDescription className="text-sm">
+                <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI receptionist when greeting callers." />
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="clinicName">
+                  <Trans i18nKey="common:setup.clinicName.label" defaults="Clinic / Business Name" />
+                </Label>
+                <Input
+                  id="clinicName"
+                  value={clinicName}
+                  onChange={(e) => setClinicName(e.target.value)}
+                  placeholder={t('common:setup.clinicName.placeholder', 'e.g. Maple Dental Clinic')}
+                  className="max-w-md"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Voice Selection */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
@@ -150,7 +190,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
         <div className="flex justify-end">
           <Button
             onClick={handleContinue}
-            disabled={!selectedVoice || isSaving}
+            disabled={!selectedVoice || !clinicName.trim() || isSaving}
           >
             {isSaving ? 'Saving...' : <Trans i18nKey="common:setup.voice.continueToKnowledge" />}
           </Button>

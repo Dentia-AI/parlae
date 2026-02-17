@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent } from '@kit/ui/card';
 import { RadioGroup, RadioGroupItem } from '@kit/ui/radio-group';
@@ -9,48 +8,18 @@ import { Label } from '@kit/ui/label';
 import { Play, Pause } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 
-// Vapi voice providers and their voices
-// Note: 11Labs voices need the full voice ID from their API
+// OpenAI TTS voices — all multilingual, auto-detect caller language.
+// Nova is the recommended default for healthcare receptionists.
 const AVAILABLE_VOICES = [
   {
-    id: 'rachel-11labs',
-    name: 'Rachel',
-    provider: '11labs' as const,
-    voiceId: '21m00Tcm4TlvDq8ikWAM', // 11Labs Rachel voice ID
+    id: 'nova-openai',
+    name: 'Nova',
+    provider: 'openai' as const,
+    voiceId: 'nova',
     gender: 'female',
-    accent: 'American',
-    description: 'Warm and professional voice, perfect for healthcare',
-    previewUrl: '/audio/voices/rachel-11labs.mp3', // Static preview file
-  },
-  {
-    id: 'josh-11labs',
-    name: 'Josh',
-    provider: '11labs' as const,
-    voiceId: 'TxGEqnHWrfWFTfGW9XjX', // 11Labs Josh voice ID
-    gender: 'male',
-    accent: 'American',
-    description: 'Friendly and approachable, great for customer service',
-    previewUrl: '/audio/voices/josh-11labs.mp3', // Static preview file
-  },
-  {
-    id: 'bella-11labs',
-    name: 'Bella',
-    provider: '11labs' as const,
-    voiceId: 'EXAVITQu4vr4xnSDxMaL', // 11Labs Bella voice ID
-    gender: 'female',
-    accent: 'American',
-    description: 'Clear and articulate, excellent for appointments',
-    previewUrl: '/audio/voices/bella-11labs.mp3', // Static preview file
-  },
-  {
-    id: 'antoni-11labs',
-    name: 'Antoni',
-    provider: '11labs' as const,
-    voiceId: 'ErXwobaYiN019PkySvjV', // 11Labs Antoni voice ID
-    gender: 'male',
-    accent: 'American',
-    description: 'Professional and reassuring tone',
-    previewUrl: '/audio/voices/antoni-11labs.mp3', // Static preview file
+    accent: 'Multilingual',
+    description: 'Energetic and friendly, great for receptionists',
+    previewUrl: '/audio/voices/nova-openai.mp3',
   },
   {
     id: 'alloy-openai',
@@ -58,9 +27,19 @@ const AVAILABLE_VOICES = [
     provider: 'openai' as const,
     voiceId: 'alloy',
     gender: 'neutral',
-    accent: 'Neutral',
-    description: 'Balanced and neutral voice',
-    previewUrl: '/audio/voices/alloy-openai.mp3', // Static preview file
+    accent: 'Multilingual',
+    description: 'Balanced and versatile, works well for any context',
+    previewUrl: '/audio/voices/alloy-openai.mp3',
+  },
+  {
+    id: 'shimmer-openai',
+    name: 'Shimmer',
+    provider: 'openai' as const,
+    voiceId: 'shimmer',
+    gender: 'female',
+    accent: 'Multilingual',
+    description: 'Soft and gentle, great for a calming experience',
+    previewUrl: '/audio/voices/shimmer-openai.mp3',
   },
   {
     id: 'echo-openai',
@@ -68,19 +47,29 @@ const AVAILABLE_VOICES = [
     provider: 'openai' as const,
     voiceId: 'echo',
     gender: 'male',
-    accent: 'American',
-    description: 'Clear and confident',
-    previewUrl: '/audio/voices/echo-openai.mp3', // Static preview file
+    accent: 'Multilingual',
+    description: 'Warm and expressive, confident tone',
+    previewUrl: '/audio/voices/echo-openai.mp3',
   },
   {
-    id: 'nova-openai',
-    name: 'Nova',
+    id: 'fable-openai',
+    name: 'Fable',
     provider: 'openai' as const,
-    voiceId: 'nova',
-    gender: 'female',
-    accent: 'American',
-    description: 'Energetic and friendly',
-    previewUrl: '/audio/voices/nova-openai.mp3', // Static preview file
+    voiceId: 'fable',
+    gender: 'male',
+    accent: 'Multilingual',
+    description: 'Articulate with a British inflection',
+    previewUrl: '/audio/voices/fable-openai.mp3',
+  },
+  {
+    id: 'onyx-openai',
+    name: 'Onyx',
+    provider: 'openai' as const,
+    voiceId: 'onyx',
+    gender: 'male',
+    accent: 'Multilingual',
+    description: 'Deep and authoritative, professional tone',
+    previewUrl: '/audio/voices/onyx-openai.mp3',
   },
 ];
 
@@ -109,18 +98,8 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
     }
   }, [initialVoice]);
 
-  // Load available voices for Speech Synthesis API (for OpenAI preview)
+  // Create audio element for playing local preview files
   useEffect(() => {
-    if ('speechSynthesis' in window) {
-      // Load voices
-      speechSynthesis.getVoices();
-      
-      // Some browsers need this event
-      speechSynthesis.onvoiceschanged = () => {
-        speechSynthesis.getVoices();
-      };
-    }
-
     // Create audio element for playing previews
     const audio = new Audio();
     let isCleaningUp = false;
@@ -189,6 +168,11 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
 
   return (
     <div className="space-y-4">
+      {/* Multilingual info */}
+      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+        All voices automatically detect and respond in the caller&apos;s language — English, French, and 50+ other languages supported out of the box.
+      </div>
+
       {/* Filter Buttons */}
       <div className="flex gap-2">
         <Button 
@@ -250,8 +234,8 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
                           {voice.name}
                         </Label>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                            {voice.provider}
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded capitalize">
+                            {voice.provider === 'openai' ? 'OpenAI' : voice.provider}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {voice.gender === 'male' ? '🧑' : voice.gender === 'female' ? '👩' : '🤖'} {voice.gender}

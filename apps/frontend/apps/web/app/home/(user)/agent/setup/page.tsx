@@ -24,6 +24,7 @@ export default async function ReceptionistSetupPage() {
           email: true,
           phoneIntegrationMethod: true,
           phoneIntegrationSettings: true,
+          brandingBusinessName: true,
         },
       })
     : null;
@@ -40,6 +41,7 @@ export default async function ReceptionistSetupPage() {
       accountId={account.id}
       businessName={account.name}
       accountEmail={account.email || ''}
+      savedClinicName={account.brandingBusinessName || ''}
     />
   );
 }

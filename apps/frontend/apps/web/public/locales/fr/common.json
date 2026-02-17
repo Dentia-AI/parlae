@@ -95,10 +95,17 @@
       "phone": "Téléphone",
       "review": "Révision"
     },
+    "clinicName": {
+      "title": "Votre clinique",
+      "description": "Ce nom sera utilisé par votre réceptionniste IA pour accueillir les appelants.",
+      "label": "Nom de la clinique / entreprise",
+      "placeholder": "ex. Clinique Dentaire de l'Érable"
+    },
     "voice": {
-      "title": "Étape 1 : Sélection de la voix",
+      "title": "Sélection de la voix",
       "description": "Choisissez la personnalité vocale de votre réceptionniste IA",
       "selectVoice": "Veuillez sélectionner une voix",
+      "enterClinicName": "Veuillez entrer le nom de votre clinique ou entreprise",
       "continueToKnowledge": "Continuer vers la base de connaissances"
     },
     "knowledge": {

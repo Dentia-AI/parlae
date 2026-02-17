@@ -402,12 +402,16 @@ export const deployReceptionistAction = enhanceAction(
       if (templateConfig.members && templateConfig.members.length > 0) {
         for (const member of templateConfig.members) {
           if (member.assistant) {
-            member.assistant.voice = {
+            const voiceConfig: Record<string, unknown> = {
               provider: data.voice.provider as any,
               voiceId: data.voice.voiceId,
-              stability: 0.5,
-              similarityBoost: 0.75,
             };
+            // ElevenLabs-specific voice tuning params
+            if (data.voice.provider === '11labs' || data.voice.provider === 'elevenlabs') {
+              voiceConfig.stability = 0.5;
+              voiceConfig.similarityBoost = 0.75;
+            }
+            member.assistant.voice = voiceConfig as any;
           }
         }
 

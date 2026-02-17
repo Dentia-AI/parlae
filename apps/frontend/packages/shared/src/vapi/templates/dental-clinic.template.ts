@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.0';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.0';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.1';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.1';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)
@@ -819,10 +819,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: 'Thank you for calling {{clinicName}}! How can I help you today?',
           firstMessageMode: 'assistant-speaks-first',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: '21m00Tcm4TlvDq8ikWAM',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -893,10 +891,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'pNInz6obpgDQGcFmaJgB',
-            stability: 0.3,
-            similarityBoost: 0.8,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -941,10 +937,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -1015,10 +1009,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -1089,10 +1081,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -1157,10 +1147,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',
@@ -1225,10 +1213,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'elevenlabs',
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: 'openai',

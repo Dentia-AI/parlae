@@ -95,10 +95,17 @@
       "phone": "Phone",
       "review": "Review"
     },
+    "clinicName": {
+      "title": "Your Clinic",
+      "description": "This name will be used by your AI receptionist when greeting callers.",
+      "label": "Clinic / Business Name",
+      "placeholder": "e.g. Maple Dental Clinic"
+    },
     "voice": {
-      "title": "Step 1: Voice Selection",
+      "title": "Voice Selection",
       "description": "Choose the voice personality for your AI receptionist",
       "selectVoice": "Please select a voice",
+      "enterClinicName": "Please enter your clinic or business name",
       "continueToKnowledge": "Continue to Knowledge Base"
     },
     "knowledge": {

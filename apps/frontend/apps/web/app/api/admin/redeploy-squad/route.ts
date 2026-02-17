@@ -212,12 +212,15 @@ export async function POST(request: NextRequest) {
     if (voiceConfig && templateConfig.members) {
       for (const member of templateConfig.members) {
         if (member.assistant) {
-          member.assistant.voice = {
+          const vc: Record<string, unknown> = {
             provider: voiceConfig.provider as any,
             voiceId: voiceConfig.voiceId,
-            stability: 0.5,
-            similarityBoost: 0.75,
           };
+          if (voiceConfig.provider === '11labs' || voiceConfig.provider === 'elevenlabs') {
+            vc.stability = 0.5;
+            vc.similarityBoost = 0.75;
+          }
+          member.assistant.voice = vc as any;
         }
       }
 

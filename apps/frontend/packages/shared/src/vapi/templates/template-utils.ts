@@ -363,9 +363,18 @@ function buildMemberPayload(
     };
   }
 
+  // Append multilingual instruction to EVERY assistant's system prompt
+  systemPrompt += `\n\n## LANGUAGE
+You are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
+
   // Build assistant payload
   const assistantPayload: Record<string, unknown> = {
     name: a.name,
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-3',
+      language: 'multi',
+    },
     voice: { ...a.voice },
     model: modelConfig,
     firstMessage: hydratePlaceholders(a.firstMessage, vars),
@@ -539,10 +548,8 @@ export function dbShapeToTemplate(
             ac.firstMessageMode ??
             'assistant-speaks-first-with-model-generated-message',
           voice: ac.voice ?? {
-            provider: 'elevenlabs',
-            voiceId: '21m00Tcm4TlvDq8ikWAM',
-            stability: 0.5,
-            similarityBoost: 0.75,
+            provider: 'openai',
+            voiceId: 'nova',
           },
           model: {
             provider: mc.provider ?? 'openai',
