@@ -14,15 +14,32 @@ async function getSessionUserId() {
   }
 }
 
-// Validation schema
+// Helper: treat empty strings as undefined so optional validators pass
+const emptyToNull = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().nullable().optional(),
+);
+const emptyToNullUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().url().nullable().optional(),
+);
+const emptyToNullEmail = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().email().nullable().optional(),
+);
+const emptyToNullColor = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
+);
+
 const brandingSchema = z.object({
-  logoUrl: z.string().url().optional().nullable(),
-  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable(),
-  businessName: z.string().optional().nullable(),
-  contactEmail: z.string().email().optional().nullable(),
-  contactPhone: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  website: z.string().url().optional().nullable(),
+  logoUrl: emptyToNullUrl,
+  primaryColor: emptyToNullColor,
+  businessName: emptyToNull,
+  contactEmail: emptyToNullEmail,
+  contactPhone: emptyToNull,
+  address: emptyToNull,
+  website: emptyToNullUrl,
 });
 
 /**

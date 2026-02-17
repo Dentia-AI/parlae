@@ -25,6 +25,36 @@ export default function BrandingSettingsPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Client-side validation
+  const validate = (data: typeof branding) => {
+    const errs: Record<string, string> = {};
+    if (!data.businessName.trim()) {
+      errs.businessName = t('common:settings.branding.validation.businessNameRequired', 'Business name is required');
+    }
+    if (!data.contactEmail.trim()) {
+      errs.contactEmail = t('common:settings.branding.validation.contactEmailRequired', 'Contact email is required');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contactEmail.trim())) {
+      errs.contactEmail = t('common:settings.branding.validation.contactEmailInvalid', 'Please enter a valid email address');
+    }
+    if (!data.contactPhone.trim()) {
+      errs.contactPhone = t('common:settings.branding.validation.contactPhoneRequired', 'Contact phone is required');
+    }
+    if (data.logoUrl.trim() && !/^https?:\/\/.+/.test(data.logoUrl.trim())) {
+      errs.logoUrl = t('common:settings.branding.validation.logoUrlInvalid', 'Please enter a valid URL');
+    }
+    if (data.website.trim() && !/^https?:\/\/.+/.test(data.website.trim())) {
+      errs.website = t('common:settings.branding.validation.websiteInvalid', 'Please enter a valid URL');
+    }
+    if (data.primaryColor && !/^#[0-9A-Fa-f]{6}$/.test(data.primaryColor)) {
+      errs.primaryColor = t('common:settings.branding.validation.colorInvalid', 'Please enter a valid hex color');
+    }
+    return errs;
+  };
+
+  const validationErrors = validate(branding);
+  const isFormValid = Object.keys(validationErrors).length === 0;
 
   useEffect(() => {
     fetchBranding();
@@ -55,6 +85,10 @@ export default function BrandingSettingsPage() {
   };
 
   const handleSave = async () => {
+    const errs = validate(branding);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
     setIsLoading(true);
     try {
       const response = await fetch('/api/account/branding', {
@@ -105,6 +139,85 @@ export default function BrandingSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Business Name * */}
+          <div className="space-y-2">
+            <Label htmlFor="businessName">
+              {t('common:settings.branding.businessName')} <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="businessName"
+              placeholder="Your Clinic Name"
+              value={branding.businessName}
+              onChange={(e) => setBranding({ ...branding, businessName: e.target.value })}
+              className={errors.businessName ? 'border-destructive' : ''}
+            />
+            {errors.businessName ? (
+              <p className="text-sm text-destructive">{errors.businessName}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.businessNameHint')}
+              </p>
+            )}
+          </div>
+
+          {/* Contact Email * */}
+          <div className="space-y-2">
+            <Label htmlFor="contactEmail">
+              {t('common:settings.branding.contactEmail')} <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="contactEmail"
+              type="email"
+              placeholder="info@yourclinic.com"
+              value={branding.contactEmail}
+              onChange={(e) => setBranding({ ...branding, contactEmail: e.target.value })}
+              className={errors.contactEmail ? 'border-destructive' : ''}
+            />
+            {errors.contactEmail ? (
+              <p className="text-sm text-destructive">{errors.contactEmail}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.contactEmailHint')}
+              </p>
+            )}
+          </div>
+
+          {/* Contact Phone * */}
+          <div className="space-y-2">
+            <Label htmlFor="contactPhone">
+              {t('common:settings.branding.contactPhone')} <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="contactPhone"
+              type="tel"
+              placeholder="(555) 123-4567"
+              value={branding.contactPhone}
+              onChange={(e) => setBranding({ ...branding, contactPhone: e.target.value })}
+              className={errors.contactPhone ? 'border-destructive' : ''}
+            />
+            {errors.contactPhone ? (
+              <p className="text-sm text-destructive">{errors.contactPhone}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.contactPhoneHint')}
+              </p>
+            )}
+          </div>
+
+          {/* Address */}
+          <div className="space-y-2">
+            <Label htmlFor="address">{t('common:settings.branding.address')}</Label>
+            <Input
+              id="address"
+              placeholder="123 Main St, City, Province A1B 2C3"
+              value={branding.address}
+              onChange={(e) => setBranding({ ...branding, address: e.target.value })}
+            />
+            <p className="text-sm text-muted-foreground">
+              {t('common:settings.branding.addressHint')}
+            </p>
+          </div>
+
           {/* Logo URL */}
           <div className="space-y-2">
             <Label htmlFor="logoUrl">{t('common:settings.branding.logoUrl')}</Label>
@@ -115,6 +228,7 @@ export default function BrandingSettingsPage() {
                 placeholder="https://yourdomain.com/logo.png"
                 value={branding.logoUrl}
                 onChange={(e) => setBranding({ ...branding, logoUrl: e.target.value })}
+                className={errors.logoUrl ? 'border-destructive' : ''}
               />
               {branding.logoUrl && (
                 <Button
@@ -128,10 +242,14 @@ export default function BrandingSettingsPage() {
                 </Button>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.logoRecommendation')}
-            </p>
-            {branding.logoUrl && (
+            {errors.logoUrl ? (
+              <p className="text-sm text-destructive">{errors.logoUrl}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.logoRecommendation')}
+              </p>
+            )}
+            {branding.logoUrl && !errors.logoUrl && (
               <div className="mt-2 p-4 bg-muted rounded-lg">
                 <p className="text-xs text-muted-foreground mb-2">{t('common:settings.branding.preview')}</p>
                 <img 
@@ -163,7 +281,7 @@ export default function BrandingSettingsPage() {
                 placeholder="#3b82f6"
                 value={branding.primaryColor}
                 onChange={(e) => setBranding({ ...branding, primaryColor: e.target.value })}
-                className="flex-1"
+                className={`flex-1 ${errors.primaryColor ? 'border-destructive' : ''}`}
                 maxLength={7}
               />
               <div 
@@ -172,67 +290,13 @@ export default function BrandingSettingsPage() {
                 title="Color preview"
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.colorUsage')}
-            </p>
-          </div>
-
-          {/* Business Name */}
-          <div className="space-y-2">
-            <Label htmlFor="businessName">{t('common:settings.branding.businessName')}</Label>
-            <Input
-              id="businessName"
-              placeholder="Your Clinic Name"
-              value={branding.businessName}
-              onChange={(e) => setBranding({ ...branding, businessName: e.target.value })}
-            />
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.businessNameHint')}
-            </p>
-          </div>
-
-          {/* Contact Email */}
-          <div className="space-y-2">
-            <Label htmlFor="contactEmail">{t('common:settings.branding.contactEmail')}</Label>
-            <Input
-              id="contactEmail"
-              type="email"
-              placeholder="info@yourclinic.com"
-              value={branding.contactEmail}
-              onChange={(e) => setBranding({ ...branding, contactEmail: e.target.value })}
-            />
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.contactEmailHint')}
-            </p>
-          </div>
-
-          {/* Contact Phone */}
-          <div className="space-y-2">
-            <Label htmlFor="contactPhone">{t('common:settings.branding.contactPhone')}</Label>
-            <Input
-              id="contactPhone"
-              type="tel"
-              placeholder="(555) 123-4567"
-              value={branding.contactPhone}
-              onChange={(e) => setBranding({ ...branding, contactPhone: e.target.value })}
-            />
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.contactPhoneHint')}
-            </p>
-          </div>
-
-          {/* Address */}
-          <div className="space-y-2">
-            <Label htmlFor="address">{t('common:settings.branding.address')}</Label>
-            <Input
-              id="address"
-              placeholder="123 Main St, City, Province A1B 2C3"
-              value={branding.address}
-              onChange={(e) => setBranding({ ...branding, address: e.target.value })}
-            />
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.addressHint')}
-            </p>
+            {errors.primaryColor ? (
+              <p className="text-sm text-destructive">{errors.primaryColor}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.colorUsage')}
+              </p>
+            )}
           </div>
 
           {/* Website */}
@@ -244,10 +308,15 @@ export default function BrandingSettingsPage() {
               placeholder="https://yourdomain.com"
               value={branding.website}
               onChange={(e) => setBranding({ ...branding, website: e.target.value })}
+              className={errors.website ? 'border-destructive' : ''}
             />
-            <p className="text-sm text-muted-foreground">
-              {t('common:settings.branding.websiteHint')}
-            </p>
+            {errors.website ? (
+              <p className="text-sm text-destructive">{errors.website}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t('common:settings.branding.websiteHint')}
+              </p>
+            )}
           </div>
 
           {/* Preview Section */}
@@ -259,7 +328,7 @@ export default function BrandingSettingsPage() {
 
           {/* Save Button */}
           <div className="flex justify-end pt-4">
-            <Button onClick={handleSave} disabled={isLoading}>
+            <Button onClick={handleSave} disabled={isLoading || !isFormValid}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t('common:settings.branding.saveButton')}
             </Button>
