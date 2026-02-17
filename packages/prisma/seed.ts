@@ -131,6 +131,22 @@ async function main() {
 
   console.log('✅ Created admin account membership');
 
+  // Ensure platform pricing defaults exist (single-row config table)
+  const existingPricing = await prisma.platformPricing.findFirst();
+  if (!existingPricing) {
+    await prisma.platformPricing.create({
+      data: {
+        twilioInboundPerMin: 0.0085,
+        twilioOutboundPerMin: 0.014,
+        serverCostPerMin: 0.005,
+        markupPercent: 30.0,
+      },
+    });
+    console.log('✅ Created default platform pricing config');
+  } else {
+    console.log('✅ Platform pricing config already exists');
+  }
+
   console.log('\n🎉 Seed completed successfully!');
   console.log('\n📝 Test Credentials:');
   console.log('   Email: test@example.com');

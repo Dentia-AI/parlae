@@ -1064,3 +1064,18 @@ model PmsCachedData {
   @@index([cacheType])
   @@map("pms_cached_data")
 }
+
+// Platform-wide pricing configuration for blended call cost calculation.
+// Single-row table (like Config). Stores rates used to compute the full cost
+// of a call: Vapi charges + Twilio telephony + server overhead + markup.
+model PlatformPricing {
+  id                   Int      @id @default(autoincrement())
+  twilioInboundPerMin  Float    @default(0.0085) @map("twilio_inbound_per_min")
+  twilioOutboundPerMin Float    @default(0.014) @map("twilio_outbound_per_min")
+  serverCostPerMin     Float    @default(0.005) @map("server_cost_per_min")
+  markupPercent        Float    @default(30.0) @map("markup_percent")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  updatedBy            String?  @map("updated_by")
+
+  @@map("platform_pricing")
+}

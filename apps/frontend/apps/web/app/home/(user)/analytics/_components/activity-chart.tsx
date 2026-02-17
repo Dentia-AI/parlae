@@ -43,11 +43,11 @@ export function ActivityChart({ data }: ActivityChartProps) {
                 return (
                   <div
                     key={index}
-                    className="flex-1 flex flex-col items-center gap-1 group"
+                    className="flex-1 flex flex-col items-center gap-1 group h-full"
                   >
-                    <div className="relative w-full">
+                    <div className="relative w-full flex-1">
                       <div
-                        className="bg-primary hover:bg-primary/80 transition-all rounded-t-sm cursor-pointer"
+                        className="absolute bottom-0 left-0 right-0 bg-primary hover:bg-primary/80 transition-all rounded-t-sm cursor-pointer"
                         style={{ height: `${height}%`, minHeight: '4px' }}
                         title={`${item.count} calls on ${dayLabel}`}
                       />

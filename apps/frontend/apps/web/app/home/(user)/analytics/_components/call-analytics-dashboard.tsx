@@ -197,7 +197,7 @@ export function CallAnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Math.round(data.metrics.totalCalls / (dateRange === '1d' ? 1 : dateRange === '7d' ? 7 : 14))}
+              {(data.metrics.totalCalls / (dateRange === '1d' ? 1 : dateRange === '7d' ? 7 : 14)).toFixed(1)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Calls per day average

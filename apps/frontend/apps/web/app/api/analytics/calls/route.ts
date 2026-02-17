@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+import { isAdminUser } from '~/lib/auth/admin';
+import { calculateBlendedCost, getPlatformPricing } from '@kit/shared/vapi/cost-calculator';
 
 import type { VapiCall, VapiAnalyticsQuery } from '@kit/shared/vapi/vapi.service';
 
@@ -319,13 +321,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(generateMockAnalytics(startDate, endDate));
     }
 
+    // Compute blended totalCost from individual calls (admin-only)
+    const isAdmin = isAdminUser(userId);
+    let blendedTotalCost = 0;
+
+    if (isAdmin && recentCalls.length > 0) {
+      const pricingRates = await getPlatformPricing(prisma);
+      for (const call of recentCalls) {
+        const vapiCost = Number(call.cost) || 0;
+        let dur = 0;
+        if (call.startedAt && call.endedAt) {
+          dur = Math.round(
+            (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
+          );
+        }
+        const callType = call.type === 'outboundPhoneCall' ? 'outbound' as const : 'inbound' as const;
+        const breakdown = calculateBlendedCost(vapiCost, dur, callType, pricingRates);
+        blendedTotalCost += breakdown.totalDollars;
+      }
+      blendedTotalCost = Math.round(blendedTotalCost * 100) / 100;
+    }
+
     return NextResponse.json({
       dateRange: { start: startDate, end: endDate },
       metrics: {
         totalCalls,
         bookingRate,
         avgCallTime,
-        totalCost,
+        totalCost: isAdmin ? blendedTotalCost : 0,
         insuranceVerified: insuranceVerifiedCount,
         paymentPlans: { count: paymentPlanCount, totalAmount: 0 },
         collections: { count: collectionCount, totalAmount: 0, recovered: 0, collectionRate: 0 },

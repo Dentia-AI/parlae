@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+import { isAdminUser } from '~/lib/auth/admin';
 import { getLogger } from '@kit/shared/logger';
+import { calculateBlendedCost, getPlatformPricing } from '@kit/shared/vapi/cost-calculator';
 
 /**
  * GET /api/call-logs/[id]
@@ -100,7 +102,11 @@ export async function GET(
       action: 'viewed_call_detail',
     }, '[Call Logs] Call detail accessed');
 
-    return NextResponse.json(mapVapiCallToDetail(call));
+    // Fetch pricing rates and check admin status for cost visibility
+    const isAdmin = isAdminUser(userId);
+    const pricingRates = await getPlatformPricing(prisma);
+
+    return NextResponse.json(mapVapiCallToDetail(call, isAdmin, pricingRates));
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -144,16 +150,21 @@ function normalizeTranscript(raw: unknown): string | null {
 
 /**
  * Map a full Vapi call to the detail shape the frontend expects.
+ *
+ * @param showCost If true (admin), include blended cost + breakdown. Otherwise null.
+ * @param rates    Platform pricing rates for blended cost calculation.
  */
-function mapVapiCallToDetail(call: any) {
+function mapVapiCallToDetail(
+  call: any,
+  showCost: boolean,
+  rates: import('@kit/shared/vapi/cost-calculator').PlatformPricingRates,
+) {
   const analysis = call.analysis || {};
   const structuredData = analysis.structuredData || {};
   const artifact = call.artifact || {};
 
   const summary = analysis.summary || call.summary || null;
 
-  // Normalize transcript: prefer artifact.transcript (array), fall back to
-  // artifact.messages, then legacy top-level call.transcript string.
   const transcript =
     normalizeTranscript(artifact.transcript) ||
     normalizeTranscript(artifact.messages) ||
@@ -169,6 +180,15 @@ function mapVapiCallToDetail(call: any) {
   }
 
   const outcome = inferOutcome(structuredData);
+
+  // Blended cost (admin-only)
+  let costCents: number | null = null;
+  let costBreakdownBlended: import('@kit/shared/vapi/cost-calculator').BlendedCostBreakdown | null = null;
+  if (showCost && call.cost != null && duration != null) {
+    const callType = call.type === 'outboundPhoneCall' ? 'outbound' as const : 'inbound' as const;
+    costBreakdownBlended = calculateBlendedCost(call.cost, duration, callType, rates);
+    costCents = costBreakdownBlended.totalCents;
+  }
 
   return {
     id: call.id,
@@ -234,7 +254,7 @@ function mapVapiCallToDetail(call: any) {
     aiConfidence: null,
     callQuality: null,
 
-    costCents: call.cost ? Math.round(call.cost * 100) : null,
+    costCents,
 
     metadata: {
       vapiPhoneNumberId: call.phoneNumberId,
@@ -242,6 +262,7 @@ function mapVapiCallToDetail(call: any) {
       vapiSquadId: call.squadId,
       endedReason: call.endedReason,
       costBreakdown: call.costBreakdown,
+      ...(showCost && costBreakdownBlended ? { blendedCostBreakdown: costBreakdownBlended } : {}),
     },
     actions: structuredData.actionsPerformed ? { actions: structuredData.actionsPerformed } : null,
     callNotes: null,

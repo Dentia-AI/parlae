@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+import { isAdminUser } from '~/lib/auth/admin';
+import { calculateBlendedCost, getPlatformPricing, DEFAULT_PRICING_RATES } from '@kit/shared/vapi/cost-calculator';
+import type { PlatformPricingRates } from '@kit/shared/vapi/cost-calculator';
 
 import type { VapiCall } from '@kit/shared/vapi/vapi.service';
 
@@ -32,8 +35,15 @@ function normalizeTranscript(raw: unknown): string | null {
 
 /**
  * Map a Vapi call to the shape the frontend expects for the call list.
+ *
+ * @param showCost  If true (admin), include blended cost. Otherwise costCents is null.
+ * @param rates     Platform pricing rates for blended cost calculation.
  */
-function mapVapiCallToListItem(call: VapiCall) {
+function mapVapiCallToListItem(
+  call: VapiCall,
+  showCost: boolean,
+  rates: PlatformPricingRates,
+) {
   const analysis = call.analysis || {};
   const structuredData = analysis.structuredData || {};
   const artifact = call.artifact || {};
@@ -53,6 +63,14 @@ function mapVapiCallToListItem(call: VapiCall) {
 
   // Infer outcome from structured data
   const outcome = inferOutcome(structuredData);
+
+  // Blended cost (admin-only)
+  let costCents: number | null = null;
+  if (showCost && call.cost != null && duration != null) {
+    const callType = call.type === 'outboundPhoneCall' ? 'outbound' as const : 'inbound' as const;
+    const breakdown = calculateBlendedCost(call.cost, duration, callType, rates);
+    costCents = breakdown.totalCents;
+  }
 
   return {
     id: call.id,
@@ -74,7 +92,7 @@ function mapVapiCallToListItem(call: VapiCall) {
     transferredTo: structuredData.transferredTo || null,
     followUpRequired: !!structuredData.followUpRequired,
     customerSentiment: structuredData.customerSentiment || null,
-    costCents: call.cost ? Math.round(call.cost * 100) : null,
+    costCents,
     callStartedAt: call.startedAt || call.endedAt || new Date().toISOString(),
     callEndedAt: call.endedAt || null,
   };
@@ -199,8 +217,14 @@ export async function GET(request: NextRequest) {
       return bTime - aTime;
     });
 
+    // Fetch pricing rates and check admin status for cost visibility
+    const isAdmin = isAdminUser(userId);
+    const pricingRates = isAdmin ? await getPlatformPricing(prisma) : DEFAULT_PRICING_RATES;
+
     // Map to frontend shape
-    let mappedCalls = allCalls.map(mapVapiCallToListItem);
+    let mappedCalls = allCalls.map((call) =>
+      mapVapiCallToListItem(call, isAdmin, pricingRates)
+    );
 
     // Apply client-side filters
     if (outcome) {

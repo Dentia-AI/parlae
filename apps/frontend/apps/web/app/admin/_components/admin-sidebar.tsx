@@ -54,6 +54,11 @@ const navigation = [
     href: '/admin/pms',
     icon: Database,
   },
+  {
+    name: 'Platform Settings',
+    href: '/admin/settings',
+    icon: Settings,
+  },
   ...(isDev
     ? [
         {
