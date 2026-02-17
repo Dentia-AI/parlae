@@ -3,15 +3,26 @@
 import { useEffect } from 'react';
 
 /**
- * GoHighLevel Tracking Script Component
+ * GoHighLevel External Tracking Script Component
  *
- * Loads the GHL tracking pixel that records page visits, form fills,
- * and user activity — tied to contacts in your GHL CRM.
+ * Loads the GHL external tracking script that records page views,
+ * form submissions, and user activity — tied to contacts in your GHL CRM.
  *
- * This is separate from the chat widget. The tracking script is what
- * enables the "Activity" tab on each GHL contact to show page visits.
+ * This uses the current GHL external tracking format:
+ * ```html
+ * <script
+ *   src="https://{tracking-domain}/js/external-tracking.js"
+ *   data-tracking-id="tk_xxxxx">
+ * </script>
+ * ```
  *
- * Requires NEXT_PUBLIC_GHL_LOCATION_ID to be set.
+ * Get the tracking code from GHL: Settings → External Tracking → Copy Script
+ *
+ * Required env vars:
+ * - NEXT_PUBLIC_GHL_TRACKING_DOMAIN — e.g. "link.yourdomain.com"
+ * - NEXT_PUBLIC_GHL_TRACKING_ID — e.g. "tk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ *
+ * Only loads in production to avoid console errors during development.
  *
  * @example
  * ```tsx
@@ -28,10 +39,16 @@ import { useEffect } from 'react';
  * ```
  */
 export function GHLTracking() {
-  const locationId = process.env.NEXT_PUBLIC_GHL_LOCATION_ID;
+  const trackingDomain = process.env.NEXT_PUBLIC_GHL_TRACKING_DOMAIN;
+  const trackingId = process.env.NEXT_PUBLIC_GHL_TRACKING_ID;
+  const isDev = process.env.NODE_ENV === 'development';
 
   useEffect(() => {
-    if (!locationId) {
+    if (isDev) {
+      return;
+    }
+
+    if (!trackingDomain || !trackingId) {
       return;
     }
 
@@ -42,14 +59,15 @@ export function GHLTracking() {
 
     const script = document.createElement('script');
     script.id = 'ghl-tracking-script';
-    script.src = `https://storage.googleapis.com/msgsndr/scripts/${locationId}.js`;
+    script.src = `https://${trackingDomain}/js/external-tracking.js`;
     script.async = true;
+    script.setAttribute('data-tracking-id', trackingId);
 
     script.onerror = () => {
-      console.error('[GHL Tracking] Failed to load tracking script');
+      console.warn('[GHL Tracking] Failed to load tracking script');
     };
 
-    document.head.appendChild(script);
+    document.body.appendChild(script);
 
     return () => {
       const scriptToRemove = document.getElementById('ghl-tracking-script');
@@ -57,7 +75,7 @@ export function GHLTracking() {
         scriptToRemove.remove();
       }
     };
-  }, [locationId]);
+  }, [trackingDomain, trackingId, isDev]);
 
   return null;
 }

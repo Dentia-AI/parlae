@@ -305,8 +305,9 @@ export class VapiWebhookController {
 
   /**
    * Resolve unresolved Vapi template variables in tool parameters.
-   * The AI model sometimes copies literal {{call.customer.number}} into
-   * tool arguments. This replaces them with actual values from the call.
+   * The AI model sometimes copies literal {{call.customer.number}} or
+   * placeholder text like "caller_phone_number" into tool arguments
+   * instead of using the resolved value.
    */
   private resolveTemplateVars(params: any, call: any): any {
     if (!params || !call) return params;
@@ -314,12 +315,31 @@ export class VapiWebhookController {
     const customerNumber =
       call.customer?.number || call.phoneNumber?.number || '';
 
+    const PLACEHOLDER_PHONE_VALUES = [
+      'caller_phone_number',
+      'caller phone number',
+      "caller's phone number",
+      'phone_number',
+      'customer_phone_number',
+      'customer phone number',
+    ];
+
     const resolve = (value: any): any => {
       if (typeof value === 'string') {
-        return value.replace(
+        let resolved = value.replace(
           /\{\{call\.customer\.number\}\}/g,
           customerNumber,
         );
+        if (
+          customerNumber &&
+          PLACEHOLDER_PHONE_VALUES.includes(resolved.toLowerCase().trim())
+        ) {
+          this.logger.warn(
+            `[resolveTemplateVars] AI sent placeholder "${resolved}", replacing with actual number`,
+          );
+          resolved = customerNumber;
+        }
+        return resolved;
       }
       if (Array.isArray(value)) return value.map(resolve);
       if (value && typeof value === 'object') {
