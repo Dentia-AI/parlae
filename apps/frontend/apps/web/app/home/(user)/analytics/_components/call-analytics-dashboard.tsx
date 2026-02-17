@@ -55,7 +55,7 @@ interface AnalyticsData {
 export function CallAnalyticsDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d'>('7d');
+  const [dateRange, setDateRange] = useState<'1d' | '7d' | '14d'>('7d');
 
   useEffect(() => {
     fetchAnalytics();
@@ -65,12 +65,12 @@ export function CallAnalyticsDashboard() {
     setLoading(true);
     try {
       const startDate = new Date();
-      if (dateRange === '7d') {
+      if (dateRange === '1d') {
+        startDate.setDate(startDate.getDate() - 1);
+      } else if (dateRange === '7d') {
         startDate.setDate(startDate.getDate() - 7);
-      } else if (dateRange === '30d') {
-        startDate.setDate(startDate.getDate() - 30);
       } else {
-        startDate.setDate(startDate.getDate() - 90);
+        startDate.setDate(startDate.getDate() - 14);
       }
 
       const response = await fetch(
@@ -114,11 +114,18 @@ export function CallAnalyticsDashboard() {
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-bold tracking-tight">Call Analytics</h2>
           <Badge variant="outline" className="gap-1">
-            Last {dateRange === '7d' ? '7 days' : dateRange === '30d' ? '30 days' : '90 days'}
+            Last {dateRange === '1d' ? '24 hours' : dateRange === '7d' ? '7 days' : '14 days'}
           </Badge>
         </div>
 
         <div className="flex gap-2">
+          <Button
+            variant={dateRange === '1d' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDateRange('1d')}
+          >
+            24 Hours
+          </Button>
           <Button
             variant={dateRange === '7d' ? 'default' : 'outline'}
             size="sm"
@@ -127,18 +134,11 @@ export function CallAnalyticsDashboard() {
             7 Days
           </Button>
           <Button
-            variant={dateRange === '30d' ? 'default' : 'outline'}
+            variant={dateRange === '14d' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setDateRange('30d')}
+            onClick={() => setDateRange('14d')}
           >
-            30 Days
-          </Button>
-          <Button
-            variant={dateRange === '90d' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setDateRange('90d')}
-          >
-            90 Days
+            14 Days
           </Button>
           <Button variant="outline" size="sm" className="gap-1">
             <Calendar className="h-4 w-4" />
@@ -197,7 +197,7 @@ export function CallAnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Math.round(data.metrics.totalCalls / (dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90))}
+              {Math.round(data.metrics.totalCalls / (dateRange === '1d' ? 1 : dateRange === '7d' ? 7 : 14))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Calls per day average

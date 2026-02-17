@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
       bulkWebhookSecret,
       vapiCredentialId,
     );
-    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, template.version, vapiCredentialId);
 
     for (const entry of plan) {
       if (entry.status !== 'pending') continue;

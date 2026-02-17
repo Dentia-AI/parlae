@@ -169,7 +169,7 @@ export async function POST(request: Request) {
     );
     const toolIdMap = await vapiService.ensureStandaloneTools(
       toolDefs,
-      'v1.0',
+      DENTAL_CLINIC_TEMPLATE_VERSION,
       vapiCredentialId,
     );
 

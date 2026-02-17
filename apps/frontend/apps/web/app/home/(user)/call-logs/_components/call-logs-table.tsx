@@ -168,7 +168,7 @@ export function CallLogsTable() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [outcomeFilter, setOutcomeFilter] = useState(searchParams.get('outcome') || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
-  const [dateRange, setDateRange] = useState(searchParams.get('range') || '30d');
+  const [dateRange, setDateRange] = useState(searchParams.get('range') || '14d');
 
   const currentPage = parseInt(searchParams.get('page') || '1');
 
@@ -186,10 +186,9 @@ export function CallLogsTable() {
       // Date range
       const now = new Date();
       const startDate = new Date();
-      if (dateRange === '7d') startDate.setDate(now.getDate() - 7);
-      else if (dateRange === '30d') startDate.setDate(now.getDate() - 30);
-      else if (dateRange === '90d') startDate.setDate(now.getDate() - 90);
-      else if (dateRange === 'all') startDate.setFullYear(2020);
+      if (dateRange === '1d') startDate.setDate(now.getDate() - 1);
+      else if (dateRange === '7d') startDate.setDate(now.getDate() - 7);
+      else if (dateRange === '14d') startDate.setDate(now.getDate() - 14);
       params.set('startDate', startDate.toISOString());
       params.set('endDate', now.toISOString());
 
@@ -225,7 +224,7 @@ export function CallLogsTable() {
     router.push('/home/call-logs');
   };
 
-  const hasActiveFilters = searchTerm || outcomeFilter || statusFilter || dateRange !== '30d';
+  const hasActiveFilters = searchTerm || outcomeFilter || statusFilter || dateRange !== '14d';
 
   return (
     <div className="space-y-4">
@@ -267,10 +266,9 @@ export function CallLogsTable() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="1d">Last 24 hours</SelectItem>
                 <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="30d">Last 30 days</SelectItem>
-                <SelectItem value="90d">Last 90 days</SelectItem>
-                <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="14d">Last 14 days</SelectItem>
               </SelectContent>
             </Select>
 

@@ -1999,7 +1999,25 @@ class VapiService {
         return [];
       }
 
-      return await response.json();
+      const body = await response.json();
+
+      // Handle paginated response format (Vapi may return { results: [...] })
+      if (Array.isArray(body)) {
+        return body;
+      }
+      if (body && Array.isArray(body.results)) {
+        return body.results;
+      }
+      if (body && Array.isArray(body.data)) {
+        return body.data;
+      }
+
+      logger.warn({
+        bodyType: typeof body,
+        hasResults: !!body?.results,
+        hasData: !!body?.data,
+      }, '[Vapi] Unexpected response shape from list tools');
+      return [];
     } catch (error) {
       logger.error({
         error: error instanceof Error ? error.message : error,
@@ -2171,81 +2189,132 @@ class VapiService {
 
     if (!this.enabled) return toolIdMap;
 
-    // Fetch existing tools to avoid duplicates
+    // Fetch ALL existing tools
     const existingTools = await this.listTools();
-    const existingByName = new Map<string, any>();
 
+    // Group existing tools by function name — detects duplicates
+    const existingByName = new Map<string, any[]>();
     for (const tool of existingTools) {
       const funcName = tool.function?.name;
       if (funcName) {
-        existingByName.set(funcName, tool);
+        const list = existingByName.get(funcName) || [];
+        list.push(tool);
+        existingByName.set(funcName, list);
       }
+    }
+
+    // Collect the set of function names we need
+    const requestedNames = new Set<string>();
+    for (const td of toolDefinitions) {
+      if (td.function?.name) requestedNames.add(td.function.name);
     }
 
     logger.info({
       existingCount: existingTools.length,
       requestedCount: toolDefinitions.length,
       hasCredentialId: !!credentialId,
+      version,
     }, '[Vapi] Ensuring standalone tools exist');
 
     let apiCallCount = 0;
+
+    const rateLimitDelay = async () => {
+      apiCallCount++;
+      if (apiCallCount > 0 && apiCallCount % 5 === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    };
+
+    // Build the desired server config once
+    const buildServerConfig = (toolDef: any): Record<string, unknown> | undefined => {
+      if (!toolDef.server) return undefined;
+      if (credentialId) {
+        return {
+          url: toolDef.server.url,
+          credentialId,
+          ...(toolDef.server.timeoutSeconds ? { timeoutSeconds: toolDef.server.timeoutSeconds } : {}),
+        };
+      }
+      return { ...toolDef.server };
+    };
+
+    // Build the version-tagged description
+    const versionedDescription = (desc: string) => {
+      // Strip any existing version tag like [v1.0] or [v2.4]
+      const stripped = desc.replace(/^\[v[\d.]+\]\s*/, '');
+      return `[${version}] ${stripped}`;
+    };
+
     for (const toolDef of toolDefinitions) {
       const funcName = toolDef.function?.name;
       if (!funcName) continue;
 
-      // Check if tool already exists with matching function name
-      const existing = existingByName.get(funcName);
-      if (existing) {
-        toolIdMap.set(funcName, existing.id);
+      const existingList = existingByName.get(funcName) || [];
+      const desiredServerConfig = buildServerConfig(toolDef);
+      const desiredDescription = versionedDescription(toolDef.function.description);
 
-        // If a credentialId is requested but the existing tool doesn't have it,
-        // patch the tool's server config to add the credential.
-        if (credentialId && existing.server?.credentialId !== credentialId) {
-          // Rate-limit courtesy: delay between API calls
-          if (apiCallCount > 0 && apiCallCount % 5 === 0) {
-            await new Promise((r) => setTimeout(r, 2000));
+      if (existingList.length > 0) {
+        // Pick the tool to keep (prefer the most recent — last in array — or one with server config)
+        const keeper = existingList.find((t) => t.server?.url || t.server?.credentialId)
+          || existingList[existingList.length - 1];
+
+        // Delete all duplicates (any tool with the same name that isn't the keeper)
+        for (const dup of existingList) {
+          if (dup.id === keeper.id) continue;
+          await rateLimitDelay();
+          const deleted = await this.deleteTool(dup.id);
+          if (deleted) {
+            logger.info({ funcName, toolId: dup.id }, '[Vapi] Deleted duplicate tool');
           }
-          const serverPatch: Record<string, unknown> = {
-            url: toolDef.server?.url || existing.server?.url,
-            credentialId,
-          };
-          if (existing.server?.timeoutSeconds) {
-            serverPatch.timeoutSeconds = existing.server.timeoutSeconds;
-          }
-          await this.updateTool(existing.id, { server: serverPatch });
-          apiCallCount++;
-          logger.info({ funcName, toolId: existing.id }, '[Vapi] Patched tool with credential');
         }
 
+        // Always update the keeper with correct server config, description, and version
+        const needsServerUpdate =
+          JSON.stringify(keeper.server || {}) !== JSON.stringify(desiredServerConfig || {});
+        const needsDescUpdate =
+          keeper.function?.description !== desiredDescription;
+
+        if (needsServerUpdate || needsDescUpdate) {
+          await rateLimitDelay();
+          const updates: Record<string, unknown> = {};
+
+          if (needsServerUpdate && desiredServerConfig) {
+            updates.server = desiredServerConfig;
+          }
+          if (needsDescUpdate) {
+            updates.function = {
+              ...keeper.function,
+              description: desiredDescription,
+            };
+          }
+
+          const patched = await this.updateTool(keeper.id, updates);
+          if (patched) {
+            logger.info({
+              funcName,
+              toolId: keeper.id,
+              updatedServer: needsServerUpdate,
+              updatedDesc: needsDescUpdate,
+            }, '[Vapi] Updated existing tool');
+          }
+        }
+
+        toolIdMap.set(funcName, keeper.id);
         continue;
       }
 
-      // Build server config — prefer credentialId over inline secret
-      let serverConfig: Record<string, unknown> | undefined;
-      if (toolDef.server) {
-        if (credentialId) {
-          serverConfig = {
-            url: toolDef.server.url,
-            credentialId,
-            ...(toolDef.server.timeoutSeconds ? { timeoutSeconds: toolDef.server.timeoutSeconds } : {}),
-          };
-        } else {
-          serverConfig = { ...toolDef.server };
-        }
-      }
-
-      // Create the standalone tool
+      // No existing tool — create a fresh one
       const standalonePayload: Record<string, unknown> = {
         type: toolDef.type || 'function',
         function: {
           name: funcName,
-          description: `[${version}] ${toolDef.function.description}`,
+          description: desiredDescription,
           parameters: toolDef.function.parameters,
         },
       };
 
-      if (serverConfig) {
-        standalonePayload.server = serverConfig;
+      if (desiredServerConfig) {
+        standalonePayload.server = desiredServerConfig;
       }
 
       if (toolDef.messages && toolDef.messages.length > 0) {
@@ -2256,12 +2325,8 @@ class VapiService {
         standalonePayload.async = toolDef.async;
       }
 
-      // Rate-limit courtesy: delay between API calls
-      if (apiCallCount > 0 && apiCallCount % 5 === 0) {
-        await new Promise((r) => setTimeout(r, 2000));
-      }
+      await rateLimitDelay();
       const created = await this.createStandaloneTool(standalonePayload);
-      apiCallCount++;
       if (created) {
         toolIdMap.set(funcName, created.id);
         logger.info({ funcName, toolId: created.id }, '[Vapi] Standalone tool created');

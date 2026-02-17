@@ -138,9 +138,15 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
     const outcome = searchParams.get('outcome');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
     const search = searchParams.get('search');
+
+    // Vapi plan limits call history to the last 14 days.
+    // Clamp startDate so we never request beyond the retention window.
+    const RETENTION_DAYS = 14;
+    const earliestAllowed = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const rawStartDate = searchParams.get('startDate');
+    const startDate = rawStartDate && rawStartDate > earliestAllowed ? rawStartDate : earliestAllowed;
+    const endDate = searchParams.get('endDate');
 
     // Get account's phone numbers from VapiPhoneNumber table
     let phoneNumbers = await prisma.vapiPhoneNumber.findMany({

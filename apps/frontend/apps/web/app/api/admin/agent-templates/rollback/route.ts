@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       rbWebhookSecret,
       vapiCredentialId,
     );
-    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, 'v1.0', vapiCredentialId);
+    const toolIdMap = await vapiService.ensureStandaloneTools(toolDefs, DENTAL_CLINIC_TEMPLATE_VERSION, vapiCredentialId);
 
     for (const accountId of accountIds) {
       try {
