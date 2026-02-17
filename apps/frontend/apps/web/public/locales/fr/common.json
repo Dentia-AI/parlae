@@ -106,7 +106,18 @@
       "description": "Choisissez la personnalité vocale de votre réceptionniste IA",
       "selectVoice": "Veuillez sélectionner une voix",
       "enterClinicName": "Veuillez entrer le nom de votre clinique ou entreprise",
-      "continueToKnowledge": "Continuer vers la base de connaissances"
+      "continueToKnowledge": "Continuer vers la base de connaissances",
+      "languageBanner": "Toutes les voix détectent et répondent automatiquement dans la langue de l'appelant — anglais, français, espagnol et plus de 40 autres langues prises en charge.",
+      "filterAll": "Toutes les voix",
+      "filterFemale": "Féminine",
+      "filterMale": "Masculine",
+      "genderMale": "Masculine",
+      "genderFemale": "Féminine",
+      "preview": "Écouter",
+      "stop": "Arrêter",
+      "noVoicesFound": "Aucune voix trouvée pour ce filtre",
+      "previewError": "Impossible de lire {{name}}. Veuillez réessayer.",
+      "previewLoadError": "Impossible de lire l'aperçu vocal"
     },
     "knowledge": {
       "title": "Base de connaissances",

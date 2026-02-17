@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.3';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.3';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.4';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.4';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)
@@ -839,13 +839,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: 'Thank you for calling {{clinicName}}! How can I help you today?',
           firstMessageMode: 'assistant-speaks-first',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie — stable, professional voice for agents
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.7,
+            temperature: 0.3,
             maxTokens: 300,
           },
           recordingEnabled: true,
@@ -910,8 +910,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
@@ -955,13 +955,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.7,
+            temperature: 0.4,
             maxTokens: 400,
           },
           recordingEnabled: true,
@@ -1026,13 +1026,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.7,
+            temperature: 0.3,
             maxTokens: 400,
           },
           recordingEnabled: true,
@@ -1097,13 +1097,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.5,
+            temperature: 0.3,
             maxTokens: 400,
           },
           recordingEnabled: true,
@@ -1162,13 +1162,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.5,
+            temperature: 0.3,
             maxTokens: 400,
           },
           recordingEnabled: true,
@@ -1227,13 +1227,13 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           firstMessage: '',
           firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
           voice: {
-            provider: 'openai',
-            voiceId: 'nova',
+            provider: 'cartesia',
+            voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
             provider: 'openai',
             model: 'gpt-4o',
-            temperature: 0.5,
+            temperature: 0.3,
             maxTokens: 400,
           },
           recordingEnabled: true,

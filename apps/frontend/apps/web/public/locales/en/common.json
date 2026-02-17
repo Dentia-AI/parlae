@@ -106,7 +106,18 @@
       "description": "Choose the voice personality for your AI receptionist",
       "selectVoice": "Please select a voice",
       "enterClinicName": "Please enter your clinic or business name",
-      "continueToKnowledge": "Continue to Knowledge Base"
+      "continueToKnowledge": "Continue to Knowledge Base",
+      "languageBanner": "All voices automatically detect and respond in the caller's language — English, French, Spanish, and 40+ other languages supported.",
+      "filterAll": "All Voices",
+      "filterFemale": "Female",
+      "filterMale": "Male",
+      "genderMale": "Male",
+      "genderFemale": "Female",
+      "preview": "Preview",
+      "stop": "Stop",
+      "noVoicesFound": "No voices found for this filter",
+      "previewError": "Failed to play {{name}}. Please try again.",
+      "previewLoadError": "Failed to play voice preview"
     },
     "knowledge": {
       "title": "Knowledge Base",
