@@ -2225,13 +2225,16 @@ class VapiService {
       }
     };
 
-    // Build the desired server config once
+    // Build the desired server config once.
+    // When credentialId is available, use it exclusively and null out any legacy
+    // server.secret to prevent Vapi from sending a stale secret in X-Vapi-Secret.
     const buildServerConfig = (toolDef: any): Record<string, unknown> | undefined => {
       if (!toolDef.server) return undefined;
       if (credentialId) {
         return {
           url: toolDef.server.url,
           credentialId,
+          secret: null,
           ...(toolDef.server.timeoutSeconds ? { timeoutSeconds: toolDef.server.timeoutSeconds } : {}),
         };
       }

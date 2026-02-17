@@ -44,25 +44,28 @@ export class VapiWebhookController {
     );
 
     // Verify webhook authentication.
-    // Vapi sends the server.secret (or serverUrlSecret) in the X-Vapi-Secret header.
-    // For credential-based auth, it may come in the Authorization header.
+    // Vapi may authenticate in two ways:
+    //   1. X-Vapi-Secret header (from tool server.secret)
+    //   2. Authorization: Bearer <token> (from credentialId)
+    // Accept if EITHER matches the expected secret, because tools
+    // may have both credentialId and a legacy server.secret set.
     const expectedSecret =
       process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET;
 
     if (expectedSecret) {
-      const receivedSecret =
-        vapiSecret ||
-        (authorization?.startsWith('Bearer ')
-          ? authorization.slice(7)
-          : undefined);
+      const bearerToken = authorization?.startsWith('Bearer ')
+        ? authorization.slice(7)
+        : undefined;
 
-      if (!receivedSecret) {
-        this.logger.error('[Vapi Webhook] Missing authentication header (x-vapi-secret or Authorization)');
-        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-      }
+      const secretMatches = vapiSecret === expectedSecret;
+      const bearerMatches = bearerToken === expectedSecret;
 
-      if (receivedSecret !== expectedSecret) {
-        this.logger.error('[Vapi Webhook] Invalid secret — does not match VAPI_WEBHOOK_SECRET');
+      if (!secretMatches && !bearerMatches) {
+        if (!vapiSecret && !bearerToken) {
+          this.logger.error('[Vapi Webhook] Missing authentication header (x-vapi-secret or Authorization)');
+        } else {
+          this.logger.error('[Vapi Webhook] Invalid secret — neither X-Vapi-Secret nor Bearer token matches');
+        }
         throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
       }
     }
@@ -111,12 +114,15 @@ export class VapiWebhookController {
       }
       const results: Array<{ toolCallId: string; result: string }> = [];
       for (const tc of toolCallList) {
+        // tc has { id, type, function: { name, arguments } }
+        // Merge tc.id into the functionCall so dispatchToolCall can read toolCallId
+        const funcObj = tc.function || tc;
         const singlePayload = {
           ...payload,
           message: {
             ...payload.message,
             type: 'function-call',
-            functionCall: tc.function || tc,
+            functionCall: { ...funcObj, id: tc.id || funcObj.id },
           },
         };
         const singleResult = await this.dispatchToolCall(singlePayload);
@@ -133,7 +139,22 @@ export class VapiWebhookController {
     const functionCall = payload?.message?.functionCall;
     const toolCallId = functionCall?.id;
     const toolName = functionCall?.name;
-    const parameters = functionCall?.parameters || {};
+
+    // Vapi sends tool arguments as a JSON string in 'arguments',
+    // but our tool handlers expect a parsed 'parameters' object.
+    let parameters = functionCall?.parameters;
+    if (!parameters || (typeof parameters === 'object' && Object.keys(parameters).length === 0)) {
+      const args = functionCall?.arguments;
+      if (args) {
+        try {
+          parameters = typeof args === 'string' ? JSON.parse(args) : args;
+        } catch {
+          parameters = {};
+        }
+      } else {
+        parameters = {};
+      }
+    }
 
     if (!toolName) {
       this.logger.error('function-call missing functionCall.name');
@@ -295,9 +316,11 @@ export class VapiWebhookController {
       this.logger.log(
         `Call reference created: ${callRef.id} for call ${vapiCallId}`,
       );
-    } catch (dbError) {
-      if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
-        return; // Already exists, expected for end-of-call after status-update
+    } catch (dbError: any) {
+      // P2002 = unique constraint violation — already exists, expected for
+      // end-of-call after status-update created the reference first.
+      if (dbError?.code === 'P2002' || dbError?.message?.includes('Unique constraint')) {
+        return;
       }
 
       this.logger.error(
