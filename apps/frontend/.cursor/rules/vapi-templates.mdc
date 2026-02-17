@@ -1,0 +1,35 @@
+---
+description: Vapi template versioning — ALWAYS bump version when changing templates
+globs: apps/frontend/packages/shared/src/vapi/templates/**,apps/frontend/packages/shared/src/vapi/vapi-pms-tools.config.ts
+alwaysApply: false
+---
+## Vapi Template Versioning
+
+When editing any Vapi template file (system prompts, tool configs, squad templates), you **MUST** bump the template version.
+
+### Version location
+
+The version is defined in `packages/shared/src/vapi/templates/dental-clinic.template.ts`:
+
+```typescript
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.5';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.5';
+```
+
+### Rules
+
+1. **Any change** to template prompts, tool descriptions, tool parameters, or `PMS_SYSTEM_PROMPT_ADDITION` requires a version bump.
+2. Bump the **patch** number for prompt wording changes (e.g. `v2.5` → `v2.6`).
+3. Bump the **minor** number for structural changes like new tools, removed tools, or new squad members (e.g. `v2.6` → `v3.0`).
+4. Update **both** `DENTAL_CLINIC_TEMPLATE_VERSION` and `DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME` together.
+5. The version is compared at deploy time — if the built-in version is not higher than the DB version, the old prompts stay active.
+
+### Why this matters
+
+The redeploy route (`/api/admin/redeploy-squad`) compares the built-in template version against the database-stored template version. If the built-in version is not **strictly greater** than the DB version, the stale DB template is used. This means prompt changes without a version bump are silently ignored in production.
+
+### Files that require a version bump when changed
+
+- `packages/shared/src/vapi/templates/dental-clinic.template.ts` — all system prompts
+- `packages/shared/src/vapi/vapi-pms-tools.config.ts` — tool definitions and PMS prompt additions
+- Any new template file added to the templates directory
