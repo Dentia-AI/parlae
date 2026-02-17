@@ -184,6 +184,7 @@ export async function POST(request: Request) {
       knowledgeFileIds,
       toolIdMap,
       vapiCredentialId,
+      accountId,
     };
 
     // STEP 4: Create squad based on type

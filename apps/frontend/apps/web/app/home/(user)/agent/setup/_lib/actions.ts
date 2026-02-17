@@ -394,6 +394,7 @@ export const deployReceptionistAction = enhanceAction(
         vapiCredentialId,
         queryToolId,
         queryToolName,
+        accountId: account.id,
       };
 
       // STEP 4: Build the squad from template

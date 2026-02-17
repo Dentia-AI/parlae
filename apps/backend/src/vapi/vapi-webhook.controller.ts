@@ -186,10 +186,18 @@ export class VapiWebhookController {
       `[Vapi Tool] ${toolName} | ${JSON.stringify(parameters).slice(0, 300)}`,
     );
 
+    // Resolve the account ID once so tool handlers don't have to do their own lookups.
+    // Checks assistant.metadata.accountId first, then falls back to phone lookups.
+    const resolvedAccountId = await this.resolveAccountFromCall(
+      payload.message?.call,
+      payload.message,
+    );
+
     const toolPayload = {
       call: payload.message?.call,
       message: payload.message,
       functionCall: { name: toolName, parameters },
+      accountId: resolvedAccountId,
     };
 
     const toolMap: Record<string, (p: any) => Promise<any>> = {
@@ -236,9 +244,21 @@ export class VapiWebhookController {
       const resultStr =
         typeof result === 'string' ? result : JSON.stringify(result);
 
-      this.logger.log(
-        `[Vapi Tool Response] ${toolName} | ${resultStr.slice(0, 500)}`,
-      );
+      // Detect error payloads returned as normal results (not thrown).
+      // Many tool methods catch errors internally and return { error: '...' }
+      // instead of throwing, so they bypass the catch block below.
+      const hasError =
+        result && typeof result === 'object' && 'error' in result;
+
+      if (hasError) {
+        this.logger.warn(
+          `[Vapi Tool Error] ${toolName} | ${resultStr.slice(0, 500)}`,
+        );
+      } else {
+        this.logger.log(
+          `[Vapi Tool Response] ${toolName} | ${resultStr.slice(0, 500)}`,
+        );
+      }
 
       return {
         results: [
@@ -258,7 +278,7 @@ export class VapiWebhookController {
       });
 
       this.logger.error(
-        `[Vapi Tool Response] ${toolName} ERROR | ${errorResult.slice(0, 500)}`,
+        `[Vapi Tool Error] ${toolName} THROWN | ${errMsg}`,
       );
 
       return {
@@ -290,7 +310,7 @@ export class VapiWebhookController {
     this.logger.log(`Status update: ${status} for call ${vapiCallId}`);
 
     if (status === 'in-progress' && vapiCallId) {
-      await this.ensureCallReference(call);
+      await this.ensureCallReference(call, payload?.message);
     }
 
     return { received: true };
@@ -308,7 +328,7 @@ export class VapiWebhookController {
 
     // Safety net: create CallReference if status-update didn't fire
     if (vapiCallId) {
-      await this.ensureCallReference(payload?.message?.call || {});
+      await this.ensureCallReference(payload?.message?.call || {}, payload?.message);
     }
 
     return { received: true };
@@ -370,11 +390,11 @@ export class VapiWebhookController {
    * Create a thin CallReference linking the Vapi call to our account.
    * Uses upsert for idempotency — no duplicate-key errors.
    */
-  private async ensureCallReference(call: any): Promise<void> {
+  private async ensureCallReference(call: any, message?: any): Promise<void> {
     const vapiCallId = call.id;
     if (!vapiCallId) return;
 
-    const accountId = await this.resolveAccountFromCall(call);
+    const accountId = await this.resolveAccountFromCall(call, message);
     if (!accountId) {
       this.logger.warn(
         `Skipping call reference for ${vapiCallId} — no account found`,
@@ -400,39 +420,61 @@ export class VapiWebhookController {
   }
 
   /**
-   * Resolve accountId from the Vapi call payload.
-   * Uses the phone number to look up the VapiPhoneNumber → Account mapping.
+   * Resolve accountId from the Vapi webhook payload.
+   *
+   * Resolution order:
+   * 1. assistant.metadata.accountId (embedded at squad creation — phone-independent)
+   * 2. VapiPhoneNumber record by Vapi phone ID
+   * 3. VapiPhoneNumber record by phone number string
+   * 4. Account.phoneIntegrationSettings JSON scan (legacy fallback)
    */
-  private async resolveAccountFromCall(call: any): Promise<string | null> {
+  private async resolveAccountFromCall(
+    call: any,
+    message?: any,
+  ): Promise<string | null> {
     try {
-      const phoneNumberId = call.phoneNumberId;
-      const phoneNumber = call.phoneNumber?.number;
+      // 1. Metadata-based resolution (highest priority, phone-independent)
+      const metadataAccountId = message?.assistant?.metadata?.accountId;
+      if (metadataAccountId && typeof metadataAccountId === 'string') {
+        this.logger.log(
+          `[resolveAccount] via assistant metadata (accountId=${metadataAccountId})`,
+        );
+        return metadataAccountId;
+      }
 
-      // Primary lookup: VapiPhoneNumber record by Vapi phone ID
+      const phoneNumberId = call?.phoneNumberId;
+      const phoneNumber = call?.phoneNumber?.number;
+
+      // 2. VapiPhoneNumber record by Vapi phone ID
       if (phoneNumberId) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
           where: { vapiPhoneId: phoneNumberId },
           select: { accountId: true },
         });
         if (vapiPhone) {
+          this.logger.log(
+            `[resolveAccount] via vapiPhoneNumber table (vapiPhoneId=${phoneNumberId})`,
+          );
           return vapiPhone.accountId;
         }
       }
 
-      // Secondary lookup: VapiPhoneNumber record by phone number string
+      // 3. VapiPhoneNumber record by phone number string
       if (phoneNumber) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
           where: { phoneNumber },
           select: { accountId: true },
         });
         if (vapiPhone) {
+          this.logger.log(
+            `[resolveAccount] via vapiPhoneNumber phone string (number=${phoneNumber})`,
+          );
           return vapiPhone.accountId;
         }
       }
 
-      // Fallback: search Account.phoneIntegrationSettings JSON for matching vapiPhoneId.
-      // This handles cases where the VapiPhoneNumber table is out of sync
-      // (e.g. squad was recreated with a new phone import).
+      // 4. Fallback: search Account.phoneIntegrationSettings JSON for matching vapiPhoneId.
+      // Handles cases where the VapiPhoneNumber table is out of sync.
       if (phoneNumberId) {
         const accounts = await this.prisma.account.findMany({
           where: {
@@ -445,7 +487,7 @@ export class VapiWebhookController {
           const settings = acct.phoneIntegrationSettings as any;
           if (settings?.vapiPhoneId === phoneNumberId) {
             this.logger.log(
-              `Resolved account ${acct.id} via phoneIntegrationSettings fallback (vapiPhoneId=${phoneNumberId})`,
+              `[resolveAccount] via phoneIntegrationSettings fallback (vapiPhoneId=${phoneNumberId}, accountId=${acct.id})`,
             );
             return acct.id;
           }
@@ -453,12 +495,12 @@ export class VapiWebhookController {
       }
 
       this.logger.warn(
-        `Could not resolve account for call: phoneNumberId=${phoneNumberId}, phoneNumber=${phoneNumber}`,
+        `[resolveAccount] Could not resolve account: phoneNumberId=${phoneNumberId}, phoneNumber=${phoneNumber}, hasMetadata=${!!message?.assistant?.metadata}`,
       );
       return null;
     } catch (err) {
       this.logger.error(
-        `Error resolving account: ${err instanceof Error ? err.message : err}`,
+        `[resolveAccount] Error: ${err instanceof Error ? err.message : err}`,
       );
       return null;
     }

@@ -122,10 +122,7 @@ export class VapiToolsService {
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       // Get phone record and PMS integration
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true, account: true },
-      });
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
         // ── Google Calendar Fallback ──
@@ -185,10 +182,7 @@ export class VapiToolsService {
       try {
         const { call, message } = payload;
         const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
-        const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-          where: { vapiPhoneId: call.phoneNumberId },
-          include: { pmsIntegration: true, account: true },
-        });
+        const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
         if (phoneRecord) {
           this.logger.log({ msg: '[PMS] Attempting fallback after unexpected error' });
           return this.handlePmsBookingFailure(phoneRecord, params, call, error?.message || 'Unexpected error');
@@ -209,6 +203,8 @@ export class VapiToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
+      const callerPhone = call?.customer?.number || 'unknown';
+
       // Safety net: if the AI hallucinated a date in the past, replace with today
       const today = new Date().toISOString().slice(0, 10);
       let requestedDate = params.date || today;
@@ -218,9 +214,18 @@ export class VapiToolsService {
       }
       params.date = requestedDate;
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true, account: true },
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+
+      this.logger.log({
+        callerPhone,
+        accountId: phoneRecord?.accountId || payload.accountId || 'none',
+        vapiPhoneId: call?.phoneNumberId,
+        hasPms: !!phoneRecord?.pmsIntegration,
+        hasPhoneRecord: !!phoneRecord,
+        date: params.date,
+        appointmentType: params.appointmentType,
+        duration: params.duration,
+        msg: '[checkAvailability] Request details',
       });
 
       if (!phoneRecord?.pmsIntegration) {
@@ -422,10 +427,7 @@ export class VapiToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true },
-      });
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
         // No PMS configured — Google Calendar-only mode.
@@ -524,10 +526,7 @@ export class VapiToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true },
-      });
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
         // No PMS configured — Google Calendar-only mode.
@@ -725,10 +724,7 @@ export class VapiToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true, account: true },
-      });
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
         // ── Google Calendar Fallback ──
@@ -1476,10 +1472,50 @@ export class VapiToolsService {
   /**
    * Helper: Check if Google Calendar is available as fallback for an account
    */
+  /**
+   * Resolve the phone record from vapiPhoneNumber table.
+   * Falls back to using the pre-resolved accountId from the webhook controller
+   * when the vapiPhoneNumber table is out of sync.
+   */
+  private async resolvePhoneRecord(call: any, fallbackAccountId?: string) {
+    const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
+      where: { vapiPhoneId: call?.phoneNumberId },
+      include: { pmsIntegration: true, account: true },
+    });
+
+    if (phoneRecord) return phoneRecord;
+
+    // vapiPhoneNumber table doesn't have this phone — use the fallback accountId
+    // that the webhook controller resolved via phoneIntegrationSettings.
+    if (fallbackAccountId) {
+      this.logger.warn(
+        `[resolvePhoneRecord] No vapiPhoneNumber record for vapiPhoneId=${call?.phoneNumberId}, using fallback accountId=${fallbackAccountId}`,
+      );
+      return {
+        accountId: fallbackAccountId,
+        vapiPhoneId: call?.phoneNumberId,
+        pmsIntegration: null,
+        account: await this.prisma.account.findUnique({ where: { id: fallbackAccountId } }),
+      } as any;
+    }
+
+    return null;
+  }
+
   private async isGoogleCalendarAvailable(accountId: string | null | undefined): Promise<boolean> {
-    if (!accountId) return false;
-    if (!this.googleCalendar.isConfigured()) return false;
-    return this.googleCalendar.isConnectedForAccount(accountId);
+    if (!accountId) {
+      this.logger.warn('[GCal Check] No accountId provided');
+      return false;
+    }
+    if (!this.googleCalendar.isConfigured()) {
+      this.logger.warn({ accountId, msg: '[GCal Check] Google Calendar service not configured (missing env vars)' });
+      return false;
+    }
+    const connected = await this.googleCalendar.isConnectedForAccount(accountId);
+    if (!connected) {
+      this.logger.warn({ accountId, msg: '[GCal Check] Account has no Google Calendar connection (no OAuth tokens)' });
+    }
+    return connected;
   }
 
   /**

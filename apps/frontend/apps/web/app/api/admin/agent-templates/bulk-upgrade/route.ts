@@ -273,6 +273,7 @@ export async function POST(request: NextRequest) {
           clinicPhoneNumber,
           toolIdMap,
           vapiCredentialId,
+          accountId: entry.accountId,
         };
 
         // Build the new squad payload

@@ -213,6 +213,7 @@ export async function POST(request: NextRequest) {
           knowledgeFileIds: settings.knowledgeBaseFileIds || [],
           toolIdMap,
           vapiCredentialId,
+          accountId: account.id,
         };
 
         // Build squad payload

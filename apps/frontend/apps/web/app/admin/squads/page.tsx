@@ -11,6 +11,7 @@ import {
 } from '@kit/ui/card';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Badge } from '@kit/ui/badge';
+import { Checkbox } from '@kit/ui/checkbox';
 import {
   Loader2,
   Trash2,
@@ -102,6 +103,8 @@ export default function AdminSquadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [selectedOrphans, setSelectedOrphans] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const csrfToken = useCsrfToken();
 
   const fetchSquads = useCallback(async () => {
@@ -232,6 +235,63 @@ export default function AdminSquadsPage() {
       toast.error(err.message);
     } finally {
       setRedeployingId(null);
+    }
+  };
+
+  const toggleOrphan = (id: string) => {
+    setSelectedOrphans((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllOrphans = () => {
+    if (selectedOrphans.size === orphanedAssistants.length) {
+      setSelectedOrphans(new Set());
+    } else {
+      setSelectedOrphans(new Set(orphanedAssistants.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkDeleteOrphans = async (ids: string[]) => {
+    if (ids.length === 0) return;
+
+    const label =
+      ids.length === orphanedAssistants.length
+        ? `all ${ids.length} orphaned assistants`
+        : `${ids.length} selected assistant${ids.length > 1 ? 's' : ''}`;
+
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch('/api/admin/squads', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ squadId: null, assistantIds: ids }),
+      });
+
+      if (!res.ok) throw new Error('Failed to delete assistants');
+      const data = await res.json();
+
+      toast.success(
+        `Deleted ${data.deleted?.length || 0} assistants. ${data.failed?.length || 0} failed.`,
+      );
+      setSelectedOrphans(new Set());
+      await fetchSquads();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -612,21 +672,87 @@ export default function AdminSquadsPage() {
       {orphanedAssistants.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
-              Orphaned Assistants ({orphanedAssistants.length})
-            </CardTitle>
-            <CardDescription>
-              Assistants not in any squad — can be safely deleted
-            </CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                  Orphaned Assistants ({orphanedAssistants.length})
+                </CardTitle>
+                <CardDescription>
+                  Assistants not in any squad — can be safely deleted
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedOrphans.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() =>
+                      handleBulkDeleteOrphans(Array.from(selectedOrphans))
+                    }
+                    disabled={bulkDeleting || !!deletingId}
+                  >
+                    {bulkDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1" />
+                    )}
+                    Delete Selected ({selectedOrphans.size})
+                  </Button>
+                )}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() =>
+                    handleBulkDeleteOrphans(
+                      orphanedAssistants.map((a) => a.id),
+                    )
+                  }
+                  disabled={bulkDeleting || !!deletingId}
+                >
+                  {bulkDeleting && selectedOrphans.size === 0 ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Delete All
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
+            {/* Select all row */}
+            <div className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={
+                  selectedOrphans.size === orphanedAssistants.length &&
+                  orphanedAssistants.length > 0
+                }
+                onCheckedChange={toggleAllOrphans}
+                aria-label="Select all orphaned assistants"
+              />
+              <span className="text-xs font-medium">
+                {selectedOrphans.size === orphanedAssistants.length
+                  ? 'Deselect all'
+                  : 'Select all'}
+              </span>
+            </div>
+
             {orphanedAssistants.map((assistant) => (
               <div
                 key={assistant.id}
-                className="flex items-center justify-between p-3 rounded-lg border text-sm"
+                className={`flex items-center justify-between p-3 rounded-lg border text-sm transition-colors ${
+                  selectedOrphans.has(assistant.id)
+                    ? 'border-destructive/50 bg-destructive/5'
+                    : ''
+                }`}
               >
                 <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={selectedOrphans.has(assistant.id)}
+                    onCheckedChange={() => toggleOrphan(assistant.id)}
+                    aria-label={`Select ${assistant.name || 'unnamed'} assistant`}
+                  />
                   <Bot className="h-4 w-4 text-muted-foreground" />
                   <span>{assistant.name || 'Unnamed'}</span>
                   <span className="text-xs text-muted-foreground">
@@ -642,7 +768,7 @@ export default function AdminSquadsPage() {
                   variant="destructive"
                   size="sm"
                   onClick={() => handleDeleteAssistant(assistant.id)}
-                  disabled={!!deletingId}
+                  disabled={!!deletingId || bulkDeleting}
                 >
                   {deletingId === assistant.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

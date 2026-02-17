@@ -139,6 +139,12 @@ export interface RuntimeConfig {
   queryToolId?: string;
   /** Human-readable name of the query tool (for prompt injection). */
   queryToolName?: string;
+  /**
+   * Clinic account ID embedded in assistant metadata.
+   * Used by the backend webhook to resolve the account without
+   * relying on phone-number lookups (supports multi-number / outbound).
+   */
+  accountId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,11 +248,15 @@ export function buildSquadPayloadFromTemplate(
   variables: TemplateVariables,
   runtime: RuntimeConfig,
 ): Record<string, unknown> {
-  const versionMetadata = {
+  const versionMetadata: Record<string, unknown> = {
     templateVersion: DENTAL_CLINIC_TEMPLATE_VERSION,
     templateDisplayName: DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME,
     deployedAt: new Date().toISOString(),
   };
+
+  if (runtime.accountId) {
+    versionMetadata.accountId = runtime.accountId;
+  }
 
   const members = template.members.map((member) => {
     const payload = buildMemberPayload(member, variables, runtime);

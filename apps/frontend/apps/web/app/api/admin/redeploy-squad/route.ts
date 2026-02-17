@@ -166,6 +166,7 @@ export async function POST(request: NextRequest) {
       vapiCredentialId,
       queryToolId,
       queryToolName,
+      accountId: account.id,
     };
 
     // STEP 4: Load template
