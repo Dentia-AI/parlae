@@ -76,8 +76,13 @@ jobs:
 
       - name: Force ECS deployment
         run: |
+          # Use --task-definition with family name (no revision) to always
+          # pick up the latest task definition revision (e.g. new env vars
+          # added via Terraform). Without this, the service stays pinned to
+          # whatever revision it was last deployed with.
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
+            --task-definition "$ECS_SERVICE" \
             --force-new-deployment \
             --region "$AWS_REGION"
