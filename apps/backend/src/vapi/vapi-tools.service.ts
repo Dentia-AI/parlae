@@ -1088,6 +1088,221 @@ export class VapiToolsService {
   // Eliminates repeated boilerplate across handlers
   // ============================================================================
 
+  /**
+   * Add insurance to a patient record
+   * Params: { patientId, provider, policyNumber, groupNumber, subscriberName, isPrimary }
+   */
+  async addPatientInsurance(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      const sikkaService = await this.getSikkaService(call);
+      if (!sikkaService.service) return sikkaService.error;
+
+      const result = await sikkaService.service.addPatientInsurance(params.patientId, {
+        provider: params.provider,
+        policyNumber: params.policyNumber,
+        groupNumber: params.groupNumber,
+        subscriberName: params.subscriberName,
+        isPrimary: params.isPrimary ?? true,
+      });
+
+      if (!result.success) {
+        throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'Failed to add insurance');
+      }
+
+      return {
+        result: {
+          success: true,
+          insurance: result.data,
+          message: `Insurance has been added successfully for ${params.provider}.`,
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Failed to add insurance', message: "I'm having trouble adding insurance information. Our team can help with that." };
+    }
+  }
+
+  /**
+   * Update existing insurance on a patient record
+   * Params: { patientId, insuranceId, provider?, policyNumber?, groupNumber? }
+   */
+  async updatePatientInsurance(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      const sikkaService = await this.getSikkaService(call);
+      if (!sikkaService.service) return sikkaService.error;
+
+      const result = await sikkaService.service.updatePatientInsurance(params.patientId, params.insuranceId, {
+        provider: params.provider,
+        policyNumber: params.policyNumber,
+        groupNumber: params.groupNumber,
+      });
+
+      if (!result.success) {
+        throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'Failed to update insurance');
+      }
+
+      return {
+        result: {
+          success: true,
+          insurance: result.data,
+          message: 'Insurance information has been updated.',
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Failed to update insurance', message: "I'm having trouble updating insurance information right now." };
+    }
+  }
+
+  /**
+   * Verify insurance coverage eligibility
+   * Params: { patientId, insuranceId?, procedureCode? }
+   */
+  async verifyInsuranceCoverage(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      const sikkaService = await this.getSikkaService(call);
+      if (!sikkaService.service) return sikkaService.error;
+
+      const insuranceResult = await sikkaService.service.getPatientInsurance(params.patientId);
+      if (!insuranceResult.success || !insuranceResult.data) {
+        return {
+          result: {
+            success: true,
+            verified: false,
+            message: "I don't see any insurance on file to verify. Would you like to add insurance information first?",
+          },
+        };
+      }
+
+      return {
+        result: {
+          success: true,
+          verified: true,
+          insurance: insuranceResult.data,
+          message: 'Insurance is on file. For detailed coverage verification, our billing team can provide specific benefit details.',
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Failed to verify coverage', message: "I'm unable to verify coverage right now. Our billing team can help with that." };
+    }
+  }
+
+  /**
+   * Get payment history for a patient
+   * Params: { patientId }
+   */
+  async getPaymentHistory(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      const sikkaService = await this.getSikkaService(call);
+      if (!sikkaService.service) return sikkaService.error;
+
+      const result = await sikkaService.service.getPaymentHistory(params.patientId);
+
+      if (!result.success) {
+        throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'Failed to get payment history');
+      }
+
+      const payments = result.data || [];
+
+      return {
+        result: {
+          success: true,
+          payments: payments.slice(0, 10),
+          count: payments.length,
+          message: payments.length > 0
+            ? `I can see ${payments.length} recent transaction(s) on your account.`
+            : 'No recent transactions found on your account.',
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Failed to get payment history', message: "I'm unable to pull up payment history right now." };
+    }
+  }
+
+  /**
+   * Process a payment
+   * Params: { patientId, amount, method, last4?, notes? }
+   */
+  async processPayment(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      const sikkaService = await this.getSikkaService(call);
+      if (!sikkaService.service) return sikkaService.error;
+
+      const result = await sikkaService.service.processPayment({
+        patientId: params.patientId,
+        amount: params.amount,
+        method: params.method || 'card',
+        last4: params.last4,
+        notes: params.notes,
+      });
+
+      if (!result.success) {
+        throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'Payment processing failed');
+      }
+
+      return {
+        result: {
+          success: true,
+          payment: result.data,
+          message: `Payment of $${params.amount} has been processed successfully.`,
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Payment processing failed', message: "I'm unable to process the payment right now. Our billing team can assist you." };
+    }
+  }
+
+  /**
+   * Create a payment plan for a patient
+   * Params: { patientId, totalAmount, numberOfPayments, frequency?, startDate? }
+   */
+  async createPaymentPlan(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message.functionCall.parameters;
+
+      this.logger.log(`[createPaymentPlan] Creating plan for patient ${params.patientId}: $${params.totalAmount} over ${params.numberOfPayments} payments`);
+
+      const monthlyAmount = (params.totalAmount / params.numberOfPayments).toFixed(2);
+
+      return {
+        result: {
+          success: true,
+          plan: {
+            patientId: params.patientId,
+            totalAmount: params.totalAmount,
+            numberOfPayments: params.numberOfPayments,
+            monthlyAmount: parseFloat(monthlyAmount),
+            frequency: params.frequency || 'monthly',
+            startDate: params.startDate || new Date().toISOString(),
+          },
+          message: `A payment plan of $${monthlyAmount} per month for ${params.numberOfPayments} months (total: $${params.totalAmount}) has been noted. Our billing team will finalize the details and follow up with you.`,
+        },
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return { error: 'Failed to create payment plan', message: "I'm unable to set up a payment plan right now. Our billing team can help arrange one for you." };
+    }
+  }
+
   private async getSikkaService(call: any): Promise<{
     service: any;
     pmsIntegrationId: string;

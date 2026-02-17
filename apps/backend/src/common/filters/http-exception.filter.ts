@@ -43,26 +43,17 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
-    // Log based on severity
+    // Log based on severity — single-line JSON for CloudWatch
     if (status >= 500) {
+      const errorDetail = exception instanceof Error
+        ? { name: exception.name, message: exception.message, stack: exception.stack }
+        : exception;
       this.logger.error(
-        `[${request.method}] ${request.url} - ${status}`,
-        {
-          ...logContext,
-          error:
-            exception instanceof Error
-              ? {
-                  name: exception.name,
-                  message: exception.message,
-                  stack: exception.stack,
-                }
-              : exception,
-        },
+        `[${request.method}] ${request.url} ${status} | ${JSON.stringify({ ...logContext, error: errorDetail })}`,
       );
     } else if (status >= 400) {
       this.logger.warn(
-        `[${request.method}] ${request.url} - ${status}`,
-        logContext,
+        `[${request.method}] ${request.url} ${status} | ${JSON.stringify(logContext)}`,
       );
     }
 

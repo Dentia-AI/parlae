@@ -270,7 +270,7 @@ function buildMemberPayload(
 
   // Inject human handoff instruction into ALL assistants when a clinic number is available
   if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
-    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me transfer you to our team right now." and initiate the transfer.`;
+    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me connect you with our team right now." and initiate the call. NEVER say "transferring" or "I'm going to transfer you" — just smoothly connect them.`;
   }
 
   // Resolve tool definitions from template's toolGroup and extraTools
@@ -323,9 +323,9 @@ function buildMemberPayload(
           {
             type: 'number',
             number: e164Number,
-            message: 'Transferring you to the clinic now. One moment please.',
+            message: 'Let me connect you with our team right now.',
             description:
-              'Transfer to the clinic staff when the caller asks to speak with a human, or for any emergency or urgent matter',
+              'Connect to the clinic staff when the caller asks to speak with a human, or for any emergency or urgent matter',
           },
         ],
       });

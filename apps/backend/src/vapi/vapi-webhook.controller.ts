@@ -69,6 +69,7 @@ export class VapiWebhookController {
 
     switch (messageType) {
       case 'function-call':
+      case 'tool-calls':
         return this.handleFunctionCall(payload);
 
       case 'assistant-request':
@@ -80,16 +81,55 @@ export class VapiWebhookController {
       case 'end-of-call-report':
         return this.handleEndOfCall(payload);
 
+      // Known Vapi event types we acknowledge but don't act on
+      case 'speech-update':
+      case 'conversation-update':
+      case 'hang':
+      case 'transfer-destination-request':
+      case 'voice-input':
+        return { received: true };
+
       default:
-        this.logger.warn(`Unknown webhook type: ${messageType}`);
+        this.logger.warn(`Unhandled webhook type: ${messageType}`);
         return { received: true };
     }
   }
 
   /**
-   * Dispatch function-call (tool call) to the appropriate service method.
+   * Dispatch function-call / tool-calls to the appropriate service method.
+   * Supports both legacy 'function-call' and newer 'tool-calls' payload formats.
    */
   private async handleFunctionCall(payload: any) {
+    const messageType = payload?.message?.type;
+
+    // Handle 'tool-calls' format (array of tool calls)
+    if (messageType === 'tool-calls') {
+      const toolCallList = payload?.message?.toolCallList || [];
+      if (toolCallList.length === 0) {
+        this.logger.warn('tool-calls event with empty toolCallList');
+        return { results: [] };
+      }
+      const results: Array<{ toolCallId: string; result: string }> = [];
+      for (const tc of toolCallList) {
+        const singlePayload = {
+          ...payload,
+          message: {
+            ...payload.message,
+            type: 'function-call',
+            functionCall: tc.function || tc,
+          },
+        };
+        const singleResult = await this.dispatchToolCall(singlePayload);
+        results.push(...(singleResult.results || []));
+      }
+      return { results };
+    }
+
+    // Legacy 'function-call' format
+    return this.dispatchToolCall(payload);
+  }
+
+  private async dispatchToolCall(payload: any) {
     const functionCall = payload?.message?.functionCall;
     const toolCallId = functionCall?.id;
     const toolName = functionCall?.name;
@@ -108,7 +148,7 @@ export class VapiWebhookController {
     }
 
     this.logger.log(
-      `[Vapi Tool] ${toolName} with params: ${JSON.stringify(parameters).slice(0, 200)}`,
+      `[Vapi Tool] ${toolName} | ${JSON.stringify(parameters).slice(0, 300)}`,
     );
 
     const toolPayload = {
@@ -123,14 +163,18 @@ export class VapiWebhookController {
       updatePatient: (p) => this.vapiToolsService.updatePatient(p),
       checkAvailability: (p) => this.vapiToolsService.checkAvailability(p),
       bookAppointment: (p) => this.vapiToolsService.bookAppointment(p),
-      rescheduleAppointment: (p) =>
-        this.vapiToolsService.rescheduleAppointment(p),
+      rescheduleAppointment: (p) => this.vapiToolsService.rescheduleAppointment(p),
       cancelAppointment: (p) => this.vapiToolsService.cancelAppointment(p),
       getAppointments: (p) => this.vapiToolsService.getAppointments(p),
       addPatientNote: (p) => this.vapiToolsService.addPatientNote(p),
-      getPatientInsurance: (p) =>
-        this.vapiToolsService.getPatientInsurance(p),
+      getPatientInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
+      addPatientInsurance: (p) => this.vapiToolsService.addPatientInsurance(p),
+      updatePatientInsurance: (p) => this.vapiToolsService.updatePatientInsurance(p),
+      verifyInsuranceCoverage: (p) => this.vapiToolsService.verifyInsuranceCoverage(p),
       getPatientBalance: (p) => this.vapiToolsService.getPatientBalance(p),
+      getPaymentHistory: (p) => this.vapiToolsService.getPaymentHistory(p),
+      processPayment: (p) => this.vapiToolsService.processPayment(p),
+      createPaymentPlan: (p) => this.vapiToolsService.createPaymentPlan(p),
       getProviders: (p) => this.vapiToolsService.getProviders(p),
       transferToHuman: (p) => this.vapiToolsService.transferToHuman(p),
     };
