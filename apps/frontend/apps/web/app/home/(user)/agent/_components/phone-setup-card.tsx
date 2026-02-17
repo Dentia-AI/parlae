@@ -9,12 +9,15 @@ import { toast } from '@kit/ui/sonner';
 import Link from 'next/link';
 import { changePhoneNumberAction } from '../setup/_lib/actions';
 
+const MAX_PHONE_CHANGES = 5;
+
 interface PhoneSetupCardProps {
   phoneNumber: string;
   integrationLabel: string;
+  phoneChangeCount?: number;
 }
 
-export function PhoneSetupCard({ phoneNumber, integrationLabel }: PhoneSetupCardProps) {
+export function PhoneSetupCard({ phoneNumber, integrationLabel, phoneChangeCount = 0 }: PhoneSetupCardProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [showConfirm, setShowConfirm] = useState(false);
@@ -65,21 +68,31 @@ export function PhoneSetupCard({ phoneNumber, integrationLabel }: PhoneSetupCard
             </Button>
           </Link>
 
-          {!showConfirm ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-muted-foreground"
-              onClick={() => setShowConfirm(true)}
-            >
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-              Change Number
-            </Button>
+          {phoneChangeCount >= MAX_PHONE_CHANGES ? (
+            <p className="text-xs text-center text-muted-foreground">
+              Number change limit reached. Contact support to change your number.
+            </p>
+          ) : !showConfirm ? (
+            <div className="space-y-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => setShowConfirm(true)}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Change Number
+              </Button>
+              <p className="text-[11px] text-center text-muted-foreground/60">
+                {MAX_PHONE_CHANGES - phoneChangeCount} of {MAX_PHONE_CHANGES} changes remaining
+              </p>
+            </div>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
               <p className="text-xs text-amber-800 dark:text-amber-200">
                 This will purchase a new Twilio number and update your agent.
                 Your current number ({phoneNumber}) will be released.
+                ({MAX_PHONE_CHANGES - phoneChangeCount} changes remaining)
               </p>
               <div className="flex gap-2">
                 <Button

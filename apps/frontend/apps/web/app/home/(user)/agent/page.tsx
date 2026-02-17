@@ -141,6 +141,7 @@ export default async function ReceptionistDashboardPage({
         <PhoneSetupCard
           phoneNumber={phoneNumber}
           integrationLabel={integrationLabel}
+          phoneChangeCount={integrationSettings?.phoneChangeCount ?? 0}
         />
 
         <Card>

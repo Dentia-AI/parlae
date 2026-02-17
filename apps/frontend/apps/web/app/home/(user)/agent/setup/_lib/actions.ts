@@ -20,6 +20,42 @@ import type {
   KnowledgeBaseConfig,
 } from '@kit/shared/vapi/templates';
 
+/**
+ * Derive the Twilio country code (ISO 3166-1 alpha-2) from a phone number.
+ * Canadian numbers start with +1 but have area codes in the 2xx-9xx range
+ * that map to Canadian provinces. We check the well-known Canadian area codes.
+ */
+function detectCountryFromPhone(phone: string): string {
+  if (!phone) return 'US';
+  const digits = phone.replace(/\D/g, '');
+
+  // Canadian area codes (comprehensive list)
+  const canadianAreaCodes = new Set([
+    '204', '226', '236', '249', '250', '263', '289',
+    '306', '343', '354', '365', '367', '368', '382',
+    '403', '416', '418', '428', '431', '437', '438', '450', '468',
+    '506', '514', '519', '548', '579', '581', '584', '587',
+    '600', '604', '613', '639', '647', '672', '683',
+    '705', '709', '742', '753', '778', '780', '782',
+    '807', '819', '825', '867', '873', '879',
+    '902', '905',
+  ]);
+
+  // +1XXXXXXXXXX — check the 3-digit area code after the country code
+  if (digits.startsWith('1') && digits.length >= 4) {
+    const areaCode = digits.substring(1, 4);
+    if (canadianAreaCodes.has(areaCode)) return 'CA';
+    return 'US';
+  }
+
+  // International numbers
+  if (digits.startsWith('44')) return 'GB';
+  if (digits.startsWith('33')) return 'FR';
+  if (digits.startsWith('61')) return 'AU';
+
+  return 'US';
+}
+
 const SetupPhoneSchema = z.object({
   accountId: z.string(),
   areaCode: z.string().length(3),
@@ -232,12 +268,13 @@ export const deployReceptionistAction = enhanceAction(
           );
         } else {
           // All existing numbers are taken — search for and purchase a new one
+          const purchaseCountry = detectCountryFromPhone(phoneIntegrationSettings?.clinicNumber || '');
           logger.info(
-            { accountId: account.id },
+            { accountId: account.id, purchaseCountry, clinicNumber: phoneIntegrationSettings?.clinicNumber },
             '[Receptionist] All Twilio numbers assigned, purchasing a new one'
           );
           try {
-            const availableNumbers = await twilioService.searchAvailableNumbers('US', 'Local', {
+            const availableNumbers = await twilioService.searchAvailableNumbers(purchaseCountry, 'Local', {
               voiceEnabled: true,
               limit: 1,
             });
@@ -664,13 +701,22 @@ export const changePhoneNumberAction = enhanceAction(
         throw new Error('No deployed agent found. Please deploy first.');
       }
 
-      const businessName = account.brandingBusinessName || account.name;
+      const MAX_PHONE_CHANGES = 5;
+      const changeCount = settings?.phoneChangeCount ?? 0;
+      if (changeCount >= MAX_PHONE_CHANGES) {
+        throw new Error(
+          `You have reached the maximum of ${MAX_PHONE_CHANGES} phone number changes. Please contact support to change your number.`
+        );
+      }
 
-      // Search for a new Twilio number
+      const businessName = account.brandingBusinessName || account.name;
+      const changeCountry = detectCountryFromPhone(settings?.clinicNumber || settings?.phoneNumber || '');
+
+      // Search for a new Twilio number in the same country as the clinic
       const { createTwilioService } = await import('@kit/shared/twilio/server');
       const twilioService = createTwilioService();
 
-      const availableNumbers = await twilioService.searchAvailableNumbers('US', 'Local', {
+      const availableNumbers = await twilioService.searchAvailableNumbers(changeCountry, 'Local', {
         voiceEnabled: true,
         limit: 1,
       });
@@ -735,7 +781,7 @@ export const changePhoneNumberAction = enhanceAction(
         }
       }
 
-      // Update account settings
+      // Update account settings and increment the change counter
       await prisma.account.update({
         where: { id: account.id },
         data: {
@@ -743,6 +789,7 @@ export const changePhoneNumberAction = enhanceAction(
             ...settings,
             vapiPhoneId: vapiPhone.id,
             phoneNumber: newPhoneNumber,
+            phoneChangeCount: changeCount + 1,
           },
         },
       });
