@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
 import { enhanceAction } from '@kit/next/actions';
 import { getLogger } from '@kit/shared/logger';
 import { createVapiService } from '@kit/shared/vapi/server';
@@ -574,25 +575,41 @@ export const deployReceptionistAction = enhanceAction(
       const existingMethod = account.phoneIntegrationMethod && account.phoneIntegrationMethod !== 'none'
         ? account.phoneIntegrationMethod
         : 'forwarded';
+
+      // Build the new settings, preserving existing KB data if the wizard
+      // didn't supply any (e.g. user only changed voice).
+      const updatedSettings: Record<string, unknown> = {
+        ...(phoneIntegrationSettings || {}),
+        vapiSquadId: squad.id,
+        vapiPhoneId: vapiPhone.id,
+        voiceConfig: data.voice,
+        phoneNumber: phoneNumber,
+        templateVersion,
+        templateName,
+        deployedAt: new Date().toISOString(),
+      };
+
+      // Only overwrite KB fields when the wizard actually provided KB data.
+      // Setting to `undefined` would erase existing values from the KB management page.
+      if (allKBFileIds.length > 0) {
+        updatedSettings.knowledgeBaseFileIds = allKBFileIds;
+      }
+      if (hasCategorizedKB) {
+        updatedSettings.knowledgeBaseConfig = knowledgeBaseConfig;
+      }
+      if (queryToolId) {
+        updatedSettings.queryToolId = queryToolId;
+      }
+      if (queryToolName) {
+        updatedSettings.queryToolName = queryToolName;
+      }
+
       await prisma.account.update({
         where: { id: account.id },
         data: {
           phoneIntegrationMethod: existingMethod,
           agentTemplateId: templateId,
-          phoneIntegrationSettings: {
-            ...(phoneIntegrationSettings || {}),
-            vapiSquadId: squad.id,
-            vapiPhoneId: vapiPhone.id,
-            voiceConfig: data.voice,
-            phoneNumber: phoneNumber,
-            knowledgeBaseFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
-            knowledgeBaseConfig: hasCategorizedKB ? knowledgeBaseConfig : undefined,
-            queryToolId,
-            queryToolName,
-            templateVersion,
-            templateName,
-            deployedAt: new Date().toISOString(),
-          },
+          phoneIntegrationSettings: updatedSettings as any,
         },
       });
 
@@ -634,23 +651,20 @@ export const deployReceptionistAction = enhanceAction(
           );
 
           if (structuredOutputId) {
+            // Only add the structuredOutputId to the settings written in STEP 8.
+            // Re-read current settings from DB to avoid reverting STEP 8 changes.
+            const freshAccount = await prisma.account.findUnique({
+              where: { id: account.id },
+              select: { phoneIntegrationSettings: true },
+            });
+            const freshSettings = (freshAccount?.phoneIntegrationSettings as Record<string, unknown>) || {};
+
             await prisma.account.update({
               where: { id: account.id },
               data: {
                 phoneIntegrationSettings: {
-                  ...(phoneIntegrationSettings || {}),
-                  vapiSquadId: squad.id,
-                  vapiPhoneId: vapiPhone.id,
-                  voiceConfig: data.voice,
-                  phoneNumber: phoneNumber,
-                  knowledgeBaseFileIds: allKBFileIds.length > 0 ? allKBFileIds : undefined,
-                  knowledgeBaseConfig: hasCategorizedKB ? knowledgeBaseConfig : undefined,
-                  queryToolId,
-                  queryToolName,
-                  templateVersion,
-                  templateName,
+                  ...freshSettings,
                   structuredOutputId,
-                  deployedAt: new Date().toISOString(),
                 },
               },
             });
@@ -671,6 +685,10 @@ export const deployReceptionistAction = enhanceAction(
         { accountId: account.id, squadId: squad.id, templateVersion },
         '[Receptionist] AI receptionist deployed successfully'
       );
+
+      // Revalidate the overview page so it renders with fresh data after redirect
+      revalidatePath('/home/agent');
+      revalidatePath('/home/agent/knowledge');
 
       return {
         success: true,

@@ -99,14 +99,41 @@ export default function KnowledgeBaseManagementPage() {
       setQueryToolId(data.queryToolId || null);
 
       const kbConfig: Record<string, string[]> = data.knowledgeBaseConfig || {};
+      const kbFileIds: string[] = data.knowledgeBaseFileIds || [];
+
+      // Check if knowledgeBaseConfig has any entries
+      const configHasFiles = Object.values(kbConfig).some(
+        (ids) => Array.isArray(ids) && ids.length > 0,
+      );
 
       setCategories((prev) => {
         const next = { ...prev };
-        for (const [catId, fileIds] of Object.entries(kbConfig)) {
-          if (next[catId] && Array.isArray(fileIds)) {
-            next[catId] = {
-              ...next[catId]!,
-              files: fileIds.map((fid: string) => ({
+
+        if (configHasFiles) {
+          // Use categorized config
+          for (const [catId, fileIds] of Object.entries(kbConfig)) {
+            if (next[catId] && Array.isArray(fileIds)) {
+              next[catId] = {
+                ...next[catId]!,
+                files: fileIds.map((fid: string) => ({
+                  id: fid,
+                  name: `File ${fid.slice(0, 8)}`,
+                  size: 0,
+                  status: 'uploaded' as const,
+                  vapiFileId: fid,
+                })),
+              };
+            }
+          }
+        } else if (kbFileIds.length > 0) {
+          // Fallback: knowledgeBaseConfig is empty but flat file IDs exist
+          // (e.g. files were uploaded through the wizard but not yet categorized).
+          // Show them under the first category so they're visible and manageable.
+          const firstCategory = KB_CATEGORIES[0]!.id;
+          if (next[firstCategory]) {
+            next[firstCategory] = {
+              ...next[firstCategory]!,
+              files: kbFileIds.map((fid: string) => ({
                 id: fid,
                 name: `File ${fid.slice(0, 8)}`,
                 size: 0,
@@ -116,6 +143,7 @@ export default function KnowledgeBaseManagementPage() {
             };
           }
         }
+
         return next;
       });
     } catch {
