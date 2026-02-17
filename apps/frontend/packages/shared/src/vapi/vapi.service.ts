@@ -172,7 +172,15 @@ export interface VapiCall {
   };
   // Artifact contains transcript, recording, etc.
   artifact?: {
-    transcript?: string;
+    // Vapi returns transcript as an array of message objects (role + message + time).
+    // Some older calls may have it as a plain string.
+    transcript?: string | Array<{
+      role: string;
+      message: string;
+      time: number;
+      endTime?: number;
+    }>;
+    recording?: string;
     recordingUrl?: string;
     messages?: Array<{
       role: string;
@@ -180,6 +188,12 @@ export interface VapiCall {
       time: number;
       endTime?: number;
     }>;
+    messagesOpenAIFormatted?: Array<{
+      role: string;
+      content: string;
+    }>;
+    logUrl?: string;
+    pcapUrl?: string;
   };
   // Analysis contains AI-extracted structured data
   analysis?: {
@@ -191,6 +205,7 @@ export interface VapiCall {
   transcript?: string;
   recordingUrl?: string;
   summary?: string;
+  createdAt?: string;
 }
 
 /**
@@ -209,6 +224,8 @@ export interface VapiListCallsParams {
 /**
  * Parameters for Vapi analytics query.
  * Matches the full POST /analytics API spec.
+ *
+ * Note: `groupBy` is a single string per the OpenAPI spec, not an array.
  */
 export interface VapiAnalyticsQuery {
   queries: Array<{
@@ -219,9 +236,7 @@ export interface VapiAnalyticsQuery {
       column: string;
       alias?: string;
     }>;
-    groupBy?: Array<
-      'type' | 'assistantId' | 'endedReason' | 'analysis.successEvaluation' | 'status'
-    >;
+    groupBy?: 'type' | 'assistantId' | 'endedReason' | 'analysis.successEvaluation' | 'status';
     groupByVariableValue?: Array<{ key: string }>;
     timeRange?: {
       start: string;
@@ -1678,7 +1693,25 @@ class VapiService {
         return [];
       }
 
-      return await response.json();
+      const body = await response.json();
+
+      // Vapi returns a paginated response: { results: [...], metadata: {...} }
+      if (Array.isArray(body)) {
+        return body;
+      }
+      if (body && Array.isArray(body.results)) {
+        return body.results;
+      }
+      if (body && Array.isArray(body.data)) {
+        return body.data;
+      }
+
+      logger.warn({
+        bodyType: typeof body,
+        hasResults: !!body?.results,
+        hasData: !!body?.data,
+      }, '[Vapi] Unexpected response shape from list structured outputs');
+      return [];
     } catch (error) {
       logger.error({
         error: error instanceof Error ? error.message : error,
@@ -1717,42 +1750,64 @@ class VapiService {
     try {
       // Check for existing structured output with matching name prefix
       const existingOutputs = await this.listStructuredOutputs();
+
+      logger.info({
+        existingCount: existingOutputs.length,
+        targetName,
+        assistantIds,
+      }, '[Vapi] Checking for existing structured output');
+
       const existing = existingOutputs.find(
         (o) => o.name.startsWith(namePrefix),
       );
 
       if (existing) {
-        // Check if assistant IDs need updating
-        const currentIds = new Set(existing.assistantIds || []);
+        // Always update with the current assistant IDs (replaces stale IDs from deleted squads)
+        const currentIdsSet = new Set(existing.assistantIds || []);
+        const newIdsSet = new Set(assistantIds);
         const needsUpdate =
           existing.name !== targetName ||
-          assistantIds.some((id) => !currentIds.has(id));
+          assistantIds.some((id) => !currentIdsSet.has(id)) ||
+          (existing.assistantIds || []).some((id: string) => !newIdsSet.has(id));
 
         if (needsUpdate) {
-          const mergedIds = [...new Set([...(existing.assistantIds || []), ...assistantIds])];
+          // Replace (not merge) assistant IDs so stale references from deleted squads are removed
           const updated = await this.updateStructuredOutput(existing.id, {
             name: targetName,
             schema,
-            assistantIds: mergedIds,
+            assistantIds,
             description: `Extracts call outcomes, patient info, and actions for dental clinic calls (${version})`,
           });
 
           if (updated) {
             logger.info({
               structuredOutputId: updated.id,
-              assistantCount: mergedIds.length,
+              assistantCount: assistantIds.length,
+              previousAssistantIds: existing.assistantIds,
+              newAssistantIds: assistantIds,
             }, '[Vapi] Updated existing call analysis structured output');
             return updated.id;
           }
-        }
 
-        logger.info({
-          structuredOutputId: existing.id,
-        }, '[Vapi] Existing call analysis structured output is up to date');
-        return existing.id;
+          logger.error({
+            structuredOutputId: existing.id,
+          }, '[Vapi] Failed to update existing structured output, will try to create new');
+        } else {
+          logger.info({
+            structuredOutputId: existing.id,
+          }, '[Vapi] Existing call analysis structured output is up to date');
+          return existing.id;
+        }
       }
 
       // Create new structured output
+      logger.info({
+        name: targetName,
+        assistantIds,
+        schemaType: schema?.type,
+        propertyCount: schema?.properties ? Object.keys(schema.properties).length : 0,
+      }, '[Vapi] Creating new call analysis structured output');
+
       const created = await this.createStructuredOutput({
         name: targetName,
         description: `Extracts call outcomes, patient info, and actions for dental clinic calls (${version})`,
@@ -1774,6 +1829,9 @@ class VapiService {
     } catch (error) {
       logger.error({
         error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        assistantIds,
+        version,
       }, '[Vapi] Exception in ensureCallAnalysisOutput');
       return null;
     }

@@ -120,103 +120,106 @@ export async function GET(request: NextRequest) {
 
     // -----------------------------------------------------------------------
     // PART 1: Vapi Analytics API for aggregate metrics
-    // Uses POST /analytics for efficient server-side aggregation
+    // Uses POST /analytics for efficient server-side aggregation.
+    // Note: This returns org-wide data (no phone-number filter), so we use
+    // it for global trends and always verify against listCalls for accuracy.
     // -----------------------------------------------------------------------
-    const analyticsQuery: VapiAnalyticsQuery = {
-      queries: [
-        {
-          table: 'call',
-          name: 'callMetrics',
-          timeRange: {
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            timezone,
-          },
-          operations: [
-            { operation: 'count', column: 'id', alias: 'totalCalls' },
-            { operation: 'avg', column: 'duration', alias: 'avgDuration' },
-            { operation: 'sum', column: 'cost', alias: 'totalCost' },
-          ],
-        },
-        {
-          table: 'call',
-          name: 'dailyTrend',
-          timeRange: {
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            step: 'day',
-            timezone,
-          },
-          operations: [
-            { operation: 'count', column: 'id', alias: 'count' },
-          ],
-        },
-        {
-          table: 'call',
-          name: 'byStatus',
-          groupBy: ['status'],
-          timeRange: {
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            timezone,
-          },
-          operations: [
-            { operation: 'count', column: 'id', alias: 'count' },
-          ],
-        },
-      ],
-    };
-
-    const analyticsResult = await vapiService.getCallAnalytics(analyticsQuery);
-
-    // Parse analytics API results
     let totalCalls = 0;
     let avgDurationSeconds = 0;
     let totalCost = 0;
     let activityTrend: Array<{ date: string; count: number }> = [];
 
-    if (analyticsResult && Array.isArray(analyticsResult)) {
-      for (const queryResult of analyticsResult) {
-        if (queryResult.name === 'callMetrics' && queryResult.result?.length > 0) {
-          const metrics = queryResult.result[0];
-          totalCalls = metrics.totalCalls || 0;
-          avgDurationSeconds = Math.round(metrics.avgDuration || 0);
-          totalCost = Math.round((metrics.totalCost || 0) * 100) / 100;
-        }
+    try {
+      const analyticsQuery: VapiAnalyticsQuery = {
+        queries: [
+          {
+            table: 'call',
+            name: 'callMetrics',
+            timeRange: {
+              start: startDate.toISOString(),
+              end: endDate.toISOString(),
+              timezone,
+            },
+            operations: [
+              { operation: 'count', column: 'id', alias: 'totalCalls' },
+              { operation: 'avg', column: 'duration', alias: 'avgDuration' },
+              { operation: 'sum', column: 'cost', alias: 'totalCost' },
+            ],
+          },
+          {
+            table: 'call',
+            name: 'dailyTrend',
+            timeRange: {
+              start: startDate.toISOString(),
+              end: endDate.toISOString(),
+              step: 'day',
+              timezone,
+            },
+            operations: [
+              { operation: 'count', column: 'id', alias: 'count' },
+            ],
+          },
+        ],
+      };
 
-        if (queryResult.name === 'dailyTrend' && queryResult.result?.length > 0) {
-          activityTrend = queryResult.result.map((row: any) => ({
-            date: row.date ? row.date.slice(0, 10) : '',
-            count: row.count || 0,
-          })).filter((r: any) => r.date);
+      const analyticsResult = await vapiService.getCallAnalytics(analyticsQuery);
+
+      // Parse analytics API results — response is Array<{ name, timeRange, result }>
+      const results = Array.isArray(analyticsResult)
+        ? analyticsResult
+        : (analyticsResult as any)?.data ?? (analyticsResult as any)?.results ?? [];
+
+      if (Array.isArray(results)) {
+        for (const queryResult of results) {
+          if (queryResult.name === 'callMetrics' && queryResult.result?.length > 0) {
+            const metrics = queryResult.result[0];
+            totalCalls = metrics.totalCalls || 0;
+            avgDurationSeconds = Math.round(metrics.avgDuration || 0);
+            totalCost = Math.round((metrics.totalCost || 0) * 100) / 100;
+          }
+
+          if (queryResult.name === 'dailyTrend' && queryResult.result?.length > 0) {
+            activityTrend = queryResult.result.map((row: any) => ({
+              date: (row.date || row.timestamp || '').toString().slice(0, 10),
+              count: row.count || 0,
+            })).filter((r: any) => r.date);
+          }
         }
       }
+    } catch (analyticsErr) {
+      console.error('[Analytics] Vapi analytics API failed, will compute from calls:', analyticsErr);
     }
 
     // -----------------------------------------------------------------------
-    // PART 2: Fetch recent calls for structured output analysis
-    // Only fetches the most recent calls (limited) to extract outcomes, insurance, etc.
-    // This avoids pulling all calls into memory for large volumes.
+    // PART 2: Fetch calls for structured output analysis
+    // Always fetch WITHOUT date filter first to ensure we have data.
+    // Then filter by date range client-side for the selected period.
     // -----------------------------------------------------------------------
     const MAX_CALLS_FOR_OUTCOMES = 500;
-    const recentCalls: VapiCall[] = [];
+    const allFetchedCalls: VapiCall[] = [];
 
     for (const phone of phoneNumbers) {
       const calls = await vapiService.listCalls({
         phoneNumberId: phone.vapiPhoneId,
         limit: MAX_CALLS_FOR_OUTCOMES,
-        createdAtGe: startDate.toISOString(),
-        createdAtLe: endDate.toISOString(),
       });
-      recentCalls.push(...calls);
+      allFetchedCalls.push(...calls);
     }
 
-    // If analytics API returned 0 calls but we have recent calls, use their count
+    // Filter to the requested date range
+    const startMs = startDate.getTime();
+    const endMs = endDate.getTime();
+    const recentCalls = allFetchedCalls.filter((call) => {
+      const callTime = new Date(call.startedAt || call.endedAt || call.createdAt || 0).getTime();
+      return callTime >= startMs && callTime <= endMs;
+    });
+
+    // If analytics API returned 0 calls but we have calls, use listCalls data
     if (totalCalls === 0 && recentCalls.length > 0) {
       totalCalls = recentCalls.length;
     }
 
-    // If analytics API didn't return trends, compute from recent calls
+    // If analytics API didn't return trends, compute from calls
     if (activityTrend.length === 0 && recentCalls.length > 0) {
       const dailyCounts = new Map<string, number>();
       for (const call of recentCalls) {
@@ -230,7 +233,7 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => a.date.localeCompare(b.date));
     }
 
-    // Compute outcome metrics from structured data in recent calls
+    // Compute outcome metrics from structured data in calls
     const outcomeCounts = new Map<string, number>();
     let bookedCount = 0;
     let insuranceVerifiedCount = 0;
@@ -250,7 +253,6 @@ export async function GET(request: NextRequest) {
       if (sd.paymentDiscussed) paymentPlanCount++;
       if (sd.collectionAttempt) collectionCount++;
 
-      // Fallback duration calculation if analytics API didn't provide it
       if (avgDurationSeconds === 0 && call.startedAt && call.endedAt) {
         const dur = Math.round(
           (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000
@@ -260,7 +262,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Use analytics API duration if available, otherwise fall back to computed
     const avgCallTime = avgDurationSeconds > 0
       ? avgDurationSeconds
       : (fallbackDurationCount > 0 ? Math.round(fallbackDuration / fallbackDurationCount) : 0);

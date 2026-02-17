@@ -8,6 +8,7 @@ import {
   buildSquadPayloadFromTemplate,
   dbShapeToTemplate,
   DENTAL_CLINIC_TEMPLATE_VERSION,
+  CALL_ANALYSIS_SCHEMA,
   getAllFunctionToolDefinitions,
   prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
@@ -254,7 +255,35 @@ export async function POST(request: Request) {
       }
     }
 
-    // STEP 6: Record template version on account (if accountId provided)
+    // STEP 6: Ensure structured output is created and linked to squad assistants
+    let structuredOutputId: string | null = null;
+    try {
+      const assistantIds = (squad.members || [])
+        .map((m: any) => m.assistantId)
+        .filter(Boolean) as string[];
+
+      if (assistantIds.length > 0 && usedTemplateVersion) {
+        structuredOutputId = await vapiService.ensureCallAnalysisOutput(
+          assistantIds,
+          CALL_ANALYSIS_SCHEMA,
+          usedTemplateVersion,
+        );
+
+        if (structuredOutputId) {
+          logger.info(
+            { structuredOutputId, assistantCount: assistantIds.length },
+            '[Squad Setup] Structured output linked to squad assistants',
+          );
+        }
+      }
+    } catch (soErr: any) {
+      logger.warn(
+        { error: soErr?.message },
+        '[Squad Setup] Non-fatal: could not ensure structured output',
+      );
+    }
+
+    // STEP 7: Record template version on account (if accountId provided)
     if (accountId && usedTemplateVersion) {
       try {
         const existingAccount = await prisma.account.findUnique({
@@ -273,6 +302,7 @@ export async function POST(request: Request) {
               vapiSquadId: squad.id,
               templateVersion: usedTemplateVersion,
               templateName: usedTemplateName,
+              ...(structuredOutputId ? { structuredOutputId } : {}),
               lastTemplateUpdate: new Date().toISOString(),
             },
           },
@@ -282,6 +312,7 @@ export async function POST(request: Request) {
           accountId,
           templateVersion: usedTemplateVersion,
           templateName: usedTemplateName,
+          structuredOutputId,
         }, '[Squad Setup] Template version recorded on account');
       } catch (dbError) {
         logger.error({ dbError, accountId }, '[Squad Setup] Failed to record template on account');
@@ -294,6 +325,7 @@ export async function POST(request: Request) {
       squadName: squad.name,
       phoneNumber,
       templateVersion: usedTemplateVersion,
+      structuredOutputId,
     }, '[Squad Setup] Squad created successfully');
 
     return NextResponse.json({

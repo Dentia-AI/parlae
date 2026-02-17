@@ -101,6 +101,38 @@ export async function GET(
 }
 
 /**
+ * Normalize a Vapi transcript into a plain-text string.
+ *
+ * Vapi returns `artifact.transcript` as an array of message objects:
+ *   [{ role: "assistant", message: "Hello!", time: 0.5 }, ...]
+ * Older calls may still have a plain string. This helper handles both.
+ */
+function normalizeTranscript(raw: unknown): string | null {
+  if (!raw) return null;
+
+  // Already a string (legacy format)
+  if (typeof raw === 'string') return raw;
+
+  // Array of message objects
+  if (Array.isArray(raw)) {
+    return raw
+      .map((msg: any) => {
+        const role = msg.role || 'unknown';
+        const label =
+          role === 'assistant' || role === 'bot' ? 'AI' :
+          role === 'user' || role === 'customer' ? 'User' :
+          role === 'system' ? 'System' :
+          role.charAt(0).toUpperCase() + role.slice(1);
+        return `${label}: ${msg.message || msg.content || ''}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return null;
+}
+
+/**
  * Map a full Vapi call to the detail shape the frontend expects.
  */
 function mapVapiCallToDetail(call: any) {
@@ -109,8 +141,15 @@ function mapVapiCallToDetail(call: any) {
   const artifact = call.artifact || {};
 
   const summary = analysis.summary || call.summary || null;
-  const transcript = artifact.transcript || call.transcript || null;
-  const recordingUrl = artifact.recordingUrl || call.recordingUrl || null;
+
+  // Normalize transcript: prefer artifact.transcript (array), fall back to
+  // artifact.messages, then legacy top-level call.transcript string.
+  const transcript =
+    normalizeTranscript(artifact.transcript) ||
+    normalizeTranscript(artifact.messages) ||
+    (typeof call.transcript === 'string' ? call.transcript : null);
+
+  const recordingUrl = artifact.recording || artifact.recordingUrl || call.recordingUrl || null;
 
   let duration: number | null = null;
   if (call.startedAt && call.endedAt) {

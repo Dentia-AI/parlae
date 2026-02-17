@@ -6,6 +6,31 @@ import { requireSession } from '~/lib/auth/get-session';
 import type { VapiCall } from '@kit/shared/vapi/vapi.service';
 
 /**
+ * Normalize a Vapi transcript into a plain-text string.
+ * Vapi returns artifact.transcript as an array of message objects;
+ * older calls may still have a plain string.
+ */
+function normalizeTranscript(raw: unknown): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    return raw
+      .map((msg: any) => {
+        const role = msg.role || 'unknown';
+        const label =
+          role === 'assistant' || role === 'bot' ? 'AI' :
+          role === 'user' || role === 'customer' ? 'User' :
+          role === 'system' ? 'System' :
+          role.charAt(0).toUpperCase() + role.slice(1);
+        return `${label}: ${msg.message || msg.content || ''}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return null;
+}
+
+/**
  * Map a Vapi call to the shape the frontend expects for the call list.
  */
 function mapVapiCallToListItem(call: VapiCall) {
@@ -13,7 +38,10 @@ function mapVapiCallToListItem(call: VapiCall) {
   const structuredData = analysis.structuredData || {};
   const artifact = call.artifact || {};
   const summary = analysis.summary || call.summary || null;
-  const transcript = artifact.transcript || call.transcript || null;
+  const transcript =
+    normalizeTranscript(artifact.transcript) ||
+    normalizeTranscript(artifact.messages) ||
+    (typeof call.transcript === 'string' ? call.transcript : null);
 
   // Calculate duration in seconds
   let duration: number | null = null;
