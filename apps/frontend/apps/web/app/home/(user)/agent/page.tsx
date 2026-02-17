@@ -192,14 +192,27 @@ export default async function ReceptionistDashboardPage({
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              {integrationSettings?.knowledgeBaseFileIds?.length || 0} documents
-            </p>
-            <Link href="/home/agent/setup/knowledge">
-              <Button variant="outline" size="sm" className="w-full">
-                Manage Files
-              </Button>
-            </Link>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm text-muted-foreground">Documents</p>
+                  <p className="font-semibold">
+                    {integrationSettings?.knowledgeBaseFileIds?.length || 0} uploaded
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="font-semibold">
+                    {integrationSettings?.queryToolId ? 'Active' : 'Not configured'}
+                  </p>
+                </div>
+              </div>
+              <Link href="/home/agent/knowledge">
+                <Button variant="outline" size="sm" className="w-full">
+                  Manage Files
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
