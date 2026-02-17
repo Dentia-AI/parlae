@@ -409,23 +409,26 @@ export const deployReceptionistAction = enhanceAction(
           where: { id: account.agentTemplateId },
         });
 
-        if (dbTemplate && dbTemplate.isActive && dbTemplate.version >= builtInVersion) {
+        if (dbTemplate && dbTemplate.isActive && dbTemplate.version > builtInVersion) {
+          // DB template is strictly newer (custom/hotfix) — use it
           templateConfig = dbShapeToTemplate(dbTemplate as any);
           templateVersion = dbTemplate.version;
           templateName = dbTemplate.name;
           logger.info(
-            { templateName, templateVersion, memberCount: templateConfig.members.length },
-            '[Receptionist] Using DB template'
+            { templateName, templateVersion, builtInVersion, memberCount: templateConfig.members.length },
+            '[Receptionist] Using DB template (strictly newer than built-in)'
           );
         } else {
+          // Built-in template wins when versions are equal — code is source of truth
           templateConfig = builtInTemplate;
           templateVersion = builtInVersion;
           templateName = builtInTemplate.name;
           logger.info({
             builtInVersion,
             dbVersion: dbTemplate?.version,
+            reason: !dbTemplate ? 'no-db-template' : !dbTemplate.isActive ? 'db-inactive' : 'built-in-wins',
             memberCount: builtInTemplate.members.length,
-          }, '[Receptionist] Built-in template is newer, using it');
+          }, '[Receptionist] Using built-in template (code is source of truth)');
         }
       } else {
         templateConfig = builtInTemplate;
@@ -532,17 +535,17 @@ export const deployReceptionistAction = enhanceAction(
       const dbShape = templateToDbShape(templateConfig);
 
       if (templateId) {
-        // Account already linked — update the DB record if the version is newer
+        // Account already linked — keep DB in sync with built-in
         try {
           const existing = await prisma.agentTemplate.findUnique({ where: { id: templateId } });
-          if (existing && existing.version < templateVersion) {
+          if (existing && existing.version <= templateVersion) {
             await prisma.agentTemplate.update({
               where: { id: templateId },
               data: { ...dbShape, isActive: true },
             });
             logger.info(
               { templateId, oldVersion: existing.version, newVersion: templateVersion },
-              '[Receptionist] Updated DB template to latest version',
+              '[Receptionist] Synced DB template with built-in',
             );
           }
         } catch (updateErr: any) {
@@ -555,8 +558,8 @@ export const deployReceptionistAction = enhanceAction(
         });
         if (existingDbTemplate) {
           templateId = existingDbTemplate.id;
-          // Also update it if version is newer
-          if (existingDbTemplate.version < templateVersion) {
+          // Keep DB in sync (same or older version)
+          if (existingDbTemplate.version <= templateVersion) {
             try {
               await prisma.agentTemplate.update({
                 where: { id: templateId },

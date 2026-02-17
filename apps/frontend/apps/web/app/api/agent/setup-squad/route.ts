@@ -400,8 +400,9 @@ async function resolveDentalClinicSquad(
       throw new Error(`Template ${templateId} is not active`);
     }
 
-    // Prefer built-in if it has a newer version
-    if (dbTemplate.version >= builtInVersion) {
+    // Only use DB template if it's strictly newer (custom/hotfix);
+    // otherwise code is the source of truth
+    if (dbTemplate.version > builtInVersion) {
       templateConfig = dbShapeToTemplate(dbTemplate as any);
       templateVersion = dbTemplate.version;
       templateName = dbTemplate.name;
@@ -409,8 +410,9 @@ async function resolveDentalClinicSquad(
       logger.info({
         templateName,
         templateVersion,
+        builtInVersion,
         memberCount: templateConfig.members.length,
-      }, '[Squad Setup] Using DB template');
+      }, '[Squad Setup] Using DB template (strictly newer than built-in)');
     } else {
       templateConfig = builtInTemplate;
       templateVersion = builtInVersion;
@@ -420,7 +422,8 @@ async function resolveDentalClinicSquad(
         builtInVersion,
         dbVersion: dbTemplate.version,
         memberCount: builtInTemplate.members.length,
-      }, '[Squad Setup] Built-in template is newer, using it');
+        reason: 'built-in-wins',
+      }, '[Squad Setup] Using built-in template (code is source of truth)');
     }
   } else {
     // ── Use built-in default template ────────────────────────────────────

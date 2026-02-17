@@ -16,6 +16,11 @@ import {
   PMS_SYSTEM_PROMPT_ADDITION,
 } from '../vapi-pms-tools.config';
 
+import {
+  DENTAL_CLINIC_TEMPLATE_VERSION,
+  DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME,
+} from './dental-clinic.template';
+
 import type {
   DentalClinicTemplateConfig,
   SquadMemberTemplate,
@@ -237,13 +242,25 @@ export function buildSquadPayloadFromTemplate(
   variables: TemplateVariables,
   runtime: RuntimeConfig,
 ): Record<string, unknown> {
-  const members = template.members.map((member) =>
-    buildMemberPayload(member, variables, runtime),
-  );
+  const versionMetadata = {
+    templateVersion: DENTAL_CLINIC_TEMPLATE_VERSION,
+    templateDisplayName: DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME,
+    deployedAt: new Date().toISOString(),
+  };
+
+  const members = template.members.map((member) => {
+    const payload = buildMemberPayload(member, variables, runtime);
+    // Tag each assistant with version metadata
+    if (payload.assistant && typeof payload.assistant === 'object') {
+      (payload.assistant as Record<string, unknown>).metadata = versionMetadata;
+    }
+    return payload;
+  });
 
   return {
     name: `${variables.clinicName} - ${template.displayName}`,
     members,
+    metadata: versionMetadata,
   };
 }
 

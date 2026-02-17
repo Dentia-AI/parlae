@@ -59,6 +59,8 @@ export interface VapiAssistantConfig {
     voiceSeconds?: number;
     backoffSeconds?: number;
   };
+  /** Arbitrary metadata stored on the Vapi assistant (e.g. templateVersion) */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -102,6 +104,8 @@ export interface VapiSquadConfig {
       description?: string;
     }>;
   }>;
+  /** Arbitrary metadata stored on the Vapi squad (e.g. templateVersion) */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -526,16 +530,21 @@ class VapiService {
       }
 
       // Step 2: Create the squad with assistantId references
+      const squadBody: Record<string, unknown> = {
+        name: config.name,
+        members,
+      };
+      if (config.metadata) {
+        squadBody.metadata = config.metadata;
+      }
+
       const response = await fetch(`${this.baseUrl}/squad`, {
         method: 'POST',
         headers: {
           'Authorization': this.getAuthHeader(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: config.name,
-          members,
-        }),
+        body: JSON.stringify(squadBody),
       });
 
       if (!response.ok) {
@@ -654,6 +663,11 @@ class VapiService {
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
       recordingEnabled: config.recordingEnabled ?? true,
     };
+
+    // Embed template version in Vapi metadata for visibility in dashboard
+    if (config.metadata) {
+      payload.metadata = config.metadata;
+    }
 
     if (config.firstMessage !== undefined) {
       payload.firstMessage = config.firstMessage;

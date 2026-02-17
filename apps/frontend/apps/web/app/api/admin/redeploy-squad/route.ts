@@ -183,14 +183,14 @@ export async function POST(request: NextRequest) {
         where: { id: account.agentTemplateId },
       });
 
-      if (dbTemplate && dbTemplate.isActive && dbTemplate.version >= builtInVersion) {
-        // DB template is same or newer — use it
+      if (dbTemplate && dbTemplate.isActive && dbTemplate.version > builtInVersion) {
+        // DB template is strictly newer (custom/hotfix) — use it
         templateConfig = dbShapeToTemplate(dbTemplate as any);
         templateVersion = dbTemplate.version;
         templateName = dbTemplate.name;
-        logger.info({ templateVersion, templateName, memberCount: templateConfig.members.length }, '[Admin Redeploy] Using DB template');
+        logger.info({ templateVersion, templateName, builtInVersion, memberCount: templateConfig.members.length }, '[Admin Redeploy] Using DB template (strictly newer than built-in)');
       } else {
-        // Built-in template is newer — use it and update the DB record
+        // Built-in template is same or newer — code is source of truth
         templateConfig = builtInTemplate;
         templateVersion = builtInVersion;
         templateName = builtInTemplate.name;
@@ -198,8 +198,8 @@ export async function POST(request: NextRequest) {
           builtInVersion,
           dbVersion: dbTemplate?.version,
           builtInMembers: builtInTemplate.members.length,
-          dbMembers: dbTemplate ? 'outdated' : 'missing',
-        }, '[Admin Redeploy] Built-in template is newer, using it instead of DB template');
+          reason: !dbTemplate ? 'no-db-template' : !dbTemplate.isActive ? 'db-inactive' : 'built-in-wins',
+        }, '[Admin Redeploy] Using built-in template (code is source of truth)');
       }
     } else {
       templateConfig = builtInTemplate;
@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
       // Account already linked to a DB template — update it if we used the built-in
       try {
         const existing = await prisma.agentTemplate.findUnique({ where: { id: templateId } });
-        if (existing && existing.version < templateVersion) {
+        if (existing && existing.version <= templateVersion) {
           await prisma.agentTemplate.update({
             where: { id: templateId },
             data: {
@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
           });
           logger.info(
             { templateId, oldVersion: existing.version, newVersion: templateVersion },
-            '[Admin Redeploy] Updated DB template to latest version',
+            '[Admin Redeploy] Synced DB template with built-in',
           );
         }
       } catch (updateErr: any) {
@@ -326,8 +326,8 @@ export async function POST(request: NextRequest) {
 
       if (existingTemplate) {
         templateId = existingTemplate.id;
-        // Also update it if version is newer
-        if (existingTemplate.version < templateVersion) {
+        // Also update it if version is same or older (keep DB in sync)
+        if (existingTemplate.version <= templateVersion) {
           try {
             await prisma.agentTemplate.update({
               where: { id: templateId },
