@@ -104,8 +104,6 @@ export interface VapiSquadConfig {
       description?: string;
     }>;
   }>;
-  /** Arbitrary metadata stored on the Vapi squad (e.g. templateVersion) */
-  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -534,9 +532,6 @@ class VapiService {
         name: config.name,
         members,
       };
-      if (config.metadata) {
-        squadBody.metadata = config.metadata;
-      }
 
       const response = await fetch(`${this.baseUrl}/squad`, {
         method: 'POST',

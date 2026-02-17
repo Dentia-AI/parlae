@@ -260,7 +260,6 @@ export function buildSquadPayloadFromTemplate(
   return {
     name: `${variables.clinicName} - ${template.displayName}`,
     members,
-    metadata: versionMetadata,
   };
 }
 
