@@ -1491,7 +1491,25 @@ class VapiService {
         return [];
       }
 
-      return await response.json();
+      const body = await response.json();
+
+      // Handle paginated response format (Vapi may return { results: [...] })
+      if (Array.isArray(body)) {
+        return body;
+      }
+      if (body && Array.isArray(body.results)) {
+        return body.results;
+      }
+      if (body && Array.isArray(body.data)) {
+        return body.data;
+      }
+
+      logger.warn({
+        bodyType: typeof body,
+        hasResults: !!body?.results,
+        hasData: !!body?.data,
+      }, '[Vapi] Unexpected response shape from list calls');
+      return [];
     } catch (error) {
       logger.error({
         error: error instanceof Error ? error.message : error,

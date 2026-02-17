@@ -414,9 +414,17 @@ You are multilingual. Detect the language the caller is speaking and respond in 
     },
   };
 
+  // Ensure silent transfers: set message to a single space on every destination
+  // so Vapi doesn't announce "Transferring your call to...". The system prompt
+  // already instructs the assistant to use natural transition phrases.
+  const silentDestinations = member.assistantDestinations.map((dest) => ({
+    ...dest,
+    message: (dest as any).message ?? ' ',
+  }));
+
   return {
     assistant: assistantPayload,
-    assistantDestinations: member.assistantDestinations,
+    assistantDestinations: silentDestinations,
   };
 }
 

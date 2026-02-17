@@ -161,12 +161,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (phoneNumbers.length === 0) {
+      console.log('[Call Logs] No phone numbers found for account', account.id);
       return NextResponse.json({
         calls: [],
         pagination: { page, limit, total: 0, totalPages: 0, hasMore: false },
         filters: { outcomes: [], reasons: [] },
       });
     }
+
+    console.log('[Call Logs] Fetching calls for phone IDs:', phoneNumbers.map(p => p.vapiPhoneId));
 
     // Fetch calls from Vapi for each phone number
     const vapiService = createVapiService();
@@ -179,6 +182,7 @@ export async function GET(request: NextRequest) {
         createdAtGe: startDate || undefined,
         createdAtLe: endDate || undefined,
       });
+      console.log(`[Call Logs] Phone ${phone.vapiPhoneId}: ${calls.length} calls returned`);
       allCalls.push(...calls);
     }
 

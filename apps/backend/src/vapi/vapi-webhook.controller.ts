@@ -152,6 +152,7 @@ export class VapiWebhookController {
     );
 
     const toolPayload = {
+      call: payload.message?.call,
       message: payload.message,
       functionCall: { name: toolName, parameters },
     };
@@ -298,6 +299,7 @@ export class VapiWebhookController {
       const phoneNumberId = call.phoneNumberId;
       const phoneNumber = call.phoneNumber?.number;
 
+      // Primary lookup: VapiPhoneNumber record by Vapi phone ID
       if (phoneNumberId) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
           where: { vapiPhoneId: phoneNumberId },
@@ -308,6 +310,7 @@ export class VapiWebhookController {
         }
       }
 
+      // Secondary lookup: VapiPhoneNumber record by phone number string
       if (phoneNumber) {
         const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
           where: { phoneNumber },
@@ -315,6 +318,28 @@ export class VapiWebhookController {
         });
         if (vapiPhone) {
           return vapiPhone.accountId;
+        }
+      }
+
+      // Fallback: search Account.phoneIntegrationSettings JSON for matching vapiPhoneId.
+      // This handles cases where the VapiPhoneNumber table is out of sync
+      // (e.g. squad was recreated with a new phone import).
+      if (phoneNumberId) {
+        const accounts = await this.prisma.account.findMany({
+          where: {
+            phoneIntegrationSettings: { not: null as any },
+          },
+          select: { id: true, phoneIntegrationSettings: true },
+        });
+
+        for (const acct of accounts) {
+          const settings = acct.phoneIntegrationSettings as any;
+          if (settings?.vapiPhoneId === phoneNumberId) {
+            this.logger.log(
+              `Resolved account ${acct.id} via phoneIntegrationSettings fallback (vapiPhoneId=${phoneNumberId})`,
+            );
+            return acct.id;
+          }
         }
       }
 
