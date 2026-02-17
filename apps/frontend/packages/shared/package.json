@@ -20,6 +20,7 @@
     "./employee-management/server-actions": "./src/employee-management/server-actions.ts",
     "./notifications": "./src/notifications/index.ts",
     "./notifications/server-actions": "./src/notifications/server-actions.ts",
+    "./analytics": "./src/analytics/index.ts",
     "./gohighlevel": "./src/gohighlevel/index.ts",
     "./gohighlevel/server": "./src/gohighlevel/server.ts",
     "./vapi/server": "./src/vapi/server.ts",

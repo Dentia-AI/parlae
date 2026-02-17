@@ -1,5 +1,6 @@
-// Client-side components for chat and calendar
+// Client-side components for chat, calendar, and tracking
 export { GHLChatWidget } from './ghl-chat-widget';
+export { GHLTracking } from './ghl-tracking';
 export { 
   GHLCalendarEmbed, 
   GHLCalendarDialog,
