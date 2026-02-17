@@ -170,18 +170,28 @@ export async function GET(request: NextRequest) {
 
       const analyticsResult = await vapiService.getCallAnalytics(analyticsQuery);
 
+      console.log('[Analytics] Vapi POST /analytics raw result type:', typeof analyticsResult, Array.isArray(analyticsResult));
+      if (analyticsResult) {
+        console.log('[Analytics] Vapi POST /analytics keys:', Object.keys(analyticsResult));
+      }
+
       // Parse analytics API results — response is Array<{ name, timeRange, result }>
       const results = Array.isArray(analyticsResult)
         ? analyticsResult
         : (analyticsResult as any)?.data ?? (analyticsResult as any)?.results ?? [];
 
+      console.log('[Analytics] Parsed results:', Array.isArray(results), 'length:', results?.length);
+
       if (Array.isArray(results)) {
         for (const queryResult of results) {
+          console.log('[Analytics] Query result:', queryResult.name, 'result rows:', queryResult.result?.length);
+
           if (queryResult.name === 'callMetrics' && queryResult.result?.length > 0) {
             const metrics = queryResult.result[0];
             totalCalls = metrics.totalCalls || 0;
             avgDurationSeconds = Math.round(metrics.avgDuration || 0);
             totalCost = Math.round((metrics.totalCost || 0) * 100) / 100;
+            console.log('[Analytics] callMetrics:', { totalCalls, avgDurationSeconds, totalCost });
           }
 
           if (queryResult.name === 'dailyTrend' && queryResult.result?.length > 0) {
@@ -189,6 +199,7 @@ export async function GET(request: NextRequest) {
               date: (row.date || row.timestamp || '').toString().slice(0, 10),
               count: row.count || 0,
             })).filter((r: any) => r.date);
+            console.log('[Analytics] dailyTrend entries:', activityTrend.length, 'sample:', activityTrend.slice(0, 3));
           }
         }
       }
@@ -204,21 +215,31 @@ export async function GET(request: NextRequest) {
     const MAX_CALLS_FOR_OUTCOMES = 500;
     const allFetchedCalls: VapiCall[] = [];
 
+    console.log('[Analytics] Fetching calls for phones:', phoneNumbers.map(p => p.vapiPhoneId));
+
     for (const phone of phoneNumbers) {
       const calls = await vapiService.listCalls({
         phoneNumberId: phone.vapiPhoneId,
         limit: MAX_CALLS_FOR_OUTCOMES,
+        createdAtGe: startDate.toISOString(),
+        createdAtLe: endDate.toISOString(),
       });
+      console.log(`[Analytics] Phone ${phone.vapiPhoneId}: ${calls.length} calls from listCalls`);
       allFetchedCalls.push(...calls);
     }
 
-    // Filter to the requested date range
+    console.log(`[Analytics] Total fetched calls: ${allFetchedCalls.length}`);
+
+    // allFetchedCalls are already within the date range (via Vapi query params).
+    // Apply a lenient client-side filter just in case of edge cases.
     const startMs = startDate.getTime();
     const endMs = endDate.getTime();
     const recentCalls = allFetchedCalls.filter((call) => {
       const callTime = new Date(call.startedAt || call.endedAt || call.createdAt || 0).getTime();
       return callTime >= startMs && callTime <= endMs;
     });
+
+    console.log(`[Analytics] After date filter (${startDate.toISOString()} - ${endDate.toISOString()}): ${recentCalls.length} calls`);
 
     // If analytics API returned 0 calls but we have calls, use listCalls data
     if (totalCalls === 0 && recentCalls.length > 0) {
@@ -282,6 +303,15 @@ export async function GET(request: NextRequest) {
       count,
       percentage: sampleSize > 0 ? Math.round((count / sampleSize) * 1000) / 10 : 0,
     }));
+
+    console.log('[Analytics] Final response:', {
+      totalCalls,
+      bookingRate,
+      avgCallTime: avgCallTime,
+      activityTrendEntries: activityTrend.length,
+      outcomesCount: outcomesDistribution.length,
+      recentCallsCount: recentCalls.length,
+    });
 
     // If no calls at all, return mock in dev
     if (totalCalls === 0 && recentCalls.length === 0 && process.env.NODE_ENV === 'development') {

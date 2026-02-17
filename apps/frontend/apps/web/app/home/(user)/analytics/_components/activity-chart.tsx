@@ -20,7 +20,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
           <CardTitle className="text-base">Activity</CardTitle>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <TrendingUp className="h-4 w-4" />
-            <span>Monthly Trend</span>
+            <span>Daily Trend</span>
           </div>
         </div>
       </CardHeader>

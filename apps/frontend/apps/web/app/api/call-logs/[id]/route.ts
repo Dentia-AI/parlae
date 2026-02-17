@@ -42,45 +42,55 @@ export async function GET(
       },
     });
 
-    if (!callRef) {
-      // Fallback: check if any of the account's phone numbers match this call
-      // This handles calls that may not have a CallReference yet
-      const vapiService = createVapiService();
-      const call = await vapiService.getCall(vapiCallId);
-
-      if (!call) {
-        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
-      }
-
-      // Verify phone number belongs to this account
-      const phoneNumberId = call.phoneNumberId;
-      if (phoneNumberId) {
-        const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
-          where: { vapiPhoneId: phoneNumberId, accountId: account.id },
-        });
-        if (!vapiPhone) {
-          return NextResponse.json({ error: 'Call not found' }, { status: 404 });
-        }
-      } else {
-        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
-      }
-
-      // HIPAA: Log access
-      logger.info({
-        userId,
-        vapiCallId,
-        action: 'viewed_call_detail',
-      }, '[Call Logs] Call detail accessed');
-
-      return NextResponse.json(mapVapiCallToDetail(call));
-    }
-
     // Fetch full call data from Vapi
     const vapiService = createVapiService();
     const call = await vapiService.getCall(vapiCallId);
 
     if (!call) {
-      return NextResponse.json({ error: 'Call not found in Vapi' }, { status: 404 });
+      return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+    }
+
+    // Verify access: the call must belong to this account
+    if (!callRef) {
+      const phoneNumberId = call.phoneNumberId;
+      let authorized = false;
+
+      if (phoneNumberId) {
+        // Check VapiPhoneNumber table
+        const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
+          where: { vapiPhoneId: phoneNumberId, accountId: account.id },
+        });
+
+        if (vapiPhone) {
+          authorized = true;
+        } else {
+          // Fallback: check phoneIntegrationSettings.vapiPhoneId
+          const fullAccount = await prisma.account.findUnique({
+            where: { id: account.id },
+            select: { phoneIntegrationSettings: true },
+          });
+          const settings = fullAccount?.phoneIntegrationSettings as any;
+          if (settings?.vapiPhoneId === phoneNumberId) {
+            authorized = true;
+          }
+        }
+      }
+
+      if (!authorized) {
+        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+      }
+
+      // Create a CallReference for future lookups
+      try {
+        await prisma.callReference.create({
+          data: {
+            vapiCallId,
+            accountId: account.id,
+          },
+        });
+      } catch {
+        // Ignore duplicate key — another request may have created it
+      }
     }
 
     // HIPAA: Log access
