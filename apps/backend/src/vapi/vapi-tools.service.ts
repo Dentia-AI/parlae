@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HipaaAuditService } from '../common/services/hipaa-audit.service';
+import { SecretsService } from '../common/services/secrets.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import twilio from 'twilio';
 
@@ -11,6 +12,7 @@ export class VapiToolsService {
   constructor(
     private prisma: PrismaService,
     private hipaaAudit: HipaaAuditService,
+    private secretsService: SecretsService,
     private googleCalendar: GoogleCalendarService,
   ) {}
 
@@ -130,9 +132,7 @@ export class VapiToolsService {
 
       // Get PMS service (credentials from env, never DB)
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -192,9 +192,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -255,9 +253,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -346,9 +342,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -441,9 +435,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -540,9 +532,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -626,9 +616,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -1324,9 +1312,7 @@ export class VapiToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const { SecretsService } = await import('../common/services/secrets.service');
-      const secretsService = new SecretsService();
-      const pmsService = new PmsService(this.prisma, secretsService);
+      const pmsService = new PmsService(this.prisma, this.secretsService);
       const service = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,

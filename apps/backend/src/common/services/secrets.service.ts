@@ -12,11 +12,21 @@ export interface SikkaPracticeCredentials {
   pmsType?: string; // The actual PMS they use (Dentrix, Eaglesoft, etc.)
 }
 
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
 @Injectable()
 export class SecretsService {
   private readonly logger = new Logger(SecretsService.name);
   private readonly client: SecretsManagerClient;
   private readonly secretPrefix = 'parlae/pms/sikka';
+
+  /** In-memory cache: secretName → { value, expiresAt } */
+  private readonly cache = new Map<string, CacheEntry<SikkaPracticeCredentials | null>>();
+  /** Cache TTL in milliseconds (5 minutes) */
+  private readonly cacheTtlMs = 5 * 60 * 1000;
 
   constructor() {
     this.client = new SecretsManagerClient({
@@ -25,30 +35,55 @@ export class SecretsService {
   }
 
   /**
-   * Get practice credentials from AWS Secrets Manager
+   * Get practice credentials from cache or AWS Secrets Manager.
+   * Results are cached for 5 minutes to avoid repeated API calls during a call session.
    */
   async getPracticeCredentials(accountId: string): Promise<SikkaPracticeCredentials | null> {
+    const secretName = `${this.secretPrefix}/${accountId}`;
+
+    const cached = this.cache.get(secretName);
+    if (cached && Date.now() < cached.expiresAt) {
+      this.logger.debug(`Cache hit for ${secretName}`);
+      return cached.value;
+    }
+
     try {
-      const secretName = `${this.secretPrefix}/${accountId}`;
-      
       const command = new GetSecretValueCommand({
         SecretId: secretName,
       });
 
       const response = await this.client.send(command);
       
-      if (!response.SecretString) {
-        return null;
-      }
+      const credentials = response.SecretString
+        ? JSON.parse(response.SecretString)
+        : null;
 
-      return JSON.parse(response.SecretString);
+      this.cache.set(secretName, {
+        value: credentials,
+        expiresAt: Date.now() + this.cacheTtlMs,
+      });
+
+      return credentials;
     } catch (error: any) {
       if (error.name === 'ResourceNotFoundException') {
+        this.cache.set(secretName, {
+          value: null,
+          expiresAt: Date.now() + this.cacheTtlMs,
+        });
         return null;
       }
       this.logger.error(`Failed to get practice credentials: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Invalidate cached credentials for a specific account.
+   * Call this after storing/updating credentials.
+   */
+  invalidateCache(accountId: string): void {
+    const secretName = `${this.secretPrefix}/${accountId}`;
+    this.cache.delete(secretName);
   }
 
   /**
@@ -77,6 +112,7 @@ export class SecretsService {
 
         const response = await this.client.send(createCommand);
         this.logger.log(`Created secret: ${secretName}`);
+        this.invalidateCache(accountId);
         return response.ARN!;
       } catch (error: any) {
         if (error.name === 'ResourceExistsException') {
@@ -88,6 +124,7 @@ export class SecretsService {
 
           await this.client.send(putCommand);
           this.logger.log(`Updated secret: ${secretName}`);
+          this.invalidateCache(accountId);
           
           // Get ARN
           const getCommand = new GetSecretValueCommand({ SecretId: secretName });

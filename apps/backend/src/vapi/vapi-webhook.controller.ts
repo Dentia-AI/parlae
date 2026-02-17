@@ -25,8 +25,8 @@ export class VapiWebhookController {
    * Single entry-point for ALL Vapi events:
    * - function-call: Tool invocations (searchPatients, bookAppointment, etc.)
    * - assistant-request: When a call starts
-   * - status-update: Call status changes
-   * - end-of-call-report: Creates a thin CallReference linking Vapi call to our account
+   * - status-update: Creates a thin CallReference when call goes in-progress
+   * - end-of-call-report: Lightweight ack (CallReference already created above)
    *
    * All call data (transcripts, recordings, analytics) stays in Vapi as the source of truth.
    */
@@ -231,37 +231,57 @@ export class VapiWebhookController {
     return { received: true };
   }
 
+  /**
+   * Handle status-update: create a CallReference when the call starts (in-progress).
+   * This avoids waiting for the heavy end-of-call-report payload which includes
+   * the full transcript, recording, and analytics data we don't store.
+   */
   private async handleStatusUpdate(payload: any) {
     const status = payload?.message?.status;
-    const callId = payload?.message?.call?.id;
-    this.logger.log(`Status update: ${status} for call ${callId}`);
+    const call = payload?.message?.call || {};
+    const vapiCallId = call.id;
+
+    this.logger.log(`Status update: ${status} for call ${vapiCallId}`);
+
+    if (status === 'in-progress' && vapiCallId) {
+      await this.ensureCallReference(call);
+    }
+
     return { received: true };
   }
 
   /**
-   * Process end-of-call-report: create a thin CallReference linking the Vapi call to our account.
-   * All call data (transcript, summary, recording, cost, analytics) stays in Vapi.
+   * Handle end-of-call-report: lightweight acknowledgment only.
+   * The CallReference was already created during status-update (in-progress).
+   * We intentionally skip processing the large payload (transcript, recording, etc.)
+   * since all call data stays in Vapi as the source of truth.
    */
   private async handleEndOfCall(payload: any) {
-    const call = payload?.message?.call || {};
-    const vapiCallId = call.id;
+    const vapiCallId = payload?.message?.call?.id;
+    this.logger.log(`End-of-call for ${vapiCallId}`);
 
-    this.logger.log(
-      `End-of-call for ${vapiCallId}`,
-    );
-
-    if (!vapiCallId) {
-      this.logger.warn('No call ID in end-of-call report');
-      return { received: true };
+    // Safety net: create CallReference if status-update didn't fire
+    if (vapiCallId) {
+      await this.ensureCallReference(payload?.message?.call || {});
     }
 
-    const accountId = await this.resolveAccountFromCall(call);
+    return { received: true };
+  }
 
+  /**
+   * Create a thin CallReference linking the Vapi call to our account.
+   * Idempotent — silently skips if the reference already exists.
+   */
+  private async ensureCallReference(call: any): Promise<void> {
+    const vapiCallId = call.id;
+    if (!vapiCallId) return;
+
+    const accountId = await this.resolveAccountFromCall(call);
     if (!accountId) {
       this.logger.warn(
         `Skipping call reference for ${vapiCallId} — no account found`,
       );
-      return { received: true };
+      return;
     }
 
     try {
@@ -275,18 +295,14 @@ export class VapiWebhookController {
       this.logger.log(
         `Call reference created: ${callRef.id} for call ${vapiCallId}`,
       );
-      return { received: true, callRefId: callRef.id };
     } catch (dbError) {
-      // If duplicate vapiCallId, that's fine
       if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
-        this.logger.log(`Call reference already exists for ${vapiCallId}`);
-        return { received: true };
+        return; // Already exists, expected for end-of-call after status-update
       }
 
       this.logger.error(
         `Failed to save call reference for ${vapiCallId}: ${dbError instanceof Error ? dbError.message : dbError}`,
       );
-      return { received: true };
     }
   }
 
