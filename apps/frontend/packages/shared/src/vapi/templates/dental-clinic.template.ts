@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.4';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.4';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.5';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.5';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)

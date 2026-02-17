@@ -117,7 +117,7 @@ export class VapiToolsService {
   async bookAppointment(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       // Get phone record and PMS integration
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
@@ -179,7 +179,16 @@ export class VapiToolsService {
   async checkAvailability(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
+
+      // Safety net: if the AI hallucinated a date in the past, replace with today
+      const today = new Date().toISOString().slice(0, 10);
+      let requestedDate = params.date || today;
+      if (requestedDate < today) {
+        this.logger.warn(`[checkAvailability] AI sent past date "${requestedDate}", correcting to today "${today}"`);
+        requestedDate = today;
+      }
+      params.date = requestedDate;
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -294,7 +303,7 @@ export class VapiToolsService {
   async getPatientInfo(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -383,7 +392,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -485,7 +494,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -600,7 +609,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -686,7 +695,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
         where: { vapiPhoneId: call.phoneNumberId },
@@ -772,7 +781,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) {
@@ -847,7 +856,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) {
@@ -930,7 +939,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -988,7 +997,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1049,7 +1058,7 @@ export class VapiToolsService {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1166,7 +1175,7 @@ export class VapiToolsService {
   async addPatientInsurance(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1203,7 +1212,7 @@ export class VapiToolsService {
   async updatePatientInsurance(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1238,7 +1247,7 @@ export class VapiToolsService {
   async verifyInsuranceCoverage(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1275,7 +1284,7 @@ export class VapiToolsService {
   async getPaymentHistory(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1311,7 +1320,7 @@ export class VapiToolsService {
   async processPayment(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const sikkaService = await this.getSikkaService(call);
       if (!sikkaService.service) return sikkaService.error;
@@ -1348,7 +1357,7 @@ export class VapiToolsService {
   async createPaymentPlan(payload: any) {
     try {
       const { call, message } = payload;
-      const params = message.functionCall.parameters;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       this.logger.log(`[createPaymentPlan] Creating plan for patient ${params.patientId}: $${params.totalAmount} over ${params.numberOfPayments} payments`);
 
@@ -1471,7 +1480,15 @@ export class VapiToolsService {
 
     try {
       const callerPhone = call?.customer?.number;
-      const startTime = new Date(params.startTime || params.datetime);
+      let startTime = new Date(params.startTime || params.datetime);
+      const now = new Date();
+
+      // Safety: reject bookings in the past — bump to now + 1 hour
+      if (startTime < now) {
+        this.logger.warn(`[GCal Booking] AI sent past startTime "${startTime.toISOString()}", adjusting to now + 1hr`);
+        startTime = new Date(now.getTime() + 60 * 60 * 1000);
+      }
+
       const duration = params.duration || 30;
 
       const result = await this.googleCalendar.createAppointmentEvent(

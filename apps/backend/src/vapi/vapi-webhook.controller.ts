@@ -174,6 +174,14 @@ export class VapiWebhookController {
     // the resolved value. Replace with the actual call metadata.
     parameters = this.resolveTemplateVars(parameters, payload.message?.call);
 
+    // CRITICAL: Write parsed parameters back to message.functionCall so
+    // tool handlers can access them via message.functionCall.parameters.
+    // Without this, handlers reading from message.functionCall.parameters
+    // get undefined (Vapi sends 'arguments' as a JSON string, not 'parameters').
+    if (functionCall) {
+      functionCall.parameters = parameters;
+    }
+
     this.logger.log(
       `[Vapi Tool] ${toolName} | ${JSON.stringify(parameters).slice(0, 300)}`,
     );
