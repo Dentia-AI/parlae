@@ -6,6 +6,7 @@ import { EmailService } from '../email/email.service';
 import { renderAppointmentConfirmation } from '../email/templates/appointment-confirmation.template';
 import { renderAppointmentCancellation } from '../email/templates/appointment-cancellation.template';
 import { renderAppointmentReschedule } from '../email/templates/appointment-reschedule.template';
+import { renderClinicBookingNotification } from '../email/templates/clinic-booking-notification.template';
 
 interface PatientInfo {
   firstName: string;
@@ -382,6 +383,130 @@ export class NotificationsService {
   }
 
   // ============================================================================
+  // Clinic Booking Notifications (internal emails to the clinic)
+  // ============================================================================
+
+  /**
+   * Send a booking notification email to the clinic after a GCal-only booking.
+   * This is an internal notification — HIPAA-compliant, no PHI beyond scheduling.
+   * Best-effort: never throws.
+   */
+  async sendClinicBookingNotification(params: {
+    accountId: string;
+    patient: PatientInfo;
+    appointment: AppointmentInfo;
+    gcalEventLink?: string;
+  }): Promise<boolean> {
+    try {
+      const { accountId, patient, appointment, gcalEventLink } = params;
+
+      const account = await this.getAccountWithBranding(accountId);
+      if (!account) {
+        this.logger.warn({ accountId, msg: '[ClinicNotify] Account not found, skipping' });
+        return false;
+      }
+
+      const recipientEmail = account.brandingContactEmail || account.email;
+      if (!recipientEmail) {
+        this.logger.warn({ accountId, msg: '[ClinicNotify] No clinic email configured, skipping' });
+        return false;
+      }
+
+      const time = this.formatAppointmentTime(appointment.startTime);
+      const [date, timeStr] = time.split(' at ');
+
+      const { html, subject } = renderClinicBookingNotification({
+        clinicName: account.name,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientPhone: patient.phone,
+        appointmentType: appointment.appointmentType,
+        date: date || time,
+        time: timeStr || '',
+        duration: `${appointment.duration} minutes`,
+        notes: appointment.notes,
+        bookingSource: 'google_calendar',
+        gcalEventLink,
+        logoUrl: account.brandingLogoUrl || undefined,
+        primaryColor: account.brandingPrimaryColor || undefined,
+        businessName: account.brandingBusinessName || undefined,
+        contactEmail: account.brandingContactEmail || account.email || undefined,
+        contactPhone: account.brandingContactPhone || undefined,
+        address: account.brandingAddress || undefined,
+        website: account.brandingWebsite || undefined,
+      });
+
+      await this.emailService.sendEmail({ to: recipientEmail, subject, html });
+      this.logger.log({ accountId, to: recipientEmail, msg: '[ClinicNotify] Booking notification sent' });
+      return true;
+    } catch (error: any) {
+      this.logger.error({ error: error?.message, msg: '[ClinicNotify] Failed to send booking notification' });
+      return false;
+    }
+  }
+
+  /**
+   * Send a PMS failure notification email to the clinic.
+   * Includes appointment details so the clinic can manually enter the booking.
+   * Best-effort: never throws.
+   */
+  async sendPmsFailureNotification(params: {
+    accountId: string;
+    patient: PatientInfo;
+    appointment: AppointmentInfo;
+    pmsErrorMessage?: string;
+    gcalBackupCreated: boolean;
+    gcalEventLink?: string;
+  }): Promise<boolean> {
+    try {
+      const { accountId, patient, appointment, pmsErrorMessage, gcalBackupCreated, gcalEventLink } = params;
+
+      const account = await this.getAccountWithBranding(accountId);
+      if (!account) {
+        this.logger.warn({ accountId, msg: '[PmsFailNotify] Account not found, skipping' });
+        return false;
+      }
+
+      const recipientEmail = account.brandingContactEmail || account.email;
+      if (!recipientEmail) {
+        this.logger.warn({ accountId, msg: '[PmsFailNotify] No clinic email configured, skipping' });
+        return false;
+      }
+
+      const time = this.formatAppointmentTime(appointment.startTime);
+      const [date, timeStr] = time.split(' at ');
+
+      const { html, subject } = renderClinicBookingNotification({
+        clinicName: account.name,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientPhone: patient.phone,
+        appointmentType: appointment.appointmentType,
+        date: date || time,
+        time: timeStr || '',
+        duration: `${appointment.duration} minutes`,
+        notes: appointment.notes,
+        bookingSource: 'pms_failure',
+        pmsErrorMessage,
+        gcalBackupCreated,
+        gcalEventLink,
+        logoUrl: account.brandingLogoUrl || undefined,
+        primaryColor: account.brandingPrimaryColor || undefined,
+        businessName: account.brandingBusinessName || undefined,
+        contactEmail: account.brandingContactEmail || account.email || undefined,
+        contactPhone: account.brandingContactPhone || undefined,
+        address: account.brandingAddress || undefined,
+        website: account.brandingWebsite || undefined,
+      });
+
+      await this.emailService.sendEmail({ to: recipientEmail, subject, html });
+      this.logger.log({ accountId, to: recipientEmail, msg: '[PmsFailNotify] PMS failure notification sent' });
+      return true;
+    } catch (error: any) {
+      this.logger.error({ error: error?.message, msg: '[PmsFailNotify] Failed to send PMS failure notification' });
+      return false;
+    }
+  }
+
+  // ============================================================================
   // SMS Message Generation
   // ============================================================================
 
@@ -587,12 +712,26 @@ export class NotificationsService {
     type: 'booking' | 'cancellation',
     reason?: string,
   ): Promise<void> {
-    // TODO: Implement clinic notification email template
-    this.logger.log({
-      to,
-      subject: `New Appointment ${type === 'booking' ? 'Booked' : 'Cancelled'} via AI`,
-      msg: 'Would send clinic notification email (not implemented)',
+    const time = this.formatAppointmentTime(appointment.startTime);
+    const [date, timeStr] = time.split(' at ');
+    const subject = type === 'booking'
+      ? `New Appointment: ${appointment.appointmentType} for ${patient.firstName} ${patient.lastName} on ${date}`
+      : `Cancelled: ${appointment.appointmentType} for ${patient.firstName} ${patient.lastName} on ${date}`;
+
+    const { html } = renderClinicBookingNotification({
+      clinicName: 'Your Clinic',
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      patientPhone: patient.phone,
+      appointmentType: appointment.appointmentType,
+      date: date || time,
+      time: timeStr || '',
+      duration: `${appointment.duration} minutes`,
+      notes: type === 'cancellation' && reason ? `Cancellation reason: ${reason}` : appointment.notes,
+      bookingSource: 'google_calendar',
     });
+
+    await this.emailService.sendEmail({ to, subject, html });
+    this.logger.log({ to, subject, msg: 'Clinic notification email sent' });
   }
 
   private async sendClinicRescheduleNotification(
@@ -624,5 +763,25 @@ export class NotificationsService {
       minute: '2-digit',
       timeZone: 'America/Toronto', // TODO: Make this configurable per account
     }).format(date);
+  }
+
+  /**
+   * Fetch account with all branding fields needed for email templates.
+   */
+  private async getAccountWithBranding(accountId: string) {
+    return this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        name: true,
+        email: true,
+        brandingLogoUrl: true,
+        brandingBusinessName: true,
+        brandingPrimaryColor: true,
+        brandingContactEmail: true,
+        brandingContactPhone: true,
+        brandingAddress: true,
+        brandingWebsite: true,
+      },
+    });
   }
 }

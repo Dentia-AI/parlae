@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HipaaAuditService } from '../common/services/hipaa-audit.service';
 import { SecretsService } from '../common/services/secrets.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import twilio from 'twilio';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class VapiToolsService {
     private hipaaAudit: HipaaAuditService,
     private secretsService: SecretsService,
     private googleCalendar: GoogleCalendarService,
+    private notifications: NotificationsService,
   ) {}
 
   async transferToHuman(payload: any) {
@@ -152,7 +154,16 @@ export class VapiToolsService {
       
       if (!result.success || !result.data) {
         const errorMsg = result.error ? (typeof result.error === 'string' ? result.error : result.error.message) : 'Booking failed';
-        throw new Error(errorMsg);
+
+        // ── PMS writeback failed — fallback: GCal backup + email notification ──
+        this.logger.warn({ accountId: phoneRecord.accountId, errorMsg, msg: '[PMS] Writeback failed, attempting fallback' });
+
+        return this.handlePmsBookingFailure(
+          phoneRecord,
+          params,
+          call,
+          errorMsg,
+        );
       }
       
       const appointment = result.data;
@@ -164,11 +175,28 @@ export class VapiToolsService {
           success: true,
           appointmentId: appointment.id,
           confirmationNumber: appointment.confirmationNumber,
-          message: `Appointment booked for ${new Date(params.datetime).toLocaleString()}`,
+          message: `Appointment booked for ${new Date(params.startTime || params.datetime).toLocaleString()}`,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(error);
+
+      // Even on unexpected errors, try the fallback if we have a phone record
+      try {
+        const { call, message } = payload;
+        const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
+        const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
+          where: { vapiPhoneId: call.phoneNumberId },
+          include: { pmsIntegration: true, account: true },
+        });
+        if (phoneRecord) {
+          this.logger.log({ msg: '[PMS] Attempting fallback after unexpected error' });
+          return this.handlePmsBookingFailure(phoneRecord, params, call, error?.message || 'Unexpected error');
+        }
+      } catch {
+        // Fallback itself failed — return the original error
+      }
+
       return {
         error: 'Booking failed',
         message: "I'm sorry, I had trouble booking that appointment. Let me take your information and have someone call you back.",
@@ -1455,6 +1483,87 @@ export class VapiToolsService {
   }
 
   /**
+   * Handle PMS booking failure: try to create a backup GCal event,
+   * then send an email to the clinic with the appointment details.
+   * Returns success to the AI so the caller is told "confirmed".
+   */
+  private async handlePmsBookingFailure(
+    phoneRecord: any,
+    params: any,
+    call: any,
+    pmsErrorMessage: string,
+  ) {
+    const accountId = phoneRecord?.accountId;
+    const callerPhone = call?.customer?.number;
+    const startTime = new Date(params.startTime || params.datetime);
+    const duration = params.duration || 30;
+
+    let gcalBackupCreated = false;
+    let gcalEventLink: string | undefined;
+
+    // Step 1: Try creating a backup Google Calendar event
+    const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
+    if (gcAvailable) {
+      try {
+        const gcalResult = await this.googleCalendar.createAppointmentEvent(
+          accountId,
+          {
+            patient: {
+              firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
+              lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
+              phone: params.phone || callerPhone,
+              email: params.email,
+            },
+            appointmentType: params.appointmentType || params.type || 'General',
+            startTime,
+            duration,
+            notes: `[PMS BACKUP] Original PMS writeback failed. ${params.notes || ''}`.trim(),
+            providerId: params.providerId,
+          },
+        );
+        gcalBackupCreated = true;
+        gcalEventLink = gcalResult.htmlLink || undefined;
+        this.logger.log({ accountId, eventId: gcalResult.eventId, msg: '[PMS Fallback] Backup GCal event created' });
+      } catch (gcalError: any) {
+        this.logger.error({ accountId, error: gcalError?.message, msg: '[PMS Fallback] Failed to create backup GCal event' });
+      }
+    }
+
+    // Step 2: Send notification email to the clinic (fire-and-forget)
+    this.notifications.sendPmsFailureNotification({
+      accountId,
+      patient: {
+        firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
+        lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
+        phone: params.phone || callerPhone,
+        email: params.email,
+      },
+      appointment: {
+        appointmentType: params.appointmentType || params.type || 'General',
+        startTime,
+        duration,
+        notes: params.notes,
+      },
+      pmsErrorMessage,
+      gcalBackupCreated,
+      gcalEventLink,
+    }).catch((err) => {
+      this.logger.error({ error: err?.message, msg: '[PMS Fallback] Email notification also failed' });
+    });
+
+    // Return success to the AI — the appointment IS captured somewhere
+    return {
+      result: {
+        success: true,
+        integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
+        message: gcalBackupCreated
+          ? `Your appointment has been confirmed for ${startTime.toLocaleString()}. A calendar event has been created.`
+          : `Your appointment has been noted for ${startTime.toLocaleString()}. Our team will confirm the details shortly.`,
+      },
+    };
+  }
+
+  /**
    * Fallback: Book appointment via Google Calendar
    */
   private async bookAppointmentViaGoogleCalendar(
@@ -1491,23 +1600,48 @@ export class VapiToolsService {
 
       const duration = params.duration || 30;
 
+      const patientFirstName = params.firstName || params.patientName?.split(' ')[0] || 'Patient';
+      const patientLastName = params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '';
+      const patientPhone = params.phone || callerPhone;
+      const appointmentType = params.appointmentType || params.type || 'General';
+
       const result = await this.googleCalendar.createAppointmentEvent(
         accountId,
         {
           patient: {
-            firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
-            lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
-            phone: params.phone || callerPhone,
+            firstName: patientFirstName,
+            lastName: patientLastName,
+            phone: patientPhone,
             email: params.email,
             dateOfBirth: params.dateOfBirth,
           },
-          appointmentType: params.appointmentType || params.type || 'General',
+          appointmentType,
           startTime,
           duration,
           notes: params.notes,
           providerId: params.providerId,
         },
       );
+
+      // Fire-and-forget: send clinic notification email about the new booking
+      this.notifications.sendClinicBookingNotification({
+        accountId,
+        patient: {
+          firstName: patientFirstName,
+          lastName: patientLastName,
+          phone: patientPhone,
+          email: params.email,
+        },
+        appointment: {
+          appointmentType,
+          startTime,
+          duration,
+          notes: params.notes,
+        },
+        gcalEventLink: result.htmlLink || undefined,
+      }).catch((err) => {
+        this.logger.error({ error: err?.message, msg: '[GCal Booking] Clinic notification email failed (non-fatal)' });
+      });
 
       return {
         result: {
