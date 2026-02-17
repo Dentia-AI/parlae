@@ -152,7 +152,9 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
-            <Phone className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-blue-500/10 p-2">
+              <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.totalCalls.toLocaleString()}</div>
@@ -167,10 +169,12 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Booking Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-emerald-500/10 p-2">
+              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.metrics.bookingRate}%</div>
+            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{data.metrics.bookingRate}%</div>
             <p className="text-xs text-muted-foreground mt-1">
               {data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0} appointments booked
             </p>
@@ -180,7 +184,9 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Avg. Call Time</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-violet-500/10 p-2">
+              <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatTime(data.metrics.avgCallTime)}</div>
@@ -193,7 +199,9 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Activity</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-amber-500/10 p-2">
+              <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -211,7 +219,9 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Insurance Verified</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-cyan-500/10 p-2">
+              <CheckCircle className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.insuranceVerified.toLocaleString()}</div>
@@ -226,7 +236,9 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Payment Plans</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-indigo-500/10 p-2">
+              <DollarSign className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -245,27 +257,33 @@ export function CallAnalyticsDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Collections</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-emerald-500/10 p-2">
+              <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
               {formatCurrency({
                 value: data.metrics.collections.recovered / 100,
                 currencyCode: 'USD',
                 locale,
               })}
             </div>
-            <p className="text-xs text-success-foreground mt-1">recovered</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              recovered from outstanding
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-teal-500/10 p-2">
+              <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
+            <div className="text-2xl font-bold text-teal-600 dark:text-teal-400">
               {data.metrics.collections.collectionRate}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">

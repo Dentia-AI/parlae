@@ -1,7 +1,6 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
-import { Badge } from '@kit/ui/badge';
 
 interface CallOutcomesChartProps {
   data: Array<{
@@ -11,52 +10,93 @@ interface CallOutcomesChartProps {
   }>;
 }
 
-const outcomeColors: Record<string, { bg: string; text: string; label: string }> = {
-  BOOKED: { bg: 'bg-green-500', text: 'text-green-500', label: 'Booked' },
-  TRANSFERRED: { bg: 'bg-blue-500', text: 'text-blue-500', label: 'Transferred' },
-  INSURANCE_INQUIRY: { bg: 'bg-purple-500', text: 'text-purple-500', label: 'Insurance Inquiry' },
-  PAYMENT_PLAN: { bg: 'bg-amber-500', text: 'text-amber-500', label: 'Payment Plan' },
-  INFORMATION: { bg: 'bg-cyan-500', text: 'text-cyan-500', label: 'Information' },
-  VOICEMAIL: { bg: 'bg-gray-500', text: 'text-gray-500', label: 'Voicemail' },
-  NO_ANSWER: { bg: 'bg-gray-400', text: 'text-gray-400', label: 'No Answer' },
-  OTHER: { bg: 'bg-orange-500', text: 'text-orange-500', label: 'Other' },
+const outcomeColors: Record<string, { dot: string; bar: string; label: string }> = {
+  BOOKED: {
+    dot: 'bg-emerald-500',
+    bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
+    label: 'Booked',
+  },
+  TRANSFERRED: {
+    dot: 'bg-blue-500',
+    bar: 'bg-gradient-to-r from-blue-500 to-blue-400',
+    label: 'Transferred',
+  },
+  INSURANCE_INQUIRY: {
+    dot: 'bg-violet-500',
+    bar: 'bg-gradient-to-r from-violet-500 to-violet-400',
+    label: 'Insurance Inquiry',
+  },
+  PAYMENT_PLAN: {
+    dot: 'bg-amber-500',
+    bar: 'bg-gradient-to-r from-amber-500 to-amber-400',
+    label: 'Payment Plan',
+  },
+  INFORMATION: {
+    dot: 'bg-cyan-500',
+    bar: 'bg-gradient-to-r from-cyan-500 to-cyan-400',
+    label: 'Information',
+  },
+  VOICEMAIL: {
+    dot: 'bg-slate-500',
+    bar: 'bg-gradient-to-r from-slate-500 to-slate-400',
+    label: 'Voicemail',
+  },
+  NO_ANSWER: {
+    dot: 'bg-rose-400',
+    bar: 'bg-gradient-to-r from-rose-400 to-rose-300',
+    label: 'No Answer',
+  },
+  OTHER: {
+    dot: 'bg-orange-500',
+    bar: 'bg-gradient-to-r from-orange-500 to-orange-400',
+    label: 'Other',
+  },
 };
 
 export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
   const sortedData = [...data].sort((a, b) => b.count - a.count);
+  const totalCalls = sortedData.reduce((sum, item) => sum + item.count, 0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Call Outcomes</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Call Outcomes</CardTitle>
+          {totalCalls > 0 && (
+            <span className="text-sm text-muted-foreground">
+              {totalCalls} total
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
+        <div className="space-y-5">
           {sortedData.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No call outcome data available
             </div>
           ) : (
             sortedData.map((item, index) => {
-              const config = outcomeColors[item.outcome] || outcomeColors.OTHER;
+              const config = outcomeColors[item.outcome] || outcomeColors.OTHER!;
 
               return (
                 <div key={index} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${config.bg}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full ${config.dot} ring-2 ring-offset-2 ring-offset-background ring-${config.dot.replace('bg-', '')}/30`} />
                       <span className="font-medium">{config.label}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
-                        {item.count} ({Math.round(item.percentage)}%)
+                    <div className="flex items-center gap-1.5 tabular-nums">
+                      <span className="font-semibold">{item.count}</span>
+                      <span className="text-muted-foreground text-xs">
+                        ({Math.round(item.percentage)}%)
                       </span>
                     </div>
                   </div>
-                  <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-secondary/50 rounded-full h-2.5 overflow-hidden">
                     <div
-                      className={`h-full ${config.bg} transition-all duration-300`}
-                      style={{ width: `${item.percentage}%` }}
+                      className={`h-full ${config.bar} rounded-full transition-all duration-500 ease-out`}
+                      style={{ width: `${Math.max(item.percentage, 2)}%` }}
                     />
                   </div>
                 </div>

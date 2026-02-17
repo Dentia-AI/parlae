@@ -335,9 +335,18 @@ export class VapiToolsService {
       });
 
       if (!phoneRecord?.pmsIntegration) {
+        // No PMS configured — Google Calendar-only mode.
+        // There's no patient database to search, so return "not found"
+        // and let the AI collect the info for the calendar event.
+        this.logger.log('[searchPatients] No PMS configured — GCal-only mode, returning no results');
         return {
-          error: 'PMS not configured',
-          message: "Let me get your information manually.",
+          result: {
+            success: true,
+            patients: [],
+            count: 0,
+            message: "I don't have an existing record on file. Could I get your name so I can help you with your appointment?",
+            integrationType: 'google_calendar',
+          },
         };
       }
 
@@ -428,9 +437,27 @@ export class VapiToolsService {
       });
 
       if (!phoneRecord?.pmsIntegration) {
+        // No PMS configured — Google Calendar-only mode.
+        // Patient details will be stored in the Google Calendar event notes
+        // when bookAppointment is called. Return success so the AI continues
+        // to the booking step without pausing.
+        const callerPhone = call?.customer?.number;
+        const patientPhone = params.phone || callerPhone;
+        const patientName = `${params.firstName || ''} ${params.lastName || ''}`.trim() || 'Patient';
+
+        this.logger.log(`[createPatient] No PMS — GCal-only mode. Noted: ${patientName}, ${patientPhone}`);
+
         return {
-          error: 'PMS not configured',
-          message: "Let me take your information manually.",
+          result: {
+            success: true,
+            patient: {
+              id: `gcal-${Date.now()}`,
+              name: patientName,
+              phone: patientPhone,
+            },
+            integrationType: 'google_calendar',
+            message: `I've noted your information, ${params.firstName || 'there'}. Your details will be included when we book your appointment. Now, what type of appointment would you like, and when works best for you?`,
+          },
         };
       }
 
@@ -498,7 +525,7 @@ export class VapiToolsService {
             id: patient.id,
             name: `${patient.firstName} ${patient.lastName}`,
           },
-          message: `Great! I've created your patient profile, ${patient.firstName}. You're all set.`,
+          message: `I've created your patient profile, ${patient.firstName}. Now, what type of appointment would you like, and when works best for you?`,
         },
       };
     } catch (error) {

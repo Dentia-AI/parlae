@@ -10,6 +10,23 @@ interface ActivityChartProps {
   }>;
 }
 
+const barColors = [
+  'from-violet-500 to-violet-600',
+  'from-indigo-500 to-indigo-600',
+  'from-blue-500 to-blue-600',
+  'from-sky-500 to-sky-600',
+  'from-cyan-500 to-cyan-600',
+  'from-teal-500 to-teal-600',
+  'from-emerald-500 to-emerald-600',
+  'from-green-500 to-green-600',
+  'from-violet-500 to-violet-600',
+  'from-indigo-500 to-indigo-600',
+  'from-blue-500 to-blue-600',
+  'from-sky-500 to-sky-600',
+  'from-cyan-500 to-cyan-600',
+  'from-teal-500 to-teal-600',
+];
+
 export function ActivityChart({ data }: ActivityChartProps) {
   const maxCount = Math.max(...data.map(d => d.count), 1);
 
@@ -31,34 +48,48 @@ export function ActivityChart({ data }: ActivityChartProps) {
               No activity data available
             </div>
           ) : (
-            <div className="flex items-end justify-between gap-2 h-32">
-              {data.map((item, index) => {
-                const height = (item.count / maxCount) * 100;
-                const date = new Date(item.date);
-                const dayLabel = date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                });
+            <>
+              <div className="flex items-end justify-between gap-2 h-36">
+                {data.map((item, index) => {
+                  const height = (item.count / maxCount) * 100;
+                  const date = new Date(item.date);
+                  const dayLabel = date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                  const gradient = barColors[index % barColors.length]!;
 
-                return (
-                  <div
-                    key={index}
-                    className="flex-1 flex flex-col items-center gap-1 group h-full"
-                  >
-                    <div className="relative w-full flex-1">
-                      <div
-                        className="absolute bottom-0 left-0 right-0 bg-primary hover:bg-primary/80 transition-all rounded-t-sm cursor-pointer"
-                        style={{ height: `${height}%`, minHeight: '4px' }}
-                        title={`${item.count} calls on ${dayLabel}`}
-                      />
+                  return (
+                    <div
+                      key={index}
+                      className="flex-1 flex flex-col items-center gap-1.5 group h-full"
+                    >
+                      {item.count > 0 && (
+                        <span className="text-xs font-semibold text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          {item.count}
+                        </span>
+                      )}
+                      <div className="relative w-full flex-1">
+                        <div
+                          className={`absolute bottom-0 left-1 right-1 bg-gradient-to-t ${gradient} rounded-t-md shadow-sm hover:shadow-md hover:brightness-110 transition-all cursor-pointer`}
+                          style={{ height: `${Math.max(height, 3)}%` }}
+                          title={`${item.count} calls on ${dayLabel}`}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground group-hover:text-foreground font-medium transition-colors">
+                        {date.getDate()}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                      {date.getDate()}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-gradient-to-r from-violet-500 to-blue-500" />
+                  <span>Calls per day</span>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </CardContent>

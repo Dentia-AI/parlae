@@ -168,6 +168,12 @@ export class VapiWebhookController {
       };
     }
 
+    // Resolve unresolved Vapi template variables in tool arguments.
+    // The AI model sometimes copies literal template syntax like
+    // {{call.customer.number}} into tool arguments instead of using
+    // the resolved value. Replace with the actual call metadata.
+    parameters = this.resolveTemplateVars(parameters, payload.message?.call);
+
     this.logger.log(
       `[Vapi Tool] ${toolName} | ${JSON.stringify(parameters).slice(0, 300)}`,
     );
@@ -290,8 +296,40 @@ export class VapiWebhookController {
   }
 
   /**
+   * Resolve unresolved Vapi template variables in tool parameters.
+   * The AI model sometimes copies literal {{call.customer.number}} into
+   * tool arguments. This replaces them with actual values from the call.
+   */
+  private resolveTemplateVars(params: any, call: any): any {
+    if (!params || !call) return params;
+
+    const customerNumber =
+      call.customer?.number || call.phoneNumber?.number || '';
+
+    const resolve = (value: any): any => {
+      if (typeof value === 'string') {
+        return value.replace(
+          /\{\{call\.customer\.number\}\}/g,
+          customerNumber,
+        );
+      }
+      if (Array.isArray(value)) return value.map(resolve);
+      if (value && typeof value === 'object') {
+        const resolved: any = {};
+        for (const [k, v] of Object.entries(value)) {
+          resolved[k] = resolve(v);
+        }
+        return resolved;
+      }
+      return value;
+    };
+
+    return resolve(params);
+  }
+
+  /**
    * Create a thin CallReference linking the Vapi call to our account.
-   * Idempotent — silently skips if the reference already exists.
+   * Uses upsert for idempotency — no duplicate-key errors.
    */
   private async ensureCallReference(call: any): Promise<void> {
     const vapiCallId = call.id;
@@ -306,23 +344,16 @@ export class VapiWebhookController {
     }
 
     try {
-      const callRef = await this.prisma.callReference.create({
-        data: {
-          vapiCallId,
-          accountId,
-        },
+      await this.prisma.callReference.upsert({
+        where: { vapiCallId },
+        create: { vapiCallId, accountId },
+        update: {},
       });
 
       this.logger.log(
-        `Call reference created: ${callRef.id} for call ${vapiCallId}`,
+        `Call reference ensured for call ${vapiCallId}`,
       );
     } catch (dbError: any) {
-      // P2002 = unique constraint violation — already exists, expected for
-      // end-of-call after status-update created the reference first.
-      if (dbError?.code === 'P2002' || dbError?.message?.includes('Unique constraint')) {
-        return;
-      }
-
       this.logger.error(
         `Failed to save call reference for ${vapiCallId}: ${dbError instanceof Error ? dbError.message : dbError}`,
       );
