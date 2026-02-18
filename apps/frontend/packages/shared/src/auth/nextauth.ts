@@ -5,6 +5,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { ensureUserProvisioned } from './ensure-user';
 import { getCognitoUser, initiateUserPasswordAuth } from './cognito-helpers';
 import { storeCognitoTokens } from './token-storage';
+import { createGoHighLevelService } from '../gohighlevel/gohighlevel.service';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -467,6 +468,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (ensured?.user?.id) {
               (user as Record<string, unknown>).id = ensured.user.id;
             }
+
+            // Sync to GoHighLevel CRM (covers Google OAuth and all Cognito logins)
+            try {
+              const ghlService = createGoHighLevelService();
+              if (ghlService.isEnabled()) {
+                ghlService.syncRegisteredUser({
+                  email: user.email!,
+                  displayName: resolvedDisplayName,
+                }).catch((ghlErr) => {
+                  console.error(JSON.stringify({
+                    message: '[Auth][NextAuth] GHL sync failed (non-critical)',
+                    error: ghlErr instanceof Error ? ghlErr.message : ghlErr,
+                    email: user.email,
+                  }));
+                });
+              }
+            } catch { /* GHL init failure — non-critical */ }
           } catch (error) {
             console.error(JSON.stringify({
               message: '[Auth][NextAuth] Failed to provision user',

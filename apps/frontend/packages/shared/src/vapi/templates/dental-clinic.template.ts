@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v3.0';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v3.0';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v3.1';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v3.1';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)
@@ -900,7 +900,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 300,
           },
@@ -971,7 +971,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 250,
           },
@@ -1016,7 +1016,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.4,
             maxTokens: 400,
           },
@@ -1087,7 +1087,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1158,7 +1158,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1223,7 +1223,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1288,7 +1288,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
           },
           model: {
             provider: 'xai',
-            model: 'grok-4-fast',
+            model: 'grok-4-fast-non-reasoning',
             temperature: 0.3,
             maxTokens: 400,
           },
