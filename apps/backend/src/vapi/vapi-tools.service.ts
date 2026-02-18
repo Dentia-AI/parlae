@@ -548,7 +548,7 @@ export class VapiToolsService {
               phone: patientPhone,
             },
             integrationType: 'google_calendar',
-            message: `I've noted your information, ${params.firstName || 'there'}. Your details will be included when we book your appointment. Now, what type of appointment would you like, and when works best for you?`,
+            message: `Patient profile created for ${params.firstName || 'the caller'}. Proceed immediately to book the appointment — do not wait for the caller to respond.`,
           },
         };
       }

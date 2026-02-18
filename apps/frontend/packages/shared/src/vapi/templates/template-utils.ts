@@ -273,6 +273,56 @@ export function buildSquadPayloadFromTemplate(
   };
 }
 
+/**
+ * Build the fully-hydrated system prompt for a single template member.
+ *
+ * This applies placeholder replacement, PMS injection, KB instructions,
+ * human-handoff injection, and the multilingual suffix — the same pipeline
+ * used during full squad creation, but returns only the prompt string.
+ */
+export function buildMemberSystemPrompt(
+  member: SquadMemberTemplate,
+  vars: TemplateVariables,
+  runtime: Pick<RuntimeConfig, 'queryToolId' | 'queryToolName' | 'clinicPhoneNumber'>,
+): string {
+  const a = member.assistant;
+
+  let systemPrompt = hydratePlaceholders(a.systemPrompt, vars);
+
+  if (a.toolGroup === 'scheduling') {
+    systemPrompt = appendPmsPrompt(systemPrompt, vars);
+  }
+
+  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
+    const toolName = runtime.queryToolName || 'clinic-kb';
+    systemPrompt += `\n\n## KNOWLEDGE BASE\nYou have access to the clinic's knowledge base through the '${toolName}' query tool. When the caller asks about clinic information, services, insurance, doctors, office policies, hours, pricing, or anything specific to this clinic, use the '${toolName}' tool to search for accurate, verified information. Always prefer knowledge base results over guessing.`;
+  }
+
+  if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
+    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me connect you with our team right now." and initiate the call. NEVER say "transferring" or "I'm going to transfer you" — just smoothly connect them.`;
+  }
+
+  systemPrompt += `\n\n## LANGUAGE\nYou are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
+
+  return systemPrompt;
+}
+
+/**
+ * Build hydrated system prompts for every member in a template.
+ * Returns an array of `{ assistantName, systemPrompt }` that can be
+ * matched against live Vapi assistants by name and PATCHed in-place.
+ */
+export function buildAllMemberPrompts(
+  template: DentalClinicTemplateConfig,
+  vars: TemplateVariables,
+  runtime: Pick<RuntimeConfig, 'queryToolId' | 'queryToolName' | 'clinicPhoneNumber'>,
+): { assistantName: string; systemPrompt: string }[] {
+  return template.members.map((member) => ({
+    assistantName: member.assistant.name,
+    systemPrompt: buildMemberSystemPrompt(member, vars, runtime),
+  }));
+}
+
 function buildMemberPayload(
   member: SquadMemberTemplate,
   vars: TemplateVariables,
@@ -280,24 +330,7 @@ function buildMemberPayload(
 ): Record<string, unknown> {
   const a = member.assistant;
 
-  // Hydrate system prompt
-  let systemPrompt = hydratePlaceholders(a.systemPrompt, vars);
-
-  // Inject PMS prompt addition for scheduling assistant
-  if (a.toolGroup === 'scheduling') {
-    systemPrompt = appendPmsPrompt(systemPrompt, vars);
-  }
-
-  // Inject knowledge base query tool instruction for assistants with KB access
-  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
-    const toolName = runtime.queryToolName || 'clinic-kb';
-    systemPrompt += `\n\n## KNOWLEDGE BASE\nYou have access to the clinic's knowledge base through the '${toolName}' query tool. When the caller asks about clinic information, services, insurance, doctors, office policies, hours, pricing, or anything specific to this clinic, use the '${toolName}' tool to search for accurate, verified information. Always prefer knowledge base results over guessing.`;
-  }
-
-  // Inject human handoff instruction into ALL assistants when a clinic number is available
-  if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
-    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me connect you with our team right now." and initiate the call. NEVER say "transferring" or "I'm going to transfer you" — just smoothly connect them.`;
-  }
+  const systemPrompt = buildMemberSystemPrompt(member, vars, runtime);
 
   // Resolve tool definitions from template's toolGroup and extraTools
   const rawTools: unknown[] = [
@@ -388,10 +421,6 @@ function buildMemberPayload(
       fileIds: runtime.knowledgeFileIds,
     };
   }
-
-  // Append multilingual instruction to EVERY assistant's system prompt
-  systemPrompt += `\n\n## LANGUAGE
-You are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
 
   // Build assistant payload
   const assistantPayload: Record<string, unknown> = {

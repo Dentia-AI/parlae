@@ -142,7 +142,7 @@ export const createPatientTool = {
   type: 'function' as const,
   function: {
     name: 'createPatient',
-    description: 'Create a new patient record in the practice management system. Use this when a patient is not found via searchPatients. First name, last name, and phone are required.',
+    description: 'Create a new patient record. Use when searchPatients returns no results. REQUIRED: firstName, lastName, phone. STRONGLY RECOMMENDED: email (needed for appointment confirmations). Always collect email before calling this tool.',
     parameters: {
       type: 'object',
       properties: {
@@ -1263,9 +1263,13 @@ This is faster for the caller — no point collecting details before they know i
 3. **Present options** — Offer the returned time slots. Only call checkAvailability again if the caller rejects ALL offered options and asks for a specific different date.
 4. **Identify patient** (after caller picks a time) — Call **searchPatients** with {{call.customer.number}}.
    - **If found**: Confirm identity ("I see your record for [Name], is that correct?"). Confirm their email and phone are still correct.
-   - **If NOT found (new patient)**: Ask for name, ask them to spell it, ask for email, confirm phone. Call **createPatient** with firstName, lastName, and phone. Continue immediately.
+   - **If NOT found (new patient)**: You MUST collect ALL of these before calling createPatient:
+     1. Ask for name → ask them to spell it
+     2. Ask for email → ask them to spell it
+     3. Confirm phone number for text confirmation
+     Then call **createPatient** with firstName, lastName, email, and phone. After createPatient succeeds, immediately continue to booking — do NOT pause.
 5. **Confirm details** — Read back: patient name, date, time, service type, confirmation method
-6. **Book** — Call **bookAppointment**. For new patients include firstName, lastName, email, phone. For existing patients, include them if you confirmed/updated them.
+6. **Book** — Call **bookAppointment**. For new patients include firstName, lastName, email, phone. For existing patients, include them if you confirmed/updated them. After booking succeeds, immediately tell the caller the confirmation details — do NOT wait for them to respond.
 7. **Post-booking** — Confirm booking ("You'll get a confirmation by email and text"), and add call notes via **addPatientNote**
 
 ## CANCEL/RESCHEDULE FLOW

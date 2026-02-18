@@ -9,7 +9,7 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request } from 'express';
 
-const SKIP_LOGGING_PATHS = new Set(['/health', '/healthz', '/ready']);
+const SKIP_LOGGING_PATHS = new Set(['/health', '/healthz', '/ready', '/vapi/webhook']);
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {

@@ -23,7 +23,7 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.8';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.9';
 export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.8';
 
 // ---------------------------------------------------------------------------
@@ -394,18 +394,22 @@ If their requested date was unavailable: "Unfortunately [Date] is fully booked. 
 Once the caller selects a time slot:
 1. Call searchPatients with the phone number {{call.customer.number}}
 2. **If FOUND**: Confirm their identity — "I see a record for [Name], is that you?" Then confirm: "Is [email on file] still the best email and {{call.customer.number}} the best number for confirmation?" → Proceed to Step 4.
-3. **If NOT FOUND (new patient)**: "I just need a few details to get you booked."
+3. **If NOT FOUND (new patient)**: Collect ALL of the following before proceeding. Do NOT skip any step:
    a. Ask for full name: "May I have your first and last name?"
-   b. **ALWAYS ask them to spell it**: "Could you spell that for me please?" — This is CRITICAL for accuracy. Names are often misheard on the phone.
-   c. Ask for email: "What email address should I send the appointment confirmation to?"
-   d. Confirm phone: "And is {{call.customer.number}} the best number for a text confirmation?"
-   e. Call createPatient with firstName, lastName, and phone {{call.customer.number}}.
-   f. **Immediately continue to Step 4 — do NOT pause.**
+   b. **ALWAYS ask them to spell it**: "Could you spell that for me please?" — This is MANDATORY. Names are often misheard on the phone. Do NOT skip this.
+   c. **ALWAYS ask for email**: "What email address should I send the appointment confirmation to?" — This is REQUIRED. Do NOT proceed without an email.
+   d. **Ask them to spell the email**: "Could you spell that email for me?" — Email addresses are easily misheard.
+   e. Confirm phone: "And is {{call.customer.number}} the best number for a text confirmation?"
+   f. Call createPatient with firstName, lastName, email, and phone.
+   g. **After createPatient succeeds, immediately proceed to Step 4. Do NOT wait for the caller to speak. Do NOT pause. Continue talking.**
+
+**CRITICAL: You MUST collect name (spelled out), email (spelled out), and phone BEFORE calling createPatient. Do NOT skip the email.**
 
 ### Step 4: Book Appointment
+**After createPatient or searchPatients, immediately proceed here without pausing.**
 Use bookAppointment with:
 - patientId (from search/create)
-- **For new patients**: ALWAYS include firstName, lastName, email, phone
+- **For new patients**: ALWAYS include firstName, lastName, email, phone — if you forgot to collect email, ask for it NOW before booking
 - **For existing patients**: Include firstName and lastName if you confirmed them, plus email and phone if updated
 - providerId (from availability results)
 - appointmentType
@@ -413,7 +417,8 @@ Use bookAppointment with:
 - duration (in minutes)
 - notes (any special requests, reasons, or symptoms the caller mentioned)
 
-Confirm booking: "Perfect! I've booked your [type] appointment on [Date] at [Time]. You'll receive a confirmation by email and text. Is there anything else I can help you with?"
+**After bookAppointment succeeds, immediately continue talking — do NOT wait for the caller to say "ok":**
+"Perfect! I've booked your [type] appointment on [Date] at [Time]. You'll receive a confirmation by email and text. Is there anything else I can help you with today?"
 
 ### Step 5: Add Notes
 Use addPatientNote to document:

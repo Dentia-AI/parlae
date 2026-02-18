@@ -13,6 +13,8 @@ export type {
 export {
   hydratePlaceholders,
   buildSquadPayloadFromTemplate,
+  buildMemberSystemPrompt,
+  buildAllMemberPrompts,
   templateToDbShape,
   dbShapeToTemplate,
   getAllFunctionToolDefinitions,

@@ -920,6 +920,68 @@ class VapiService {
   }
 
   /**
+   * Update ONLY the system prompt of an existing assistant.
+   *
+   * Fetches the current assistant config from Vapi, replaces the system
+   * prompt in model.messages, and PATCHes it back. All other config
+   * (tools, voice, model provider, etc.) is preserved.
+   */
+  async updateAssistantSystemPrompt(
+    assistantId: string,
+    newSystemPrompt: string,
+  ): Promise<{ success: boolean; assistantName?: string }> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Vapi] Integration disabled - missing API key');
+      return { success: false };
+    }
+
+    try {
+      const existing = await this.getAssistant(assistantId);
+      if (!existing) {
+        logger.error({ assistantId }, '[Vapi] Could not fetch assistant for prompt update');
+        return { success: false };
+      }
+
+      const existingModel = (existing as any).model;
+      if (!existingModel) {
+        logger.error({ assistantId }, '[Vapi] Assistant has no model config');
+        return { success: false };
+      }
+
+      const updatedModel = {
+        ...existingModel,
+        messages: [{ role: 'system', content: newSystemPrompt }],
+      };
+
+      const response = await fetch(`${this.baseUrl}/assistant/${assistantId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: updatedModel }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ status: response.status, error: errorText, assistantId }, '[Vapi] Failed to patch assistant prompt');
+        return { success: false, assistantName: (existing as any).name };
+      }
+
+      logger.info({ assistantId, name: (existing as any).name }, '[Vapi] System prompt updated in-place');
+      return { success: true, assistantName: (existing as any).name };
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+        assistantId,
+      }, '[Vapi] Exception while updating assistant prompt');
+      return { success: false };
+    }
+  }
+
+  /**
    * Delete an assistant
    */
   async deleteAssistant(assistantId: string): Promise<boolean> {

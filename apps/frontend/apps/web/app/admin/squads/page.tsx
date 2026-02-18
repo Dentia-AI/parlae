@@ -25,6 +25,7 @@ import {
   Wrench,
   BrainCircuit,
   Globe,
+  PenLine,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
@@ -103,6 +104,7 @@ export default function AdminSquadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [updatingPromptsId, setUpdatingPromptsId] = useState<string | null>(null);
   const [selectedOrphans, setSelectedOrphans] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const csrfToken = useCsrfToken();
@@ -235,6 +237,44 @@ export default function AdminSquadsPage() {
       toast.error(err.message);
     } finally {
       setRedeployingId(null);
+    }
+  };
+
+  const handleUpdatePrompts = async (accountId: string) => {
+    if (
+      !confirm(
+        'Update system prompts for all assistants in this squad? This will NOT recreate the squad or change tools/voice.',
+      )
+    ) {
+      return;
+    }
+
+    setUpdatingPromptsId(accountId);
+    try {
+      const res = await fetch('/api/admin/update-squad-prompts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update prompts');
+      }
+
+      const data = await res.json();
+      toast.success(
+        `Prompts updated: ${data.updatedCount} assistants patched, template ${data.templateVersion}${data.failedCount > 0 ? ` (${data.failedCount} failed)` : ''}`,
+      );
+      await fetchSquads();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setUpdatingPromptsId(null);
     }
   };
 
@@ -406,22 +446,43 @@ export default function AdminSquadsPage() {
                   </Button>
                 </a>
                 {squad.account && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRedeploy(squad.account!.accountId)}
-                    disabled={
-                      redeployingId === squad.account.accountId ||
-                      !!deletingId
-                    }
-                  >
-                    {redeployingId === squad.account.accountId ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                    )}
-                    Recreate
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleUpdatePrompts(squad.account!.accountId)}
+                      disabled={
+                        updatingPromptsId === squad.account.accountId ||
+                        redeployingId === squad.account.accountId ||
+                        !!deletingId
+                      }
+                      title="Update system prompts only — no squad recreation"
+                    >
+                      {updatingPromptsId === squad.account.accountId ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <PenLine className="h-4 w-4 mr-1" />
+                      )}
+                      Update Prompts
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRedeploy(squad.account!.accountId)}
+                      disabled={
+                        redeployingId === squad.account.accountId ||
+                        updatingPromptsId === squad.account.accountId ||
+                        !!deletingId
+                      }
+                    >
+                      {redeployingId === squad.account.accountId ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                      )}
+                      Recreate
+                    </Button>
+                  </>
                 )}
                 <Button
                   variant="destructive"
