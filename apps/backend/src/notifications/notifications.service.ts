@@ -443,7 +443,7 @@ export class NotificationsService {
       if (isSandbox) {
         this.logger.warn({
           error: error?.message,
-          recipientEmail,
+          accountId: params.accountId,
           msg: '[ClinicNotify] SES sandbox: recipient email not verified. Request production SES access or verify the recipient email in AWS SES console.',
         });
       } else {

@@ -50,6 +50,7 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   brandingContactPhone: null,
   brandingAddress: null,
   brandingWebsite: null,
+  brandingTimezone: null,
   twilioMessagingServiceSid: null,
   ...overrides,
 });

@@ -185,6 +185,7 @@ export const deployReceptionistAction = enhanceAction(
           brandingContactPhone: true,
           googleCalendarConnected: true,
           setupProgress: true,
+          twilioMessagingServiceSid: true,
         },
       });
 
@@ -302,6 +303,36 @@ export const deployReceptionistAction = enhanceAction(
             );
             throw new Error('No Twilio phone numbers available and failed to purchase a new one. Please contact support.');
           }
+        }
+      }
+
+      // STEP 1b: Ensure a Twilio Messaging Service exists for SMS confirmations
+      if (!account.twilioMessagingServiceSid) {
+        try {
+          const phoneSid = await twilioService.getPhoneNumberSid(phoneNumber);
+          if (phoneSid) {
+            const msgSvcSid = await twilioService.createMessagingServiceForNumber(
+              phoneSid,
+              `${businessName} - Parlae`,
+            );
+            if (msgSvcSid) {
+              await prisma.account.update({
+                where: { id: account.id },
+                data: { twilioMessagingServiceSid: msgSvcSid },
+              });
+              logger.info(
+                { accountId: account.id, messagingServiceSid: msgSvcSid },
+                '[Receptionist] Auto-created Twilio Messaging Service'
+              );
+            }
+          } else {
+            logger.warn({ phoneNumber, accountId: account.id }, '[Receptionist] Could not resolve phone SID for Messaging Service');
+          }
+        } catch (msgSvcErr: any) {
+          logger.warn(
+            { error: msgSvcErr?.message, accountId: account.id },
+            '[Receptionist] Non-fatal: could not auto-create Messaging Service'
+          );
         }
       }
 
@@ -783,6 +814,7 @@ export const changePhoneNumberAction = enhanceAction(
           name: true,
           phoneIntegrationSettings: true,
           brandingBusinessName: true,
+          twilioMessagingServiceSid: true,
         },
       });
 
@@ -833,6 +865,29 @@ export const changePhoneNumberAction = enhanceAction(
         { newPhoneNumber, accountId: account.id },
         '[Receptionist] Purchased new phone number'
       );
+
+      // Create/update Twilio Messaging Service for SMS confirmations
+      try {
+        const msgSvcSid = await twilioService.createMessagingServiceForNumber(
+          purchased.sid,
+          `${businessName} - Parlae`,
+        );
+        if (msgSvcSid) {
+          await prisma.account.update({
+            where: { id: account.id },
+            data: { twilioMessagingServiceSid: msgSvcSid },
+          });
+          logger.info(
+            { accountId: account.id, messagingServiceSid: msgSvcSid },
+            '[Receptionist] Auto-created Twilio Messaging Service for new number'
+          );
+        }
+      } catch (msgSvcErr: any) {
+        logger.warn(
+          { error: msgSvcErr?.message, accountId: account.id },
+          '[Receptionist] Non-fatal: could not create Messaging Service on phone change'
+        );
+      }
 
       // Import new number to Vapi and link to squad
       const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID!;

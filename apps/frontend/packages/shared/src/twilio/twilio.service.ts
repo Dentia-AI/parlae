@@ -429,6 +429,116 @@ class TwilioService {
       return false;
     }
   }
+
+  /**
+   * Create a Twilio Messaging Service and add a phone number to it.
+   * Returns the Messaging Service SID, or null on failure.
+   *
+   * @param phoneNumberSid - The SID of the purchased Twilio phone number (PN...)
+   * @param friendlyName - Human-readable name for the service
+   */
+  async createMessagingServiceForNumber(
+    phoneNumberSid: string,
+    friendlyName: string,
+  ): Promise<string | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Twilio] Integration disabled - cannot create messaging service');
+      return null;
+    }
+
+    try {
+      // 1. Create the Messaging Service
+      const createUrl = 'https://messaging.twilio.com/v1/Services';
+      const createBody = new URLSearchParams();
+      createBody.append('FriendlyName', friendlyName);
+      createBody.append('UseCase', 'notifications');
+
+      logger.info({ friendlyName }, '[Twilio] Creating Messaging Service');
+
+      const createResp = await fetch(createUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: createBody,
+      });
+
+      if (!createResp.ok) {
+        const errorText = await createResp.text();
+        logger.error({ status: createResp.status, error: errorText }, '[Twilio] Failed to create Messaging Service');
+        return null;
+      }
+
+      const service = await createResp.json();
+      const messagingServiceSid: string = service.sid;
+      logger.info({ messagingServiceSid }, '[Twilio] Messaging Service created');
+
+      // 2. Add the phone number to the service
+      const addUrl = `https://messaging.twilio.com/v1/Services/${messagingServiceSid}/PhoneNumbers`;
+      const addBody = new URLSearchParams();
+      addBody.append('PhoneNumberSid', phoneNumberSid);
+
+      const addResp = await fetch(addUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: addBody,
+      });
+
+      if (!addResp.ok) {
+        const errorText = await addResp.text();
+        logger.error({ status: addResp.status, error: errorText, messagingServiceSid }, '[Twilio] Failed to add phone to Messaging Service');
+        return messagingServiceSid; // Service was created, number just wasn't added
+      }
+
+      logger.info({ messagingServiceSid, phoneNumberSid }, '[Twilio] Phone number added to Messaging Service');
+      return messagingServiceSid;
+    } catch (error) {
+      const logger2 = await getLogger();
+      logger2.error({
+        error: error instanceof Error ? { name: error.name, message: error.message } : error,
+      }, '[Twilio] Exception creating Messaging Service');
+      return null;
+    }
+  }
+
+  /**
+   * Look up the SID of a purchased phone number by its E.164 number.
+   * Needed because purchaseNumber returns the SID, but when reusing an
+   * existing number we only have the E.164 string.
+   */
+  async getPhoneNumberSid(phoneNumber: string): Promise<string | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) return null;
+
+    try {
+      const params = new URLSearchParams({ PhoneNumber: phoneNumber });
+      const url = `${this.baseUrl}/Accounts/${this.accountSid}/IncomingPhoneNumbers.json?${params}`;
+
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': this.getAuthHeader() },
+      });
+
+      if (!resp.ok) return null;
+
+      const result = await resp.json();
+      const numbers = result.incoming_phone_numbers || [];
+      return numbers.length > 0 ? numbers[0].sid : null;
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : error,
+        phoneNumber,
+      }, '[Twilio] Exception looking up phone number SID');
+      return null;
+    }
+  }
 }
 
 /**
