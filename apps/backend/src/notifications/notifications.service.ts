@@ -439,7 +439,16 @@ export class NotificationsService {
       this.logger.log({ accountId, to: recipientEmail, msg: '[ClinicNotify] Booking notification sent' });
       return true;
     } catch (error: any) {
-      this.logger.error({ error: error?.message, msg: '[ClinicNotify] Failed to send booking notification' });
+      const isSandbox = error?.message?.includes('Email address is not verified');
+      if (isSandbox) {
+        this.logger.warn({
+          error: error?.message,
+          recipientEmail,
+          msg: '[ClinicNotify] SES sandbox: recipient email not verified. Request production SES access or verify the recipient email in AWS SES console.',
+        });
+      } else {
+        this.logger.error({ error: error?.message, msg: '[ClinicNotify] Failed to send booking notification' });
+      }
       return false;
     }
   }
@@ -752,8 +761,7 @@ export class NotificationsService {
   // Helper Functions
   // ============================================================================
 
-  private formatAppointmentTime(date: Date): string {
-    // Format: "Monday, February 20, 2026 at 2:00 PM"
+  private formatAppointmentTime(date: Date, timezone?: string): string {
     return new Intl.DateTimeFormat('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -761,7 +769,7 @@ export class NotificationsService {
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-      timeZone: 'America/Toronto', // TODO: Make this configurable per account
+      timeZone: timezone || 'America/Toronto',
     }).format(date);
   }
 
@@ -781,6 +789,8 @@ export class NotificationsService {
         brandingContactPhone: true,
         brandingAddress: true,
         brandingWebsite: true,
+        brandingTimezone: true,
+        twilioMessagingServiceSid: true,
       },
     });
   }

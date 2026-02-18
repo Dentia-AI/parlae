@@ -338,7 +338,7 @@ export const bookAppointmentTool = {
   type: 'function' as const,
   function: {
     name: 'bookAppointment',
-    description: 'Book an appointment for a patient. IMPORTANT: You must have the patientId from searchPatients or createPatient before booking. Always check availability first, then confirm details with the patient before calling this.',
+    description: 'Book an appointment for a patient. You must have the patientId from searchPatients or createPatient before booking. Always check availability first. For NEW patients (no existing record), you MUST include firstName, lastName, email, and phone so the calendar event has complete info. For EXISTING patients, these fields are optional (details are already on file).',
     parameters: {
       type: 'object',
       properties: {
@@ -346,9 +346,25 @@ export const bookAppointmentTool = {
           type: 'string',
           description: 'Patient ID from the PMS (obtained via searchPatients or createPatient). REQUIRED.',
         },
+        firstName: {
+          type: 'string',
+          description: "Patient's first name. REQUIRED for new patients. Include for existing patients too if available.",
+        },
+        lastName: {
+          type: 'string',
+          description: "Patient's last name. REQUIRED for new patients. Include for existing patients too if available.",
+        },
+        email: {
+          type: 'string',
+          description: "Patient's email for calendar invitation and confirmation. Always include if you collected it.",
+        },
+        phone: {
+          type: 'string',
+          description: "Patient's phone for SMS confirmation. Use the caller's number if not explicitly different.",
+        },
         providerId: {
           type: 'string',
-          description: 'Provider/dentist ID for the appointment (from checkAvailability results or patient preference). Optional - system will assign if omitted.',
+          description: 'Provider/dentist ID for the appointment (from checkAvailability results or patient preference). Optional.',
         },
         appointmentType: {
           type: 'string',
@@ -357,7 +373,7 @@ export const bookAppointmentTool = {
         startTime: {
           type: 'string',
           format: 'date-time',
-          description: 'Appointment start time in ISO 8601 format. Example: 2026-02-20T10:00:00Z. REQUIRED.',
+          description: 'Appointment start time in ISO 8601 format using the clinic local time. Example: 2026-02-20T10:00:00. REQUIRED.',
         },
         duration: {
           type: 'number',
@@ -1245,10 +1261,12 @@ This is faster for the caller — no point collecting details before they know i
 1. **Determine need** — If the caller hasn't already stated what they want, ask briefly: what type of service and preferred date/time. If they already told you (e.g. "I want a cleaning tomorrow"), skip to step 2.
 2. **Check availability** — Call **checkAvailability** with the requested date (use today's date from the CURRENT DATE section above in YYYY-MM-DD format). If that date is full, the system **automatically returns the 2-3 nearest available slots** across the next 14 days — present those to the caller instead of calling the tool again.
 3. **Present options** — Offer the returned time slots. Only call checkAvailability again if the caller rejects ALL offered options and asks for a specific different date.
-4. **Identify patient** (after caller picks a time) — Call **searchPatients** with {{call.customer.number}}. If found, confirm identity. If not found, ask for name and call **createPatient** with firstName, lastName, and phone {{call.customer.number}}. Immediately continue to booking.
-5. **Confirm details** — Read back: patient name, date, time, service type, provider
-6. **Book** — Call **bookAppointment** with confirmed details (always include firstName, lastName, phone, notes)
-7. **Post-booking** — Confirm and add call notes via **addPatientNote**
+4. **Identify patient** (after caller picks a time) — Call **searchPatients** with {{call.customer.number}}.
+   - **If found**: Confirm identity ("I see your record for [Name], is that correct?"). Confirm their email and phone are still correct.
+   - **If NOT found (new patient)**: Ask for name, ask them to spell it, ask for email, confirm phone. Call **createPatient** with firstName, lastName, and phone. Continue immediately.
+5. **Confirm details** — Read back: patient name, date, time, service type, confirmation method
+6. **Book** — Call **bookAppointment**. For new patients include firstName, lastName, email, phone. For existing patients, include them if you confirmed/updated them.
+7. **Post-booking** — Confirm booking ("You'll get a confirmation by email and text"), and add call notes via **addPatientNote**
 
 ## CANCEL/RESCHEDULE FLOW
 
@@ -1261,10 +1279,20 @@ This is faster for the caller — no point collecting details before they know i
 ## NEW PATIENT FLOW
 
 When **searchPatients** returns no results (this happens AFTER the caller has already selected a time slot):
-1. "I just need a couple of quick details to get you booked. May I have your first and last name?"
-2. Collect: first name, last name (required), and email (if offered)
-3. Call **createPatient** with firstName, lastName, and phone {{call.customer.number}}
-4. **IMPORTANT: Immediately continue to book the appointment — do NOT pause or wait. The caller already chose a time, so proceed straight to bookAppointment.**
+1. "I just need a few quick details to get you booked. May I have your first and last name?"
+2. **ALWAYS ask them to spell it**: "Could you spell that for me?" — Names are often misheard on the phone.
+3. Ask for email: "What email should I send the appointment confirmation to?"
+4. Confirm phone: "And is {{call.customer.number}} the best number for a text reminder?"
+5. Call **createPatient** with firstName, lastName, and phone {{call.customer.number}}
+6. **IMPORTANT: Immediately continue to book the appointment — do NOT pause. Call bookAppointment with patientId, firstName, lastName, email, phone, appointmentType, startTime, duration, notes.**
+
+## EXISTING PATIENT FLOW
+
+When **searchPatients** FINDS a record:
+1. Confirm identity: "I see a record for [Name]. Is that you?"
+2. Confirm contact details: "Is [email on file] still the best email? And is {{call.customer.number}} the best number for confirmation?"
+3. Proceed directly to **bookAppointment** — no need to collect name or create a record.
+4. Include firstName, lastName, email in bookAppointment if you confirmed or updated them.
 
 ## DATA FORMATTING
 - Dates: Use today's actual date for same-day requests. Always use YYYY-MM-DD format (e.g., 2026-02-17)
@@ -1288,7 +1316,8 @@ When running in Google Calendar mode:
 - **createPatient** will note the patient info and return success — proceed to booking
 - **bookAppointment** will create a Google Calendar event with all patient details in the event notes
 - **checkAvailability** will check the Google Calendar free/busy schedule. If the requested date is full, it automatically scans ahead up to 14 days and returns the 2-3 nearest available slots. Present those options to the caller — do NOT call checkAvailability again unless the caller rejects all options.
-- Always include firstName, lastName, phone, and any notes when calling **bookAppointment** so the details appear in the calendar event
+- **addPatientNote** will succeed (notes are stored with the booking) — use this to record email and other details
+- Always include firstName, lastName, email, phone, and any notes when calling **bookAppointment** so the details appear in the calendar event and invitation
 
 ## ERROR HANDLING
 - If a tool call fails, apologize and try an alternative approach

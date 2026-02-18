@@ -210,6 +210,7 @@ model Account {
   brandingContactPhone        String?   @map("branding_contact_phone") // Contact phone for patient communications
   brandingAddress             String?   @map("branding_address") // Physical address for emails
   brandingWebsite             String?   @map("branding_website") // Website URL
+  brandingTimezone            String?   @map("branding_timezone") // IANA timezone, e.g. America/Toronto. Defaults to America/Toronto if unset.
   twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
 
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])

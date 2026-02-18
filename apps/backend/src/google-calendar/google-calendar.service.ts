@@ -11,6 +11,30 @@ export class GoogleCalendarService {
     this.initializeOAuth();
   }
 
+  /**
+   * Strip the trailing 'Z' from an ISO string so Google Calendar interprets
+   * the datetime using the accompanying timeZone field instead of as UTC.
+   * AI models send times like "2026-02-18T14:30:00Z" meaning 2:30 PM local
+   * time; passing that literal Z to GCal creates the event at 14:30 UTC.
+   */
+  private static readonly DEFAULT_TIMEZONE = 'America/Toronto';
+
+  private toNaiveIso(date: Date): string {
+    return date.toISOString().replace('Z', '');
+  }
+
+  private async getAccountTimezone(accountId: string): Promise<string> {
+    try {
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { brandingTimezone: true },
+      });
+      return account?.brandingTimezone || GoogleCalendarService.DEFAULT_TIMEZONE;
+    } catch {
+      return GoogleCalendarService.DEFAULT_TIMEZONE;
+    }
+  }
+
   private initializeOAuth() {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -186,6 +210,7 @@ export class GoogleCalendarService {
   ) {
     try {
       const calendar = await this.getAuthenticatedClient(accountId);
+      const tz = await this.getAccountTimezone(accountId);
 
       const account = await this.prisma.account.findUnique({
         where: { id: accountId },
@@ -200,12 +225,12 @@ export class GoogleCalendarService {
           summary: event.summary,
           description: event.description,
           start: {
-            dateTime: event.start.toISOString(),
-            timeZone: 'America/Toronto', // TODO: Make this configurable
+            dateTime: this.toNaiveIso(event.start),
+            timeZone: tz,
           },
           end: {
-            dateTime: event.end.toISOString(),
-            timeZone: 'America/Toronto',
+            dateTime: this.toNaiveIso(event.end),
+            timeZone: tz,
           },
           attendees: event.attendees?.map(email => ({ email })),
         },
@@ -247,6 +272,7 @@ export class GoogleCalendarService {
   ) {
     try {
       const calendar = await this.getAuthenticatedClient(accountId);
+      const tz = await this.getAccountTimezone(accountId);
 
       const account = await this.prisma.account.findUnique({
         where: { id: accountId },
@@ -260,11 +286,12 @@ export class GoogleCalendarService {
       endTime.setMinutes(endTime.getMinutes() + appointment.duration);
 
       // Build event title
-      const summary = `${appointment.appointmentType} - ${appointment.patient.firstName} ${appointment.patient.lastName}`;
+      const patientFullName = `${appointment.patient.firstName} ${appointment.patient.lastName}`.trim();
+      const summary = `${appointment.appointmentType} - ${patientFullName || 'Patient'}`;
 
       // Build description with patient info and notes
       let description = `**Patient Information**\n`;
-      description += `Name: ${appointment.patient.firstName} ${appointment.patient.lastName}\n`;
+      description += `Name: ${patientFullName || 'Not provided'}\n`;
       if (appointment.patient.phone) {
         description += `Phone: ${appointment.patient.phone}\n`;
       }
@@ -297,12 +324,12 @@ export class GoogleCalendarService {
           summary,
           description,
           start: {
-            dateTime: appointment.startTime.toISOString(),
-            timeZone: 'America/Toronto', // TODO: Make this configurable
+            dateTime: this.toNaiveIso(appointment.startTime),
+            timeZone: tz,
           },
           end: {
-            dateTime: endTime.toISOString(),
-            timeZone: 'America/Toronto',
+            dateTime: this.toNaiveIso(endTime),
+            timeZone: tz,
           },
           attendees: attendees.length > 0 ? attendees : undefined,
           colorId: '9', // Blue color for appointments
@@ -351,6 +378,7 @@ export class GoogleCalendarService {
   ) {
     try {
       const calendar = await this.getAuthenticatedClient(accountId);
+      const tz = await this.getAccountTimezone(accountId);
 
       const account = await this.prisma.account.findUnique({
         where: { id: accountId },
@@ -364,14 +392,14 @@ export class GoogleCalendarService {
       if (updates.description) updateData.description = updates.description;
       if (updates.start) {
         updateData.start = {
-          dateTime: updates.start.toISOString(),
-          timeZone: 'America/Toronto',
+          dateTime: this.toNaiveIso(updates.start),
+          timeZone: tz,
         };
       }
       if (updates.end) {
         updateData.end = {
-          dateTime: updates.end.toISOString(),
-          timeZone: 'America/Toronto',
+          dateTime: this.toNaiveIso(updates.end),
+          timeZone: tz,
         };
       }
 
@@ -497,6 +525,7 @@ export class GoogleCalendarService {
   ) {
     try {
       const calendar = await this.getAuthenticatedClient(accountId);
+      const tz = await this.getAccountTimezone(accountId);
 
       const account = await this.prisma.account.findUnique({
         where: { id: accountId },
@@ -513,7 +542,7 @@ export class GoogleCalendarService {
         requestBody: {
           timeMin: dayStart.toISOString(),
           timeMax: dayEnd.toISOString(),
-          timeZone: 'America/Toronto', // TODO: Make configurable
+          timeZone: tz,
           items: [{ id: calendarId }],
         },
       });

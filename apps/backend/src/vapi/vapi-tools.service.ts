@@ -965,8 +965,26 @@ export class VapiToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+
+      if (!phoneRecord?.pmsIntegration) {
+        this.logger.log(`[addPatientNote] No PMS — GCal-only mode. Note: ${(params.content || '').slice(0, 100)}`);
+        return {
+          result: {
+            success: true,
+            integrationType: 'google_calendar',
+            message: "I've noted that information. It will be included in your appointment details.",
+          },
+        };
+      }
+
       const sikkaService = await this.getSikkaService(call);
-      if (!sikkaService.service) return sikkaService.error;
+      if (!sikkaService.service) {
+        return sikkaService.error || {
+          error: 'PMS not available',
+          message: "I'll make sure our team gets that information.",
+        };
+      }
 
       const result = await sikkaService.service.addPatientNote(
         params.patientId,
@@ -1636,9 +1654,28 @@ export class VapiToolsService {
 
       const duration = params.duration || 30;
 
-      const patientFirstName = params.firstName || params.patientName?.split(' ')[0] || 'Patient';
-      const patientLastName = params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '';
+      let patientFirstName = params.firstName || '';
+      let patientLastName = params.lastName || '';
+
+      if (!patientFirstName && params.patientName) {
+        const parts = params.patientName.trim().split(/\s+/);
+        patientFirstName = parts[0] || '';
+        patientLastName = parts.slice(1).join(' ') || '';
+      }
+
+      if (!patientFirstName && params.name) {
+        const parts = params.name.trim().split(/\s+/);
+        patientFirstName = parts[0] || '';
+        patientLastName = parts.slice(1).join(' ') || '';
+      }
+
+      if (!patientFirstName) {
+        patientFirstName = 'Patient';
+        this.logger.warn('[GCal Booking] No patient name provided by AI — falling back to "Patient"');
+      }
+
       const patientPhone = params.phone || callerPhone;
+      const patientEmail = params.email || params.patientEmail;
       const appointmentType = params.appointmentType || params.type || 'General';
 
       const result = await this.googleCalendar.createAppointmentEvent(
@@ -1648,7 +1685,7 @@ export class VapiToolsService {
             firstName: patientFirstName,
             lastName: patientLastName,
             phone: patientPhone,
-            email: params.email,
+            email: patientEmail,
             dateOfBirth: params.dateOfBirth,
           },
           appointmentType,
@@ -1666,7 +1703,7 @@ export class VapiToolsService {
           firstName: patientFirstName,
           lastName: patientLastName,
           phone: patientPhone,
-          email: params.email,
+          email: patientEmail,
         },
         appointment: {
           appointmentType,
@@ -1679,12 +1716,47 @@ export class VapiToolsService {
         this.logger.error({ error: err?.message, msg: '[GCal Booking] Clinic notification email failed (non-fatal)' });
       });
 
+      // Fire-and-forget: send patient confirmation (SMS + email)
+      this.notifications.sendAppointmentConfirmation({
+        accountId,
+        patient: {
+          firstName: patientFirstName,
+          lastName: patientLastName,
+          phone: patientPhone,
+          email: patientEmail,
+        },
+        appointment: {
+          appointmentType,
+          startTime,
+          duration,
+          notes: params.notes,
+          externalEventLink: result.htmlLink || undefined,
+        },
+        integrationType: 'google_calendar',
+      }).then(({ emailSent, smsSent }) => {
+        this.logger.log({
+          accountId,
+          emailSent,
+          smsSent,
+          msg: '[GCal Booking] Patient confirmation sent',
+        });
+      }).catch((err) => {
+        this.logger.error({ error: err?.message, msg: '[GCal Booking] Patient confirmation failed (non-fatal)' });
+      });
+
+      const confirmationParts: string[] = [];
+      if (patientEmail) confirmationParts.push('email confirmation');
+      if (patientPhone) confirmationParts.push('text confirmation');
+      const confirmationMsg = confirmationParts.length > 0
+        ? ` You'll receive a ${confirmationParts.join(' and ')}.`
+        : '';
+
       return {
         result: {
           success: true,
           appointmentId: result.eventId,
           integrationType: 'google_calendar',
-          message: `Appointment booked for ${startTime.toLocaleString()}. A calendar invitation has been created.`,
+          message: `Appointment booked for ${startTime.toLocaleString()}. A calendar invitation has been created.${confirmationMsg}`,
         },
       };
     } catch (error) {

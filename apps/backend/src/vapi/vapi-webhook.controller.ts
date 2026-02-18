@@ -39,9 +39,18 @@ export class VapiWebhookController {
     const messageType = payload?.message?.type;
     const callId = payload?.message?.call?.id;
 
-    this.logger.log(
-      `[Vapi Webhook] Type: ${messageType}, Call ID: ${callId}`,
-    );
+    const silentTypes = new Set([
+      'speech-update',
+      'conversation-update',
+      'voice-input',
+      'user-interrupted',
+    ]);
+
+    if (!silentTypes.has(messageType)) {
+      this.logger.log(
+        `[Vapi Webhook] Type: ${messageType}, Call ID: ${callId}`,
+      );
+    }
 
     // Verify webhook authentication.
     // Vapi may authenticate in two ways:
@@ -90,6 +99,8 @@ export class VapiWebhookController {
       case 'hang':
       case 'transfer-destination-request':
       case 'voice-input':
+      case 'user-interrupted':
+      case 'assistant.started':
         return { received: true };
 
       default:
@@ -242,7 +253,9 @@ export class VapiWebhookController {
     try {
       const result = await handler(toolPayload);
       const resultStr =
-        typeof result === 'string' ? result : JSON.stringify(result);
+        typeof result === 'string'
+          ? result
+          : JSON.stringify(result) ?? JSON.stringify({ error: 'No response from tool' });
 
       // Detect error payloads returned as normal results (not thrown).
       // Many tool methods catch errors internally and return { error: '...' }
@@ -250,14 +263,12 @@ export class VapiWebhookController {
       const hasError =
         result && typeof result === 'object' && 'error' in result;
 
+      const logSnippet = (resultStr || '').slice(0, 500);
+
       if (hasError) {
-        this.logger.warn(
-          `[Vapi Tool Error] ${toolName} | ${resultStr.slice(0, 500)}`,
-        );
+        this.logger.warn(`[Vapi Tool Error] ${toolName} | ${logSnippet}`);
       } else {
-        this.logger.log(
-          `[Vapi Tool Response] ${toolName} | ${resultStr.slice(0, 500)}`,
-        );
+        this.logger.log(`[Vapi Tool Response] ${toolName} | ${logSnippet}`);
       }
 
       return {
