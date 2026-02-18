@@ -476,9 +476,10 @@ class VapiService {
         let assistantId = member.assistantId;
 
         if (!assistantId && member.assistant) {
-          // Rate-limit courtesy: wait between assistant creations (skip first)
+          // Throttle between assistant creations to avoid Vapi 429 rate limits.
+          // Vapi's rate window is tight — 2.5s gap keeps us safely under.
           if (memberIdx > 0) {
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 2500));
           }
 
           const assistantConfig = member.assistant;
@@ -500,9 +501,10 @@ class VapiService {
           // Create the assistant via the standalone endpoint (supports full config)
           const assistant = await this.createAssistant(assistantConfig);
           if (!assistant) {
-            // Cleanup: delete any assistants we already created
-            for (const id of createdAssistantIds) {
-              try { await this.deleteAssistant(id); } catch { /* best effort */ }
+            // Cleanup: delete any assistants we already created (throttled to avoid cascading 429s)
+            for (let i = 0; i < createdAssistantIds.length; i++) {
+              if (i > 0) await new Promise((r) => setTimeout(r, 1500));
+              try { await this.deleteAssistant(createdAssistantIds[i]!); } catch { /* best effort */ }
             }
             throw new Error(`Failed to create assistant: ${assistantConfig.name}`);
           }
@@ -749,7 +751,7 @@ class VapiService {
         hasServerSecret: !!serverConfig?.secret,
       }, '[Vapi] Creating assistant — sending to Vapi API');
 
-      const maxRetries = 3;
+      const maxRetries = 5;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const response = await fetch(`${this.baseUrl}/assistant`, {
           method: 'POST',
@@ -760,13 +762,14 @@ class VapiService {
           body: JSON.stringify(builtPayload),
         });
 
-        if (response.status === 429 && attempt < maxRetries) {
-          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
+        if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
+          const backoffMs = Math.min(2000 * Math.pow(2, attempt), 30000);
           logger.warn({
             attempt: attempt + 1,
             backoffMs,
+            status: response.status,
             name: config.name,
-          }, '[Vapi] Rate limited creating assistant, retrying after backoff');
+          }, '[Vapi] Retrying assistant creation after error');
           await new Promise((r) => setTimeout(r, backoffMs));
           continue;
         }
@@ -1942,9 +1945,9 @@ class VapiService {
           body: JSON.stringify(toolConfig),
         });
 
-        if (response.status === 429 && attempt < maxRetries) {
-          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
-          logger.warn({ attempt: attempt + 1, backoffMs, toolName }, '[Vapi] Rate limited creating tool, retrying');
+        if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
+          const backoffMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+          logger.warn({ attempt: attempt + 1, backoffMs, status: response.status, toolName }, '[Vapi] Retrying tool creation after error');
           await new Promise((r) => setTimeout(r, backoffMs));
           continue;
         }
@@ -2121,9 +2124,9 @@ class VapiService {
           body: JSON.stringify(updates),
         });
 
-        if (response.status === 429 && attempt < maxRetries) {
-          const backoffMs = Math.min(1000 * Math.pow(2, attempt + 1), 10000);
-          logger.warn({ attempt: attempt + 1, backoffMs, toolId }, '[Vapi] Rate limited updating tool, retrying');
+        if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
+          const backoffMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+          logger.warn({ attempt: attempt + 1, backoffMs, toolId, status: response.status }, '[Vapi] Retrying tool update after error');
           await new Promise((r) => setTimeout(r, backoffMs));
           continue;
         }
@@ -2229,7 +2232,8 @@ class VapiService {
 
     const rateLimitDelay = async () => {
       apiCallCount++;
-      if (apiCallCount > 0 && apiCallCount % 5 === 0) {
+      // Pause every 5th API call to stay under Vapi's rate limit window.
+      if (apiCallCount % 5 === 0) {
         await new Promise((r) => setTimeout(r, 2000));
       }
     };
@@ -2280,9 +2284,15 @@ class VapiService {
           }
         }
 
-        // Always update the keeper with correct server config, description, and version
-        const needsServerUpdate =
-          JSON.stringify(keeper.server || {}) !== JSON.stringify(desiredServerConfig || {});
+        // Compare only the fields we care about — Vapi returns extra fields
+        // (id, orgId, createdAt, etc.) which would cause a false diff every time.
+        const existingServer = keeper.server || {};
+        const needsServerUpdate = desiredServerConfig
+          ? (existingServer.url !== desiredServerConfig.url ||
+             existingServer.credentialId !== desiredServerConfig.credentialId ||
+             (desiredServerConfig.timeoutSeconds !== undefined &&
+              existingServer.timeoutSeconds !== desiredServerConfig.timeoutSeconds))
+          : false;
         const needsDescUpdate =
           keeper.function?.description !== desiredDescription;
 
@@ -2309,6 +2319,8 @@ class VapiService {
               updatedDesc: needsDescUpdate,
             }, '[Vapi] Updated existing tool');
           }
+        } else {
+          logger.info({ funcName, toolId: keeper.id }, '[Vapi] Tool already up to date, skipping');
         }
 
         toolIdMap.set(funcName, keeper.id);
