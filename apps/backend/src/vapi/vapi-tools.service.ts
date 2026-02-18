@@ -6,9 +6,26 @@ import { GoogleCalendarService } from '../google-calendar/google-calendar.servic
 import { NotificationsService } from '../notifications/notifications.service';
 import twilio from 'twilio';
 
+interface CachedPatientData {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  email?: string;
+  patientId: string;
+  cachedAt: number;
+}
+
 @Injectable()
 export class VapiToolsService {
   private readonly logger = new Logger(VapiToolsService.name);
+
+  /**
+   * Per-call patient cache: stores data from createPatient so bookAppointment
+   * can retrieve it even when the AI model forgets to pass the fields through.
+   * Keyed by callId. Entries auto-expire after 15 minutes.
+   */
+  private readonly patientCache = new Map<string, CachedPatientData>();
+  private static readonly CACHE_TTL_MS = 15 * 60 * 1000;
 
   constructor(
     private prisma: PrismaService,
@@ -17,6 +34,27 @@ export class VapiToolsService {
     private googleCalendar: GoogleCalendarService,
     private notifications: NotificationsService,
   ) {}
+
+  private cachePatient(callId: string, data: CachedPatientData) {
+    this.patientCache.set(callId, data);
+    // Lazy cleanup of stale entries
+    if (this.patientCache.size > 200) {
+      const cutoff = Date.now() - VapiToolsService.CACHE_TTL_MS;
+      for (const [key, val] of this.patientCache) {
+        if (val.cachedAt < cutoff) this.patientCache.delete(key);
+      }
+    }
+  }
+
+  private getCachedPatient(callId: string): CachedPatientData | undefined {
+    const entry = this.patientCache.get(callId);
+    if (!entry) return undefined;
+    if (Date.now() - entry.cachedAt > VapiToolsService.CACHE_TTL_MS) {
+      this.patientCache.delete(callId);
+      return undefined;
+    }
+    return entry;
+  }
 
   async transferToHuman(payload: any) {
     try {
@@ -529,23 +567,33 @@ export class VapiToolsService {
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
-        // No PMS configured — Google Calendar-only mode.
-        // Patient details will be stored in the Google Calendar event notes
-        // when bookAppointment is called. Return success so the AI continues
-        // to the booking step without pausing.
         const callerPhone = call?.customer?.number;
         const patientPhone = params.phone || callerPhone;
         const patientName = `${params.firstName || ''} ${params.lastName || ''}`.trim() || 'Patient';
+        const patientId = `gcal-${Date.now()}`;
+        const callId = call?.id;
 
-        this.logger.log(`[createPatient] No PMS — GCal-only mode. Noted: ${patientName}, ${patientPhone}`);
+        this.logger.log(`[createPatient] No PMS — GCal-only mode. Noted: ${patientName}, ${params.email || 'no email'}, ${patientPhone}`);
+
+        if (callId) {
+          this.cachePatient(callId, {
+            firstName: params.firstName || '',
+            lastName: params.lastName || '',
+            phone: patientPhone,
+            email: params.email,
+            patientId,
+            cachedAt: Date.now(),
+          });
+        }
 
         return {
           result: {
             success: true,
             patient: {
-              id: `gcal-${Date.now()}`,
+              id: patientId,
               name: patientName,
               phone: patientPhone,
+              email: params.email,
             },
             integrationType: 'google_calendar',
             message: `Patient profile created for ${params.firstName || 'the caller'}. Proceed immediately to book the appointment — do not wait for the caller to respond.`,
@@ -1654,6 +1702,10 @@ export class VapiToolsService {
 
       const duration = params.duration || 30;
 
+      // Try to get patient info from params first, then fall back to per-call cache
+      const callId = call?.id;
+      const cached = callId ? this.getCachedPatient(callId) : undefined;
+
       let patientFirstName = params.firstName || '';
       let patientLastName = params.lastName || '';
 
@@ -1669,13 +1721,20 @@ export class VapiToolsService {
         patientLastName = parts.slice(1).join(' ') || '';
       }
 
-      if (!patientFirstName) {
-        patientFirstName = 'Patient';
-        this.logger.warn('[GCal Booking] No patient name provided by AI — falling back to "Patient"');
+      // Fallback: use cached data from createPatient earlier in this call
+      if (!patientFirstName && cached) {
+        patientFirstName = cached.firstName || '';
+        patientLastName = cached.lastName || '';
+        this.logger.log(`[GCal Booking] Using cached patient data from createPatient: ${patientFirstName} ${patientLastName}`);
       }
 
-      const patientPhone = params.phone || callerPhone;
-      const patientEmail = params.email || params.patientEmail;
+      if (!patientFirstName) {
+        patientFirstName = 'Patient';
+        this.logger.warn('[GCal Booking] No patient name provided by AI and no cache — falling back to "Patient"');
+      }
+
+      const patientPhone = params.phone || cached?.phone || callerPhone;
+      const patientEmail = params.email || params.patientEmail || cached?.email;
       const appointmentType = params.appointmentType || params.type || 'General';
 
       const result = await this.googleCalendar.createAppointmentEvent(

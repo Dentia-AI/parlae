@@ -23,8 +23,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v2.9';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v2.8';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v3.0';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v3.0';
 
 // ---------------------------------------------------------------------------
 // System prompts (with placeholders)
@@ -899,8 +899,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie — stable, professional voice for agents
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 300,
           },
@@ -970,8 +970,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 250,
           },
@@ -1015,8 +1015,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.4,
             maxTokens: 400,
           },
@@ -1086,8 +1086,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1157,8 +1157,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1222,8 +1222,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 400,
           },
@@ -1287,8 +1287,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
             voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02', // Katie
           },
           model: {
-            provider: 'openai',
-            model: 'gpt-4o',
+            provider: 'xai',
+            model: 'grok-4-fast',
             temperature: 0.3,
             maxTokens: 400,
           },

@@ -160,7 +160,7 @@ export const createPatientTool = {
         },
         email: {
           type: 'string',
-          description: "Patient's email address (recommended for email confirmations)",
+          description: "Patient's email address — REQUIRED for new patients. Must be collected and spelled out before calling this tool.",
         },
         dateOfBirth: {
           type: 'string',
@@ -172,7 +172,7 @@ export const createPatientTool = {
           description: 'Any notes about the patient collected during the call (optional)',
         },
       },
-      required: ['firstName', 'lastName', 'phone'],
+      required: ['firstName', 'lastName', 'phone', 'email'],
     },
   },
   async: false,
@@ -338,7 +338,7 @@ export const bookAppointmentTool = {
   type: 'function' as const,
   function: {
     name: 'bookAppointment',
-    description: 'Book an appointment for a patient. You must have the patientId from searchPatients or createPatient before booking. Always check availability first. For NEW patients (no existing record), you MUST include firstName, lastName, email, and phone so the calendar event has complete info. For EXISTING patients, these fields are optional (details are already on file).',
+    description: 'Book an appointment for a patient. You must have the patientId from searchPatients or createPatient before booking. Always check availability first. ALWAYS include firstName, lastName, email, and phone — these are needed for calendar invitations and confirmations.',
     parameters: {
       type: 'object',
       properties: {
@@ -348,19 +348,19 @@ export const bookAppointmentTool = {
         },
         firstName: {
           type: 'string',
-          description: "Patient's first name. REQUIRED for new patients. Include for existing patients too if available.",
+          description: "Patient's first name. Always include.",
         },
         lastName: {
           type: 'string',
-          description: "Patient's last name. REQUIRED for new patients. Include for existing patients too if available.",
+          description: "Patient's last name. Always include.",
         },
         email: {
           type: 'string',
-          description: "Patient's email for calendar invitation and confirmation. Always include if you collected it.",
+          description: "Patient's email address. Always include — needed for calendar invitation.",
         },
         phone: {
           type: 'string',
-          description: "Patient's phone for SMS confirmation. Use the caller's number if not explicitly different.",
+          description: "Patient's phone number. Use the caller's number from the call.",
         },
         providerId: {
           type: 'string',
@@ -384,7 +384,7 @@ export const bookAppointmentTool = {
           description: 'Any notes, special requests, or concerns the patient mentioned during the call. Include pain details, preferences, or accessibility needs.',
         },
       },
-      required: ['patientId', 'appointmentType', 'startTime', 'duration'],
+      required: ['patientId', 'appointmentType', 'startTime', 'duration', 'firstName', 'lastName', 'email', 'phone'],
     },
   },
   async: false,
