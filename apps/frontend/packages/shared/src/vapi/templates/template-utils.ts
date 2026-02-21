@@ -468,7 +468,36 @@ function buildMemberPayload(
     assistantPayload.toolIds = standaloneToolIds;
   }
 
-  // Inline tools (transferCall, endCall, or legacy function tools)
+  // v4.0: Build explicit handoff tools from handoffDestinations.
+  // Each destination becomes its own Vapi "handoff" tool — the "multiple tools"
+  // pattern recommended by Vapi for OpenAI models. This gives the LLM a separate
+  // function per destination (e.g., handoff_to_Emergency, handoff_to_BookingAgent)
+  // making routing decisions more reliable.
+  if (member.handoffDestinations && member.handoffDestinations.length > 0) {
+    for (const dest of member.handoffDestinations) {
+      inlineTools.push({
+        type: 'handoff',
+        destinations: [
+          {
+            type: 'assistant',
+            assistantName: dest.assistantName,
+            description: dest.description,
+            message: ' ',
+            ...(dest.contextEngineeringPlan && {
+              contextEngineeringPlan: dest.contextEngineeringPlan,
+            }),
+            ...(dest.variableExtractionPlan && {
+              variableExtractionPlan: dest.variableExtractionPlan,
+            }),
+          },
+        ],
+      });
+    }
+  }
+
+  // Inline tools (transferCall, handoff, endCall, or legacy function tools)
+  // Handoff tools MUST be in assistant.tools, NOT model.tools — Vapi reads them
+  // from the assistant-level tools array for squad member routing.
   if (inlineTools.length > 0) {
     assistantPayload.tools = inlineTools;
   }
@@ -486,32 +515,8 @@ function buildMemberPayload(
     },
   };
 
-  // v4.0: Build explicit handoff tools from handoffDestinations.
-  // Each destination becomes a Vapi "handoff" tool with context engineering
-  // and variable extraction — replacing the legacy auto-generated transferAssistant.
+  // If handoffDestinations were provided, skip legacy assistantDestinations
   if (member.handoffDestinations && member.handoffDestinations.length > 0) {
-    const handoffTool: Record<string, unknown> = {
-      type: 'handoff',
-      destinations: member.handoffDestinations.map((dest) => ({
-        type: 'assistant',
-        assistantName: dest.assistantName,
-        description: dest.description,
-        message: ' ', // Silent handoff
-        ...(dest.contextEngineeringPlan && {
-          contextEngineeringPlan: dest.contextEngineeringPlan,
-        }),
-        ...(dest.variableExtractionPlan && {
-          variableExtractionPlan: dest.variableExtractionPlan,
-        }),
-      })),
-    };
-
-    // Handoff tool goes in model.tools alongside other inline tools
-    if (!modelConfig.tools) {
-      modelConfig.tools = [];
-    }
-    (modelConfig.tools as unknown[]).push(handoffTool);
-
     return {
       assistant: assistantPayload,
     };
