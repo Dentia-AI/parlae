@@ -98,12 +98,12 @@ export interface VapiSquadConfig {
   members: Array<{
     assistantId?: string;
     assistant?: VapiAssistantConfig;
-    /** @deprecated v3.x legacy — use handoff tools in model.tools instead */
     assistantDestinations?: Array<{
       type: 'assistant';
       assistantName: string;
       message?: string;
       description?: string;
+      transferMode?: string;
     }>;
   }>;
 }
@@ -489,6 +489,9 @@ class VapiService {
           const standaloneToolCount = assistantConfig.toolIds?.length || 0;
           const hasAnalysis = !!(assistantConfig.analysisPlan || assistantConfig.analysisSchema);
 
+          const destNames = member.assistantDestinations
+            ?.map((d: any) => d.assistantName) || [];
+
           logger.info({
             assistantName: assistantConfig.name,
             standaloneToolCount,
@@ -497,6 +500,8 @@ class VapiService {
             serverUrl: assistantConfig.serverUrl,
             toolIds: assistantConfig.toolIds?.slice(0, 5),
             inlineToolNames: assistantConfig.tools?.map((t: any) => t.function?.name || t.type).slice(0, 5),
+            assistantDestinationCount: destNames.length,
+            assistantDestinations: destNames,
             memberIndex: `${memberIdx + 1}/${config.members.length}`,
           }, '[Vapi] Creating assistant for squad member');
 
@@ -582,8 +587,9 @@ class VapiService {
    *
    * Vapi assistant schema:
    * - Standalone tools are referenced via `model.toolIds` (array of Vapi tool IDs).
-   * - Inline tools (transferCall, handoff, endCall) go in `model.tools`.
+   * - Inline tools (transferCall, endCall) go in `model.tools`.
    * - Function tools also go in `model.tools` as FALLBACK when no standalone toolIds exist.
+   * - Handoff routing uses `assistantDestinations` at the squad member level (not tools).
    * - `analysisPlan` goes at the assistant level.
    * - `server` object with `url` + `credentialId` for lifecycle webhooks (replaces serverUrl/serverUrlSecret).
    */
@@ -594,9 +600,10 @@ class VapiService {
       voiceId: config.voice?.voiceId,
     };
 
-    // All inline tools go in model.tools (transferCall, handoff, endCall, function fallback).
-    // The POST /assistant API does NOT accept a top-level `tools` property — everything
-    // must go through model.tools for standalone assistants.
+    // Separate tools into standalone (referenced by ID) and inline (model.tools).
+    // NOTE: Handoff routing is handled via assistantDestinations at the squad member
+    // level, NOT via inline tools. The POST /assistant API does not support handoff
+    // tools; Vapi auto-generates transfer tools from assistantDestinations.
     const toolIds: string[] = config.toolIds || [];
     const inlineTools: unknown[] = [];
 
@@ -604,9 +611,7 @@ class VapiService {
       for (const tool of config.tools) {
         const t = tool as any;
 
-        if (t.type === 'handoff') {
-          inlineTools.push(t);
-        } else if (t.type === 'transferCall') {
+        if (t.type === 'transferCall') {
           if (t.destinations) {
             const validDests = t.destinations.filter((d: any) =>
               d.type !== 'number' || /^\+\d{10,15}$/.test(d.number),
@@ -649,7 +654,7 @@ class VapiService {
       modelConfig.toolIds = toolIds;
     }
 
-    // Inline tools (transferCall, handoff, endCall, function fallback)
+    // Inline tools (transferCall, endCall, function fallback)
     if (inlineTools.length > 0) {
       modelConfig.tools = inlineTools;
     }
@@ -746,9 +751,6 @@ class VapiService {
         standaloneToolIdList: modelToolIds.slice(0, 5),
         inlineToolCount: modelTools.length,
         inlineToolTypes: modelTools.map((t: any) => t.type || t.function?.name).slice(0, 10),
-        handoffDestinations: modelTools
-          .filter((t: any) => t.type === 'handoff')
-          .flatMap((t: any) => t.destinations?.map((d: any) => d.assistantName) || []),
         hasAnalysisPlan: !!analysisPlan,
         hasStructuredDataPlan: !!analysisPlan?.structuredDataPlan,
         structuredDataEnabled: analysisPlan?.structuredDataPlan?.enabled,

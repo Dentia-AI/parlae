@@ -468,36 +468,7 @@ function buildMemberPayload(
     assistantPayload.toolIds = standaloneToolIds;
   }
 
-  // v4.0: Build explicit handoff tools from handoffDestinations.
-  // Each destination becomes its own Vapi "handoff" tool — the "multiple tools"
-  // pattern recommended by Vapi for OpenAI models. This gives the LLM a separate
-  // function per destination (e.g., handoff_to_Emergency, handoff_to_BookingAgent)
-  // making routing decisions more reliable.
-  if (member.handoffDestinations && member.handoffDestinations.length > 0) {
-    for (const dest of member.handoffDestinations) {
-      inlineTools.push({
-        type: 'handoff',
-        destinations: [
-          {
-            type: 'assistant',
-            assistantName: dest.assistantName,
-            description: dest.description,
-            message: ' ',
-            ...(dest.contextEngineeringPlan && {
-              contextEngineeringPlan: dest.contextEngineeringPlan,
-            }),
-            ...(dest.variableExtractionPlan && {
-              variableExtractionPlan: dest.variableExtractionPlan,
-            }),
-          },
-        ],
-      });
-    }
-  }
-
-  // Inline tools (transferCall, handoff, endCall, or legacy function tools)
-  // Handoff tools MUST be in assistant.tools, NOT model.tools — Vapi reads them
-  // from the assistant-level tools array for squad member routing.
+  // Inline tools (transferCall, endCall, or legacy function tools)
   if (inlineTools.length > 0) {
     assistantPayload.tools = inlineTools;
   }
@@ -515,10 +486,23 @@ function buildMemberPayload(
     },
   };
 
-  // If handoffDestinations were provided, skip legacy assistantDestinations
+  // v4.1: Convert handoffDestinations to assistantDestinations on the squad member.
+  // Vapi's POST /assistant API does NOT accept a `tools` property, and handoff tools
+  // in model.tools are not recognized for squad routing. The only approach that creates
+  // visible connections in the Vapi dashboard is `assistantDestinations` at the squad
+  // member level. Vapi auto-generates transfer tools for the LLM from these.
   if (member.handoffDestinations && member.handoffDestinations.length > 0) {
+    const handoffAsDests = member.handoffDestinations.map((dest) => ({
+      type: 'assistant' as const,
+      assistantName: dest.assistantName,
+      description: dest.description,
+      message: ' ',
+      transferMode: 'swap-system-message-in-history' as const,
+    }));
+
     return {
       assistant: assistantPayload,
+      assistantDestinations: handoffAsDests,
     };
   }
 
