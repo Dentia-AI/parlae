@@ -1,5 +1,5 @@
 /**
- * Dental Clinic Squad Template v4.1
+ * Dental Clinic Squad Template v4.2
  *
  * Restructured from 7 assistants to 6 focused agents:
  *   1. Receptionist (merged Triage + Clinic Info) — entry point, answers common Qs
@@ -35,8 +35,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v4.1';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.1';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v4.2';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.2';
 
 // ---------------------------------------------------------------------------
 // System prompts — short, focused, MANDATORY RULES at top
@@ -528,7 +528,7 @@ const PATIENT_CONTEXT_EXTRACTION = {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the built-in dental clinic squad template (v4.1).
+ * Returns the built-in dental clinic squad template (v4.2).
  * All clinic-specific values use {{placeholder}} syntax.
  * Tools are referenced by group key and injected at hydration time.
  */

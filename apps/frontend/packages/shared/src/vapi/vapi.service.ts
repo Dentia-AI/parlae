@@ -62,6 +62,8 @@ export interface VapiAssistantConfig {
   silenceTimeoutSeconds?: number;
   /** Arbitrary metadata stored on the Vapi assistant (e.g. templateVersion) */
   metadata?: Record<string, unknown>;
+  /** Vapi hooks for platform-level event handling (e.g. customer.speech.timeout) */
+  hooks?: unknown[];
 }
 
 /**
@@ -706,6 +708,11 @@ class VapiService {
     }
     if (config.silenceTimeoutSeconds) {
       payload.silenceTimeoutSeconds = config.silenceTimeoutSeconds;
+    }
+
+    // Hooks (platform-level event handlers like customer.speech.timeout)
+    if (config.hooks && config.hooks.length > 0) {
+      payload.hooks = config.hooks;
     }
 
     // Analysis plan (structured output)

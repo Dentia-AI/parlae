@@ -3,16 +3,18 @@ import {
   Post,
   Body,
   Headers,
-  Logger,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { VapiToolsService } from './vapi-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StructuredLogger } from '../common/structured-logger';
 
 @Controller('vapi')
 export class VapiWebhookController {
-  private readonly logger = new Logger(VapiWebhookController.name);
+  static readonly BACKEND_VERSION = 'v4.2';
+
+  private readonly logger = new StructuredLogger(VapiWebhookController.name);
 
   private static readonly RATE_LIMIT_PER_TOOL = 5;
   private static readonly RATE_LIMIT_TTL_MS = 30 * 60 * 1000;
@@ -26,7 +28,9 @@ export class VapiWebhookController {
   constructor(
     private readonly vapiToolsService: VapiToolsService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.logger.log(`[Vapi Webhook] Backend ${VapiWebhookController.BACKEND_VERSION} initialized`);
+  }
 
   /**
    * POST /vapi/webhook
@@ -57,7 +61,7 @@ export class VapiWebhookController {
 
     if (!silentTypes.has(messageType)) {
       this.logger.log(
-        `[Vapi Webhook] Type: ${messageType}, Call ID: ${callId}`,
+        `[Vapi Webhook ${VapiWebhookController.BACKEND_VERSION}] Type: ${messageType}, Call ID: ${callId}`,
       );
     }
 
