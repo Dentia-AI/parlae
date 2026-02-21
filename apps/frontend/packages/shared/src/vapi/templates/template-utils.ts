@@ -102,10 +102,13 @@ export interface KnowledgeBaseConfig {
  * Assistants that should have access to the clinic's knowledge base query tool.
  */
 export const KB_ASSISTANTS = [
-  // v4.0 assistant names
+  // v4.1: all assistants get KB access to avoid unnecessary handoffs and hallucination
   'Receptionist',
   'Booking Agent',
+  'Appointment Management',
+  'Patient Records',
   'Insurance & Billing',
+  'Emergency',
   // v3.x legacy names (for backward compat with existing squads)
   'Triage Receptionist',
   'Clinic Information',
@@ -416,16 +419,21 @@ function buildMemberPayload(
     maxTokens: a.model.maxTokens,
   };
 
+  // Add clinic query tool for assistants with KB access.
+  // Must be in standaloneToolIds so it flows through assistantPayload.toolIds
+  // and gets picked up by buildAssistantPayload in vapi.service.ts.
+  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
+    if (!standaloneToolIds.includes(runtime.queryToolId)) {
+      standaloneToolIds.push(runtime.queryToolId);
+    }
+  }
+
   // Standalone tools referenced by ID (visible in Vapi Tools UI)
   if (standaloneToolIds.length > 0) {
     modelConfig.toolIds = standaloneToolIds;
   }
 
-  // Add clinic query tool for assistants with KB access
-  if (runtime.queryToolId && KB_ASSISTANTS.includes(a.name)) {
-    const existing = (modelConfig.toolIds as string[]) || [];
-    modelConfig.toolIds = [...existing, runtime.queryToolId];
-  } else if (
+  if (
     runtime.knowledgeFileIds &&
     runtime.knowledgeFileIds.length > 0 &&
     (a.name === 'Triage Receptionist' || a.name === 'Clinic Information' || a.name === 'Receptionist')
@@ -497,7 +505,6 @@ function buildMemberPayload(
       assistantName: dest.assistantName,
       description: dest.description,
       message: ' ',
-      transferMode: 'swap-system-message-in-history' as const,
     }));
 
     return {

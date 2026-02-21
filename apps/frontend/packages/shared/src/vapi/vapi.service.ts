@@ -103,7 +103,6 @@ export interface VapiSquadConfig {
       assistantName: string;
       message?: string;
       description?: string;
-      transferMode?: string;
     }>;
   }>;
 }
