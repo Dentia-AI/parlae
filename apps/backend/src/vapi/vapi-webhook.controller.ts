@@ -182,7 +182,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: JSON.stringify({ error: 'Missing tool name' }),
+            result: this.formatToolError('unknown', 'Missing tool name'),
           },
         ],
       };
@@ -215,7 +215,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: JSON.stringify({ error: rateLimitError }),
+            result: this.formatToolError(toolName, rateLimitError),
           },
         ],
       };
@@ -246,7 +246,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: JSON.stringify({ error: validationError }),
+            result: this.formatToolError(toolName, validationError),
           },
         ],
       };
@@ -295,10 +295,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: JSON.stringify({
-              error: `Unknown tool: ${toolName}`,
-              message: 'This function is not available.',
-            }),
+            result: this.formatToolError(toolName, `Unknown tool: ${toolName}. This function is not available.`),
           },
         ],
       };
@@ -321,26 +318,28 @@ export class VapiWebhookController {
 
       if (hasError) {
         this.logger.warn(`[Vapi Tool Error] ${toolName} | ${logSnippet}`);
-      } else {
-        this.logger.log(`[Vapi Tool Response] ${toolName} | ${logSnippet}`);
+        return {
+          results: [
+            {
+              toolCallId,
+              result: this.formatToolError(toolName, typeof result.error === 'string' ? result.error : resultStr),
+            },
+          ],
+        };
       }
 
+      this.logger.log(`[Vapi Tool Response] ${toolName} | ${logSnippet}`);
       return {
         results: [
           {
             toolCallId,
-            result: resultStr,
+            result: this.formatToolSuccess(toolName, resultStr),
           },
         ],
       };
     } catch (error) {
       const errMsg =
         error instanceof Error ? error.message : 'Tool execution failed';
-      const errorResult = JSON.stringify({
-        error: errMsg,
-        message:
-          "I'm having trouble with that right now. Let me take your information and someone will follow up.",
-      });
 
       this.logger.error(
         `[Vapi Tool Error] ${toolName} THROWN | ${errMsg}`,
@@ -350,7 +349,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: errorResult,
+            result: this.formatToolError(toolName, errMsg),
           },
         ],
       };
@@ -447,7 +446,7 @@ export class VapiWebhookController {
         }
         if (!params.phone && !params.phoneNumber) {
           errors.push(
-            'Phone number is required. Use the caller\'s phone number from the call metadata.',
+            'Phone number is required. If the caller\'s phone number is available in the call metadata, use it. Otherwise, ask the caller for their phone number.',
           );
         }
         if (!params.email) {
@@ -487,7 +486,7 @@ export class VapiWebhookController {
       case 'getPatientInfo': {
         if (!params.query && !params.phone && !params.name && !params.email && !params.firstName && !params.patientId) {
           errors.push(
-            "A search query is required. Use the caller's phone number (preferred), patient name, or email.",
+            "A search query is required. You must provide at least one of: phone number, patient name, or email. If the caller's phone number is unknown, ask the caller for their name (have them spell it) and search by name instead. Do NOT call this tool again with an empty query.",
           );
         }
         break;
@@ -586,6 +585,43 @@ export class VapiWebhookController {
     }
 
     return errors.length > 0 ? `VALIDATION ERROR: ${errors.join(' ')}` : null;
+  }
+
+  private static readonly TOOL_NEXT_STEPS: Record<string, string> = {
+    createPatient: 'Immediately proceed to book the appointment using bookAppointment. Do NOT pause or wait for the caller.',
+    bookAppointment: 'Tell the caller their booking details: type, date, time. Mention they will receive email and text confirmation. Then ask if there is anything else.',
+    checkAvailability: 'Present the available time slots to the caller and ask which one they prefer.',
+    lookupPatient: 'Continue with the next step in your workflow based on what the caller needs.',
+    cancelAppointment: 'Confirm the cancellation to the caller and offer to reschedule.',
+    rescheduleAppointment: 'Confirm the new appointment details to the caller.',
+    getAppointments: 'Present the appointments to the caller.',
+    getInsurance: 'Share the relevant insurance information with the caller.',
+    getBalance: 'Tell the caller their balance amount.',
+    processPayment: 'Confirm the payment was processed and provide a summary.',
+  };
+
+  /**
+   * Format a successful tool result with a clear [SUCCESS] prefix and next-step
+   * instruction. This ensures the LLM can unambiguously distinguish success from
+   * error and knows exactly what to do next — preventing stalling.
+   */
+  private formatToolSuccess(toolName: string, resultStr: string): string {
+    const nextStep = VapiWebhookController.TOOL_NEXT_STEPS[toolName]
+      || 'Continue the conversation naturally. Tell the caller the result and ask if they need anything else.';
+    return `[SUCCESS] ${resultStr}\n\n[NEXT STEP] ${nextStep}`;
+  }
+
+  /**
+   * Format a tool error with a clear [ERROR] prefix and explicit instructions.
+   * This prevents the LLM from hallucinating success when a tool actually failed.
+   */
+  private formatToolError(toolName: string, errorMsg: string): string {
+    return (
+      `[ERROR] ${toolName} failed: ${errorMsg}\n\n` +
+      `[INSTRUCTIONS] This tool call did NOT succeed. Do NOT tell the caller the action was completed. ` +
+      `Read the error above, ask the caller for any missing information, and retry the tool call. ` +
+      `Keep the conversation going naturally — never go silent.`
+    );
   }
 
   /**

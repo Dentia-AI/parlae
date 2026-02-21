@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
+import { StructuredLogger } from '../common/structured-logger';
 
 @Injectable()
 export class GoogleCalendarService {
-  private readonly logger = new Logger(GoogleCalendarService.name);
+  private readonly logger = new StructuredLogger(GoogleCalendarService.name);
   private oauth2Client: any;
 
   constructor(private readonly prisma: PrismaService) {

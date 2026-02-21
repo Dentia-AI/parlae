@@ -321,6 +321,16 @@ export function buildMemberSystemPrompt(
     systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me connect you with our team right now." and initiate the call. NEVER say "transferring" or "I'm going to transfer you" — just smoothly connect them.`;
   }
 
+  systemPrompt += `\n\n## CONVERSATION FLOW — CRITICAL
+You are on a live phone call. The caller expects a natural, continuous conversation. Follow these rules at ALL times:
+
+1. **NEVER go silent.** After every tool call — success or failure — you MUST immediately speak. Silence loses the caller.
+2. **Read tool results carefully.** Results prefixed with [SUCCESS] mean the action completed. Results prefixed with [ERROR] mean it failed. NEVER say an action was completed if the result says [ERROR].
+3. **On [ERROR]: ask and retry.** The error message tells you exactly what is missing. Ask the caller for that information, then retry. Stay natural: "I just need one more detail to get that done for you."
+4. **On [SUCCESS]: move to the next step.** The result includes a [NEXT STEP] instruction. Follow it immediately without pausing. Chain actions together: create patient → book appointment should feel like one smooth step to the caller.
+5. **Never repeat yourself.** If you already told the caller something (e.g., "Your profile is set up"), do not say it again after a retry.
+6. **You lead the conversation.** Do not wait for the caller to prompt you for the next step. After completing each action, proactively move forward or ask "Is there anything else I can help you with?"`;
+
   systemPrompt += `\n\n## LANGUAGE\nYou are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
 
   return systemPrompt;
@@ -480,6 +490,42 @@ function buildMemberPayload(
   if (inlineTools.length > 0) {
     assistantPayload.tools = inlineTools;
   }
+
+  // Hooks: safety net for conversation continuity.
+  // If the caller is silent after the assistant speaks (e.g., after a tool call),
+  // these hooks nudge the conversation forward instead of letting it stall.
+  assistantPayload.hooks = [
+    {
+      on: 'customer.speech.timeout',
+      options: {
+        timeoutSeconds: 8,
+        triggerMaxCount: 3,
+        triggerResetMode: 'onUserSpeech',
+      },
+      do: [
+        {
+          type: 'say',
+          prompt: 'The caller has been silent. Based on the conversation so far in {{transcript}}, briefly continue with the next step in your workflow or ask if they need anything else. Be concise.',
+        },
+      ],
+      name: 'continue_after_silence',
+    },
+    {
+      on: 'customer.speech.timeout',
+      options: {
+        timeoutSeconds: 20,
+        triggerMaxCount: 2,
+        triggerResetMode: 'onUserSpeech',
+      },
+      do: [
+        {
+          type: 'say',
+          exact: 'Are you still there? I want to make sure I can help you with everything you need.',
+        },
+      ],
+      name: 'check_still_there',
+    },
+  ];
 
   // Analysis plan: enable summaryPlan for automatic call summaries.
   // Structured data extraction is now handled by standalone Vapi Structured Outputs

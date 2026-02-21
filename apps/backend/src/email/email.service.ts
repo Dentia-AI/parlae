@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { StructuredLogger } from '../common/structured-logger';
 
 @Injectable()
 export class EmailService {
-  private readonly logger = new Logger(EmailService.name);
+  private readonly logger = new StructuredLogger(EmailService.name);
   private sesClient: SESClient | null = null;
 
   constructor(private configService: ConfigService) {

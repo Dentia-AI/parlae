@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HipaaAuditService } from '../common/services/hipaa-audit.service';
 import { SecretsService } from '../common/services/secrets.service';
+import { StructuredLogger } from '../common/structured-logger';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import twilio from 'twilio';
@@ -22,7 +23,7 @@ interface CachedPatientData {
 
 @Injectable()
 export class VapiToolsService {
-  private readonly logger = new Logger(VapiToolsService.name);
+  private readonly logger = new StructuredLogger(VapiToolsService.name);
 
   /**
    * Per-call patient cache: stores data from createPatient so bookAppointment

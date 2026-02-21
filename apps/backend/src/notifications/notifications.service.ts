@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { StructuredLogger } from '../common/structured-logger';
 import { TwilioMessagingService } from '../twilio/twilio-messaging.service';
 import { EmailService } from '../email/email.service';
 import { renderAppointmentConfirmation } from '../email/templates/appointment-confirmation.template';
@@ -32,7 +33,7 @@ interface ClinicInfo {
 
 @Injectable()
 export class NotificationsService {
-  private readonly logger = new Logger(NotificationsService.name);
+  private readonly logger = new StructuredLogger(NotificationsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
