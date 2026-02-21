@@ -38,29 +38,25 @@ const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVE
 // ============================================================================
 
 /**
- * Search for patients by phone, name, or email.
- * 
- * Sikka API: GET /patients/search
- * Backend: sikkaService.searchPatients({ query, limit })
- * 
- * The `query` param is a general search - phone numbers, names, or email all work.
- * System prompt should instruct AI to ask for phone first (most reliable identifier).
+ * Look up a patient by phone number, name, or email.
+ *
+ * v4.0: Replaces both `searchPatients` and `getPatientInfo`.
+ * The backend verifies the caller's phone against the patient record
+ * and filters sensitive fields accordingly (HIPAA).
+ *
+ * Backend: routes to lookupPatient handler (also accepts searchPatients / getPatientInfo)
  */
-export const searchPatientsTool = {
+export const lookupPatientTool = {
   type: 'function' as const,
   function: {
-    name: 'searchPatients',
-    description: 'Search for a patient in the practice management system. Accepts phone number, patient name, or email as the search query. Phone number is the most reliable way to find a patient - always try phone first.',
+    name: 'lookupPatient',
+    description: "Look up the caller's patient record. Use the caller's phone number ({{call.customer.number}}) as the query — this is the most reliable identifier and verifies the caller's identity. The backend checks the caller's phone against the record and only returns full details if they match. If identity cannot be verified, you will be prompted to ask for date of birth.",
     parameters: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Search term: phone number (preferred), patient name, or email address. Phone number should be digits only or formatted like +1XXXXXXXXXX.',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return. Default: 5',
+          description: "Search term: caller's phone number (strongly preferred), patient name, or email. Always try the caller's phone number first.",
         },
       },
       required: ['query'],
@@ -88,47 +84,10 @@ export const searchPatientsTool = {
   ],
 };
 
-/**
- * Get detailed patient information by ID.
- * 
- * Sikka API: GET /patients/{patientId}
- * Backend: sikkaService.getPatient(patientId)
- * 
- * Use after searchPatients returns a match to get full details.
- */
-export const getPatientInfoTool = {
-  type: 'function' as const,
-  function: {
-    name: 'getPatientInfo',
-    description: 'Get detailed information about a patient by their patient ID. Use this after finding a patient with searchPatients to get their full record including contact info, last visit, and balance.',
-    parameters: {
-      type: 'object',
-      properties: {
-        patientId: {
-          type: 'string',
-          description: 'The patient ID from the PMS system (returned by searchPatients)',
-        },
-      },
-      required: ['patientId'],
-    },
-  },
-  async: false,
-  server: {
-    url: WEBHOOK_URL,
-    secret: WEBHOOK_SECRET,
-    timeoutSeconds: 15,
-  },
-  messages: [
-    {
-      type: 'request-start' as const,
-      content: 'Let me pull up your details...',
-    },
-    {
-      type: 'request-failed' as const,
-      content: "I'm having trouble accessing your record. Let me verify your information.",
-    },
-  ],
-};
+/** @deprecated v3.x alias — use lookupPatientTool instead */
+export const searchPatientsTool = lookupPatientTool;
+/** @deprecated v3.x alias — use lookupPatientTool instead */
+export const getPatientInfoTool = lookupPatientTool;
 
 /**
  * Create a new patient record.
@@ -579,11 +538,13 @@ export const getAppointmentsTool = {
  * 
  * Sikka API: POST /medical_notes
  * Backend: sikkaService.addPatientNote(patientId, { content, category })
+ *
+ * v4.0: Renamed from addPatientNote → addNote (shorter, unambiguous).
  */
-export const addPatientNoteTool = {
+export const addNoteTool = {
   type: 'function' as const,
   function: {
-    name: 'addPatientNote',
+    name: 'addNote',
     description: "Add a note to a patient's record. Use this to document important information from the call, such as concerns, preferences, allergies, or special requests.",
     parameters: {
       type: 'object',
@@ -623,16 +584,21 @@ export const addPatientNoteTool = {
   ],
 };
 
+/** @deprecated v3.x alias — use addNoteTool instead */
+export const addPatientNoteTool = addNoteTool;
+
 /**
  * Get patient's insurance information.
  * 
  * Sikka API: GET /patients/{patientId}/insurance
  * Backend: sikkaService.getPatientInsurance(patientId)
+ *
+ * v4.0: Renamed from getPatientInsurance → getInsurance.
  */
-export const getPatientInsuranceTool = {
+export const getInsuranceTool = {
   type: 'function' as const,
   function: {
-    name: 'getPatientInsurance',
+    name: 'getInsurance',
     description: "Get a patient's insurance information on file.",
     parameters: {
       type: 'object',
@@ -663,16 +629,21 @@ export const getPatientInsuranceTool = {
   ],
 };
 
+/** @deprecated v3.x alias — use getInsuranceTool instead */
+export const getPatientInsuranceTool = getInsuranceTool;
+
 /**
  * Get patient's account balance.
  * 
  * Sikka API: GET /patient_balance?patient_id={patientId}
  * Backend: sikkaService.getPatientBalance(patientId)
+ *
+ * v4.0: Renamed from getPatientBalance → getBalance.
  */
-export const getPatientBalanceTool = {
+export const getBalanceTool = {
   type: 'function' as const,
   function: {
-    name: 'getPatientBalance',
+    name: 'getBalance',
     description: "Check a patient's account balance.",
     parameters: {
       type: 'object',
@@ -702,6 +673,9 @@ export const getPatientBalanceTool = {
     },
   ],
 };
+
+/** @deprecated v3.x alias — use getBalanceTool instead */
+export const getPatientBalanceTool = getBalanceTool;
 
 /**
  * Get list of providers/dentists.
@@ -738,23 +712,28 @@ export const getProvidersTool = {
 // ============================================================================
 
 /**
- * Add insurance information to a patient record.
+ * Save (add or update) insurance information for a patient.
  *
- * Backend: sikkaService.addPatientInsurance(patientId, insuranceData)
+ * v4.0: Merges addPatientInsurance + updatePatientInsurance into a single tool.
+ * The backend detects whether to create or update based on the presence of insuranceId.
  *
- * Used by the Insurance assistant when a patient provides new insurance info.
+ * Backend: routes to saveInsurance handler (also accepts addPatientInsurance / updatePatientInsurance)
  */
-export const addPatientInsuranceTool = {
+export const saveInsuranceTool = {
   type: 'function' as const,
   function: {
-    name: 'addPatientInsurance',
-    description: 'Add insurance information to a patient record. Requires the patient ID and insurance details. Use when a patient provides new insurance they want on file.',
+    name: 'saveInsurance',
+    description: "Add or update insurance information for a patient. If the patient already has insurance on file (you have an insuranceId), it will update the existing record. Otherwise it creates a new one. Use this whenever a patient provides or changes their insurance details.",
     parameters: {
       type: 'object',
       properties: {
         patientId: {
           type: 'string',
-          description: 'The patient ID from a previous searchPatients call.',
+          description: 'The patient ID.',
+        },
+        insuranceId: {
+          type: 'string',
+          description: 'The existing insurance record ID (from getInsurance results). Omit when adding new insurance.',
         },
         insuranceProvider: {
           type: 'string',
@@ -781,6 +760,10 @@ export const addPatientInsuranceTool = {
           type: 'boolean',
           description: 'Whether this is the primary insurance. Default: true.',
         },
+        isActive: {
+          type: 'boolean',
+          description: 'Set to false to deactivate insurance (e.g., expired coverage).',
+        },
       },
       required: ['patientId', 'insuranceProvider', 'memberId'],
     },
@@ -794,7 +777,7 @@ export const addPatientInsuranceTool = {
   messages: [
     {
       type: 'request-start' as const,
-      content: 'Let me add that insurance information to your record...',
+      content: 'Saving your insurance information...',
     },
     {
       type: 'request-response-delayed' as const,
@@ -807,73 +790,10 @@ export const addPatientInsuranceTool = {
   ],
 };
 
-/**
- * Update existing insurance information for a patient.
- *
- * Backend: sikkaService.updatePatientInsurance(patientId, insuranceId, updates)
- */
-export const updatePatientInsuranceTool = {
-  type: 'function' as const,
-  function: {
-    name: 'updatePatientInsurance',
-    description: 'Update existing insurance information for a patient. Use when a patient needs to change their insurance provider, update their member ID, or correct insurance details.',
-    parameters: {
-      type: 'object',
-      properties: {
-        patientId: {
-          type: 'string',
-          description: 'The patient ID.',
-        },
-        insuranceId: {
-          type: 'string',
-          description: 'The insurance record ID to update (from getPatientInsurance results).',
-        },
-        insuranceProvider: {
-          type: 'string',
-          description: 'Updated insurance company name.',
-        },
-        memberId: {
-          type: 'string',
-          description: 'Updated member/subscriber ID.',
-        },
-        groupNumber: {
-          type: 'string',
-          description: 'Updated group number.',
-        },
-        subscriberName: {
-          type: 'string',
-          description: 'Updated subscriber name.',
-        },
-        subscriberRelationship: {
-          type: 'string',
-          enum: ['self', 'spouse', 'child', 'other'],
-          description: 'Updated relationship to subscriber.',
-        },
-        isActive: {
-          type: 'boolean',
-          description: 'Set to false to deactivate insurance (e.g., expired coverage).',
-        },
-      },
-      required: ['patientId', 'insuranceId'],
-    },
-  },
-  async: false,
-  server: {
-    url: WEBHOOK_URL,
-    secret: WEBHOOK_SECRET,
-    timeoutSeconds: 15,
-  },
-  messages: [
-    {
-      type: 'request-start' as const,
-      content: 'Updating your insurance information...',
-    },
-    {
-      type: 'request-failed' as const,
-      content: "I wasn't able to update that right now. Our team will follow up.",
-    },
-  ],
-};
+/** @deprecated v3.x alias — use saveInsuranceTool instead */
+export const addPatientInsuranceTool = saveInsuranceTool;
+/** @deprecated v3.x alias — use saveInsuranceTool instead */
+export const updatePatientInsuranceTool = saveInsuranceTool;
 
 /**
  * Verify insurance coverage and eligibility for a patient.
@@ -1151,11 +1071,10 @@ export const CLINIC_INFO_TOOLS = [
  * Handles patient data queries and updates (HIPAA-sensitive health data)
  */
 export const PATIENT_RECORDS_TOOLS = [
-  searchPatientsTool,
-  getPatientInfoTool,
+  lookupPatientTool,
   createPatientTool,
   updatePatientTool,
-  addPatientNoteTool,
+  addNoteTool,
 ];
 
 /**
@@ -1181,6 +1100,52 @@ export const PAYMENT_TOOLS = [
   processPaymentTool,
   createPaymentPlanTool,
 ];
+
+// ============================================================================
+// v4.0 Tool Groups — Focused sets for the restructured squad
+// ============================================================================
+
+/**
+ * Booking Agent tools — new appointment booking only (4 tools)
+ */
+export const BOOKING_TOOLS = [
+  lookupPatientTool,
+  createPatientTool,
+  checkAvailabilityTool,
+  bookAppointmentTool,
+];
+
+/**
+ * Appointment Management tools — cancel, reschedule, lookup (4 tools)
+ */
+export const APPOINTMENT_MGMT_TOOLS = [
+  lookupPatientTool,
+  getAppointmentsTool,
+  rescheduleAppointmentTool,
+  cancelAppointmentTool,
+];
+
+/**
+ * Receptionist tools — general info, no patient-sensitive ops (1 tool + KB at runtime)
+ */
+export const RECEPTIONIST_TOOLS = [
+  getProvidersTool,
+];
+
+/**
+ * Insurance & Billing tools — combined coverage + payment (5 tools)
+ */
+export const INSURANCE_BILLING_TOOLS = [
+  lookupPatientTool,
+  getInsuranceTool,
+  verifyInsuranceCoverageTool,
+  getBalanceTool,
+  processPaymentTool,
+];
+
+// ============================================================================
+// Legacy tool groups (v3.x) — kept for backward compatibility
+// ============================================================================
 
 /**
  * All PMS tools combined (deduplicated)
@@ -1227,105 +1192,20 @@ export function addPmsToolsToAssistant(assistantConfig: any) {
  * No need to ask for the phone number — Vapi provides it.
  */
 export const PMS_SYSTEM_PROMPT_ADDITION = `
-## PRACTICE MANAGEMENT SYSTEM ACCESS
-
-You have access to the following scheduling tools (use exact names):
-- **searchPatients** — Find patient by phone, name, or email
-- **createPatient** — Create a new patient record
-- **checkAvailability** — Check available slots (auto-finds nearest openings if requested date is full)
-- **bookAppointment** — Book an appointment
-- **rescheduleAppointment** — Change an existing appointment time
-- **cancelAppointment** — Cancel an appointment
-- **getAppointments** — Look up existing appointments
-- **addPatientNote** — Add notes to the patient's record
-- **getProviders** — List available providers and specialties
-
-Note: Insurance, billing, and patient record updates are handled by separate specialists.
-If the caller asks about those, transfer them to the appropriate assistant.
-
-## CALLER PHONE NUMBER
-
-The caller is calling from: {{call.customer.number}}
-**You do NOT need to ask for their phone number.** Use {{call.customer.number}} when searching for patient records or creating new patients.
-
-## CURRENT DATE & TIME
-
-Right now it is: {{now}}
-ALWAYS use dates from this year (2026 or later) when checking availability. NEVER use dates from 2023, 2024, or 2025. If the caller says "today", use today's date from above in YYYY-MM-DD format.
-
-## APPOINTMENT BOOKING FLOW
-
-**KEY PRINCIPLE: Check availability FIRST, collect patient info AFTER a time is chosen.**
-This is faster for the caller — no point collecting details before they know if a good time is available.
-
-1. **Determine need** — If the caller hasn't already stated what they want, ask briefly: what type of service and preferred date/time. If they already told you (e.g. "I want a cleaning tomorrow"), skip to step 2.
-2. **Check availability** — Call **checkAvailability** with the requested date (use today's date from the CURRENT DATE section above in YYYY-MM-DD format). If that date is full, the system **automatically returns the 2-3 nearest available slots** across the next 14 days — present those to the caller instead of calling the tool again.
-3. **Present options** — Offer the returned time slots. Only call checkAvailability again if the caller rejects ALL offered options and asks for a specific different date.
-4. **Identify patient** (after caller picks a time) — Call **searchPatients** with {{call.customer.number}}.
-   - **If found**: Confirm identity ("I see your record for [Name], is that correct?"). Confirm their email and phone are still correct.
-   - **If NOT found (new patient)**: You MUST collect ALL of these before calling createPatient:
-     1. Ask for name → ask them to spell it
-     2. Ask for email → ask them to spell it
-     3. Confirm phone number for text confirmation
-     Then call **createPatient** with firstName, lastName, email, and phone. After createPatient succeeds, immediately continue to booking — do NOT pause.
-5. **Confirm details** — Read back: patient name, date, time, service type, confirmation method
-6. **Book** — Call **bookAppointment**. For new patients include firstName, lastName, email, phone. For existing patients, include them if you confirmed/updated them. After booking succeeds, immediately tell the caller the confirmation details — do NOT wait for them to respond.
-7. **Post-booking** — Confirm booking ("You'll get a confirmation by email and text"), and add call notes via **addPatientNote**
-
-## CANCEL/RESCHEDULE FLOW
-
-1. **Auto-identify** — call **searchPatients** with {{call.customer.number}}
-2. **Find appointment** — Call **getAppointments** with patientId
-3. **Confirm which** — If multiple, ask which one
-4. **For cancel**: Call **cancelAppointment**, ask for reason, offer to reschedule
-5. **For reschedule**: Call **checkAvailability**, then **rescheduleAppointment**
-
-## NEW PATIENT FLOW
-
-When **searchPatients** returns no results (this happens AFTER the caller has already selected a time slot):
-1. "I just need a few quick details to get you booked. May I have your first and last name?"
-2. **ALWAYS ask them to spell it**: "Could you spell that for me?" — Names are often misheard on the phone.
-3. Ask for email: "What email should I send the appointment confirmation to?"
-4. Confirm phone: "And is {{call.customer.number}} the best number for a text reminder?"
-5. Call **createPatient** with firstName, lastName, and phone {{call.customer.number}}
-6. **IMPORTANT: Immediately continue to book the appointment — do NOT pause. Call bookAppointment with patientId, firstName, lastName, email, phone, appointmentType, startTime, duration, notes.**
-
-## EXISTING PATIENT FLOW
-
-When **searchPatients** FINDS a record:
-1. Confirm identity: "I see a record for [Name]. Is that you?"
-2. Confirm contact details: "Is [email on file] still the best email? And is {{call.customer.number}} the best number for confirmation?"
-3. Proceed directly to **bookAppointment** — no need to collect name or create a record.
-4. Include firstName, lastName, email in bookAppointment if you confirmed or updated them.
-
 ## DATA FORMATTING
-- Dates: Use today's actual date for same-day requests. Always use YYYY-MM-DD format (e.g., 2026-02-17)
+- Dates: Always use YYYY-MM-DD format (e.g., 2026-02-17). Use today's actual date for same-day requests.
 - Times: ISO 8601 (e.g., 2026-02-17T10:00:00Z)
 - Duration: minutes (30, 60, 90)
 - Phone: digits or +1XXXXXXXXXX format
 - **NEVER use a made-up or example date** — always use the real current date or the date the caller requests
 
 ## HIPAA & PRIVACY
+- The **lookupPatient** tool verifies the caller automatically by matching their phone number. Check the \`callerVerified\` field in the response.
+- If \`callerVerified: false\`, ask the caller to confirm their date of birth before sharing any details.
+- If \`familyAccount: true\`, ask which family member they are calling about before proceeding.
 - Never share patient information with unauthorized parties
-- Only access records for the current caller
-- Don't read back sensitive data unless the patient asks
+- Don't read back sensitive data (DOB, balance, insurance) unless the patient asks
+- Do NOT provide medical advice, diagnoses, or treatment recommendations. If asked, say: "That's a great question for your dentist. I can help you schedule an appointment to discuss that."
+- If a balance is returned, state the amount without commenting on whether it's high or low.
 - All PMS access is HIPAA audit-logged
-
-## GOOGLE CALENDAR MODE
-
-All scheduling tools (searchPatients, createPatient, checkAvailability, bookAppointment) work in both PMS and Google Calendar mode — the backend handles the routing automatically.
-
-When running in Google Calendar mode:
-- **searchPatients** will return no results (no patient database) — this is expected
-- **createPatient** will note the patient info and return success — proceed to booking
-- **bookAppointment** will create a Google Calendar event with all patient details in the event notes
-- **checkAvailability** will check the Google Calendar free/busy schedule. If the requested date is full, it automatically scans ahead up to 14 days and returns the 2-3 nearest available slots. Present those options to the caller — do NOT call checkAvailability again unless the caller rejects all options.
-- **addPatientNote** will succeed (notes are stored with the booking) — use this to record email and other details
-- Always include firstName, lastName, email, phone, and any notes when calling **bookAppointment** so the details appear in the calendar event and invitation
-
-## ERROR HANDLING
-- If a tool call fails, apologize and try an alternative approach
-- If scheduling system is down, offer to take information manually for callback
-- If neither PMS nor Google Calendar is connected, offer to take a message
-- Never leave the patient without a resolution path
 `;

@@ -6,6 +6,11 @@ import { GoogleCalendarService } from '../google-calendar/google-calendar.servic
 import { NotificationsService } from '../notifications/notifications.service';
 import twilio from 'twilio';
 
+const ANTI_HALLUCINATION_DISCLAIMER =
+  'IMPORTANT: Do not provide medical advice, diagnoses, or treatment recommendations. ' +
+  'If the caller asks medical questions, say: "That\'s a great question for your dentist. ' +
+  'I can help you schedule an appointment to discuss that."';
+
 interface CachedPatientData {
   firstName: string;
   lastName: string;
@@ -371,114 +376,50 @@ export class VapiToolsService {
     }
   }
 
+  /** @deprecated v3.x — routes to lookupPatient */
   async getPatientInfo(payload: any) {
-    try {
-      const { call, message } = payload;
-      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
+    return this.lookupPatient(payload);
+  }
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true },
-      });
-
-      if (!phoneRecord?.pmsIntegration) {
-        return {
-          error: 'PMS not configured',
-          message: "Let me get your information manually.",
-        };
-      }
-
-      const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
-      const sikkaService = await pmsService.getPmsService(
-        phoneRecord.accountId,
-        phoneRecord.pmsIntegration.provider,
-        phoneRecord.pmsIntegration.config,
-      );
-
-      // Search by phone or name
-      const searchQuery = params.phone || params.email || params.name || `${params.firstName || ''} ${params.lastName || ''}`.trim();
-      const result = await sikkaService.searchPatients({
-        query: searchQuery,
-        limit: 5,
-      });
-      
-      if (!result.success) {
-        const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
-        throw new Error(errorMsg || 'Patient search failed');
-      }
-      
-      const patients = result.data || [];
-
-      if (patients.length === 0) {
-        return {
-          result: {
-            success: false,
-            message: "I don't see a record for you. Let me create a new patient profile.",
-          },
-        };
-      }
-
-      const patient = patients[0];
-      // HIPAA AUDIT LOG
-      await this.hipaaAudit.logAccess({
-        pmsIntegrationId: phoneRecord.pmsIntegration.id,
-        action: 'getPatientInfo',
-        endpoint: '/patients/search',
-        method: 'GET',
-        vapiCallId: call.id,
-        requestSummary: 'Retrieved patient information during call',
-        responseStatus: 200,
-        responseTime: 0, // TODO: Track actual time
-        phiAccessed: true,
-        phiFields: ['name', 'phone', 'email', 'dateOfBirth', 'lastVisit', 'balance'],
-      });
-
-      return {
-        result: {
-          success: true,
-          patient: {
-            id: patient.id,
-            name: `${patient.firstName} ${patient.lastName}`,
-            lastVisit: patient.lastVisit,
-            balance: patient.balance,
-          },
-          message: `Welcome back, ${patient.firstName}! I see your last visit was on ${patient.lastVisit?.toLocaleDateString()}.`,
-        },
-      };
-    } catch (error) {
-      this.logger.error(error);
-      return {
-        error: 'Patient lookup failed',
-        message: "Let me get your information manually.",
-      };
-    }
+  /** @deprecated v3.x — routes to lookupPatient */
+  async searchPatients(payload: any) {
+    return this.lookupPatient(payload);
   }
 
   /**
-   * Search for patients by name, phone, or email
-   * Separate from getPatientInfo - returns multiple results
+   * Unified patient lookup with HIPAA guardrails (v4.0).
+   *
+   * Replaces both searchPatients and getPatientInfo. Implements:
+   * - Caller phone verification (compares caller phone to patient records)
+   * - PHI field redaction based on verification status
+   * - Single-result filtering for phone-based searches
+   * - Family account handling (multiple patients on one phone)
+   * - Anti-hallucination disclaimers in every response
    */
-  async searchPatients(payload: any) {
+  async lookupPatient(payload: any) {
     const startTime = Date.now();
     try {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
+      const callerPhone = this.normalizePhone(call?.customer?.number || '');
+      const query = params.query || params.phone || params.email || params.name
+        || `${params.firstName || ''} ${params.lastName || ''}`.trim()
+        || callerPhone;
+
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
-        // No PMS configured — Google Calendar-only mode.
-        // There's no patient database to search, so return "not found"
-        // and let the AI collect the info for the calendar event.
-        this.logger.log('[searchPatients] No PMS configured — GCal-only mode, returning no results');
+        this.logger.log('[lookupPatient] No PMS configured — GCal-only mode');
         return {
           result: {
             success: true,
             patients: [],
             count: 0,
+            callerVerified: false,
             message: "I don't have an existing record on file. Could I get your name so I can help you with your appointment?",
             integrationType: 'google_calendar',
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
           },
         };
       }
@@ -492,8 +433,8 @@ export class VapiToolsService {
       );
 
       const result = await sikkaService.searchPatients({
-        query: params.query || '',
-        limit: params.limit || 10,
+        query,
+        limit: 10,
       });
 
       const responseTime = Date.now() - startTime;
@@ -502,11 +443,11 @@ export class VapiToolsService {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
-          action: 'searchPatients',
+          action: 'lookupPatient',
           endpoint: '/patients/search',
           method: 'GET',
           vapiCallId: call.id,
-          requestSummary: `Searched patients: ${params.query}`,
+          requestSummary: `lookupPatient query: ${query}`,
           responseStatus: 500,
           responseTime,
           phiAccessed: false,
@@ -517,42 +458,187 @@ export class VapiToolsService {
 
       const patients = result.data || [];
 
-      // HIPAA AUDIT LOG
+      if (patients.length === 0) {
+        await this.hipaaAudit.logAccess({
+          pmsIntegrationId: phoneRecord.pmsIntegration.id,
+          action: 'lookupPatient',
+          endpoint: '/patients/search',
+          method: 'GET',
+          vapiCallId: call.id,
+          requestSummary: `lookupPatient: no results for "${query}"`,
+          responseStatus: 200,
+          responseTime,
+          phiAccessed: false,
+        });
+        return {
+          result: {
+            success: true,
+            patients: [],
+            count: 0,
+            callerVerified: false,
+            message: "I don't see a record matching that information. Would you like me to create a new patient profile?",
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+          },
+        };
+      }
+
+      const isPhoneQuery = /^\+?\d[\d\s\-()]{6,}$/.test(query.trim());
+      const phoneMatchedPatients = callerPhone
+        ? patients.filter((p: any) => this.normalizePhone(p.phone) === callerPhone)
+        : [];
+
+      const callerVerified = phoneMatchedPatients.length > 0;
+      const matchedSet = callerVerified ? phoneMatchedPatients : patients;
+
+      // Family account: multiple patients on the same phone
+      if (callerVerified && matchedSet.length > 1) {
+        await this.hipaaAudit.logAccess({
+          pmsIntegrationId: phoneRecord.pmsIntegration.id,
+          action: 'lookupPatient',
+          endpoint: '/patients/search',
+          method: 'GET',
+          vapiCallId: call.id,
+          requestSummary: `lookupPatient: family account — ${matchedSet.length} patients on caller phone`,
+          responseStatus: 200,
+          responseTime,
+          phiAccessed: true,
+          phiFields: ['firstName'],
+        });
+
+        return {
+          result: {
+            success: true,
+            callerVerified: true,
+            familyAccount: true,
+            patients: matchedSet.map((p: any) => ({
+              id: p.id,
+              firstName: p.firstName,
+            })),
+            count: matchedSet.length,
+            message: `I found ${matchedSet.length} patients on this phone number. Which family member are you calling about?`,
+            relationshipNote: 'Multiple patients found on this phone number. Ask which family member they need help with.',
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+          },
+        };
+      }
+
+      // Caller verified — return full (but redacted) record for the single match
+      if (callerVerified) {
+        const patient = matchedSet[0];
+
+        if (call?.id) {
+          this.cachePatient(call.id, {
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            phone: patient.phone,
+            email: patient.email,
+            patientId: patient.id,
+            cachedAt: Date.now(),
+          });
+        }
+
+        await this.hipaaAudit.logAccess({
+          pmsIntegrationId: phoneRecord.pmsIntegration.id,
+          action: 'lookupPatient',
+          endpoint: '/patients/search',
+          method: 'GET',
+          vapiCallId: call.id,
+          requestSummary: 'lookupPatient: caller verified via phone match',
+          responseStatus: 200,
+          responseTime,
+          phiAccessed: true,
+          phiFields: ['name', 'email', 'dateOfBirth', 'lastVisit', 'balance'],
+        });
+
+        return {
+          result: {
+            success: true,
+            callerVerified: true,
+            patient: {
+              id: patient.id,
+              name: `${patient.firstName} ${patient.lastName}`,
+              email: patient.email,
+              dateOfBirth: patient.dateOfBirth,
+              lastVisit: patient.lastVisit,
+              balance: patient.balance,
+            },
+            message: `Welcome back, ${patient.firstName}!`,
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+            _balanceNote: patient.balance != null
+              ? 'Do not interpret or comment on whether the balance is high or low. Simply state the amount if the caller asks.'
+              : undefined,
+          },
+        };
+      }
+
+      // NOT verified — phone-based search that didn't match caller, or name-based search
+      // Return minimal info only (no PHI beyond name + id)
+      if (isPhoneQuery) {
+        const patient = patients[0];
+        await this.hipaaAudit.logAccess({
+          pmsIntegrationId: phoneRecord.pmsIntegration.id,
+          action: 'lookupPatient',
+          endpoint: '/patients/search',
+          method: 'GET',
+          vapiCallId: call.id,
+          requestSummary: 'lookupPatient: phone search — caller NOT verified (phone mismatch)',
+          responseStatus: 200,
+          responseTime,
+          phiAccessed: true,
+          phiFields: ['name', 'patientId'],
+        });
+
+        return {
+          result: {
+            success: true,
+            callerVerified: false,
+            patient: {
+              id: patient.id,
+              name: `${patient.firstName} ${patient.lastName}`,
+            },
+            message: `I found a record but could not verify your identity. To protect your privacy, can you please confirm the date of birth on file?`,
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+          },
+        };
+      }
+
+      // Name-based search — never return individual records to unverified callers
       await this.hipaaAudit.logAccess({
         pmsIntegrationId: phoneRecord.pmsIntegration.id,
-        action: 'searchPatients',
+        action: 'lookupPatient',
         endpoint: '/patients/search',
         method: 'GET',
         vapiCallId: call.id,
-        requestSummary: `Searched patients, returned ${patients.length} results`,
+        requestSummary: `lookupPatient: name search — ${patients.length} results, caller NOT verified`,
         responseStatus: 200,
         responseTime,
-        phiAccessed: patients.length > 0,
-        phiFields: patients.length > 0 ? ['name', 'phone', 'dateOfBirth'] : [],
+        phiAccessed: false,
       });
 
       return {
         result: {
           success: true,
-          patients: patients.map((p) => ({
-            id: p.id,
-            name: `${p.firstName} ${p.lastName}`,
-            phone: p.phone,
-            dateOfBirth: p.dateOfBirth,
-          })),
+          callerVerified: false,
+          found: true,
           count: patients.length,
-          message: patients.length > 0 
-            ? `I found ${patients.length} patient(s) matching your search.`
-            : "I didn't find any patients with that information.",
+          message: `I found ${patients.length} record(s). To protect your privacy, can you confirm the phone number on file so I can pull up the right account?`,
+          _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
         },
       };
     } catch (error) {
       this.logger.error(error);
       return {
-        error: 'Patient search failed',
+        error: 'Patient lookup failed',
         message: "I'm having trouble searching our records. Let me take your information manually.",
+        _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
       };
     }
+  }
+
+  private normalizePhone(phone: string): string {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
   }
 
   /**
@@ -1257,6 +1343,18 @@ export class VapiToolsService {
   // Helper: Get Sikka service from Vapi call context
   // Eliminates repeated boilerplate across handlers
   // ============================================================================
+
+  /**
+   * Unified save (add or update) insurance — routes based on presence of insuranceId.
+   */
+  async saveInsurance(payload: any) {
+    const params = payload?.message?.functionCall?.parameters
+      || payload?.functionCall?.parameters || {};
+    if (params.insuranceId) {
+      return this.updatePatientInsurance(payload);
+    }
+    return this.addPatientInsurance(payload);
+  }
 
   /**
    * Add insurance to a patient record

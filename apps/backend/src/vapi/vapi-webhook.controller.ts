@@ -14,6 +14,15 @@ import { PrismaService } from '../prisma/prisma.service';
 export class VapiWebhookController {
   private readonly logger = new Logger(VapiWebhookController.name);
 
+  private static readonly RATE_LIMIT_PER_TOOL = 5;
+  private static readonly RATE_LIMIT_TTL_MS = 30 * 60 * 1000;
+
+  /**
+   * Per-call rate-limit tracker: { callId -> { toolName -> count } }.
+   * Prevents the AI from retrying the same tool in a loop.
+   */
+  private readonly toolCallCounts = new Map<string, Map<string, number>>();
+
   constructor(
     private readonly vapiToolsService: VapiToolsService,
     private readonly prisma: PrismaService,
@@ -197,6 +206,21 @@ export class VapiWebhookController {
       `[Vapi Tool] ${toolName} | ${JSON.stringify(parameters).slice(0, 300)}`,
     );
 
+    // ── Per-call rate limiting ──
+    const callId = payload?.message?.call?.id;
+    const rateLimitError = this.checkToolRateLimit(callId, toolName);
+    if (rateLimitError) {
+      this.logger.warn(`[Vapi Rate Limit] ${toolName} blocked for call ${callId}`);
+      return {
+        results: [
+          {
+            toolCallId,
+            result: JSON.stringify({ error: rateLimitError }),
+          },
+        ],
+      };
+    }
+
     // Resolve the account ID once so tool handlers don't have to do their own lookups.
     // Checks assistant.metadata.accountId first, then falls back to phone lookups.
     const resolvedAccountId = await this.resolveAccountFromCall(
@@ -211,9 +235,44 @@ export class VapiWebhookController {
       accountId: resolvedAccountId,
     };
 
+    // Validate tool parameters before dispatching.
+    // Returns instructive error messages so the LLM can self-correct.
+    const validationError = this.validateToolParams(toolName, parameters);
+    if (validationError) {
+      this.logger.warn(
+        `[Vapi Tool Validation] ${toolName} rejected: ${validationError}`,
+      );
+      return {
+        results: [
+          {
+            toolCallId,
+            result: JSON.stringify({ error: validationError }),
+          },
+        ],
+      };
+    }
+
+    const lookupPatientHandler = (p: any) => this.vapiToolsService.lookupPatient(p);
+    const saveInsuranceHandler = (p: any) => this.vapiToolsService.saveInsurance(p);
+
     const toolMap: Record<string, (p: any) => Promise<any>> = {
-      searchPatients: (p) => this.vapiToolsService.searchPatients(p),
-      getPatientInfo: (p) => this.vapiToolsService.getPatientInfo(p),
+      // v4.0 canonical names
+      lookupPatient: lookupPatientHandler,
+      addNote: (p) => this.vapiToolsService.addPatientNote(p),
+      getInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
+      getBalance: (p) => this.vapiToolsService.getPatientBalance(p),
+      saveInsurance: saveInsuranceHandler,
+
+      // v3.x backward-compat aliases → same handlers
+      searchPatients: lookupPatientHandler,
+      getPatientInfo: lookupPatientHandler,
+      addPatientNote: (p) => this.vapiToolsService.addPatientNote(p),
+      getPatientInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
+      getPatientBalance: (p) => this.vapiToolsService.getPatientBalance(p),
+      addPatientInsurance: saveInsuranceHandler,
+      updatePatientInsurance: saveInsuranceHandler,
+
+      // Unchanged tools
       createPatient: (p) => this.vapiToolsService.createPatient(p),
       updatePatient: (p) => this.vapiToolsService.updatePatient(p),
       checkAvailability: (p) => this.vapiToolsService.checkAvailability(p),
@@ -221,12 +280,7 @@ export class VapiWebhookController {
       rescheduleAppointment: (p) => this.vapiToolsService.rescheduleAppointment(p),
       cancelAppointment: (p) => this.vapiToolsService.cancelAppointment(p),
       getAppointments: (p) => this.vapiToolsService.getAppointments(p),
-      addPatientNote: (p) => this.vapiToolsService.addPatientNote(p),
-      getPatientInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
-      addPatientInsurance: (p) => this.vapiToolsService.addPatientInsurance(p),
-      updatePatientInsurance: (p) => this.vapiToolsService.updatePatientInsurance(p),
       verifyInsuranceCoverage: (p) => this.vapiToolsService.verifyInsuranceCoverage(p),
-      getPatientBalance: (p) => this.vapiToolsService.getPatientBalance(p),
       getPaymentHistory: (p) => this.vapiToolsService.getPaymentHistory(p),
       processPayment: (p) => this.vapiToolsService.processPayment(p),
       createPaymentPlan: (p) => this.vapiToolsService.createPaymentPlan(p),
@@ -343,6 +397,228 @@ export class VapiWebhookController {
     }
 
     return { received: true };
+  }
+
+  /**
+   * Validate tool parameters before dispatching to the service layer.
+   * Returns a human-readable error string for the LLM to self-correct,
+   * or null if validation passes.
+   *
+   * This is the primary enforcement mechanism for business rules that
+   * the LLM might skip (e.g. collecting email before booking).
+   * New rules should be added HERE, not in system prompts.
+   */
+  private validateToolParams(
+    toolName: string,
+    params: Record<string, unknown>,
+  ): string | null {
+    const errors: string[] = [];
+
+    switch (toolName) {
+      case 'bookAppointment': {
+        if (!params.patientId) {
+          errors.push(
+            'Patient ID is required. Look up the patient first using lookupPatient, or create a new patient with createPatient.',
+          );
+        }
+        if (!params.startTime) {
+          errors.push(
+            'Start time is required. Check availability first using checkAvailability, then use the selected time slot.',
+          );
+        }
+        if (!params.email && !params.patientEmail) {
+          errors.push(
+            'Email address is required to book an appointment. Ask the caller for their email address and have them spell it out before booking.',
+          );
+        }
+        if (!params.firstName && !params.lastName) {
+          errors.push(
+            'Patient name is required. Ask for the caller\'s first and last name, and ask them to spell it.',
+          );
+        }
+        break;
+      }
+
+      case 'createPatient': {
+        if (!params.firstName || !params.lastName) {
+          errors.push(
+            'First name and last name are both required. Ask the caller for their full name and have them spell it.',
+          );
+        }
+        if (!params.phone && !params.phoneNumber) {
+          errors.push(
+            'Phone number is required. Use the caller\'s phone number from the call metadata.',
+          );
+        }
+        if (!params.email) {
+          errors.push(
+            'Email address is required to create a patient record. Ask the caller for their email and have them spell it out.',
+          );
+        }
+        break;
+      }
+
+      case 'checkAvailability': {
+        const dateStr = params.date as string;
+        if (!dateStr) {
+          errors.push(
+            'Date is required. Ask the caller what date they prefer, then use YYYY-MM-DD format.',
+          );
+        } else if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          errors.push(
+            `Date must be in YYYY-MM-DD format. You provided "${dateStr}".`,
+          );
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const requested = new Date(dateStr + 'T00:00:00');
+          if (requested < today) {
+            const todayStr = today.toISOString().slice(0, 10);
+            errors.push(
+              `The date ${dateStr} is in the past. Today is ${todayStr}. Use today's date or a future date.`,
+            );
+          }
+        }
+        break;
+      }
+
+      case 'lookupPatient':
+      case 'searchPatients':
+      case 'getPatientInfo': {
+        if (!params.query && !params.phone && !params.name && !params.email && !params.firstName && !params.patientId) {
+          errors.push(
+            "A search query is required. Use the caller's phone number (preferred), patient name, or email.",
+          );
+        }
+        break;
+      }
+
+      case 'addNote':
+      case 'addPatientNote': {
+        if (!params.patientId) {
+          errors.push('Patient ID is required. Look up the patient first using lookupPatient.');
+        }
+        if (!params.content) {
+          errors.push('Note content is required.');
+        }
+        break;
+      }
+
+      case 'getInsurance':
+      case 'getPatientInsurance':
+      case 'getBalance':
+      case 'getPatientBalance': {
+        if (!params.patientId) {
+          errors.push('Patient ID is required. Look up the patient first using lookupPatient.');
+        }
+        break;
+      }
+
+      case 'saveInsurance':
+      case 'addPatientInsurance':
+      case 'updatePatientInsurance': {
+        if (!params.patientId) {
+          errors.push('Patient ID is required. Look up the patient first using lookupPatient.');
+        }
+        if (!params.insuranceProvider) {
+          errors.push('Insurance provider name is required. Ask the caller for their insurance company name.');
+        }
+        if (!params.memberId) {
+          errors.push('Member ID is required. Ask the caller for their insurance member or subscriber ID.');
+        }
+        break;
+      }
+
+      case 'rescheduleAppointment': {
+        if (!params.appointmentId) {
+          errors.push(
+            'Appointment ID is required. Look up the patient\'s appointments first using getAppointments.',
+          );
+        }
+        if (!params.newStartTime && !params.startTime) {
+          errors.push(
+            'New start time is required. Check availability first using checkAvailability.',
+          );
+        }
+        break;
+      }
+
+      case 'cancelAppointment': {
+        if (!params.appointmentId) {
+          errors.push(
+            'Appointment ID is required. Look up the patient\'s appointments first using getAppointments.',
+          );
+        }
+        break;
+      }
+
+      case 'getAppointments': {
+        if (!params.patientId) {
+          errors.push(
+            'Patient ID is required. Look up the patient first using lookupPatient.',
+          );
+        }
+        break;
+      }
+
+      case 'updatePatient': {
+        if (!params.patientId) {
+          errors.push(
+            'Patient ID is required. Look up the patient first using lookupPatient.',
+          );
+        }
+        break;
+      }
+
+      case 'processPayment': {
+        if (!params.patientId) {
+          errors.push(
+            'Patient ID is required. Look up the patient first using lookupPatient.',
+          );
+        }
+        if (!params.amount) {
+          errors.push(
+            'Payment amount is required. Confirm the amount with the caller before processing.',
+          );
+        }
+        break;
+      }
+    }
+
+    return errors.length > 0 ? `VALIDATION ERROR: ${errors.join(' ')}` : null;
+  }
+
+  /**
+   * Per-call rate limiter. Returns an error string if the same tool has been
+   * called more than RATE_LIMIT_PER_TOOL times for the same callId.
+   */
+  private checkToolRateLimit(callId: string | undefined, toolName: string): string | null {
+    if (!callId) return null;
+
+    let callMap = this.toolCallCounts.get(callId);
+    if (!callMap) {
+      callMap = new Map<string, number>();
+      this.toolCallCounts.set(callId, callMap);
+
+      // Lazy cleanup of stale entries
+      if (this.toolCallCounts.size > 500) {
+        const keys = [...this.toolCallCounts.keys()];
+        const toRemove = keys.slice(0, keys.length - 200);
+        for (const k of toRemove) this.toolCallCounts.delete(k);
+      }
+    }
+
+    const count = (callMap.get(toolName) || 0) + 1;
+    callMap.set(toolName, count);
+
+    if (count > VapiWebhookController.RATE_LIMIT_PER_TOOL) {
+      return (
+        `You have already called ${toolName} ${count} times during this call. ` +
+        'If you are not getting the expected result, apologize to the caller and offer to connect them with clinic staff.'
+      );
+    }
+
+    return null;
   }
 
   /**

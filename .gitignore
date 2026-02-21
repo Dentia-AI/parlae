@@ -51,6 +51,10 @@ prisma/generated/
 !terraform.tfvars.example
 .terraform.lock.hcl
 
+# Vapi eval cache & results
+.eval-cache.json
+eval-results-*.json
+
 # Misc
 .eslintcache
 *.tsbuildinfo

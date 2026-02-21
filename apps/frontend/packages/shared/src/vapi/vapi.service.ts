@@ -14,7 +14,7 @@ export interface VapiAssistantConfig {
     similarityBoost?: number;
   };
   model: {
-    provider: 'openai' | 'anthropic' | 'groq';
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai';
     model: string;
     systemPrompt: string;
     temperature?: number;
@@ -59,6 +59,7 @@ export interface VapiAssistantConfig {
     voiceSeconds?: number;
     backoffSeconds?: number;
   };
+  silenceTimeoutSeconds?: number;
   /** Arbitrary metadata stored on the Vapi assistant (e.g. templateVersion) */
   metadata?: Record<string, unknown>;
 }
@@ -95,8 +96,9 @@ export interface VapiTool {
 export interface VapiSquadConfig {
   name: string;
   members: Array<{
-    assistantId?: string; // Reference existing assistant by ID
-    assistant?: VapiAssistantConfig; // Or provide inline assistant config
+    assistantId?: string;
+    assistant?: VapiAssistantConfig;
+    /** @deprecated v3.x legacy — use handoff tools in model.tools instead */
     assistantDestinations?: Array<{
       type: 'assistant';
       assistantName: string;
@@ -698,6 +700,9 @@ class VapiService {
     }
     if (config.stopSpeakingPlan) {
       payload.stopSpeakingPlan = config.stopSpeakingPlan;
+    }
+    if (config.silenceTimeoutSeconds) {
+      payload.silenceTimeoutSeconds = config.silenceTimeoutSeconds;
     }
 
     // Analysis plan (structured output)

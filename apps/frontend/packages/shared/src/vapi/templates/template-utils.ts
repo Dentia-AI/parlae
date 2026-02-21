@@ -12,6 +12,10 @@ import {
   PATIENT_RECORDS_TOOLS,
   INSURANCE_TOOLS,
   PAYMENT_TOOLS,
+  BOOKING_TOOLS,
+  APPOINTMENT_MGMT_TOOLS,
+  RECEPTIONIST_TOOLS,
+  INSURANCE_BILLING_TOOLS,
   PMS_TOOLS,
   PMS_SYSTEM_PROMPT_ADDITION,
 } from '../vapi-pms-tools.config';
@@ -98,6 +102,11 @@ export interface KnowledgeBaseConfig {
  * Assistants that should have access to the clinic's knowledge base query tool.
  */
 export const KB_ASSISTANTS = [
+  // v4.0 assistant names
+  'Receptionist',
+  'Booking Agent',
+  'Insurance & Billing',
+  // v3.x legacy names (for backward compat with existing squads)
   'Triage Receptionist',
   'Clinic Information',
   'Insurance',
@@ -217,6 +226,12 @@ export function hydratePlaceholders(
 // ---------------------------------------------------------------------------
 
 const TOOL_GROUPS: Record<string, unknown[]> = {
+  // v4.0 focused tool groups
+  booking: BOOKING_TOOLS,
+  appointmentMgmt: APPOINTMENT_MGMT_TOOLS,
+  receptionist: RECEPTIONIST_TOOLS,
+  insuranceBilling: INSURANCE_BILLING_TOOLS,
+  // v3.x legacy groups (backward compat)
   scheduling: SCHEDULING_TOOLS,
   emergency: EMERGENCY_TOOLS,
   clinicInfo: CLINIC_INFO_TOOLS,
@@ -289,7 +304,8 @@ export function buildMemberSystemPrompt(
 
   let systemPrompt = hydratePlaceholders(a.systemPrompt, vars);
 
-  if (a.toolGroup === 'scheduling') {
+  const pmsToolGroups = ['scheduling', 'booking', 'appointmentMgmt', 'emergency'];
+  if (pmsToolGroups.includes(a.toolGroup)) {
     systemPrompt = appendPmsPrompt(systemPrompt, vars);
   }
 
@@ -412,12 +428,12 @@ function buildMemberPayload(
   } else if (
     runtime.knowledgeFileIds &&
     runtime.knowledgeFileIds.length > 0 &&
-    (a.name === 'Triage Receptionist' || a.name === 'Clinic Information')
+    (a.name === 'Triage Receptionist' || a.name === 'Clinic Information' || a.name === 'Receptionist')
   ) {
     // Legacy fallback: use model.knowledgeBase if no query tools configured
     modelConfig.knowledgeBase = {
       provider: 'canonical',
-      topK: a.name === 'Triage Receptionist' ? 3 : 5,
+      topK: a.name === 'Receptionist' ? 5 : a.name === 'Triage Receptionist' ? 3 : 5,
       fileIds: runtime.knowledgeFileIds,
     };
   }
@@ -439,6 +455,7 @@ function buildMemberPayload(
     serverUrlSecret: runtime.webhookSecret,
     startSpeakingPlan: { ...a.startSpeakingPlan },
     stopSpeakingPlan: { ...a.stopSpeakingPlan },
+    ...(a.silenceTimeoutSeconds && { silenceTimeoutSeconds: a.silenceTimeoutSeconds }),
   };
 
   // Pass Vapi credential ID so the assistant uses credential-based auth
@@ -469,43 +486,79 @@ function buildMemberPayload(
     },
   };
 
-  // Ensure silent transfers: set message to a single space on every destination
-  // so Vapi doesn't announce "Transferring your call to...". The system prompt
-  // already instructs the assistant to use natural transition phrases.
-  const silentDestinations = member.assistantDestinations.map((dest) => ({
-    ...dest,
-    message: (dest as any).message ?? ' ',
-  }));
+  // v4.0: Build explicit handoff tools from handoffDestinations.
+  // Each destination becomes a Vapi "handoff" tool with context engineering
+  // and variable extraction — replacing the legacy auto-generated transferAssistant.
+  if (member.handoffDestinations && member.handoffDestinations.length > 0) {
+    const handoffTool: Record<string, unknown> = {
+      type: 'handoff',
+      destinations: member.handoffDestinations.map((dest) => ({
+        type: 'assistant',
+        assistantName: dest.assistantName,
+        description: dest.description,
+        message: ' ', // Silent handoff
+        ...(dest.contextEngineeringPlan && {
+          contextEngineeringPlan: dest.contextEngineeringPlan,
+        }),
+        ...(dest.variableExtractionPlan && {
+          variableExtractionPlan: dest.variableExtractionPlan,
+        }),
+      })),
+    };
+
+    // Handoff tool goes in model.tools alongside other inline tools
+    if (!modelConfig.tools) {
+      modelConfig.tools = [];
+    }
+    (modelConfig.tools as unknown[]).push(handoffTool);
+
+    return {
+      assistant: assistantPayload,
+    };
+  }
+
+  // v3.x fallback: use legacy assistantDestinations if no handoffDestinations
+  const legacyDestinations = member.assistantDestinations ?? [];
+  if (legacyDestinations.length > 0) {
+    const silentDestinations = legacyDestinations.map((dest) => ({
+      ...dest,
+      message: (dest as any).message ?? ' ',
+    }));
+
+    return {
+      assistant: assistantPayload,
+      assistantDestinations: silentDestinations,
+    };
+  }
 
   return {
     assistant: assistantPayload,
-    assistantDestinations: silentDestinations,
   };
 }
 
 /**
- * Append the PMS system prompt addition to the scheduling prompt.
- * Inserts it after the "## STYLE & TONE" section (before workflows).
+ * Append the PMS system prompt addition to a scheduling/booking prompt.
+ * Tries insertion before "## APPOINTMENT TYPES" or "## WORKFLOW" sections,
+ * falls back to appending at the end.
  */
 function appendPmsPrompt(
-  schedulingPrompt: string,
-  vars: TemplateVariables,
+  prompt: string,
+  _vars: TemplateVariables,
 ): string {
-  // Insert PMS addition before the "## APPOINTMENT TYPES" section
-  const insertionPoint = '## APPOINTMENT TYPES';
-  const idx = schedulingPrompt.indexOf(insertionPoint);
-
-  if (idx !== -1) {
-    return (
-      schedulingPrompt.slice(0, idx) +
-      PMS_SYSTEM_PROMPT_ADDITION +
-      '\n\n' +
-      schedulingPrompt.slice(idx)
-    );
+  const insertionPoints = ['## APPOINTMENT TYPES', '## WORKFLOW'];
+  for (const point of insertionPoints) {
+    const idx = prompt.indexOf(point);
+    if (idx !== -1) {
+      return (
+        prompt.slice(0, idx) +
+        PMS_SYSTEM_PROMPT_ADDITION +
+        '\n\n' +
+        prompt.slice(idx)
+      );
+    }
   }
 
-  // Fallback: append at the end
-  return schedulingPrompt + '\n\n' + PMS_SYSTEM_PROMPT_ADDITION;
+  return prompt + '\n\n' + PMS_SYSTEM_PROMPT_ADDITION;
 }
 
 // ---------------------------------------------------------------------------
@@ -527,10 +580,12 @@ export function templateToDbShape(template: DentalClinicTemplateConfig) {
     squadConfig: {
       memberCount: template.members.length,
       memberNames: template.members.map((m) => m.assistant.name),
-      destinations: template.members.map((m) => ({
-        name: m.assistant.name,
-        destinations: m.assistantDestinations.map((d) => d.assistantName),
-      })),
+      destinations: template.members.map((m) => {
+        const dests = m.handoffDestinations
+          ? m.handoffDestinations.map((d) => d.assistantName)
+          : (m.assistantDestinations ?? []).map((d) => d.assistantName);
+        return { name: m.assistant.name, destinations: dests };
+      }),
     },
     assistantConfig: {
       members: template.members.map((m) => ({
@@ -628,11 +683,14 @@ export function dbShapeToTemplate(
           analysisSchema: ac.analysisSchema,
           extraTools: ac.extraTools,
         },
+        handoffDestinations: (dest.destinations ?? []).map((d: string) => ({
+          assistantName: d,
+          description: '',
+        })),
+        // Legacy compat: also populate assistantDestinations for v3.x code paths
         assistantDestinations: (dest.destinations ?? []).map((d: string) => ({
           type: 'assistant' as const,
           assistantName: d,
-          // Descriptions are not stored in compact DB form;
-          // the hydration step or the built-in template provides them.
           description: '',
         })),
       };
