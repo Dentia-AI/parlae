@@ -488,7 +488,8 @@ const SHARED_VOICE = {
 
 const SHARED_MODEL = {
   provider: 'openai',
-  model: 'gpt-5-mini',
+  model: 'gpt-4o',
+  // model: 'gpt-5.2-chat-latest',
   temperature: 0.3,
   maxTokens: 500,
 };
