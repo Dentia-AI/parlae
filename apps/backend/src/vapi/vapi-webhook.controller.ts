@@ -12,7 +12,7 @@ import { StructuredLogger } from '../common/structured-logger';
 
 @Controller('vapi')
 export class VapiWebhookController {
-  static readonly BACKEND_VERSION = 'v4.2';
+  static readonly BACKEND_VERSION = 'v4.3';
 
   private readonly logger = new StructuredLogger(VapiWebhookController.name);
 

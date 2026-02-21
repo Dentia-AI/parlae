@@ -318,7 +318,7 @@ export function buildMemberSystemPrompt(
   }
 
   if (runtime.clinicPhoneNumber && toE164(runtime.clinicPhoneNumber)) {
-    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, let me connect you with our team right now." and initiate the call. NEVER say "transferring" or "I'm going to transfer you" — just smoothly connect them.`;
+    systemPrompt += `\n\n## HUMAN HANDOFF\nIf the caller asks to speak with a human, a person, a receptionist, or someone at the clinic at any time, use the transferCall tool IMMEDIATELY. Do not try to persuade them to stay with the AI. Say: "Of course, one moment." and call the transferCall tool. Do NOT say "transferring", "connecting you", or mention any team/agent/specialist names.`;
   }
 
   systemPrompt += `\n\n## CONVERSATION FLOW — CRITICAL
@@ -329,7 +329,8 @@ You are on a live phone call. The caller expects a natural, continuous conversat
 3. **On [ERROR]: ask and retry.** The error message tells you exactly what is missing. Ask the caller for that information, then retry. Stay natural: "I just need one more detail to get that done for you."
 4. **On [SUCCESS]: move to the next step.** The result includes a [NEXT STEP] instruction. Follow it immediately without pausing. Chain actions together: create patient → book appointment should feel like one smooth step to the caller.
 5. **Never repeat yourself.** If you already told the caller something (e.g., "Your profile is set up"), do not say it again after a retry.
-6. **You lead the conversation.** Do not wait for the caller to prompt you for the next step. After completing each action, proactively move forward or ask "Is there anything else I can help you with?"`;
+6. **You lead the conversation.** Do not wait for the caller to prompt you for the next step. After completing each action, proactively move forward or ask "Is there anything else I can help you with?"
+7. **INVISIBLE HANDOFFS.** When calling any handoff tool, say ONLY a brief natural phrase (e.g., "Sure, I can help with that"). NEVER mention agent names, transfers, connections, specialists, or teams. The caller must not know a handoff is happening.`;
 
   systemPrompt += `\n\n## LANGUAGE\nYou are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
 

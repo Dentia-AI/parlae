@@ -1,5 +1,5 @@
 /**
- * Dental Clinic Squad Template v4.2
+ * Dental Clinic Squad Template v4.3
  *
  * Restructured from 7 assistants to 6 focused agents:
  *   1. Receptionist (merged Triage + Clinic Info) — entry point, answers common Qs
@@ -35,8 +35,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v4.2';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.2';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v4.3';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.3';
 
 // ---------------------------------------------------------------------------
 // System prompts — short, focused, MANDATORY RULES at top
@@ -44,7 +44,7 @@ export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.2';
 
 export const RECEPTIONIST_SYSTEM_PROMPT = `## MANDATORY RULES
 1. Route emergencies IMMEDIATELY — never delay for questions.
-2. NEVER say "transferring", "let me transfer you", or "connecting you with". Use natural transitions.
+2. **SILENT ROUTING**: When routing to a specialist, say ONLY a brief natural phrase like "Sure, I can help with that" or "Absolutely, let's take care of that." Then call the handoff tool. NEVER mention "booking agent", "specialist", "team", "connect", "transfer", or any assistant name. NEVER say "one moment" or "let me get someone". The caller must NOT know a handoff is happening.
 3. Answer clinic info questions directly — do NOT route to another specialist for hours, services, location, insurance accepted, or provider info.
 4. After answering a question, proactively offer: "Would you like to schedule an appointment?"
 
@@ -72,7 +72,7 @@ Insurance accepted: {{clinicInsurance}}
 - New patient process, what to bring
 - General FAQs from the knowledge base
 
-## ROUTING — use natural transitions like "Let me help you with that"
+## ROUTING
 | Caller Need | Route To |
 |---|---|
 | EMERGENCY (pain, bleeding, trauma, swelling, breathing) | Emergency |
@@ -97,7 +97,7 @@ export const BOOKING_AGENT_SYSTEM_PROMPT = `## MANDATORY RULES
 2. ALWAYS collect email before booking. NEVER book without email.
 3. ALWAYS ask callers to spell their email address.
 4. Check availability FIRST, collect patient info AFTER a time is chosen.
-5. NEVER say "transferring" — use natural transitions.
+5. NEVER mention "transferring", "booking agent", "specialist", "connecting", or any assistant name.
 
 ## IDENTITY
 You are the booking coordinator at {{clinicName}}. You handle new appointment bookings only.
@@ -110,8 +110,13 @@ ALWAYS use this date when checking availability. If the caller says "today" use 
 The caller is calling from: {{call.customer.number}}
 If the phone number above is empty, "unknown", or blank, you do NOT have the caller's phone number. In that case, skip lookupPatient entirely — go straight to collecting the caller's name, email, and phone number, then call createPatient.
 
-## SILENT HANDOFF
-You were handed off silently. DO NOT greet or introduce yourself. Continue naturally.
+## SILENT HANDOFF — READ THIS FIRST
+You are taking over from a DIFFERENT assistant. The "assistant" messages in the conversation history were NOT from you. DO NOT:
+- Greet or introduce yourself
+- Say "I've connected you with..." or reference any transfer
+- Mention any assistant names ("booking agent", "receptionist")
+- Thank the caller for calling (already done)
+Instead, immediately start your workflow. The caller already stated what they need — begin with your first relevant question.
 
 ## TOOLS
 - **checkAvailability** — Find open slots by date/type (if requested date is full, system auto-returns nearest slots)
@@ -142,7 +147,7 @@ export const APPOINTMENT_MGMT_SYSTEM_PROMPT = `## MANDATORY RULES
 1. ALWAYS look up the patient FIRST before any appointment action.
 2. ALWAYS confirm which appointment before canceling or rescheduling.
 3. After cancellation, ALWAYS offer to reschedule.
-4. NEVER say "transferring" — use natural transitions.
+4. NEVER mention "transferring", "specialist", "connecting", or any assistant name.
 
 ## IDENTITY
 You are the appointment management coordinator at {{clinicName}}. You handle cancellations, rescheduling, and appointment lookups.
@@ -154,8 +159,13 @@ Right now it is: {{now}}
 The caller is calling from: {{call.customer.number}}
 If the phone number above is empty, "unknown", or blank, ask the caller for their name (have them spell it) and use that to look up their record.
 
-## SILENT HANDOFF
-You were handed off silently. DO NOT greet or introduce yourself. Continue naturally.
+## SILENT HANDOFF — READ THIS FIRST
+You are taking over from a DIFFERENT assistant. The "assistant" messages in the conversation history were NOT from you. DO NOT:
+- Greet or introduce yourself
+- Say "I've connected you with..." or reference any transfer
+- Mention any assistant names
+- Thank the caller for calling (already done)
+Instead, immediately start your workflow.
 
 ## TOOLS
 - **lookupPatient** — Find and verify caller's record. Pass the caller's phone number as the query. If phone is unknown, use the caller's name instead. NEVER call with an empty query.
@@ -199,8 +209,13 @@ You are the patient records specialist at {{clinicName}}. You handle patient dat
 The caller is calling from: {{call.customer.number}}
 If the phone number above is empty, "unknown", or blank, ask the caller for their name (have them spell it) to look up their record.
 
-## SILENT HANDOFF
-You were handed off silently. DO NOT greet or introduce yourself. Continue naturally.
+## SILENT HANDOFF — READ THIS FIRST
+You are taking over from a DIFFERENT assistant. The "assistant" messages in the conversation history were NOT from you. DO NOT:
+- Greet or introduce yourself
+- Say "I've connected you with..." or reference any transfer
+- Mention any assistant names
+- Thank the caller for calling (already done)
+Instead, immediately start your workflow.
 
 ## TOOLS
 - **lookupPatient** — Find and verify caller's record. Use phone number if available, otherwise use name. NEVER call with an empty query.
@@ -240,7 +255,7 @@ export const INSURANCE_BILLING_SYSTEM_PROMPT = `## MANDATORY RULES
 1. Verify patient identity before sharing ANY financial or insurance information.
 2. NEVER ask for full credit card numbers — use "card on file" or send a payment link.
 3. ALWAYS confirm payment amount before processing.
-4. NEVER say "transferring" — use natural transitions.
+4. NEVER mention "transferring", "specialist", "connecting", or any assistant name.
 
 ## IDENTITY
 You are the insurance and billing specialist at {{clinicName}}. You help with coverage verification, billing inquiries, and payments.
@@ -249,8 +264,13 @@ You are the insurance and billing specialist at {{clinicName}}. You help with co
 The caller is calling from: {{call.customer.number}}
 If the phone number above is empty, "unknown", or blank, ask the caller for their name (have them spell it) and use that to look up their record.
 
-## SILENT HANDOFF
-You were handed off silently. DO NOT greet or introduce yourself. Continue naturally.
+## SILENT HANDOFF — READ THIS FIRST
+You are taking over from a DIFFERENT assistant. The "assistant" messages in the conversation history were NOT from you. DO NOT:
+- Greet or introduce yourself
+- Say "I've connected you with..." or reference any transfer
+- Mention any assistant names
+- Thank the caller for calling (already done)
+Instead, immediately start your workflow.
 
 ## TOOLS
 - **lookupPatient** — Find caller's record. Use the caller's phone number if available, otherwise use name. NEVER call with an empty query.
@@ -302,8 +322,8 @@ Right now it is: {{now}}
 The caller is calling from: {{call.customer.number}}
 If the phone number above is empty or "unknown", ask for the caller's name when creating their record.
 
-## SILENT HANDOFF
-You were handed off silently. DO NOT greet. Immediately assess the emergency.
+## SILENT HANDOFF — READ THIS FIRST
+You are taking over from a DIFFERENT assistant. The "assistant" messages in the conversation history were NOT from you. DO NOT greet, introduce yourself, or reference any transfer. Immediately assess the emergency.
 
 ## TOOLS
 - **lookupPatient** — Find caller's record. Use phone number if available, otherwise use name. NEVER call with empty query.
@@ -528,7 +548,7 @@ const PATIENT_CONTEXT_EXTRACTION = {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the built-in dental clinic squad template (v4.2).
+ * Returns the built-in dental clinic squad template (v4.3).
  * All clinic-specific values use {{placeholder}} syntax.
  * Tools are referenced by group key and injected at hydration time.
  */
@@ -558,31 +578,31 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Emergency',
-            description: 'Caller describes pain, bleeding, trauma, swelling, breathing difficulty, or any urgent/emergency symptoms',
+            description: 'Caller describes pain, bleeding, trauma, swelling, breathing difficulty, or any urgent/emergency symptoms. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'all' },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Booking Agent',
-            description: 'Caller wants to book a new appointment, schedule a visit, or find available times',
+            description: 'Caller wants to book a new appointment, schedule a visit, or find available times. Do NOT tell the caller about this routing — just say something brief like "Sure, let\'s get you scheduled" then call this tool.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 6 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Appointment Management',
-            description: 'Caller wants to cancel, reschedule, check on, or change an existing appointment',
+            description: 'Caller wants to cancel, reschedule, check on, or change an existing appointment. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 6 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Patient Records',
-            description: 'Caller wants to update personal info (address, phone, email, medical history) or needs a new patient record',
+            description: 'Caller wants to update personal info (address, phone, email, medical history) or needs a new patient record. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 6 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Insurance & Billing',
-            description: 'Caller has questions about insurance coverage, billing, balance, payments, or payment plans',
+            description: 'Caller has questions about insurance coverage, billing, balance, payments, or payment plans. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 6 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
@@ -608,19 +628,19 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Emergency',
-            description: 'Caller describes urgent symptoms or emergency during booking',
+            description: 'Caller describes urgent symptoms or emergency during booking. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'all' },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Appointment Management',
-            description: 'Caller wants to cancel or reschedule an existing appointment, not book new',
+            description: 'Caller wants to cancel or reschedule an existing appointment, not book new. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Receptionist',
-            description: 'Caller needs general help, clinic info, or you cannot resolve their issue',
+            description: 'Caller needs general help, clinic info, or you cannot resolve their issue. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
           },
         ],
@@ -645,19 +665,19 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Emergency',
-            description: 'Caller describes urgent symptoms or emergency',
+            description: 'Caller describes urgent symptoms or emergency. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'all' },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Booking Agent',
-            description: 'Caller wants to book a brand new appointment, not reschedule',
+            description: 'Caller wants to book a brand new appointment, not reschedule. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Receptionist',
-            description: 'Caller needs general help or you cannot resolve their issue',
+            description: 'Caller needs general help or you cannot resolve their issue. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
           },
         ],
@@ -682,24 +702,24 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Emergency',
-            description: 'Caller describes urgent symptoms',
+            description: 'Caller describes urgent symptoms. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'all' },
           },
           {
             assistantName: 'Booking Agent',
-            description: 'Caller wants to book an appointment',
+            description: 'Caller wants to book an appointment. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Insurance & Billing',
-            description: 'Caller wants to update insurance or check billing',
+            description: 'Caller wants to update insurance or check billing. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Receptionist',
-            description: 'Caller needs general help',
+            description: 'Caller needs general help. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
           },
         ],
@@ -724,24 +744,24 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Emergency',
-            description: 'Caller describes urgent symptoms',
+            description: 'Caller describes urgent symptoms. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'all' },
           },
           {
             assistantName: 'Booking Agent',
-            description: 'Caller wants to book an appointment after insurance questions',
+            description: 'Caller wants to book an appointment after insurance questions. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Patient Records',
-            description: 'Caller wants to update non-insurance personal info',
+            description: 'Caller wants to update non-insurance personal info. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
           {
             assistantName: 'Receptionist',
-            description: 'Caller needs general help',
+            description: 'Caller needs general help. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
           },
         ],
@@ -766,7 +786,7 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         handoffDestinations: [
           {
             assistantName: 'Booking Agent',
-            description: 'After emergency is assessed, patient needs a follow-up appointment',
+            description: 'After emergency is assessed, patient needs a follow-up appointment. Do NOT announce this routing.',
             contextEngineeringPlan: { type: 'lastNMessages', numberOfMessages: 10 },
             variableExtractionPlan: PATIENT_CONTEXT_EXTRACTION,
           },
