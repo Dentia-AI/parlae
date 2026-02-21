@@ -582,8 +582,7 @@ class VapiService {
    *
    * Vapi assistant schema:
    * - Standalone tools are referenced via `model.toolIds` (array of Vapi tool IDs).
-   * - Inline tools (transferCall, endCall) go in `model.tools`.
-   * - Handoff tools go in `assistant.tools` (Vapi reads these for squad routing).
+   * - Inline tools (transferCall, handoff, endCall) go in `model.tools`.
    * - Function tools also go in `model.tools` as FALLBACK when no standalone toolIds exist.
    * - `analysisPlan` goes at the assistant level.
    * - `server` object with `url` + `credentialId` for lifecycle webhooks (replaces serverUrl/serverUrlSecret).
@@ -595,36 +594,34 @@ class VapiService {
       voiceId: config.voice?.voiceId,
     };
 
-    // Separate tools into:
-    // - modelInlineTools: go in model.tools (transferCall, endCall, function fallback)
-    // - assistantLevelTools: go in assistant.tools (handoff tools — Vapi reads these
-    //   from the assistant level for squad routing, NOT from model.tools)
+    // All inline tools go in model.tools (transferCall, handoff, endCall, function fallback).
+    // The POST /assistant API does NOT accept a top-level `tools` property — everything
+    // must go through model.tools for standalone assistants.
     const toolIds: string[] = config.toolIds || [];
-    const modelInlineTools: unknown[] = [];
-    const assistantLevelTools: unknown[] = [];
+    const inlineTools: unknown[] = [];
 
     if (config.tools && config.tools.length > 0) {
       for (const tool of config.tools) {
         const t = tool as any;
 
         if (t.type === 'handoff') {
-          assistantLevelTools.push(t);
+          inlineTools.push(t);
         } else if (t.type === 'transferCall') {
           if (t.destinations) {
             const validDests = t.destinations.filter((d: any) =>
               d.type !== 'number' || /^\+\d{10,15}$/.test(d.number),
             );
             if (validDests.length > 0) {
-              modelInlineTools.push({ ...t, destinations: validDests });
+              inlineTools.push({ ...t, destinations: validDests });
             }
           } else {
-            modelInlineTools.push(t);
+            inlineTools.push(t);
           }
         } else if (t.type === 'endCall') {
-          modelInlineTools.push(t);
+          inlineTools.push(t);
         } else if (t.type === 'function') {
           if (toolIds.length === 0) {
-            modelInlineTools.push(t);
+            inlineTools.push(t);
           }
         }
       }
@@ -652,9 +649,9 @@ class VapiService {
       modelConfig.toolIds = toolIds;
     }
 
-    // Inline tools in model (transferCall, endCall, and function tools in fallback mode)
-    if (modelInlineTools.length > 0) {
-      modelConfig.tools = modelInlineTools;
+    // Inline tools (transferCall, handoff, endCall, function fallback)
+    if (inlineTools.length > 0) {
+      modelConfig.tools = inlineTools;
     }
 
     const payload: Record<string, unknown> = {
@@ -664,12 +661,6 @@ class VapiService {
       endCallFunctionEnabled: config.endCallFunctionEnabled ?? true,
       recordingEnabled: config.recordingEnabled ?? true,
     };
-
-    // Handoff tools go at assistant level (payload.tools), not model.tools.
-    // Vapi reads handoff tools from the assistant-level tools array for squad routing.
-    if (assistantLevelTools.length > 0) {
-      payload.tools = assistantLevelTools;
-    }
 
     // Embed template version in Vapi metadata for visibility in dashboard
     if (config.metadata) {
@@ -745,8 +736,7 @@ class VapiService {
     try {
       const builtPayload = this.buildAssistantPayload(config);
       const modelToolIds = (builtPayload as any).model?.toolIds || [];
-      const modelInlineTools = (builtPayload as any).model?.tools || [];
-      const assistantTools = (builtPayload as any).tools || [];
+      const modelTools = (builtPayload as any).model?.tools || [];
       const serverConfig = (builtPayload as any).server;
       const analysisPlan = (builtPayload as any).analysisPlan;
 
@@ -754,11 +744,9 @@ class VapiService {
         name: config.name,
         standaloneToolIds: modelToolIds.length,
         standaloneToolIdList: modelToolIds.slice(0, 5),
-        modelInlineToolCount: modelInlineTools.length,
-        modelInlineToolTypes: modelInlineTools.map((t: any) => t.type || t.function?.name).slice(0, 10),
-        assistantToolCount: assistantTools.length,
-        assistantToolTypes: assistantTools.map((t: any) => t.type).slice(0, 10),
-        handoffDestinations: assistantTools
+        inlineToolCount: modelTools.length,
+        inlineToolTypes: modelTools.map((t: any) => t.type || t.function?.name).slice(0, 10),
+        handoffDestinations: modelTools
           .filter((t: any) => t.type === 'handoff')
           .flatMap((t: any) => t.destinations?.map((d: any) => d.assistantName) || []),
         hasAnalysisPlan: !!analysisPlan,
