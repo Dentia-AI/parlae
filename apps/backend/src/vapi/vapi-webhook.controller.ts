@@ -417,6 +417,19 @@ export class VapiWebhookController {
   ): string | null {
     const errors: string[] = [];
 
+    // Catch template placeholders being passed as values (e.g., "{{call.customer.number}}")
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'string' && /\{\{.*\}\}/.test(value)) {
+        errors.push(
+          `The parameter "${key}" contains a template placeholder "${value}" instead of a real value. ` +
+          `Do NOT pass template variables as tool arguments. Ask the caller for the actual value.`,
+        );
+      }
+    }
+    if (errors.length > 0) {
+      return `VALIDATION ERROR: ${errors.join(' ')}`;
+    }
+
     switch (toolName) {
       case 'bookAppointment': {
         if (!params.patientId) {
@@ -448,9 +461,10 @@ export class VapiWebhookController {
             'First name and last name are both required. Ask the caller for their full name and have them spell it.',
           );
         }
-        if (!params.phone && !params.phoneNumber) {
+        const phone = (params.phone || params.phoneNumber || '') as string;
+        if (!phone.trim() || phone.length < 7) {
           errors.push(
-            'Phone number is required. If the caller\'s phone number is available in the call metadata, use it. Otherwise, ask the caller for their phone number.',
+            'A real phone number is required (at least 7 digits). You must ask the caller: "Could I also get your phone number?" Do NOT proceed without it.',
           );
         }
         if (!params.email) {

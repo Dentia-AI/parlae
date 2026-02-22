@@ -14,7 +14,7 @@ export interface VapiAssistantConfig {
     similarityBoost?: number;
   };
   model: {
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai';
+    provider: 'openai' | 'anthropic' | 'google' | 'groq' | 'xai';
     model: string;
     systemPrompt: string;
     temperature?: number;
