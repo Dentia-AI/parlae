@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Get,
+  Param,
   Body,
   Headers,
   HttpException,
@@ -9,6 +11,15 @@ import {
 import { VapiToolsService } from './vapi-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLogger } from '../common/structured-logger';
+
+interface ToolCallRecord {
+  toolName: string;
+  parameters: Record<string, unknown>;
+  result: string;
+  success: boolean;
+  timestamp: string;
+  durationMs: number;
+}
 
 @Controller('vapi')
 export class VapiWebhookController {
@@ -36,6 +47,32 @@ export class VapiWebhookController {
    * a [FALLBACK] directive is appended telling the AI to transfer to staff.
    */
   private readonly bookingErrorCounts = new Map<string, number>();
+
+  /**
+   * Per-call tool call history for test introspection.
+   * Gated behind ENABLE_TEST_ENDPOINTS env flag.
+   */
+  private readonly toolCallHistory = new Map<string, ToolCallRecord[]>();
+  private static readonly TOOL_HISTORY_MAX_CALLS = 500;
+
+  private recordToolCall(
+    callId: string | undefined,
+    record: ToolCallRecord,
+  ): void {
+    if (!callId || !process.env.ENABLE_TEST_ENDPOINTS) return;
+
+    let history = this.toolCallHistory.get(callId);
+    if (!history) {
+      history = [];
+      this.toolCallHistory.set(callId, history);
+
+      if (this.toolCallHistory.size > VapiWebhookController.TOOL_HISTORY_MAX_CALLS) {
+        const keys = [...this.toolCallHistory.keys()];
+        for (const k of keys.slice(0, keys.length - 200)) this.toolCallHistory.delete(k);
+      }
+    }
+    history.push(record);
+  }
 
   constructor(
     private readonly vapiToolsService: VapiToolsService,
@@ -258,13 +295,13 @@ export class VapiWebhookController {
       this.logger.warn(
         `[Vapi Tool Validation] ${toolName} rejected: ${validationError}`,
       );
+      const formattedValidationError = this.formatToolError(toolName, validationError, callId);
+      this.recordToolCall(callId, {
+        toolName, parameters, result: formattedValidationError,
+        success: false, timestamp: new Date().toISOString(), durationMs: 0,
+      });
       return {
-        results: [
-          {
-            toolCallId,
-            result: this.formatToolError(toolName, validationError, callId),
-          },
-        ],
+        results: [{ toolCallId, result: formattedValidationError }],
       };
     }
 
@@ -317,16 +354,15 @@ export class VapiWebhookController {
       };
     }
 
+    const toolStartMs = Date.now();
     try {
       const result = await handler(toolPayload);
+      const durationMs = Date.now() - toolStartMs;
       const resultStr =
         typeof result === 'string'
           ? result
           : JSON.stringify(result) ?? JSON.stringify({ error: 'No response from tool' });
 
-      // Detect error payloads returned as normal results (not thrown).
-      // Many tool methods catch errors internally and return { error: '...' }
-      // instead of throwing, so they bypass the catch block below.
       const hasError =
         result && typeof result === 'object' && 'error' in result;
 
@@ -334,26 +370,23 @@ export class VapiWebhookController {
 
       if (hasError) {
         this.logger.warn(`[Vapi Tool Error] ${toolName} | ${logSnippet}`);
-        return {
-          results: [
-            {
-              toolCallId,
-              result: this.formatToolError(toolName, typeof result.error === 'string' ? result.error : resultStr, callId),
-            },
-          ],
-        };
+        const formattedError = this.formatToolError(toolName, typeof result.error === 'string' ? result.error : resultStr, callId);
+        this.recordToolCall(callId, {
+          toolName, parameters, result: formattedError,
+          success: false, timestamp: new Date().toISOString(), durationMs,
+        });
+        return { results: [{ toolCallId, result: formattedError }] };
       }
 
       this.logger.log(`[Vapi Tool Response] ${toolName} | ${logSnippet}`);
-      return {
-        results: [
-          {
-            toolCallId,
-            result: this.formatToolSuccess(toolName, resultStr),
-          },
-        ],
-      };
+      const formattedResult = this.formatToolSuccess(toolName, resultStr);
+      this.recordToolCall(callId, {
+        toolName, parameters, result: formattedResult,
+        success: true, timestamp: new Date().toISOString(), durationMs,
+      });
+      return { results: [{ toolCallId, result: formattedResult }] };
     } catch (error) {
+      const durationMs = Date.now() - toolStartMs;
       const errMsg =
         error instanceof Error ? error.message : 'Tool execution failed';
 
@@ -361,15 +394,27 @@ export class VapiWebhookController {
         `[Vapi Tool Error] ${toolName} THROWN | ${errMsg}`,
       );
 
-      return {
-        results: [
-          {
-            toolCallId,
-            result: this.formatToolError(toolName, errMsg, callId),
-          },
-        ],
-      };
+      const formattedError = this.formatToolError(toolName, errMsg, callId);
+      this.recordToolCall(callId, {
+        toolName, parameters, result: formattedError,
+        success: false, timestamp: new Date().toISOString(), durationMs,
+      });
+      return { results: [{ toolCallId, result: formattedError }] };
     }
+  }
+
+  /**
+   * Test introspection endpoint: returns all tool calls made during a specific call.
+   * Gated behind ENABLE_TEST_ENDPOINTS env var — never exposed in production.
+   */
+  @Get('test/call/:callId/tools')
+  getToolCallHistory(@Param('callId') callId: string) {
+    if (!process.env.ENABLE_TEST_ENDPOINTS) {
+      throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+    }
+
+    const history = this.toolCallHistory.get(callId) || [];
+    return { callId, toolCalls: history };
   }
 
   private async handleAssistantRequest(payload: any) {
@@ -582,9 +627,13 @@ export class VapiWebhookController {
       }
 
       case 'getAppointments': {
-        if (!params.patientId) {
+        const hasPatientFilter = params.patientId || params.patientName
+          || params.firstName || params.lastName
+          || params.patientEmail || params.email
+          || params.patientPhone || params.phone;
+        if (!hasPatientFilter) {
           errors.push(
-            'Patient ID is required. Look up the patient first using lookupPatient.',
+            'Patient identification is required. Provide patientId, patientName (or firstName/lastName), email, or phone number to find their appointments.',
           );
         }
         break;

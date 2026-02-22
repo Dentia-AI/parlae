@@ -516,6 +516,64 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Find calendar events matching a patient by name, email, or phone.
+   *
+   * Patient info is embedded in event `summary` ("type - Name") and
+   * `description` (structured block with phone/email). This method
+   * lists events in a date range and filters client-side.
+   */
+  async findEventsByPatient(
+    accountId: string,
+    filters: {
+      patientName?: string;
+      patientEmail?: string;
+      patientPhone?: string;
+    },
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const from = startDate || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const to = endDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
+    const { events } = await this.listEvents(accountId, from, to);
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const nameNorm = filters.patientName ? normalize(filters.patientName) : '';
+    const emailNorm = filters.patientEmail ? filters.patientEmail.toLowerCase() : '';
+    const phoneDigits = filters.patientPhone
+      ? filters.patientPhone.replace(/\D/g, '')
+      : '';
+
+    const matched = events.filter((evt: any) => {
+      const desc = (evt.description || '').toLowerCase();
+      const descDigits = (evt.description || '').replace(/\D/g, '');
+
+      if (nameNorm && normalize(evt.summary || '').includes(nameNorm)) return true;
+      if (emailNorm && desc.includes(emailNorm)) return true;
+      if (phoneDigits && phoneDigits.length >= 7 && descDigits.includes(phoneDigits)) return true;
+
+      return false;
+    });
+
+    this.logger.log({
+      accountId,
+      totalEvents: events.length,
+      matchedEvents: matched.length,
+      filters: {
+        name: filters.patientName || null,
+        email: filters.patientEmail || null,
+        phone: filters.patientPhone ? '***' : null,
+      },
+      msg: 'Patient event search complete',
+    });
+
+    return {
+      success: true,
+      events: matched,
+    };
+  }
+
+  /**
    * Check free/busy time slots for availability
    * Used as fallback for checkAvailability when PMS is not connected
    */

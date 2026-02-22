@@ -2122,7 +2122,10 @@ export class VapiToolsService {
   }
 
   /**
-   * Fallback: Get appointments via Google Calendar
+   * Fallback: Get appointments via Google Calendar.
+   *
+   * When patient info (name, email, phone) is provided, uses
+   * `findEventsByPatient` to filter events. Otherwise returns all events.
    */
   private async getAppointmentsViaGoogleCalendar(
     call: any,
@@ -2152,23 +2155,40 @@ export class VapiToolsService {
       const startDate = params.startDate ? new Date(params.startDate) : today;
       const endDate = params.endDate ? new Date(params.endDate) : ninetyDaysOut;
 
-      const result = await this.googleCalendar.listEvents(
-        accountId!,
-        startDate,
-        endDate,
-      );
+      const patientName = params.patientName
+        || (params.firstName && params.lastName
+          ? `${params.firstName} ${params.lastName}`
+          : params.firstName || params.lastName || '');
+      const patientEmail = params.patientEmail || params.email || '';
+      const patientPhone = params.patientPhone || params.phone || '';
 
-      if (!result.success) {
-        throw new Error('Failed to list calendar events');
+      const hasPatientFilter = !!(patientName || patientEmail || patientPhone);
+
+      let events: any[];
+
+      if (hasPatientFilter) {
+        const result = await this.googleCalendar.findEventsByPatient(
+          accountId!,
+          { patientName, patientEmail, patientPhone },
+          startDate,
+          endDate,
+        );
+        events = result.events || [];
+      } else {
+        const result = await this.googleCalendar.listEvents(
+          accountId!,
+          startDate,
+          endDate,
+        );
+        if (!result.success) throw new Error('Failed to list calendar events');
+        events = result.events || [];
       }
-
-      const events = result.events || [];
 
       return {
         result: {
           success: true,
           integrationType: 'google_calendar',
-          appointments: events.map((evt) => ({
+          appointments: events.map((evt: any) => ({
             id: evt.id,
             date: evt.startTime,
             endTime: evt.endTime,
@@ -2178,8 +2198,10 @@ export class VapiToolsService {
           count: events.length,
           message:
             events.length > 0
-              ? `I found ${events.length} upcoming appointment(s) on the calendar.`
-              : "I don't see any upcoming appointments on the calendar.",
+              ? `I found ${events.length} appointment(s)${hasPatientFilter ? ' matching that patient' : ' on the calendar'}.`
+              : hasPatientFilter
+                ? "I couldn't find any appointments matching that patient. Could you double-check the name or phone number?"
+                : "I don't see any upcoming appointments on the calendar.",
         },
       };
     } catch (error) {
