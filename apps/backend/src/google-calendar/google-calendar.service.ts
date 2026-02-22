@@ -551,6 +551,13 @@ export class GoogleCalendarService {
       const busySlots =
         response.data.calendars?.[calendarId]?.busy || [];
 
+      const roundUpTo15Min = (d: Date): Date => {
+        const ms = d.getTime();
+        const fifteenMin = 15 * 60 * 1000;
+        const rounded = new Date(Math.ceil(ms / fifteenMin) * fifteenMin);
+        return rounded;
+      };
+
       // Generate available slots by finding gaps between busy periods
       const availableSlots: Array<{ startTime: string; endTime: string }> = [];
       let currentSlotStart = dayStart;
@@ -569,9 +576,9 @@ export class GoogleCalendarService {
           });
         }
 
-        // Move past this busy period
+        // Move past this busy period, round up to clean 15-min boundary
         if (busyEnd > currentSlotStart) {
-          currentSlotStart = busyEnd;
+          currentSlotStart = roundUpTo15Min(busyEnd);
         }
       }
 

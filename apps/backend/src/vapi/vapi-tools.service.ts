@@ -21,6 +21,25 @@ interface CachedPatientData {
   cachedAt: number;
 }
 
+function formatDateForSpeech(dateInput: string | Date): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function formatTimeForSpeech(dateInput: string | Date): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  return d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 @Injectable()
 export class VapiToolsService {
   private readonly logger = new StructuredLogger(VapiToolsService.name);
@@ -216,7 +235,7 @@ export class VapiToolsService {
           success: true,
           appointmentId: appointment.id,
           confirmationNumber: appointment.confirmationNumber,
-          message: `Appointment booked for ${new Date(params.startTime || params.datetime).toLocaleString()}`,
+          message: `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}`,
         },
       };
     } catch (error: any) {
@@ -683,7 +702,7 @@ export class VapiToolsService {
               email: params.email,
             },
             integrationType: 'google_calendar',
-            message: `Patient profile created for ${params.firstName || 'the caller'}. Proceed immediately to book the appointment — do not wait for the caller to respond.`,
+            message: `[SUCCESS] Patient created (id: ${patientId}). [NEXT STEP] Call bookAppointment immediately. [WARNING] Do NOT announce "profile created" to the caller — go directly to bookAppointment.`,
           },
         };
       }
@@ -1914,7 +1933,7 @@ export class VapiToolsService {
           success: true,
           appointmentId: result.eventId,
           integrationType: 'google_calendar',
-          message: `Appointment booked for ${startTime.toLocaleString()}. A calendar invitation has been created.${confirmationMsg}`,
+          message: `Appointment booked for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}. A calendar invitation has been created.${confirmationMsg}`,
         },
       };
     } catch (error) {
@@ -1973,7 +1992,13 @@ export class VapiToolsService {
       const daySlots = dayResult.availableSlots || [];
 
       if (daySlots.length > 0) {
-        // Slots found on the requested date — return them
+        const spokenDate = formatDateForSpeech(date + 'T12:00:00');
+        const slotDescriptions = daySlots.map((slot) => {
+          const from = formatTimeForSpeech(slot.startTime);
+          const to = formatTimeForSpeech(slot.endTime);
+          return `${from} to ${to}`;
+        });
+
         return {
           result: {
             success: true,
@@ -1984,7 +2009,7 @@ export class VapiToolsService {
               time: slot.startTime,
               endTime: slot.endTime,
             })),
-            message: `We have ${daySlots.length} available time window(s) on ${date}. Which time works best for you?`,
+            message: `We have ${daySlots.length} available time window(s) on ${spokenDate}: ${slotDescriptions.join(', ')}. Which time works best for you?`,
           },
         };
       }

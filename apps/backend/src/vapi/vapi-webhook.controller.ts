@@ -12,18 +12,30 @@ import { StructuredLogger } from '../common/structured-logger';
 
 @Controller('vapi')
 export class VapiWebhookController {
-  static readonly BACKEND_VERSION = 'v4.3';
+  static readonly BACKEND_VERSION = 'v4.4';
 
   private readonly logger = new StructuredLogger(VapiWebhookController.name);
 
   private static readonly RATE_LIMIT_PER_TOOL = 5;
   private static readonly RATE_LIMIT_TTL_MS = 30 * 60 * 1000;
 
+  private static readonly BOOKING_TOOLS = new Set([
+    'lookupPatient', 'createPatient', 'bookAppointment', 'checkAvailability',
+  ]);
+  private static readonly BOOKING_FALLBACK_THRESHOLD = 3;
+
   /**
    * Per-call rate-limit tracker: { callId -> { toolName -> count } }.
    * Prevents the AI from retrying the same tool in a loop.
    */
   private readonly toolCallCounts = new Map<string, Map<string, number>>();
+
+  /**
+   * Per-call booking error tracker: { callId -> errorCount }.
+   * When errors on booking-critical tools exceed BOOKING_FALLBACK_THRESHOLD,
+   * a [FALLBACK] directive is appended telling the AI to transfer to staff.
+   */
+  private readonly bookingErrorCounts = new Map<string, number>();
 
   constructor(
     private readonly vapiToolsService: VapiToolsService,
@@ -250,7 +262,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: this.formatToolError(toolName, validationError),
+            result: this.formatToolError(toolName, validationError, callId),
           },
         ],
       };
@@ -326,7 +338,7 @@ export class VapiWebhookController {
           results: [
             {
               toolCallId,
-              result: this.formatToolError(toolName, typeof result.error === 'string' ? result.error : resultStr),
+              result: this.formatToolError(toolName, typeof result.error === 'string' ? result.error : resultStr, callId),
             },
           ],
         };
@@ -353,7 +365,7 @@ export class VapiWebhookController {
         results: [
           {
             toolCallId,
-            result: this.formatToolError(toolName, errMsg),
+            result: this.formatToolError(toolName, errMsg, callId),
           },
         ],
       };
@@ -632,14 +644,38 @@ export class VapiWebhookController {
   /**
    * Format a tool error with a clear [ERROR] prefix and explicit instructions.
    * This prevents the LLM from hallucinating success when a tool actually failed.
+   *
+   * When booking-critical tools have failed too many times for a single call,
+   * appends a [FALLBACK] directive instructing the AI to transfer to staff.
    */
-  private formatToolError(toolName: string, errorMsg: string): string {
-    return (
+  private formatToolError(toolName: string, errorMsg: string, callId?: string): string {
+    let base =
       `[ERROR] ${toolName} failed: ${errorMsg}\n\n` +
       `[INSTRUCTIONS] This tool call did NOT succeed. Do NOT tell the caller the action was completed. ` +
       `Read the error above, ask the caller for any missing information, and retry the tool call. ` +
-      `Keep the conversation going naturally — never go silent.`
-    );
+      `Keep the conversation going naturally — never go silent.`;
+
+    if (callId && VapiWebhookController.BOOKING_TOOLS.has(toolName)) {
+      const count = (this.bookingErrorCounts.get(callId) || 0) + 1;
+      this.bookingErrorCounts.set(callId, count);
+
+      if (this.bookingErrorCounts.size > 500) {
+        const keys = [...this.bookingErrorCounts.keys()];
+        for (const k of keys.slice(0, keys.length - 200)) this.bookingErrorCounts.delete(k);
+      }
+
+      if (count >= VapiWebhookController.BOOKING_FALLBACK_THRESHOLD) {
+        this.logger.warn(
+          `[Booking Fallback] Call ${callId}: ${count} booking errors — triggering human transfer fallback`,
+        );
+        base +=
+          `\n\n[FALLBACK] This booking has failed ${count} times. Stop retrying. ` +
+          `Use the transferCall tool NOW to connect the caller with clinic staff. ` +
+          `Say: "Let me connect you with our front desk so they can get this taken care of for you."`;
+      }
+    }
+
+    return base;
   }
 
   /**
