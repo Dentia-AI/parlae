@@ -51,11 +51,11 @@ prisma/generated/
 !terraform.tfvars.example
 .terraform.lock.hcl
 
-# Vapi eval cache & results
-.eval-cache.json
-eval-results-*.json
-eval-sweep-*.json
+# Vapi test results & cache
 chat-results-*.json
+sim-results-*.json
+sim-sweep-*.json
+_test-squad-id.txt
 
 # Misc
 .eslintcache
