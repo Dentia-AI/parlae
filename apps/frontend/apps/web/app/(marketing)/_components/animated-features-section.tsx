@@ -95,20 +95,20 @@ function AnimatedFeatureCard({ feature, index }: { feature: typeof FEATURES[0]; 
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry?.isIntersecting) {
           setIsVisible(true);
           observer.disconnect();
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
     );
 
-    if (cardRef.current) {
-      observer.observe(cardRef.current);
-    }
-
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
@@ -116,11 +116,11 @@ function AnimatedFeatureCard({ feature, index }: { feature: typeof FEATURES[0]; 
     <Card
       ref={cardRef}
       className={cn(
-        'group relative overflow-hidden border-border/50 p-6 transition-all duration-300',
+        'group relative overflow-hidden border-border/50 p-6 transition-shadow duration-300',
         'hover:border-primary/50 hover:shadow-lg',
         isVisible ? 'animate-fade-in-up' : 'opacity-0',
       )}
-      style={{ animationDelay: `${index * 100}ms` }}
+      style={{ animationDelay: `${index * 120}ms` }}
     >
       <div className={cn('mb-4 inline-flex rounded-xl p-3', feature.bgColor)}>
         <feature.icon className={cn('h-6 w-6', feature.color)} />
@@ -133,7 +133,6 @@ function AnimatedFeatureCard({ feature, index }: { feature: typeof FEATURES[0]; 
         <Trans i18nKey={`marketing:${feature.descKey}`} />
       </p>
 
-      {/* Different animation types */}
       {isVisible && feature.type === 'time-saved' && <TimeSavedAnimation metric={feature.metric} />}
       {isVisible && feature.type === 'chart' && <ChartAnimation metric={feature.metric} />}
       {isVisible && feature.type === 'workload' && <WorkloadAnimation metric={feature.metric} />}
@@ -141,7 +140,6 @@ function AnimatedFeatureCard({ feature, index }: { feature: typeof FEATURES[0]; 
       {isVisible && feature.type === 'logos' && <LogosAnimation logos={feature.logos} />}
       {isVisible && feature.type === 'capacity' && <CapacityAnimation metric={feature.metric} />}
 
-      {/* Hover effect */}
       <div className="absolute inset-0 -z-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
         <div className={cn('h-full w-full', feature.bgColor, 'opacity-5')} />
       </div>
@@ -336,10 +334,10 @@ function WorkloadAnimation({ metric }: { metric: any }) {
           </div>
           <div className="bg-muted h-2 overflow-hidden rounded-full">
             <div 
-              className="bg-primary h-full transition-all duration-1000 ease-out"
+              className="bg-primary h-full"
               style={{ 
                 width: `${metric.handled}%`,
-                animation: 'slideIn 1s ease-out'
+                animation: 'slideIn 1s ease-out both'
               }}
             />
           </div>
@@ -353,7 +351,7 @@ function WorkloadAnimation({ metric }: { metric: any }) {
           </div>
           <div className="bg-muted h-2 overflow-hidden rounded-full">
             <div 
-              className="bg-muted-foreground/40 h-full transition-all duration-1000 ease-out"
+              className="bg-muted-foreground/40 h-full"
               style={{ 
                 width: `${metric.byStaff}%`,
                 animation: 'slideIn 1s ease-out 0.5s both'

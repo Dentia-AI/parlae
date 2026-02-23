@@ -581,7 +581,7 @@ export default function KnowledgeBasePage() {
           })}
 
           {/* Info box */}
-          <div className="rounded-xl bg-muted/30 p-4 text-xs text-muted-foreground">
+          <div className="rounded-xl bg-muted/80 p-4 text-xs text-muted-foreground">
             <strong className="text-foreground">How it works:</strong> Your AI receptionist learns from the documents you upload here.
             Organizing by category helps keep things tidy. The more relevant information you provide, the better it can
             answer caller questions. You can skip categories that don&apos;t apply.

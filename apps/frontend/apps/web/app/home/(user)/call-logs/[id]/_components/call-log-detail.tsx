@@ -275,7 +275,7 @@ export function CallLogDetail({ callId }: { callId: string }) {
   return (
     <div className="space-y-4">
       {/* HIPAA Notice */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/80 px-3 py-2 rounded-md">
         <Shield className="h-3.5 w-3.5 flex-shrink-0" />
         <span>HIPAA Protected: This record contains PHI. Your access has been logged.</span>
       </div>

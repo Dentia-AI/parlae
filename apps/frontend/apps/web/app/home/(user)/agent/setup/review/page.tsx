@@ -432,7 +432,7 @@ export default function ReviewPage() {
                     )}
                   </div>
 
-                  <div className="rounded-xl bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                  <div className="rounded-xl bg-muted/80 px-4 py-3 text-xs text-muted-foreground">
                     <strong className="text-foreground"><Trans i18nKey="common:setup.review.readyToLaunch" /></strong>{' '}
                     <Trans i18nKey="common:setup.review.readyToLaunchDesc" />
                   </div>

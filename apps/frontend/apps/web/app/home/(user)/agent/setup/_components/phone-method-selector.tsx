@@ -225,7 +225,7 @@ export function PhoneMethodSelector({
                   </div>
 
                   {/* Best For */}
-                  <div className="flex items-start gap-2 px-3 py-2 bg-muted/30 rounded-lg">
+                  <div className="flex items-start gap-2 px-3 py-2 bg-muted/80 rounded-lg">
                     <Info className="h-3 w-3 text-primary mt-0.5 shrink-0" />
                     <div>
                       <span className="text-xs font-medium">

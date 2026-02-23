@@ -127,7 +127,7 @@ export default function BrandingSettingsPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+      <div className="rounded-xl bg-muted/80 px-4 py-3 text-sm text-muted-foreground">
         {t('common:settings.branding.infoText')}
       </div>
 
@@ -321,7 +321,7 @@ export default function BrandingSettingsPage() {
 
           {/* Preview Section */}
           <div className="pt-4">
-            <div className="rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            <div className="rounded-xl bg-muted/80 px-4 py-3 text-sm text-muted-foreground">
               <strong className="text-foreground">{t('common:settings.branding.preview')}</strong> {t('common:settings.branding.previewNote')}
             </div>
           </div>

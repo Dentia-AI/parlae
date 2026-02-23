@@ -503,7 +503,7 @@ export default function AdminSquadsPage() {
           <CardContent className="space-y-3">
             {/* Account info */}
             {squad.account && (
-              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+              <div className="bg-muted/80 rounded-lg p-3 text-sm">
                 <span className="font-medium">Linked Account:</span>{' '}
                 {squad.account.accountName}
                 {squad.account.phoneNumber && (

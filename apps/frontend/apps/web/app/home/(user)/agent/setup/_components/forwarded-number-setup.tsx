@@ -170,7 +170,7 @@ export function ForwardedNumberSetup({
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       {/* Header info */}
-      <div className="rounded-xl bg-muted/40 p-4 flex items-start gap-3">
+      <div className="rounded-xl bg-muted/80 p-4 flex items-start gap-3">
         <PhoneForwarded className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <div className="text-sm text-muted-foreground">
           <strong className="text-foreground">{t('common:setup.phone.forwarding.headerTitle')}</strong>{' '}
@@ -475,7 +475,7 @@ export function ForwardedNumberSetup({
           </div>
 
           {/* After deployment */}
-          <div className="rounded-xl bg-muted/30 p-4">
+          <div className="rounded-xl bg-muted/80 p-4">
             <div className="flex items-center gap-2 mb-2.5">
               <Phone className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">{t('common:setup.phone.forwarding.afterDeployment')}</span>

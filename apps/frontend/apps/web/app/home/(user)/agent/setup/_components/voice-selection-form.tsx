@@ -192,7 +192,7 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
   return (
     <div className="space-y-4">
       {/* Multilingual info */}
-      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+      <div className="rounded-xl bg-muted/80 px-4 py-3 text-sm text-muted-foreground">
         {t('common:setup.voice.languageBanner')}
       </div>
 

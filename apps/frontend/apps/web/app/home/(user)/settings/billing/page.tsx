@@ -424,7 +424,7 @@ export default function SettingsBillingPage() {
               </div>
 
               {/* Billing Status Note */}
-              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+              <div className="rounded-lg bg-muted/80 p-3 text-xs text-muted-foreground">
                 {billingEnabled ? (
                   <p>
                     <strong>Setup fee:</strong> A one-time {formatCurrency(installationFee)} activation fee is charged when you deploy.
