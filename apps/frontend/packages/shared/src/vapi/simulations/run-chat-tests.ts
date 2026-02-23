@@ -606,8 +606,9 @@ function saveResults(label: string, results: ScenarioResult[]): void {
   const fs = require('fs');
   const path = require('path');
   const ts = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+  const dir = process.env.RESULTS_DIR || path.dirname(new URL(import.meta.url).pathname);
   const file = path.join(
-    path.dirname(new URL(import.meta.url).pathname),
+    dir,
     `chat-results-${label.toLowerCase().replace(/\s+/g, '-')}-${ts}.json`,
   );
 

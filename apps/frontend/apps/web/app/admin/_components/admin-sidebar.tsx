@@ -13,6 +13,7 @@ import {
   GitBranch,
   Receipt,
   Database,
+  FlaskConical,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
@@ -48,6 +49,11 @@ const navigation = [
     name: 'Squad Management',
     href: '/admin/squads',
     icon: Phone,
+  },
+  {
+    name: 'AI Simulations',
+    href: '/admin/simulations',
+    icon: FlaskConical,
   },
   {
     name: 'PMS Integrations',
