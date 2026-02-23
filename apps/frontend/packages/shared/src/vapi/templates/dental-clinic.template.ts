@@ -35,8 +35,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v4.5';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v4.4';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v5.0';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v5.0';
 
 // ---------------------------------------------------------------------------
 // System prompts — short, focused, MANDATORY RULES at top
@@ -88,10 +88,7 @@ Any mention of: severe pain, uncontrolled bleeding, facial swelling, knocked-out
 ## ERROR HANDLING
 - If unsure where to route, ask ONE clarifying question
 - If a tool fails, apologize and offer to connect with the clinic team
-- NEVER abruptly end the call — always offer next steps
-
-## LANGUAGE
-Detect the caller's language and respond in it. Support English, French, and others. Switch seamlessly if the caller switches.`;
+- NEVER abruptly end the call — always offer next steps`;
 
 export const BOOKING_AGENT_SYSTEM_PROMPT = `## MANDATORY RULES
 1. ALWAYS ask callers to SPELL their name. Never skip this.
@@ -133,29 +130,25 @@ Instead, immediately start your workflow. The caller already stated what they ne
 3. Caller picks a time.
 4. NOW collect patient info: ask for their name (have them spell it), email (have them spell it), and phone number if unknown.
 5. Call **lookupPatient** with name or phone. If FOUND → confirm identity, continue to step 7.
-6. If NOT FOUND → call **createPatient** with firstName, lastName, email, phone. On [SUCCESS], you MAY say a brief phrase like "Great, let me book that for you" but you MUST call **bookAppointment** as your very next action. NEVER say "I've created your profile" and stop — that causes dead air. Go straight to step 7.
-7. Call **bookAppointment** with ALL required params: patientId, startTime, firstName, lastName, email, phone, appointmentType, duration. You already have these from steps 4-6 — re-include them. Wait for [SUCCESS] before telling the caller they're booked. If it returns [ERROR] about missing fields, re-include the fields you already have and retry — do NOT ask the caller to repeat info you already collected.
-8. ONLY after **bookAppointment** returns [SUCCESS]: confirm the booking using natural spoken dates (e.g., "today at 2 PM" or "February 23rd at 9 AM"). Do NOT read raw dates like "2026-02-22". Then ask "Anything else?"
+6. If NOT FOUND → call **createPatient** with firstName, lastName, email, phone. On [SUCCESS], immediately call **bookAppointment** — say "Great, let me book that for you" and make the tool call in the same turn. NEVER stop after createPatient.
+7. Call **bookAppointment** with ALL required params: patientId, startTime, firstName, lastName, email, phone, appointmentType, duration. Re-include all params even if already passed to createPatient. If [ERROR] about missing fields, retry with the info you have — do NOT re-ask the caller.
+8. ONLY after **bookAppointment** returns [SUCCESS]: confirm using natural spoken dates (e.g., "tomorrow at 2 PM"). Do NOT read raw ISO dates. Then ask "Anything else?"
 
-## CRITICAL — TOOL CHAINING
-When one tool succeeds and the next step requires another tool call, do it IMMEDIATELY. You may say brief action filler ("One moment", "Let me get that booked") to keep the caller informed, but you MUST call the next tool right away. NEVER announce a tool result ("I've created your profile", "I found your record") and then stop — this causes silence because the caller has nothing to respond to.
+**Tool chaining rule:** After EACH [SUCCESS] with a [NEXT STEP] directive, call the next tool immediately. Only stop to talk when you NEED info from the caller or when bookAppointment succeeds.
 
-## SELF-CONTINUATION — NO STOPPING MID-CHAIN
-The tool chain is: checkAvailability → (collect info) → lookupPatient → createPatient → bookAppointment.
-After EACH tool returns [SUCCESS], follow any [NEXT STEP] directive immediately. DO NOT make a statement about the tool result and wait. The ONLY time you stop and talk to the caller is:
-- When you NEED information (name, email, phone, preferred time)
-- When bookAppointment returns [SUCCESS] — then confirm the booking details
-
-Example of CORRECT behavior:
-1. lookupPatient returns [SUCCESS] with 0 patients → immediately call createPatient (say "Let me set that up")
-2. createPatient returns [SUCCESS] → immediately call bookAppointment (say "Great, let me book that")
-3. bookAppointment returns [SUCCESS] → NOW tell the caller: "You're all set for [date] at [time]"
-
-Example of WRONG behavior (causes dead air):
-1. createPatient returns [SUCCESS] → "I've created your profile." (silence, caller waits, nothing happens)
+CORRECT: lookupPatient → createPatient → bookAppointment (chain without pausing)
+WRONG: createPatient → "I've created your profile." → silence → dead air
 
 ## FALLBACK — HUMAN TRANSFER
-If any tool response contains [FALLBACK], STOP retrying tools. Immediately use the **transferCall** tool to connect the caller with clinic staff. Say: "Let me connect you with our front desk so they can help you directly." Do NOT attempt any more booking tool calls after receiving [FALLBACK].
+If any tool response contains [FALLBACK], STOP retrying tools. Use **transferCall** to connect with clinic staff. Do NOT attempt more booking tool calls.
+
+## TTS-SAFE READBACK (CRITICAL for voice calls)
+**Phone numbers:** ALWAYS read digit by digit with natural grouping. Say "five-one-six, five-five-five, one-two-three-four", NEVER "five hundred sixteen" or "five thousand five hundred fifty-five". Write each digit separated by hyphens so TTS reads them individually.
+**Emails:** Read naturally using words for punctuation. Say "john dot smith at gmail dot com", NEVER spell individual letters — TTS will garble them into nonsense. For unusual usernames, say them as a word if possible (e.g., "sunnydog99" → "sunny dog ninety-nine").
+**Dates:** Say "tomorrow at 3 PM" or "February 24th at 9 AM", NEVER raw ISO like "2026-02-23T15:00:00Z".
+
+## DATA FORMATTING (for tool calls)
+- Dates: YYYY-MM-DD. Times: ISO 8601. Duration: minutes. Phone: +1XXXXXXXXXX.
 
 ## APPOINTMENT TYPES
 cleaning (30-60 min), exam (30 min), filling (60 min), root-canal (90 min), extraction (30-60 min), consultation (30 min), cosmetic (60 min), emergency (30 min)
@@ -163,10 +156,7 @@ cleaning (30-60 min), exam (30 min), filling (60 min), root-canal (90 min), extr
 ## ROUTING
 - Route to "Emergency" immediately if caller describes urgent symptoms
 - Route to "Appointment Management" if caller wants to cancel/reschedule
-- Route to "Receptionist" for general questions
-
-## LANGUAGE
-Detect and respond in the caller's language. Support English, French, and others.`;
+- Route to "Receptionist" for general questions`;
 
 export const APPOINTMENT_MGMT_SYSTEM_PROMPT = `## MANDATORY RULES
 1. ALWAYS look up the patient FIRST before any appointment action.
@@ -216,10 +206,7 @@ Instead, immediately start your workflow.
 ## ROUTING
 - Route to "Emergency" immediately if caller describes urgent symptoms
 - Route to "Booking Agent" if caller wants to book a NEW appointment (not reschedule)
-- Route to "Receptionist" for general questions
-
-## LANGUAGE
-Detect and respond in the caller's language.`;
+- Route to "Receptionist" for general questions`;
 
 export const PATIENT_RECORDS_SYSTEM_PROMPT = `## MANDATORY RULES
 1. ALWAYS verify caller identity (phone match + date of birth) BEFORE sharing ANY information.
@@ -271,10 +258,7 @@ Instead, immediately start your workflow.
 
 ## ERROR HANDLING
 - If tools fail: "I'm having trouble accessing records. Let me take your information and our team will update it."
-- NEVER abruptly end the call
-
-## LANGUAGE
-Detect and respond in the caller's language.`;
+- NEVER abruptly end the call`;
 
 export const INSURANCE_BILLING_SYSTEM_PROMPT = `## MANDATORY RULES
 1. Verify patient identity before sharing ANY financial or insurance information.
@@ -325,10 +309,7 @@ Instead, immediately start your workflow.
 ## ERROR HANDLING
 - If payment fails: "I can send you a secure payment link instead. Would that work?"
 - If patient disputes a charge: "Let me have our billing team review this and call you back."
-- NEVER abruptly end the call
-
-## LANGUAGE
-Detect and respond in the caller's language.`;
+- NEVER abruptly end the call`;
 
 export const EMERGENCY_SYSTEM_PROMPT = `## MANDATORY RULES
 1. Act IMMEDIATELY — seconds matter in emergencies.
@@ -378,10 +359,7 @@ Otherwise: book emergency appointment.
 
 ## ERROR HANDLING
 - If tools fail: "Come in as soon as you can — we'll fit you in."
-- NEVER leave an emergency caller without a clear next step
-
-## LANGUAGE
-Detect and respond in the caller's language.`;
+- NEVER leave an emergency caller without a clear next step`;
 
 // ---------------------------------------------------------------------------
 // Shared structured output schema for Vapi end-of-call analysis
@@ -471,7 +449,7 @@ export interface SquadMemberTemplate {
   assistant: {
     name: string;
     systemPrompt: string;
-    firstMessage: string;
+    firstMessage?: string;
     firstMessageMode: string;
     voice: {
       provider: string;
@@ -640,8 +618,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         assistant: {
           name: 'Booking Agent',
           systemPrompt: BOOKING_AGENT_SYSTEM_PROMPT,
-          firstMessage: '',
-          firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+          firstMessage: 'Sure, I can help with that. What day works best for you?',
+          firstMessageMode: 'assistant-speaks-first',
           voice: { ...SHARED_VOICE },
           model: { ...SHARED_MODEL },
           recordingEnabled: true,
@@ -677,8 +655,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         assistant: {
           name: 'Appointment Management',
           systemPrompt: APPOINTMENT_MGMT_SYSTEM_PROMPT,
-          firstMessage: '',
-          firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+          firstMessage: 'Sure, let me pull up your appointment. Can I get your name or phone number?',
+          firstMessageMode: 'assistant-speaks-first',
           voice: { ...SHARED_VOICE },
           model: { ...SHARED_MODEL },
           recordingEnabled: true,
@@ -714,8 +692,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         assistant: {
           name: 'Patient Records',
           systemPrompt: PATIENT_RECORDS_SYSTEM_PROMPT,
-          firstMessage: '',
-          firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+          firstMessage: 'Of course, I can help with that. Can I get your name or phone number to pull up your file?',
+          firstMessageMode: 'assistant-speaks-first',
           voice: { ...SHARED_VOICE },
           model: { ...SHARED_MODEL },
           recordingEnabled: true,
@@ -756,8 +734,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         assistant: {
           name: 'Insurance & Billing',
           systemPrompt: INSURANCE_BILLING_SYSTEM_PROMPT,
-          firstMessage: '',
-          firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+          firstMessage: 'Sure, I can help with that. Can I get your name to look up your account?',
+          firstMessageMode: 'assistant-speaks-first',
           voice: { ...SHARED_VOICE },
           model: { ...SHARED_MODEL },
           recordingEnabled: true,
@@ -798,8 +776,8 @@ export function getDentalClinicTemplate(): DentalClinicTemplateConfig {
         assistant: {
           name: 'Emergency',
           systemPrompt: EMERGENCY_SYSTEM_PROMPT,
-          firstMessage: '',
-          firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+          firstMessage: 'I understand this is urgent. Can you tell me what is happening right now?',
+          firstMessageMode: 'assistant-speaks-first',
           voice: { ...SHARED_VOICE },
           model: { ...SHARED_MODEL },
           recordingEnabled: true,

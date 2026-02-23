@@ -21,22 +21,24 @@ interface CachedPatientData {
   cachedAt: number;
 }
 
-function formatDateForSpeech(dateInput: string | Date): string {
+function formatDateForSpeech(dateInput: string | Date, tz?: string): string {
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   return d.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
+    ...(tz ? { timeZone: tz } : {}),
   });
 }
 
-function formatTimeForSpeech(dateInput: string | Date): string {
+function formatTimeForSpeech(dateInput: string | Date, tz?: string): string {
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   return d.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    ...(tz ? { timeZone: tz } : {}),
   });
 }
 
@@ -1990,12 +1992,13 @@ export class VapiToolsService {
       }
 
       const daySlots = dayResult.availableSlots || [];
+      const tz = dayResult.timezone;
 
       if (daySlots.length > 0) {
-        const spokenDate = formatDateForSpeech(date + 'T12:00:00');
+        const spokenDate = formatDateForSpeech(date + 'T12:00:00', tz);
         const slotDescriptions = daySlots.map((slot) => {
-          const from = formatTimeForSpeech(slot.startTime);
-          const to = formatTimeForSpeech(slot.endTime);
+          const from = formatTimeForSpeech(slot.startTime, tz);
+          const to = formatTimeForSpeech(slot.endTime, tz);
           return `${from} to ${to}`;
         });
 
@@ -2034,11 +2037,11 @@ export class VapiToolsService {
       );
 
       const nextSlots = multiResult.slots || [];
+      const multiTz = multiResult.timezone;
 
       if (nextSlots.length > 0) {
         const slotDescriptions = nextSlots.map((s) => {
-          const d = new Date(s.startTime);
-          return `${s.date} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+          return `${formatDateForSpeech(s.startTime, multiTz)} at ${formatTimeForSpeech(s.startTime, multiTz)}`;
         });
 
         return {

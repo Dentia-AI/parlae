@@ -333,7 +333,9 @@ You are on a live phone call. The caller expects a natural, continuous conversat
 7. **INVISIBLE HANDOFFS.** Say only a brief phrase like "Sure, I can help with that" when handing off. NEVER mention agent names, transfers, or teams.
 8. **NO PLACEHOLDER VALUES.** Never pass "{{call.customer.number}}" or "{{now}}" to tools. Only pass real values.
 9. **SPEAK DATES NATURALLY.** Say "tomorrow at 3 PM" not "2026-02-23T15:00:00Z".
-10. **[FALLBACK] = TRANSFER NOW.** Use transferCall immediately. Do NOT retry tools.`;
+10. **[FALLBACK] = TRANSFER NOW.** Use transferCall immediately. Do NOT retry tools.
+11. **PHONE NUMBERS — DIGIT BY DIGIT.** Say "five-one-six, five-five-five, one-two-three-four". NEVER say "five hundred sixteen" or group digits into large numbers. Write digits separated by hyphens.
+12. **EMAILS — NATURAL WORDS ONLY.** Say "john dot smith at gmail dot com". NEVER spell individual letters — TTS will garble them into nonsense words. Read punctuation as "dot", "at", "dash", "underscore".`;
 
   systemPrompt += `\n\n## LANGUAGE\nYou are multilingual. Detect the language the caller is speaking and respond in that same language throughout the conversation. You support English, French, and any other language the caller may speak. If the caller switches languages mid-conversation, seamlessly switch with them. Maintain the same professional tone regardless of language.`;
 
@@ -470,7 +472,7 @@ function buildMemberPayload(
     },
     voice: { ...a.voice },
     model: modelConfig,
-    firstMessage: hydratePlaceholders(a.firstMessage, vars),
+    firstMessage: a.firstMessage ? hydratePlaceholders(a.firstMessage, vars) : '',
     firstMessageMode: a.firstMessageMode,
     recordingEnabled: a.recordingEnabled,
     serverUrl: runtime.webhookUrl,
@@ -509,7 +511,7 @@ function buildMemberPayload(
       do: [
         {
           type: 'say',
-          prompt: 'The caller has been silent. Based on the conversation so far in {{transcript}}, briefly continue with the next step in your workflow or ask if they need anything else. Be concise.',
+          prompt: 'The caller has been silent. Check {{transcript}} — if a tool just returned [SUCCESS] with a [NEXT STEP], call that tool now. If you were waiting for info, re-ask briefly. Otherwise ask if they need anything else. Be concise — one sentence max.',
         },
       ],
       name: 'continue_after_silence',

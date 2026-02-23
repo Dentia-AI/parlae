@@ -24,6 +24,40 @@ export class GoogleCalendarService {
     return date.toISOString().replace('Z', '');
   }
 
+  /**
+   * Convert a local time (HH:MM) on a given date in a specific IANA timezone
+   * to an absolute UTC Date. Uses Intl.DateTimeFormat to determine the offset.
+   *
+   * Example: localToUtc('2026-02-24', '08:00', 'America/Toronto')
+   *          → Date representing 13:00 UTC (8 AM EST = UTC-5)
+   */
+  private localToUtc(date: string, time: string, tz: string): Date {
+    const naiveUtc = new Date(`${date}T${time}:00.000Z`);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(naiveUtc);
+
+    const v = (type: string) =>
+      parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+    const tzEquiv = Date.UTC(
+      v('year'),
+      v('month') - 1,
+      v('day'),
+      v('hour'),
+      v('minute'),
+      v('second'),
+    );
+
+    return new Date(naiveUtc.getTime() + (naiveUtc.getTime() - tzEquiv));
+  }
+
   private async getAccountTimezone(accountId: string): Promise<string> {
     try {
       const account = await this.prisma.account.findUnique({
@@ -593,9 +627,10 @@ export class GoogleCalendarService {
 
       const calendarId = account?.googleCalendarId || 'primary';
 
-      // Query the full business day (8am - 6pm)
-      const dayStart = new Date(`${date}T08:00:00`);
-      const dayEnd = new Date(`${date}T18:00:00`);
+      // Query the full business day (8am - 6pm) in the account's local timezone.
+      // localToUtc converts "8:00 AM in tz" to the correct UTC absolute time.
+      const dayStart = this.localToUtc(date, '08:00', tz);
+      const dayEnd = this.localToUtc(date, '18:00', tz);
 
       const response = await calendar.freebusy.query({
         requestBody: {
@@ -660,6 +695,7 @@ export class GoogleCalendarService {
 
       return {
         success: true,
+        timezone: tz,
         availableSlots,
         busySlots: busySlots.map((b) => ({
           start: b.start,
@@ -688,6 +724,7 @@ export class GoogleCalendarService {
     targetSlots: number = 3,
     maxDaysToSearch: number = 14,
   ) {
+    const tz = await this.getAccountTimezone(accountId);
     const collectedSlots: Array<{
       date: string;
       startTime: string;
@@ -730,6 +767,7 @@ export class GoogleCalendarService {
 
     return {
       success: true,
+      timezone: tz,
       slots: collectedSlots,
     };
   }

@@ -143,11 +143,7 @@ export const createPatientTool = {
   messages: [
     {
       type: 'request-start' as const,
-      content: 'Let me set up your patient profile...',
-    },
-    {
-      type: 'request-complete' as const,
-      content: "I've created your profile.",
+      content: 'One moment while I get that set up...',
     },
     {
       type: 'request-failed' as const,
@@ -210,10 +206,6 @@ export const updatePatientTool = {
     {
       type: 'request-start' as const,
       content: 'Let me update your information...',
-    },
-    {
-      type: 'request-complete' as const,
-      content: "Done! I've updated your information.",
     },
     {
       type: 'request-failed' as const,
@@ -362,10 +354,6 @@ export const bookAppointmentTool = {
       content: "I'm confirming your appointment, just a moment...",
     },
     {
-      type: 'request-complete' as const,
-      content: 'Your appointment has been booked!',
-    },
-    {
       type: 'request-failed' as const,
       content: "I'm having trouble booking that time slot. It may have just been taken. Let me check again.",
     },
@@ -423,10 +411,6 @@ export const rescheduleAppointmentTool = {
       content: 'Let me reschedule your appointment...',
     },
     {
-      type: 'request-complete' as const,
-      content: "Done! Your appointment has been rescheduled.",
-    },
-    {
       type: 'request-failed' as const,
       content: "I'm having trouble rescheduling. Let me try again or find another time.",
     },
@@ -469,10 +453,6 @@ export const cancelAppointmentTool = {
     {
       type: 'request-start' as const,
       content: 'Let me cancel that appointment...',
-    },
-    {
-      type: 'request-complete' as const,
-      content: 'Your appointment has been cancelled.',
     },
     {
       type: 'request-failed' as const,
