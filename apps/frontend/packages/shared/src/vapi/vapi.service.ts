@@ -2373,18 +2373,39 @@ class VapiService {
         const needsDescUpdate =
           keeper.function?.description !== desiredDescription;
 
-        if (needsServerUpdate || needsDescUpdate) {
+        // Compare messages by normalizing to {type, content} — Vapi may add
+        // extra properties (blocking, timingMilliseconds, etc.) that we don't
+        // control. We treat our code config as the source of truth.
+        const desiredMessages = (toolDef.messages || []).map(
+          (m: { type: string; content?: string }) => ({ type: m.type, content: m.content ?? '' }),
+        );
+        const existingMessages = (keeper.messages || []).map(
+          (m: { type: string; content?: string }) => ({ type: m.type, content: m.content ?? '' }),
+        );
+        const needsMessagesUpdate =
+          JSON.stringify(desiredMessages) !== JSON.stringify(existingMessages);
+
+        // Compare parameters so schema changes propagate
+        const needsParamsUpdate =
+          JSON.stringify(toolDef.function?.parameters) !==
+          JSON.stringify(keeper.function?.parameters);
+
+        if (needsServerUpdate || needsDescUpdate || needsMessagesUpdate || needsParamsUpdate) {
           await rateLimitDelay();
           const updates: Record<string, unknown> = {};
 
           if (needsServerUpdate && desiredServerConfig) {
             updates.server = desiredServerConfig;
           }
-          if (needsDescUpdate) {
+          if (needsDescUpdate || needsParamsUpdate) {
             updates.function = {
               ...keeper.function,
               description: desiredDescription,
+              ...(needsParamsUpdate ? { parameters: toolDef.function.parameters } : {}),
             };
+          }
+          if (needsMessagesUpdate) {
+            updates.messages = toolDef.messages || [];
           }
 
           const patched = await this.updateTool(keeper.id, updates);
@@ -2394,6 +2415,8 @@ class VapiService {
               toolId: keeper.id,
               updatedServer: needsServerUpdate,
               updatedDesc: needsDescUpdate,
+              updatedMessages: needsMessagesUpdate,
+              updatedParams: needsParamsUpdate,
             }, '[Vapi] Updated existing tool');
           }
         } else {
