@@ -54,6 +54,8 @@ prisma/generated/
 # Vapi eval cache & results
 .eval-cache.json
 eval-results-*.json
+eval-sweep-*.json
+chat-results-*.json
 
 # Misc
 .eslintcache

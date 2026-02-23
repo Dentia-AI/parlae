@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Param,
+  Query,
   Body,
   Headers,
   HttpException,
@@ -23,7 +24,7 @@ interface ToolCallRecord {
 
 @Controller('vapi')
 export class VapiWebhookController {
-  static readonly BACKEND_VERSION = 'v4.4';
+  static readonly BACKEND_VERSION = 'v4.5';
 
   private readonly logger = new StructuredLogger(VapiWebhookController.name);
 
@@ -417,6 +418,42 @@ export class VapiWebhookController {
     return { callId, toolCalls: history };
   }
 
+  /**
+   * List recent calls with tool histories in a time window.
+   * Used by the test runner to correlate chat sessions to backend calls.
+   */
+  @Get('test/calls/recent')
+  getRecentCalls(
+    @Query('after') after?: string,
+    @Query('before') before?: string,
+  ) {
+    if (!process.env.ENABLE_TEST_ENDPOINTS) {
+      throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+    }
+
+    const afterMs = after ? new Date(after).getTime() : Date.now() - 5 * 60 * 1000;
+    const beforeMs = before ? new Date(before).getTime() : Date.now();
+
+    const results: Array<{ callId: string; toolCount: number; tools: string[]; firstTimestamp: string }> = [];
+
+    for (const [callId, records] of this.toolCallHistory.entries()) {
+      if (!records.length) continue;
+      const firstTs = new Date(records[0].timestamp).getTime();
+      if (firstTs >= afterMs && firstTs <= beforeMs) {
+        results.push({
+          callId,
+          toolCount: records.length,
+          tools: records.map((r) => r.toolName),
+          firstTimestamp: records[0].timestamp,
+        });
+      }
+    }
+
+    return results.sort((a, b) =>
+      new Date(a.firstTimestamp).getTime() - new Date(b.firstTimestamp).getTime(),
+    );
+  }
+
   private async handleAssistantRequest(payload: any) {
     this.logger.log('Handling assistant-request');
     return { received: true };
@@ -699,10 +736,11 @@ export class VapiWebhookController {
    */
   private formatToolError(toolName: string, errorMsg: string, callId?: string): string {
     let base =
-      `[ERROR] ${toolName} failed: ${errorMsg}\n\n` +
-      `[INSTRUCTIONS] This tool call did NOT succeed. Do NOT tell the caller the action was completed. ` +
-      `Read the error above, ask the caller for any missing information, and retry the tool call. ` +
-      `Keep the conversation going naturally — never go silent.`;
+      `[ERROR] ${toolName} FAILED: ${errorMsg}\n\n` +
+      `[CRITICAL] This action DID NOT complete. The caller's request is NOT fulfilled. ` +
+      `If you tell the caller "${toolName === 'bookAppointment' ? 'your appointment is booked' : 'that is done'}" you are LYING — the tool returned an error. ` +
+      `Read the error above, ask the caller for the missing information, then retry the tool. ` +
+      `Keep the conversation going — never go silent.`;
 
     if (callId && VapiWebhookController.BOOKING_TOOLS.has(toolName)) {
       const count = (this.bookingErrorCounts.get(callId) || 0) + 1;

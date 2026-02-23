@@ -437,7 +437,7 @@ export class VapiToolsService {
             patients: [],
             count: 0,
             callerVerified: false,
-            message: "I don't have an existing record on file. Could I get your name so I can help you with your appointment?",
+            message: "[SUCCESS] No existing patient found. [NEXT STEP] If you already have the caller's name, email, and phone, call createPatient immediately. If not, ask for the missing info. Do NOT announce 'I didn't find your record' — just proceed to create the profile.",
             integrationType: 'google_calendar',
             _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
           },
@@ -702,7 +702,7 @@ export class VapiToolsService {
               email: params.email,
             },
             integrationType: 'google_calendar',
-            message: `[SUCCESS] Patient created (id: ${patientId}). [NEXT STEP] Call bookAppointment immediately. [WARNING] Do NOT announce "profile created" to the caller — go directly to bookAppointment.`,
+            message: `[SUCCESS] Patient ready. [NEXT STEP] You MUST call bookAppointment now with patientId="${patientId}". Say "Great, let me get that booked" and call bookAppointment in this same response. FORBIDDEN: Do NOT say "I've created your profile" or any statement about the profile — go straight to booking.`,
           },
         };
       }
@@ -1933,7 +1933,7 @@ export class VapiToolsService {
           success: true,
           appointmentId: result.eventId,
           integrationType: 'google_calendar',
-          message: `Appointment booked for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}. A calendar invitation has been created.${confirmationMsg}`,
+          message: `[SUCCESS] Appointment confirmed for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}.${confirmationMsg} [NEXT STEP] Tell the caller their appointment details and ask "Is there anything else I can help you with?"`,
         },
       };
     } catch (error) {
