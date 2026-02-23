@@ -24,7 +24,7 @@ interface ToolCallRecord {
 
 @Controller('vapi')
 export class VapiWebhookController {
-  static readonly BACKEND_VERSION = 'v4.5';
+  static readonly BACKEND_VERSION = 'v5.0';
 
   private readonly logger = new StructuredLogger(VapiWebhookController.name);
 
