@@ -437,7 +437,7 @@ export class VapiToolsService {
             patients: [],
             count: 0,
             callerVerified: false,
-            message: "[SUCCESS] No existing patient found. [NEXT STEP] If you already have the caller's name, email, and phone, call createPatient immediately. If not, ask for the missing info. Do NOT announce 'I didn't find your record' — just proceed to create the profile.",
+            message: "[SUCCESS] No existing patient record found. [NEXT STEP] Continue with your workflow. If you are booking, call createPatient with the caller's name, email, and phone. If you are managing appointments (cancel/reschedule), call getAppointments with the caller's name or email to find their appointments on the calendar. Do NOT announce 'I didn't find your record' — just proceed with the next action.",
             integrationType: 'google_calendar',
             _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
           },
