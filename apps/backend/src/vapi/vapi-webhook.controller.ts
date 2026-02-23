@@ -526,7 +526,8 @@ export class VapiWebhookController {
 
     switch (toolName) {
       case 'bookAppointment': {
-        if (!params.patientId) {
+        const hasPatientId = !!params.patientId;
+        if (!hasPatientId) {
           errors.push(
             'Patient ID is required. Look up the patient first using lookupPatient, or create a new patient with createPatient.',
           );
@@ -536,15 +537,26 @@ export class VapiWebhookController {
             'Start time is required. Check availability first using checkAvailability, then use the selected time slot.',
           );
         }
-        if (!params.email && !params.patientEmail) {
-          errors.push(
-            'Email address is required to book an appointment. Ask the caller for their email address and have them spell it out before booking.',
-          );
-        }
-        if (!params.firstName && !params.lastName) {
-          errors.push(
-            'Patient name is required. Ask for the caller\'s first and last name, and ask them to spell it.',
-          );
+        // When patientId is present, the handler auto-fills name/email from cache.
+        // Only block if we have no patientId AND no name/email (truly missing data).
+        if (!hasPatientId) {
+          if (!params.email && !params.patientEmail) {
+            errors.push(
+              'Email address is required to book an appointment. Ask the caller for their email address and have them spell it out before booking.',
+            );
+          }
+          if (!params.firstName && !params.lastName) {
+            errors.push(
+              'Patient name is required. Ask for the caller\'s first and last name, and ask them to spell it.',
+            );
+          }
+        } else {
+          if (!params.email && !params.patientEmail) {
+            this.logger.warn(`[Vapi Tool Validation] bookAppointment: email missing but patientId present — handler will use cache`);
+          }
+          if (!params.firstName && !params.lastName) {
+            this.logger.warn(`[Vapi Tool Validation] bookAppointment: name missing but patientId present — handler will use cache`);
+          }
         }
         break;
       }
