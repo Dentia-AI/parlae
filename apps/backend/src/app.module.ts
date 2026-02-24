@@ -13,6 +13,8 @@ import { StripeModule } from './stripe/stripe.module';
 import { GhlModule } from './ghl/ghl.module';
 import { PmsModule } from './pms/pms.module';
 import { VapiModule } from './vapi/vapi.module';
+import { RetellModule } from './retell/retell.module';
+import { VoiceRoutingModule } from './voice-routing/voice-routing.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -28,6 +30,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     GhlModule,
     PmsModule,
     VapiModule,
+    RetellModule,
+    VoiceRoutingModule,
     TwilioModule,
     GoogleCalendarModule,
     NotificationsModule,

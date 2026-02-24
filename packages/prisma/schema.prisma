@@ -213,6 +213,8 @@ model Account {
   brandingTimezone            String?   @map("branding_timezone") // IANA timezone, e.g. America/Toronto. Defaults to America/Toronto if unset.
   twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
 
+  voiceProviderOverride       VoiceProvider? @map("voice_provider_override") // Per-account override: null = use global toggle
+
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
   memberships           AccountMembership[]
   billingCustomers      BillingCustomer[]
@@ -227,8 +229,9 @@ model Account {
   ghlSubAccounts        GhlSubAccount[]
   agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
   pmsIntegrations       PmsIntegration[]
-  vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account
-  callReferences        CallReference[] // Thin references to Vapi calls for account scoping
+  vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account (Vapi)
+  retellPhoneNumbers    RetellPhoneNumber[] // Phone numbers for this account (Retell)
+  callReferences        CallReference[] // Thin references to voice AI calls for account scoping
 
   @@map("accounts")
 }
@@ -840,18 +843,20 @@ model KnowledgeBase {
   @@map("knowledge_base")
 }
 
-// Thin reference linking Vapi call IDs to accounts.
-// All call data (transcripts, recordings, analytics) is fetched from Vapi API on demand.
+// Thin reference linking voice AI call IDs to accounts.
+// All call data (transcripts, recordings, analytics) is fetched from the provider API on demand.
 model CallReference {
-  id         String   @id @default(uuid())
-  vapiCallId String   @unique @map("vapi_call_id")
-  accountId  String   @map("account_id")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id         String        @id @default(uuid())
+  vapiCallId String        @unique @map("vapi_call_id") // Also used for Retell call IDs
+  accountId  String        @map("account_id")
+  provider   VoiceProvider @default(VAPI) @map("provider")
+  createdAt  DateTime      @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([createdAt])
+  @@index([provider])
   @@map("call_references")
 }
 
@@ -916,11 +921,12 @@ model PmsIntegration {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account      Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  auditLogs    PmsAuditLog[]
-  cachedData   PmsCachedData[]
-  phoneNumbers VapiPhoneNumber[] // Phone numbers linked to this PMS
-  writebacks   PmsWriteback[] // Writeback operations for this PMS
+  account            Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  auditLogs          PmsAuditLog[]
+  cachedData         PmsCachedData[]
+  phoneNumbers       VapiPhoneNumber[] // Phone numbers linked to this PMS (Vapi)
+  retellPhoneNumbers RetellPhoneNumber[] // Phone numbers linked to this PMS (Retell)
+  writebacks         PmsWriteback[] // Writeback operations for this PMS
 
   @@unique([accountId, provider])
   @@index([accountId])
@@ -1064,6 +1070,59 @@ model PmsCachedData {
   @@index([expiresAt])
   @@index([cacheType])
   @@map("pms_cached_data")
+}
+
+// Active voice AI provider for the platform (global emergency toggle).
+// Single-row table. When Vapi is degraded, flip activeProvider to RETELL
+// and all inbound calls route to Retell agents instead.
+enum VoiceProvider {
+  VAPI   @map("vapi")
+  RETELL @map("retell")
+}
+
+model VoiceProviderToggle {
+  id             Int           @id @default(1)
+  activeProvider VoiceProvider @default(VAPI) @map("active_provider")
+  switchedAt     DateTime      @default(now()) @map("switched_at")
+  switchedBy     String?       @map("switched_by")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@map("voice_provider_toggle")
+}
+
+// Retell AI Phone Number to Account Mapping (mirrors VapiPhoneNumber)
+model RetellPhoneNumber {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Retell Phone Info
+  retellPhoneId String @unique @map("retell_phone_id")
+  phoneNumber   String @unique @map("phone_number")
+
+  // Retell Configuration
+  retellAgentId String? @map("retell_agent_id") // Receptionist agent that receives inbound calls
+
+  // All 6 agent IDs for the squad (needed for agent_swap wiring)
+  retellAgentIds Json? @map("retell_agent_ids") // { receptionist, booking, appointmentMgmt, patientRecords, insuranceBilling, emergency }
+  retellLlmIds   Json? @map("retell_llm_ids") // Corresponding LLM IDs for each agent
+
+  // PMS Integration Link
+  pmsIntegrationId String? @map("pms_integration_id")
+
+  // Metadata
+  name     String? @map("name")
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  pmsIntegration PmsIntegration? @relation(fields: [pmsIntegrationId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([pmsIntegrationId])
+  @@map("retell_phone_numbers")
 }
 
 // Platform-wide pricing configuration for blended call cost calculation.

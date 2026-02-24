@@ -27,6 +27,10 @@
     "./vapi/vapi-pms-tools.config": "./src/vapi/vapi-pms-tools.config.ts",
     "./vapi/templates": "./src/vapi/templates/index.ts",
     "./vapi/cost-calculator": "./src/vapi/cost-calculator.ts",
+    "./retell/retell.service": "./src/retell/retell.service.ts",
+    "./retell/retell-pms-tools.config": "./src/retell/retell-pms-tools.config.ts",
+    "./retell/templates/dental-clinic.retell-template": "./src/retell/templates/dental-clinic.retell-template.ts",
+    "./retell/templates/retell-template-utils": "./src/retell/templates/retell-template-utils.ts",
     "./twilio/server": "./src/twilio/server.ts"
   },
   "devDependencies": {

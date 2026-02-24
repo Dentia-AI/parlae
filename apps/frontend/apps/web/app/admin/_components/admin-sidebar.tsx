@@ -14,6 +14,7 @@ import {
   Receipt,
   Database,
   FlaskConical,
+  Radio,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 
@@ -44,6 +45,11 @@ const navigation = [
     name: 'Billing Management',
     href: '/admin/billing',
     icon: Receipt,
+  },
+  {
+    name: 'Voice Providers',
+    href: '/admin/voice-providers',
+    icon: Radio,
   },
   {
     name: 'Squad Management',
