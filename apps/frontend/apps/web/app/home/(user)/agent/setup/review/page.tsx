@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Separator } from '@kit/ui/separator';
 import { Loader2, Mic, FileText, Link, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
-import { deployReceptionistAction } from '../_lib/actions';
+import { markDeploymentStartedAction } from '../_actions/setup-progress-actions';
 import { SetupPaymentForm } from '../_components/setup-payment-form';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@kit/ui/collapsible';
 import { Trans } from '@kit/ui/trans';
@@ -142,29 +142,34 @@ export default function ReviewPage() {
           return;
         }
 
-        // Backend will automatically use an existing Twilio number
-        const result = await deployReceptionistAction({
-          voice: config.voice,
-          files: config.files || [],
-          knowledgeBaseConfig: config.knowledgeBaseConfig,
+        // Mark deployment as started in the DB so the overview page
+        // shows the deploying animation immediately after redirect.
+        await markDeploymentStartedAction();
+
+        // Fire deployment in background — don't await the response.
+        // `keepalive: true` ensures the request survives page navigation.
+        fetch('/api/agent/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voice: config.voice,
+            files: config.files || [],
+            knowledgeBaseConfig: config.knowledgeBaseConfig,
+          }),
+          keepalive: true,
         });
 
-        if (result.success) {
-          toast.success(t('common:setup.review.deploySuccess'));
-          
-          // Clear session storage
-          sessionStorage.removeItem('selectedVoice');
-          sessionStorage.removeItem('knowledgeBaseFiles');
-          sessionStorage.removeItem('knowledgeBaseConfig');
-          sessionStorage.removeItem('accountId');
-          sessionStorage.removeItem('businessName');
+        // Clear session storage
+        sessionStorage.removeItem('selectedVoice');
+        sessionStorage.removeItem('knowledgeBaseFiles');
+        sessionStorage.removeItem('knowledgeBaseConfig');
+        sessionStorage.removeItem('accountId');
+        sessionStorage.removeItem('businessName');
 
-          // Redirect to AI Agent dashboard with deployed flag
-          router.push('/home/agent?deployed=true');
-          return;
-        } else {
-          toast.error(result.error || t('common:setup.review.deployError'));
-        }
+        toast.success(t('common:setup.review.deployStarted'));
+
+        // Redirect to overview page — the deploying animation takes over
+        router.push('/home/agent?deploying=true');
       } catch (error) {
         toast.error(t('common:setup.review.deployErrorGeneric'));
         console.error(error);

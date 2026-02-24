@@ -2,7 +2,12 @@ import 'server-only';
 
 import { getLogger } from '@kit/shared/logger';
 
-const logger = getLogger();
+const loggerPromise = getLogger();
+const logger = {
+  info: (...args: any[]) => loggerPromise.then((l) => l.info(...args)).catch(() => {}),
+  warn: (...args: any[]) => loggerPromise.then((l) => l.warn(...args)).catch(() => {}),
+  error: (...args: any[]) => loggerPromise.then((l) => l.error(...args)).catch(() => {}),
+};
 
 // ---------------------------------------------------------------------------
 // Types

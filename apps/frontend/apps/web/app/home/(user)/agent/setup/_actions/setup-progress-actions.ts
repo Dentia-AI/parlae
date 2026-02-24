@@ -350,6 +350,51 @@ export async function savePhoneProgressAction(accountId: string, data: PhoneInte
 }
 
 /**
+ * Mark deployment as in_progress so the overview page shows the
+ * deploying animation. Called right before the fire-and-forget
+ * fetch to `/api/agent/deploy`.
+ */
+export async function markDeploymentStartedAction() {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const account = await prisma.account.findFirst({
+      where: { primaryOwnerId: session.user.id },
+      select: { id: true, phoneIntegrationSettings: true },
+    });
+
+    if (!account) {
+      return { success: false, error: 'Account not found' };
+    }
+
+    const settings = (account.phoneIntegrationSettings as Record<string, unknown>) || {};
+
+    await prisma.account.update({
+      where: { id: account.id },
+      data: {
+        phoneIntegrationSettings: {
+          ...settings,
+          deploymentStatus: 'in_progress',
+          deploymentStartedAt: new Date().toISOString(),
+          deploymentError: null,
+        },
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Setup Actions] Mark deployment started error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to mark deployment started',
+    };
+  }
+}
+
+/**
  * Clear setup progress
  */
 export async function clearSetupProgressAction(accountId: string) {

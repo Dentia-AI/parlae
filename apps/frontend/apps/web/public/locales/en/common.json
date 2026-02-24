@@ -381,6 +381,7 @@
       "configNotFound": "Configuration not found. Please start from step 1.",
       "voiceMissing": "Voice configuration is missing. Please go back to step 1.",
       "deploySuccess": "AI Receptionist deployed successfully!",
+      "deployStarted": "Deployment started! Setting up your AI receptionist...",
       "deployError": "Failed to deploy receptionist",
       "deployErrorGeneric": "An error occurred during deployment",
       "live": {

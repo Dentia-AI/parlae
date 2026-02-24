@@ -146,32 +146,27 @@ export const setupPhoneNumberAction = enhanceAction(
 );
 
 /**
- * Deploy the AI receptionist with full squad configuration.
- *
- * Creates a multi-assistant squad using the dental clinic template:
- * 1. Triage Receptionist (entry point, routes callers)
- * 2. Emergency Transfer (urgent care)
- * 3. Clinic Information (knowledge base, FAQ)
- * 4. Scheduling (appointment CRUD via PMS tools)
- *
- * Each assistant has its own system prompt, tools, and handoff destinations.
+ * Core deployment logic extracted for reuse by both the server action
+ * and the fire-and-forget API route (`/api/agent/deploy`).
  */
-export const deployReceptionistAction = enhanceAction(
-  async (data, user) => {
-    const logger = await getLogger();
-    const vapiService = createVapiService();
+export async function executeDeployment(
+  userId: string,
+  data: { voice: any; files?: any[]; knowledgeBaseConfig?: Record<string, string[]> },
+) {
+  const logger = await getLogger();
+  const vapiService = createVapiService();
 
-    logger.info(
-      { userId: user.id },
-      '[Receptionist] Deploying AI receptionist'
-    );
+  logger.info(
+    { userId },
+    '[Receptionist] Deploying AI receptionist'
+  );
 
-    try {
-      // Get account info
-      const account = await prisma.account.findFirst({
-        where: {
-          primaryOwnerId: user.id,
-        },
+  try {
+    // Get account info
+    const account = await prisma.account.findFirst({
+      where: {
+        primaryOwnerId: userId,
+      },
         select: {
           id: true,
           name: true,
@@ -733,18 +728,32 @@ export const deployReceptionistAction = enhanceAction(
         templateVersion,
         memberCount: squad.members?.length || 0,
       };
-    } catch (error) {
-      logger.error(
-        { error, userId: user.id },
-        '[Receptionist] Failed to deploy AI receptionist'
-      );
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to deploy receptionist',
-      };
-    }
-  },
+  } catch (error) {
+    logger.error(
+      { error, userId },
+      '[Receptionist] Failed to deploy AI receptionist'
+    );
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to deploy receptionist',
+    };
+  }
+}
+
+/**
+ * Deploy the AI receptionist with full squad configuration.
+ *
+ * Creates a multi-assistant squad using the dental clinic template:
+ * 1. Triage Receptionist (entry point, routes callers)
+ * 2. Emergency Transfer (urgent care)
+ * 3. Clinic Information (knowledge base, FAQ)
+ * 4. Scheduling (appointment CRUD via PMS tools)
+ *
+ * Each assistant has its own system prompt, tools, and handoff destinations.
+ */
+export const deployReceptionistAction = enhanceAction(
+  async (data, user) => executeDeployment(user.id, data),
   {
     auth: true,
     schema: DeployReceptionistSchema,

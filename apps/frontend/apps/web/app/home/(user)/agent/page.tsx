@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { DeployedBanner } from './_components/deployed-banner';
+import { DeployingAnimation } from './_components/deploying-animation';
 import { PhoneSetupCard } from './_components/phone-setup-card';
 import { PmsIntegrationCard } from './_components/pms-integration-card';
 
@@ -17,7 +18,7 @@ export const metadata = {
 export default async function ReceptionistDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ deployed?: string }>;
+  searchParams: Promise<{ deployed?: string; deploying?: string }>;
 }) {
   const params = await searchParams;
   const workspace = await loadUserWorkspace();
@@ -75,7 +76,30 @@ export default async function ReceptionistDashboardPage({
                           account.phoneIntegrationMethod !== 'none' &&
                           integrationSettings?.vapiSquadId;
 
-  // If no receptionist configured, redirect to setup
+  const isDeploying = integrationSettings?.deploymentStatus === 'in_progress';
+  const deploymentFailed = integrationSettings?.deploymentStatus === 'failed';
+
+  // Show deploying animation while setup is in progress
+  if (!hasReceptionist && (isDeploying || params.deploying === 'true')) {
+    return (
+      <DeployingAnimation
+        startedAt={integrationSettings?.deploymentStartedAt}
+        deploymentError={null}
+      />
+    );
+  }
+
+  // Show failed state if deployment failed
+  if (!hasReceptionist && deploymentFailed) {
+    return (
+      <DeployingAnimation
+        startedAt={integrationSettings?.deploymentStartedAt}
+        deploymentError={integrationSettings?.deploymentError || 'Deployment failed. Please try again.'}
+      />
+    );
+  }
+
+  // If no receptionist configured and not deploying, redirect to setup
   if (!hasReceptionist) {
     redirect('/home/agent/setup');
   }

@@ -12,6 +12,13 @@
 
 import { getLogger } from '@kit/shared/logger';
 
+const loggerPromise = getLogger();
+const logger = {
+  info: (...args: any[]) => loggerPromise.then((l) => l.info(...args)).catch(() => {}),
+  warn: (...args: any[]) => loggerPromise.then((l) => l.warn(...args)).catch(() => {}),
+  error: (...args: any[]) => loggerPromise.then((l) => l.error(...args)).catch(() => {}),
+};
+
 import {
   type RetellService,
   type RetellLlmConfig,
@@ -44,8 +51,6 @@ import {
 } from '../retell-pms-tools.config';
 
 import { hydratePlaceholders } from '../../vapi/templates/template-utils';
-
-const logger = getLogger();
 
 // ---------------------------------------------------------------------------
 // Types

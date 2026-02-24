@@ -381,6 +381,7 @@
       "configNotFound": "Configuration introuvable. Veuillez commencer à l'étape 1.",
       "voiceMissing": "Configuration vocale manquante. Veuillez retourner à l'étape 1.",
       "deploySuccess": "Réceptionniste IA déployé avec succès !",
+      "deployStarted": "Déploiement lancé ! Configuration de votre réceptionniste IA...",
       "deployError": "Échec du déploiement du réceptionniste",
       "deployErrorGeneric": "Une erreur s'est produite lors du déploiement",
       "live": {
