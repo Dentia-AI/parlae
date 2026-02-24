@@ -146,6 +146,15 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.vapiPhoneNumber;
   }
 
+  // Retell AI models
+  get retellPhoneNumber(): PrismaClient['retellPhoneNumber'] {
+    return this.client.retellPhoneNumber;
+  }
+
+  get voiceProviderToggle(): PrismaClient['voiceProviderToggle'] {
+    return this.client.voiceProviderToggle;
+  }
+
   // Call data is managed by Vapi API — only thin CallReference stored locally.
 
   // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {

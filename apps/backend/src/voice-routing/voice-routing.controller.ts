@@ -109,7 +109,7 @@ export class VoiceRoutingController {
         `[VoiceRouting] Routing to ${activeProvider}: ${forwardTo}`,
       );
 
-      const twiml = this.buildTwiml(forwardTo, callerNumber);
+      const twiml = this.buildTwiml(forwardTo || calledNumber, callerNumber);
 
       res.set('Content-Type', 'text/xml');
       res.status(HttpStatus.OK).send(twiml);
@@ -119,7 +119,7 @@ export class VoiceRoutingController {
       );
 
       // On error, fallback: just dial the original number
-      const twiml = this.buildTwiml(calledNumber, callerNumber);
+      const twiml = this.buildTwiml(calledNumber || '', callerNumber);
       res.set('Content-Type', 'text/xml');
       res.status(HttpStatus.OK).send(twiml);
     }
