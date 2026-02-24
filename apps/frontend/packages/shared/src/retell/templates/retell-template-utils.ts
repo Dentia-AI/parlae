@@ -195,7 +195,7 @@ export async function deployRetellSquad(
     accountId: config.accountId,
   };
 
-  const defaultVoiceId = config.voiceId || '11labs-Adrian';
+  const defaultVoiceId = config.voiceId || 'retell-Chloe';
   const defaultVoiceModel = config.voiceModel || 'eleven_turbo_v2_5';
   const webhookUrl = config.webhookBaseUrl || config.webhookUrl;
 

@@ -23,7 +23,7 @@ import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service'
  *   accountId: string           // Required
  *   phoneNumber?: string        // E.164 phone number to import into Retell
  *   deleteExisting?: boolean    // Delete previous Retell agents first (default: false)
- *   voiceId?: string            // Retell voice ID (default: 11labs-Adrian)
+ *   voiceId?: string            // Retell voice ID (default: retell-Chloe)
  * }
  */
 export async function POST(request: NextRequest) {
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret: process.env.RETELL_WEBHOOK_SECRET || process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET || '',
       accountId,
-      voiceId: voiceId || '11labs-Adrian',
+      voiceId: voiceId || 'retell-Chloe',
       webhookBaseUrl: backendUrl,
       knowledgeBaseIds: knowledgeBaseIds.length > 0 ? knowledgeBaseIds : undefined,
     };
