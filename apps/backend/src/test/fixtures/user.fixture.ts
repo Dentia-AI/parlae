@@ -30,6 +30,7 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   phoneIntegrationSettings: {},
   advancedSetupEnabled: false,
   agentTemplateId: null,
+  retellAgentTemplateId: null,
   setupProgress: {},
   setupCompletedAt: null,
   setupLastStep: null,

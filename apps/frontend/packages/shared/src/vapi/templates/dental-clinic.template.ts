@@ -35,8 +35,8 @@
 // ---------------------------------------------------------------------------
 
 export const DENTAL_CLINIC_TEMPLATE_NAME = 'dental-clinic';
-export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v5.0';
-export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v5.0';
+export const DENTAL_CLINIC_TEMPLATE_VERSION = 'v5.1';
+export const DENTAL_CLINIC_TEMPLATE_DISPLAY_NAME = 'Dental Clinic Squad v5.1';
 
 // ---------------------------------------------------------------------------
 // System prompts — short, focused, MANDATORY RULES at top
@@ -507,7 +507,7 @@ const SHARED_VOICE = {
 
 const SHARED_MODEL = {
   provider: 'openai',
-  model: 'gpt-5.2-chat-latest',
+  model: 'gpt-4.1',
   temperature: 0.3,
   maxTokens: 500,
 };
