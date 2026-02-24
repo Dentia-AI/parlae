@@ -5,21 +5,36 @@
  *
  * Usage:
  *   VAPI_API_KEY=... VAPI_SQUAD_ID=... npx tsx create-test-squad.ts [create|delete|update]
+ *   VAPI_API_KEY=... VAPI_SQUAD_ID=... npx tsx create-test-squad.ts create --model gpt-4.1
  *
  * Commands:
  *   create  - Clone prod squad with updated prompts (default)
  *   update  - Update existing test squad prompts in-place
  *   delete  - Delete the test squad
+ *
+ * Options:
+ *   --model <name>  Override the LLM model for all members (e.g. gpt-4.1, gpt-4o, gpt-5.2-chat-latest)
+ *   --suffix <tag>  Custom suffix for the squad name
  */
 
 const VAPI_API_KEY = process.env.VAPI_API_KEY!;
 const SOURCE_SQUAD_ID = process.env.VAPI_SQUAD_ID!;
 const VAPI_BASE = 'https://api.vapi.ai';
 
+// CLI arg parsing
+const cliArgs = process.argv.slice(2);
+function getCliArg(flag: string): string | undefined {
+  const idx = cliArgs.indexOf(flag);
+  return idx >= 0 && idx + 1 < cliArgs.length ? cliArgs[idx + 1] : undefined;
+}
+const MODEL_OVERRIDE = getCliArg('--model');
+const NAME_SUFFIX = getCliArg('--suffix');
+
 // File to persist the test squad ID between runs
 import * as fs from 'fs';
 import * as path from 'path';
-const STATE_FILE = path.join(__dirname, '_test-squad-id.txt');
+const stateFileSuffix = MODEL_OVERRIDE ? `-${MODEL_OVERRIDE.replace(/[^a-z0-9.-]/gi, '_')}` : '';
+const STATE_FILE = path.join(__dirname, `_test-squad-id${stateFileSuffix}.txt`);
 
 // ---------------------------------------------------------------------------
 // Updated prompt sections
@@ -148,7 +163,7 @@ function isBookingAgent(prompt: string): boolean {
   return prompt.includes('scheduling coordinator') && prompt.includes('bookAppointment');
 }
 
-function patchMemberPrompts(members: any[]): any[] {
+function patchMemberPrompts(members: any[], modelOverride?: string): any[] {
   return members.map((m) => {
     const msg = m.assistantOverrides?.model?.messages?.[0];
     if (!msg?.content) return m;
@@ -159,14 +174,20 @@ function patchMemberPrompts(members: any[]): any[] {
       content = patchBookingWorkflow(content);
     }
 
+    const modelConfig = {
+      ...m.assistantOverrides.model,
+      messages: [{ ...msg, content }],
+    };
+
+    if (modelOverride) {
+      modelConfig.model = modelOverride;
+    }
+
     return {
       ...m,
       assistantOverrides: {
         ...m.assistantOverrides,
-        model: {
-          ...m.assistantOverrides.model,
-          messages: [{ ...msg, content }],
-        },
+        model: modelConfig,
       },
     };
   });
@@ -181,12 +202,20 @@ async function createTestSquad(): Promise<string> {
   const squad = await vapiRequest('GET', `/squad/${SOURCE_SQUAD_ID}`);
 
   console.log(`Source squad: "${squad.name}" with ${squad.members.length} members`);
+  if (MODEL_OVERRIDE) {
+    console.log(`Model override: ${MODEL_OVERRIDE}`);
+  }
 
-  const patchedMembers = patchMemberPrompts(squad.members);
+  const patchedMembers = patchMemberPrompts(squad.members, MODEL_OVERRIDE);
+
+  const nameParts = ['TEST'];
+  if (MODEL_OVERRIDE) nameParts.push(MODEL_OVERRIDE);
+  if (NAME_SUFFIX) nameParts.push(NAME_SUFFIX);
+  nameParts.push(new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19));
 
   // Strip read-only fields
   const payload = {
-    name: `TEST-NoStall-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}`,
+    name: nameParts.join('-'),
     members: patchedMembers.map((m: any) => {
       const { id, createdAt, updatedAt, orgId, ...rest } = m;
       return rest;
@@ -222,7 +251,7 @@ async function updateTestSquad(): Promise<void> {
   console.log('Fetching test squad:', testSquadId);
   const squad = await vapiRequest('GET', `/squad/${testSquadId}`);
 
-  const patchedMembers = patchMemberPrompts(squad.members);
+  const patchedMembers = patchMemberPrompts(squad.members, MODEL_OVERRIDE);
 
   const payload = {
     members: patchedMembers.map((m: any) => {
@@ -232,6 +261,7 @@ async function updateTestSquad(): Promise<void> {
   };
 
   console.log('Updating test squad prompts...');
+  if (MODEL_OVERRIDE) console.log(`Model override: ${MODEL_OVERRIDE}`);
   await vapiRequest('PATCH', `/squad/${testSquadId}`, payload);
   console.log('Done. Test squad updated:', testSquadId);
 }

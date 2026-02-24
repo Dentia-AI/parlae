@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Param,
   Body,
@@ -182,6 +183,39 @@ export class RetellToolController {
 
       return { error: errMsg };
     }
+  }
+
+  // ── Test Introspection (gated by ENABLE_TEST_ENDPOINTS) ─────────────────
+
+  @Get('test/call/:callId/tools')
+  getToolCallHistory(@Param('callId') callId: string) {
+    if (!process.env.ENABLE_TEST_ENDPOINTS) {
+      throw new HttpException('Test endpoints disabled', HttpStatus.NOT_FOUND);
+    }
+
+    const history = this.toolCallHistory.get(callId);
+    if (!history) {
+      return { callId, tools: [], message: 'No tool calls recorded for this call ID' };
+    }
+
+    return {
+      callId,
+      tools: history,
+      count: history.length,
+    };
+  }
+
+  @Get('test/calls/recent')
+  getRecentCallIds() {
+    if (!process.env.ENABLE_TEST_ENDPOINTS) {
+      throw new HttpException('Test endpoints disabled', HttpStatus.NOT_FOUND);
+    }
+
+    const callIds = [...this.toolCallHistory.keys()].slice(-50).reverse();
+    return {
+      callIds,
+      count: callIds.length,
+    };
   }
 
   // ── Account Resolution ──────────────────────────────────────────────────

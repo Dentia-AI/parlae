@@ -1,0 +1,282 @@
+{
+  "suite": "booking",
+  "models": [
+    "gpt-4.1"
+  ],
+  "timestamp": "2026-02-24T06:57:01.744Z",
+  "sourceSquadId": "f4a0b9fb-fe23-4956-9923-74fd61cde9fa",
+  "comparison": [
+    {
+      "model": "gpt-4.1",
+      "squadId": "b11282f8-b28d-452e-ba2a-fd3fa9e3559c",
+      "summary": {
+        "total": 15,
+        "passed": 9,
+        "failed": 6,
+        "errors": 0,
+        "passRate": "60.0",
+        "avgStepMs": 3015,
+        "p95StepMs": 7683,
+        "maxStepMs": 10765,
+        "totalCost": 0.8785999999999999,
+        "totalDurationMs": 478631
+      },
+      "results": [
+        {
+          "name": "Booking: New patient complete flow",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 29387,
+          "stepTimesMs": [
+            3838,
+            2719,
+            1452,
+            3395,
+            6175,
+            1794
+          ],
+          "costUsd": 0.0687,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Rapid-fire info dump",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 26813,
+          "stepTimesMs": [
+            4295,
+            1672,
+            7262,
+            1705,
+            870
+          ],
+          "costUsd": 0.0462,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: French language",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 21204,
+          "stepTimesMs": [
+            3404,
+            1839,
+            1724,
+            1539,
+            1690
+          ],
+          "costUsd": 0.0376,
+          "failureReason": "patient created; French name captured",
+          "toolCallCount": 1
+        },
+        {
+          "name": "Booking: Unusual name handling",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 23938,
+          "stepTimesMs": [
+            3929,
+            1862,
+            1787,
+            3370,
+            1983
+          ],
+          "costUsd": 0.04340000000000001,
+          "failureReason": "patient created with unusual name; booking completed",
+          "toolCallCount": 1
+        },
+        {
+          "name": "Booking: Sensitive tooth complaint",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 25249,
+          "stepTimesMs": [
+            3324,
+            1635,
+            1480,
+            1813,
+            3023,
+            1963
+          ],
+          "costUsd": 0.0434,
+          "failureReason": "patient created; booking completed",
+          "toolCallCount": 1
+        },
+        {
+          "name": "Booking: Caller changes preferred time mid-flow",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 29746,
+          "stepTimesMs": [
+            4020,
+            1713,
+            2994,
+            1379,
+            2614,
+            4663,
+            1352
+          ],
+          "costUsd": 0.058800000000000005,
+          "failureReason": "patient created; booking completed",
+          "toolCallCount": 1
+        },
+        {
+          "name": "Booking: Caller corrects their name spelling",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 34491,
+          "stepTimesMs": [
+            4308,
+            4491,
+            2982,
+            7683,
+            1830,
+            1186
+          ],
+          "costUsd": 0.0544,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Caller asks off-topic question mid-booking",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 38957,
+          "stepTimesMs": [
+            3630,
+            4522,
+            4554,
+            3783,
+            836,
+            3946,
+            4675
+          ],
+          "costUsd": 0.0631,
+          "failureReason": "patient created; booking completed despite interruption; correct first name",
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Vague initial request — AI must guide",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 39685,
+          "stepTimesMs": [
+            1848,
+            3369,
+            2867,
+            1206,
+            2870,
+            4496,
+            8163,
+            855
+          ],
+          "costUsd": 0.0753,
+          "toolCallCount": 5
+        },
+        {
+          "name": "Booking: Caller resists giving email — AI must insist",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 25897,
+          "stepTimesMs": [
+            3325,
+            1243,
+            1323,
+            2015,
+            1282,
+            6697
+          ],
+          "costUsd": 0.0504,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Anxious caller needs reassurance but still books",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 36399,
+          "stepTimesMs": [
+            2343,
+            3125,
+            1200,
+            1646,
+            10765,
+            2113,
+            2194
+          ],
+          "costUsd": 0.0667,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Caller asks for medical advice mid-booking — AI stays on task",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 35186,
+          "stepTimesMs": [
+            3204,
+            2251,
+            3436,
+            2009,
+            8914,
+            1193,
+            1166
+          ],
+          "costUsd": 0.0669,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Caller provides info out of order — AI adapts",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 35093,
+          "stepTimesMs": [
+            3116,
+            2863,
+            4728,
+            8051,
+            2154,
+            2169
+          ],
+          "costUsd": 0.0542,
+          "toolCallCount": 4
+        },
+        {
+          "name": "Booking: Very short answers — AI must pull info out",
+          "model": "gpt-4.1",
+          "status": "pass",
+          "durationMs": 44168,
+          "stepTimesMs": [
+            1280,
+            1229,
+            4257,
+            1479,
+            6893,
+            1685,
+            1466,
+            6379,
+            1510,
+            972
+          ],
+          "costUsd": 0.09200000000000001,
+          "toolCallCount": 5
+        },
+        {
+          "name": "Booking: Root canal request — specific appointment type",
+          "model": "gpt-4.1",
+          "status": "fail",
+          "durationMs": 32418,
+          "stepTimesMs": [
+            3944,
+            2902,
+            2063,
+            2140,
+            2457,
+            2478,
+            3421
+          ],
+          "costUsd": 0.057499999999999996,
+          "failureReason": "patient created; root canal booking completed",
+          "toolCallCount": 1
+        }
+      ]
+    }
+  ]
+}

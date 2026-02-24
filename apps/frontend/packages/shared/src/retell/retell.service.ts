@@ -177,6 +177,33 @@ export interface RetellCallResponse {
   call_analysis?: Record<string, unknown>;
 }
 
+export interface RetellKnowledgeBaseSource {
+  type: 'document' | 'text' | 'url';
+  source_id: string;
+  filename?: string;
+  file_url?: string;
+  title?: string;
+  content_url?: string;
+  url?: string;
+}
+
+export interface RetellKnowledgeBaseResponse {
+  knowledge_base_id: string;
+  knowledge_base_name: string;
+  status: 'in_progress' | 'complete' | 'error' | 'refreshing_in_progress';
+  knowledge_base_sources?: RetellKnowledgeBaseSource[];
+  enable_auto_refresh?: boolean;
+  last_refreshed_timestamp?: number;
+}
+
+export interface RetellKnowledgeBaseCreateOpts {
+  name: string;
+  texts?: Array<{ title: string; text: string }>;
+  urls?: string[];
+  files?: Array<{ name: string; buffer: Buffer; contentType?: string }>;
+  enableAutoRefresh?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -368,6 +395,143 @@ export class RetellService {
   }): Promise<RetellCallResponse[]> {
     const result = await this.request<RetellCallResponse[]>('POST', '/list-calls', opts || {});
     return result || [];
+  }
+
+  // ── Knowledge Base Management ─────────────────────────────────────────
+
+  /**
+   * Create a knowledge base via multipart form upload.
+   * Supports text snippets, URLs, and file buffers.
+   */
+  async createKnowledgeBase(
+    opts: RetellKnowledgeBaseCreateOpts,
+  ): Promise<RetellKnowledgeBaseResponse | null> {
+    if (!this.enabled) {
+      logger.warn('[RetellService] Skipping createKnowledgeBase — disabled');
+      return null;
+    }
+
+    logger.info({ name: opts.name }, '[Retell] Creating knowledge base');
+
+    const formData = new FormData();
+    formData.append('knowledge_base_name', opts.name);
+
+    if (opts.texts && opts.texts.length > 0) {
+      formData.append('knowledge_base_texts', JSON.stringify(opts.texts));
+    }
+
+    if (opts.urls && opts.urls.length > 0) {
+      formData.append('knowledge_base_urls', JSON.stringify(opts.urls));
+    }
+
+    if (opts.files && opts.files.length > 0) {
+      for (const file of opts.files) {
+        const blob = new Blob([file.buffer], {
+          type: file.contentType || 'application/octet-stream',
+        });
+        formData.append('knowledge_base_files', blob, file.name);
+      }
+    }
+
+    if (opts.enableAutoRefresh) {
+      formData.append('enable_auto_refresh', 'true');
+    }
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`${BASE_URL}/create-knowledge-base`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+          body: formData,
+        });
+
+        if (res.status === 429) {
+          const waitMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+          logger.warn(`[RetellService] Rate limited on createKnowledgeBase, retrying in ${waitMs}ms`);
+          if (attempt < MAX_RETRIES) {
+            await sleep(waitMs);
+            continue;
+          }
+        }
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Retell POST /create-knowledge-base (${res.status}): ${text}`);
+        }
+
+        return (await res.json()) as RetellKnowledgeBaseResponse;
+      } catch (err) {
+        if (attempt < MAX_RETRIES && err instanceof Error && err.message.includes('429')) {
+          await sleep(INITIAL_BACKOFF_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new Error('Retell POST /create-knowledge-base: max retries exceeded');
+  }
+
+  async getKnowledgeBase(kbId: string): Promise<RetellKnowledgeBaseResponse | null> {
+    return this.request<RetellKnowledgeBaseResponse>('GET', `/get-knowledge-base/${kbId}`);
+  }
+
+  async listKnowledgeBases(): Promise<RetellKnowledgeBaseResponse[]> {
+    const result = await this.request<RetellKnowledgeBaseResponse[]>('GET', '/list-knowledge-bases');
+    return result || [];
+  }
+
+  async deleteKnowledgeBase(kbId: string): Promise<void> {
+    logger.info({ kbId }, '[Retell] Deleting knowledge base');
+    await this.request('DELETE', `/delete-knowledge-base/${kbId}`);
+  }
+
+  /**
+   * Poll a knowledge base until its status is 'complete' or 'error'.
+   * Returns the final status.
+   */
+  async waitForKnowledgeBase(
+    kbId: string,
+    timeoutMs = 120_000,
+    pollIntervalMs = 3000,
+  ): Promise<RetellKnowledgeBaseResponse | null> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const kb = await this.getKnowledgeBase(kbId);
+      if (!kb) return null;
+
+      if (kb.status === 'complete' || kb.status === 'error') {
+        return kb;
+      }
+
+      await sleep(pollIntervalMs);
+    }
+
+    logger.warn({ kbId }, '[Retell] Knowledge base polling timed out');
+    return this.getKnowledgeBase(kbId);
+  }
+
+  // ── Web Call Management ────────────────────────────────────────────────
+
+  async createWebCall(opts: {
+    agentId: string;
+    agentVersion?: number;
+    metadata?: Record<string, unknown>;
+    dynamicVariables?: Record<string, string>;
+  }): Promise<{ call_id: string; access_token: string } | null> {
+    logger.info({ agentId: opts.agentId }, '[Retell] Creating web call');
+    return this.request<{ call_id: string; access_token: string }>(
+      'POST',
+      '/v2/create-web-call',
+      {
+        agent_id: opts.agentId,
+        ...(opts.agentVersion ? { agent_version: opts.agentVersion } : {}),
+        ...(opts.metadata ? { metadata: opts.metadata } : {}),
+        ...(opts.dynamicVariables
+          ? { retell_llm_dynamic_variables: opts.dynamicVariables }
+          : {}),
+      },
+    );
   }
 
   isEnabled(): boolean {

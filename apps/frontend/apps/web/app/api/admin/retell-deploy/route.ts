@@ -9,6 +9,7 @@ import {
   type RetellDeploymentConfig,
 } from '@kit/shared/retell/templates/retell-template-utils';
 import { RETELL_AGENT_ROLES, type RetellAgentRole } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service';
 
 /**
  * POST /api/admin/retell-deploy
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
         name: true,
         brandingBusinessName: true,
         brandingContactPhone: true,
+        phoneIntegrationSettings: true,
         retellPhoneNumbers: true,
       },
     });
@@ -75,6 +77,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sync Vapi knowledge base to Retell if the account has KB files
+    const settings = (account.phoneIntegrationSettings as Record<string, any>) || {};
+    const knowledgeBaseIds: string[] = [];
+
+    const vapiKBFileIds: string[] = (() => {
+      const config = settings.knowledgeBaseConfig as Record<string, string[]> | undefined;
+      if (config) {
+        return Object.values(config).flat().filter(Boolean);
+      }
+      return (settings.knowledgeBaseFileIds as string[]) || [];
+    })();
+
+    if (vapiKBFileIds.length > 0) {
+      logger.info(
+        { funcName, accountId, fileCount: vapiKBFileIds.length },
+        '[Retell Deploy] Syncing Vapi KB to Retell',
+      );
+
+      const existingRetellKbId = (account.retellPhoneNumbers[0] as any)?.retellKnowledgeBaseId;
+      try {
+        const kbId = await ensureRetellKnowledgeBase(
+          accountId,
+          vapiKBFileIds,
+          clinicName,
+          existingRetellKbId,
+        );
+        if (kbId) {
+          knowledgeBaseIds.push(kbId);
+          logger.info({ funcName, kbId }, '[Retell Deploy] KB synced');
+        }
+      } catch (kbErr) {
+        logger.warn(
+          { error: kbErr instanceof Error ? kbErr.message : kbErr },
+          '[Retell Deploy] Non-fatal: KB sync failed, deploying without KB',
+        );
+      }
+    }
+
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
 
     const deployConfig: RetellDeploymentConfig = {
@@ -85,6 +125,7 @@ export async function POST(request: NextRequest) {
       accountId,
       voiceId: voiceId || '11labs-Adrian',
       webhookBaseUrl: backendUrl,
+      knowledgeBaseIds: knowledgeBaseIds.length > 0 ? knowledgeBaseIds : undefined,
     };
 
     logger.info({ funcName, accountId, clinicName }, '[Retell Deploy] Deploying squad');
@@ -164,6 +205,7 @@ export async function POST(request: NextRequest) {
         ]),
       ),
       phoneNumber: retellPhoneId || phoneNumber || null,
+      knowledgeBaseIds: knowledgeBaseIds.length > 0 ? knowledgeBaseIds : undefined,
     });
   } catch (error) {
     logger.error({ funcName, error: error instanceof Error ? error.message : error }, '[Retell Deploy] Failed');

@@ -14,6 +14,7 @@ import {
 
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF_MS = 2000;
+const REQUEST_TIMEOUT_MS = 90_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -25,14 +26,29 @@ export async function vapiRequest<T = unknown>(
   body?: unknown,
 ): Promise<T> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${VAPI_BASE_URL}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${VAPI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    let res: Response;
+    try {
+      res = await fetch(`${VAPI_BASE_URL}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error(`Vapi ${method} ${path}: timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (res.status === 429) {
       const retryAfter = res.headers.get('retry-after');

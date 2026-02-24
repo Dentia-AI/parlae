@@ -47,13 +47,15 @@ jest.mock('next/navigation', () => ({
 // Mock Next.js headers
 jest.mock('next/headers', () => ({
   headers: jest.fn(() => new Map()),
-  cookies: jest.fn(() => ({
-    get: jest.fn(),
-    set: jest.fn(),
-    delete: jest.fn(),
-    has: jest.fn(),
-    getAll: jest.fn(() => []),
-  })),
+  cookies: jest.fn(() =>
+    Promise.resolve({
+      get: jest.fn(),
+      set: jest.fn(),
+      delete: jest.fn(),
+      has: jest.fn(),
+      getAll: jest.fn(() => []),
+    })
+  ),
 }));
 
 // Suppress console errors/warnings during tests (optional)

@@ -1,0 +1,135 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { HttpException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PmsController } from './pms.controller';
+import { PmsService } from './pms.service';
+import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
+import { CognitoJwtVerifierService } from '../auth/cognito-jwt-verifier.service';
+
+describe('PmsController', () => {
+  let controller: PmsController;
+  let service: any;
+
+  const mockReq = { user: { sub: 'u-1' } };
+
+  beforeEach(async () => {
+    const mockService = {
+      setupPmsIntegration: jest.fn().mockResolvedValue({ success: true, provider: 'SIKKA' }),
+      getPmsStatus: jest.fn().mockResolvedValue({ success: true, integrations: [] }),
+      getConnectionStatus: jest.fn().mockResolvedValue({ isConnected: false, status: 'pending' }),
+      handleSikkaOAuthCallback: jest.fn().mockResolvedValue({ success: true, practiceName: 'Test' }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [PmsController],
+      providers: [
+        { provide: PmsService, useValue: mockService },
+        CognitoAuthGuard,
+        { provide: CognitoJwtVerifierService, useValue: { verifyToken: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+      ],
+    }).compile();
+
+    controller = module.get<PmsController>(PmsController);
+    service = module.get(PmsService);
+  });
+
+  it('should be defined', () => { expect(controller).toBeDefined(); });
+
+  describe('setupPms', () => {
+    it('should call setupPmsIntegration with userId from JWT', async () => {
+      const result = await controller.setupPms({ provider: 'SIKKA' } as any, mockReq);
+      expect(result.success).toBe(true);
+      expect(service.setupPmsIntegration).toHaveBeenCalledWith('u-1', { provider: 'SIKKA' });
+    });
+  });
+
+  describe('getStatus', () => {
+    it('should return PMS status for user', async () => {
+      const result = await controller.getStatus(mockReq);
+      expect(result.success).toBe(true);
+      expect(service.getPmsStatus).toHaveBeenCalledWith('u-1');
+    });
+  });
+
+  describe('checkConnectionStatus', () => {
+    it('should return connection status', async () => {
+      const result = await controller.checkConnectionStatus('acc-1', mockReq);
+      expect(result.status).toBe('pending');
+      expect(service.getConnectionStatus).toHaveBeenCalledWith('acc-1');
+    });
+
+    it('should throw when accountId missing', async () => {
+      await expect(
+        controller.checkConnectionStatus(undefined as any, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('handleSikkaOAuthCallback', () => {
+    it('should redirect on success', async () => {
+      const result = await controller.handleSikkaOAuthCallback('code-1', btoa(JSON.stringify({
+        accountId: 'acc-1',
+        timestamp: Date.now(),
+        nonce: 'nonce-1',
+      })));
+      expect(result.redirect).toContain('status=success');
+    });
+
+    it('should return error redirect when OAuth error', async () => {
+      const result = await controller.handleSikkaOAuthCallback(
+        undefined as any,
+        undefined as any,
+        'access_denied',
+        'User denied',
+      );
+      expect(result.redirect).toContain('status=error');
+    });
+
+    it('should throw when code or state missing', async () => {
+      await expect(
+        controller.handleSikkaOAuthCallback(undefined as any, undefined as any),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw on expired state', async () => {
+      const expiredState = btoa(JSON.stringify({
+        accountId: 'acc-1',
+        timestamp: Date.now() - 11 * 60 * 1000,
+        nonce: 'nonce-1',
+      }));
+      await expect(
+        controller.handleSikkaOAuthCallback('code-1', expiredState),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw on invalid state', async () => {
+      await expect(
+        controller.handleSikkaOAuthCallback('code-1', 'not-base64-json!!!'),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('exchangeSikkaCode', () => {
+    it('should exchange code for credentials', async () => {
+      const result = await controller.exchangeSikkaCode({
+        code: 'code-1',
+        accountId: 'acc-1',
+      });
+      expect(result.success).toBe(true);
+      expect(service.handleSikkaOAuthCallback).toHaveBeenCalledWith('code-1', 'acc-1');
+    });
+
+    it('should throw when code missing', async () => {
+      await expect(
+        controller.exchangeSikkaCode({ code: '', accountId: 'acc-1' }),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw when accountId missing', async () => {
+      await expect(
+        controller.exchangeSikkaCode({ code: 'code-1', accountId: '' }),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+});

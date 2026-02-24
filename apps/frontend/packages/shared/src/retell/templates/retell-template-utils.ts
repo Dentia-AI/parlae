@@ -66,6 +66,8 @@ export interface RetellDeploymentConfig {
   voiceId?: string;
   voiceModel?: string;
   webhookBaseUrl?: string;
+  /** Retell knowledge base IDs to attach to all LLMs */
+  knowledgeBaseIds?: string[];
 }
 
 export interface RetellDeploymentResult {
@@ -229,6 +231,9 @@ export async function deployRetellSquad(
       default_dynamic_variables: {
         customer_phone: '{{call.from_number}}',
       },
+      ...(config.knowledgeBaseIds && config.knowledgeBaseIds.length > 0
+        ? { knowledge_base_ids: config.knowledgeBaseIds }
+        : {}),
     };
 
     logger.info({ funcName, role: def.role }, '[Retell Deploy] Creating LLM');

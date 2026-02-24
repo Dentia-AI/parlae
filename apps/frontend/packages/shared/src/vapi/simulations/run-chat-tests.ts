@@ -34,6 +34,7 @@ import {
   ALL_HIPAA_SCENARIOS,
   ALL_EMERGENCY_SCENARIOS,
   ALL_APPT_MGMT_SCENARIOS,
+  ALL_V5_SCENARIOS,
   ALL_CHAT_SCENARIOS,
   type ChatTestScenario,
   type StepAssertion,
@@ -357,6 +358,7 @@ interface StepResult {
   step: number;
   message: string;
   responseSnippet: string;
+  responseTimeMs: number;
   textAssertions: AssertionResult[];
   toolAssertions: AssertionResult[];
   toolCalls: ExtractedToolCall[];
@@ -391,12 +393,14 @@ async function runScenario(scenario: ChatTestScenario): Promise<ScenarioResult> 
     for (let i = 0; i < scenario.steps.length; i++) {
       const step = scenario.steps[i];
 
+      const stepT0 = Date.now();
       let response: ChatResponse;
       if (i === 0) {
         response = await startChat(assistantId, step.userMessage);
       } else {
         response = await continueChat(lastChatId!, step.userMessage, assistantId);
       }
+      const responseTimeMs = Date.now() - stepT0;
 
       lastChatId = response.id;
       totalCost += (response as any).cost || 0;
@@ -418,6 +422,14 @@ async function runScenario(scenario: ChatTestScenario): Promise<ScenarioResult> 
         }
       }
 
+      if (step.maxResponseTimeMs && responseTimeMs > step.maxResponseTimeMs) {
+        textAssertions.push({
+          label: `response time ${formatDuration(responseTimeMs)} <= ${formatDuration(step.maxResponseTimeMs)}`,
+          passed: false,
+          detail: `Step took ${formatDuration(responseTimeMs)}, max allowed ${formatDuration(step.maxResponseTimeMs)}`,
+        });
+      }
+
       const toolAssertionResults: AssertionResult[] = [];
       if (step.toolAssertions) {
         for (const a of step.toolAssertions) {
@@ -429,6 +441,7 @@ async function runScenario(scenario: ChatTestScenario): Promise<ScenarioResult> 
         step: i + 1,
         message: step.userMessage.slice(0, 80),
         responseSnippet: assistantMessages.slice(0, 120),
+        responseTimeMs,
         textAssertions,
         toolAssertions: toolAssertionResults,
         toolCalls: stepToolCalls,
@@ -541,6 +554,11 @@ async function runSuite(
       console.log(`     -> ${result.failureReason}`);
     }
 
+    const stepTimings = result.stepResults.map(
+      (s) => `${formatDuration(s.responseTimeMs)}`,
+    ).join(', ');
+    console.log(`     [Steps] ${stepTimings}`);
+
     if (result.allToolCalls.length > 0) {
       const summary = result.allToolCalls
         .map((t) => `${t.toolName}(${t.succeeded ? 'ok' : 'err'})`)
@@ -581,10 +599,20 @@ function printSummary(label: string, results: ScenarioResult[]): void {
     0,
   );
 
+  const allStepTimes = results.flatMap((r) => r.stepResults.map((s) => s.responseTimeMs));
+  const avgStepMs = allStepTimes.length
+    ? allStepTimes.reduce((a, b) => a + b, 0) / allStepTimes.length
+    : 0;
+  const maxStepMs = allStepTimes.length ? Math.max(...allStepTimes) : 0;
+  const p95StepMs = allStepTimes.length
+    ? [...allStepTimes].sort((a, b) => a - b)[Math.floor(allStepTimes.length * 0.95)]
+    : 0;
+
   console.log(`\n${'='.repeat(70)}`);
   console.log(`  RESULTS: ${label}`);
   console.log(`  Pass: ${passed}  |  Fail: ${failed}  |  Error: ${errors}  |  Rate: ${rate}%`);
   console.log(`  Avg Duration: ${formatDuration(avgMs)}  |  Total Cost: $${totalCost.toFixed(3)}`);
+  console.log(`  Step Response Time — avg: ${formatDuration(avgStepMs)}  |  p95: ${formatDuration(p95StepMs)}  |  max: ${formatDuration(maxStepMs)}`);
   if (totalToolAssertions > 0) {
     console.log(`  Tool Assertions: ${passedToolAssertions}/${totalToolAssertions} passed`);
   }
@@ -622,6 +650,15 @@ function saveResults(label: string, results: ScenarioResult[]): void {
       failed: results.filter((r) => r.status === 'fail').length,
       errors: results.filter((r) => r.status === 'error').length,
       totalCostUsd: results.reduce((s, r) => s + r.costUsd, 0),
+      timing: (() => {
+        const allSteps = results.flatMap((r) => r.stepResults.map((s) => s.responseTimeMs));
+        const sorted = [...allSteps].sort((a, b) => a - b);
+        return {
+          avgStepMs: allSteps.length ? Math.round(allSteps.reduce((a, b) => a + b, 0) / allSteps.length) : 0,
+          p95StepMs: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : 0,
+          maxStepMs: sorted.length ? sorted[sorted.length - 1] : 0,
+        };
+      })(),
     },
     results: results.map((r) => ({
       name: r.name,
@@ -650,6 +687,7 @@ function saveResults(label: string, results: ScenarioResult[]): void {
 const SUITES: Record<string, { label: string; scenarios: ChatTestScenario[] }> = {
   booking: { label: 'Booking', scenarios: ALL_BOOKING_SCENARIOS },
   tool: { label: 'Tool Verification', scenarios: ALL_TOOL_SCENARIOS },
+  v5: { label: 'v5.0 Regression', scenarios: ALL_V5_SCENARIOS },
   handoff: { label: 'Handoff', scenarios: ALL_HANDOFF_SCENARIOS },
   hipaa: { label: 'HIPAA', scenarios: ALL_HIPAA_SCENARIOS },
   emergency: { label: 'Emergency', scenarios: ALL_EMERGENCY_SCENARIOS },
@@ -672,6 +710,7 @@ Usage: npx tsx run-chat-tests.ts <suite>
 Suites:
   booking        Run booking flow scenarios (${ALL_BOOKING_SCENARIOS.length})
   tool           Run tool verification scenarios (${ALL_TOOL_SCENARIOS.length})
+  v5             Run v5.0 regression tests (${ALL_V5_SCENARIOS.length})
   handoff        Run handoff scenarios (${ALL_HANDOFF_SCENARIOS.length})
   hipaa          Run HIPAA scenarios (${ALL_HIPAA_SCENARIOS.length})
   emergency      Run emergency/triage scenarios (${ALL_EMERGENCY_SCENARIOS.length})

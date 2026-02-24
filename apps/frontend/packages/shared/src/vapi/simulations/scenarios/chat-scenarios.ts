@@ -55,6 +55,8 @@ export interface ChatTestStep {
   assertions?: StepAssertion[];
   toolAssertions?: ToolCallAssertion[];
   waitMs?: number;
+  /** Max allowed round-trip time in ms. Step fails if exceeded. */
+  maxResponseTimeMs?: number;
 }
 
 export interface TranscriptAssertion {
@@ -536,6 +538,146 @@ export const TOOL_SPELLED_EMAIL_ACCURACY: ChatTestScenario = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// v5.0 REGRESSION — tests for specific bugs found in live voice calls
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const V5_NO_PROFILE_ANNOUNCEMENT: ChatTestScenario = {
+  name: 'v5.0: No standalone "I\'ve created your profile" announcement',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    { userMessage: "I'd like to book a cleaning for tomorrow please." },
+    { userMessage: 'Any time works. First available.' },
+    { userMessage: "My name is Profile Test. P-R-O-F-I-L-E T-E-S-T." },
+    { userMessage: "Email: P-R-O-F-I-L-E at testmail dot com. Phone: 416-555-0010.", waitMs: 3000 },
+    { userMessage: "Yes, that's correct. Please book it.", waitMs: 3000 },
+    { userMessage: "Yes.", waitMs: 3000 },
+  ],
+  finalToolAssertions: [
+    { type: 'tool_called', toolName: 'createPatient', label: 'createPatient called' },
+    { type: 'tool_succeeded', toolName: 'bookAppointment', label: 'booking succeeded' },
+  ],
+  transcriptAssertions: [
+    ...NO_STALL_ASSERTIONS,
+    { type: 'not_contains', value: "i've set up your profile", label: 'no profile setup announcement (v1)' },
+    { type: 'not_contains', value: "profile has been created", label: 'no profile setup announcement (v2)' },
+    { type: 'not_contains', value: "your profile is ready", label: 'no profile setup announcement (v3)' },
+  ],
+};
+
+export const V5_NO_BOOKING_ANNOUNCEMENT: ChatTestScenario = {
+  name: 'v5.0: No standalone "Your appointment has been booked" announcement',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    { userMessage: "I need to book a cleaning appointment for tomorrow." },
+    { userMessage: 'First available time.' },
+    { userMessage: "My name is Book Announce. B-O-O-K A-N-N-O-U-N-C-E." },
+    { userMessage: "Email: B-O-O-K at testmail dot com. Phone: 416-555-0011.", waitMs: 3000 },
+    { userMessage: "Yes, go ahead and book it.", waitMs: 3000 },
+    { userMessage: "Yes.", waitMs: 3000 },
+  ],
+  finalToolAssertions: [
+    { type: 'tool_succeeded', toolName: 'bookAppointment', label: 'booking succeeded' },
+  ],
+  transcriptAssertions: [
+    ...NO_STALL_ASSERTIONS,
+    { type: 'not_contains', value: 'your appointment has been booked!', label: 'no canned booking announcement' },
+  ],
+};
+
+export const V5_TOOL_CHAIN_CREATE_THEN_BOOK: ChatTestScenario = {
+  name: 'v5.0: createPatient → bookAppointment chains without dead air',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    { userMessage: "I'd like to book a cleaning for tomorrow morning." },
+    { userMessage: 'The first morning slot works.' },
+    { userMessage: "My name is Chain Test. C-H-A-I-N T-E-S-T." },
+    { userMessage: "Email: C-H-A-I-N dot T-E-S-T at testmail dot com. Phone: 416-555-0012.", waitMs: 3000 },
+    { userMessage: "Yes, all correct. Book it please.", waitMs: 4000 },
+    { userMessage: "Yes.", waitMs: 4000 },
+    { userMessage: "Yes, confirmed.", waitMs: 4000 },
+  ],
+  finalToolAssertions: [
+    { type: 'tool_succeeded', toolName: 'checkAvailability', label: 'availability checked' },
+    { type: 'tool_called', toolName: 'createPatient', label: 'patient created' },
+    { type: 'tool_succeeded', toolName: 'bookAppointment', label: 'booking completed' },
+  ],
+  transcriptAssertions: [
+    ...NO_STALL_ASSERTIONS,
+    { type: 'not_contains', value: 'let me set up your patient', label: 'no old request-start narration' },
+  ],
+};
+
+export const V5_AVAILABILITY_RETURNS_LOCAL_TIMES: ChatTestScenario = {
+  name: 'v5.0: checkAvailability returns human-readable local times',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    { userMessage: "What times do you have available for a cleaning tomorrow?" },
+  ],
+  finalToolAssertions: [
+    { type: 'tool_succeeded', toolName: 'checkAvailability', label: 'availability checked' },
+    { type: 'tool_response_contains', toolName: 'checkAvailability', paramValue: 'AM', label: 'response includes AM/PM format' },
+  ],
+};
+
+export const V5_NO_FORBIDDEN_PHRASES: ChatTestScenario = {
+  name: 'v5.0: AI never uses forbidden transfer/agent phrases',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    { userMessage: "Hi, I want to book a dental cleaning for tomorrow." },
+    { userMessage: "First available time works." },
+    { userMessage: "My name is Phrase Tester. P-H-R-A-S-E T-E-S-T-E-R." },
+    { userMessage: "Email: P-H-R-A-S-E at testmail dot com. Phone: 416-555-0013.", waitMs: 3000 },
+    { userMessage: "Yes, book it.", waitMs: 3000 },
+  ],
+  transcriptAssertions: [
+    { type: 'not_contains', value: 'booking agent', label: 'never mentions booking agent' },
+    { type: 'not_contains', value: 'specialist', label: 'never mentions specialist' },
+    { type: 'not_contains', value: 'transferring', label: 'never mentions transfer' },
+    { type: 'not_contains', value: 'connecting you', label: 'never mentions connecting' },
+    ...NO_STALL_ASSERTIONS,
+  ],
+};
+
+export const V5_RESPONSE_LATENCY: ChatTestScenario = {
+  name: 'v5.0: Response latency stays within acceptable bounds',
+  category: 'tool-verification',
+  targetAssistant: 'booking',
+  steps: [
+    {
+      userMessage: "I'd like to book a dental cleaning for tomorrow.",
+      maxResponseTimeMs: 30_000,
+    },
+    {
+      userMessage: "9 AM works.",
+      maxResponseTimeMs: 30_000,
+    },
+    {
+      userMessage: "My name is Latency Check. L-A-T-E-N-C-Y C-H-E-C-K.",
+      maxResponseTimeMs: 30_000,
+    },
+    {
+      userMessage: "Email: L-A-T-E-N-C-Y at testmail dot com. Phone: 416-555-0014.",
+      waitMs: 3000,
+      maxResponseTimeMs: 45_000,
+    },
+    {
+      userMessage: "Yes, that's all correct. Book it.",
+      waitMs: 3000,
+      maxResponseTimeMs: 45_000,
+    },
+  ],
+  finalToolAssertions: [
+    { type: 'tool_succeeded', toolName: 'checkAvailability', label: 'availability checked' },
+  ],
+  transcriptAssertions: NO_STALL_ASSERTIONS,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // HANDOFF (kept for reference — known flaky in chat API mode)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -984,6 +1126,15 @@ export const ALL_BOOKING_SCENARIOS: ChatTestScenario[] = [
   BOOKING_LONG_APPOINTMENT_TYPE,
 ];
 
+export const ALL_V5_SCENARIOS: ChatTestScenario[] = [
+  V5_NO_PROFILE_ANNOUNCEMENT,
+  V5_NO_BOOKING_ANNOUNCEMENT,
+  V5_TOOL_CHAIN_CREATE_THEN_BOOK,
+  V5_AVAILABILITY_RETURNS_LOCAL_TIMES,
+  V5_NO_FORBIDDEN_PHRASES,
+  V5_RESPONSE_LATENCY,
+];
+
 export const ALL_TOOL_SCENARIOS: ChatTestScenario[] = [
   TOOL_CHECK_AVAILABILITY_DATE,
   TOOL_CREATE_PATIENT_PARAMS,
@@ -991,6 +1142,7 @@ export const ALL_TOOL_SCENARIOS: ChatTestScenario[] = [
   TOOL_NO_HALLUCINATED_BOOKING,
   TOOL_FULL_CHAIN_NO_PAUSE,
   TOOL_SPELLED_EMAIL_ACCURACY,
+  ...ALL_V5_SCENARIOS,
 ];
 
 export const ALL_HANDOFF_SCENARIOS: ChatTestScenario[] = [

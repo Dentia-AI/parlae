@@ -716,6 +716,72 @@ export async function executeDeployment(
         '[Receptionist] AI receptionist deployed successfully'
       );
 
+      // STEP 11: Deploy to Retell as backup (non-blocking)
+      // If the account has voiceProviderOverride=RETELL or we want dual-deploy,
+      // also create Retell agents with the same KB and config.
+      let retellDeployResult: any = null;
+      try {
+        const accountWithProvider = await prisma.account.findUnique({
+          where: { id: account.id },
+          select: { voiceProviderOverride: true },
+        });
+
+        const shouldDeployRetell =
+          accountWithProvider?.voiceProviderOverride === 'RETELL';
+
+        if (shouldDeployRetell) {
+          const { createRetellService } = await import('@kit/shared/retell/retell.service');
+          const retellService = createRetellService();
+
+          if (retellService.isEnabled()) {
+            const { deployRetellSquad } = await import(
+              '@kit/shared/retell/templates/retell-template-utils'
+            );
+            const { ensureRetellKnowledgeBase } = await import(
+              '@kit/shared/retell/retell-kb.service'
+            );
+
+            const retellBackendUrl =
+              process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
+
+            // Sync KB to Retell
+            const retellKbIds: string[] = [];
+            if (allKBFileIds.length > 0) {
+              const kbId = await ensureRetellKnowledgeBase(
+                account.id,
+                allKBFileIds,
+                businessName,
+              );
+              if (kbId) retellKbIds.push(kbId);
+            }
+
+            const retellConfig = {
+              clinicName: businessName,
+              clinicPhone: clinicOriginalNumber,
+              webhookUrl: retellBackendUrl,
+              webhookSecret:
+                process.env.RETELL_WEBHOOK_SECRET ||
+                process.env.VAPI_WEBHOOK_SECRET ||
+                '',
+              accountId: account.id,
+              webhookBaseUrl: retellBackendUrl,
+              knowledgeBaseIds: retellKbIds.length > 0 ? retellKbIds : undefined,
+            };
+
+            retellDeployResult = await deployRetellSquad(retellService, retellConfig);
+            logger.info(
+              { accountId: account.id, retellVersion: retellDeployResult?.version },
+              '[Receptionist] Retell backup deployed alongside Vapi',
+            );
+          }
+        }
+      } catch (retellErr: any) {
+        logger.warn(
+          { error: retellErr?.message, accountId: account.id },
+          '[Receptionist] Non-fatal: Retell backup deployment failed',
+        );
+      }
+
       // Revalidate the overview page so it renders with fresh data after redirect
       revalidatePath('/home/agent');
       revalidatePath('/home/agent/knowledge');
@@ -727,6 +793,7 @@ export async function executeDeployment(
         phoneNumber: phoneNumber,
         templateVersion,
         memberCount: squad.members?.length || 0,
+        retellDeployed: !!retellDeployResult,
       };
   } catch (error) {
     logger.error(

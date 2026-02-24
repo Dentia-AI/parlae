@@ -1,0 +1,73 @@
+export const prisma = {
+  account: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  agentTemplate: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  impersonationSession: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  vapiPhoneNumber: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  callReference: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    upsert: jest.fn(),
+  },
+  vapiSquadTemplate: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+  vapiAssistantTemplate: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+  squadTemplate: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+  assistantTemplate: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+  pmsIntegration: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    upsert: jest.fn(),
+  },
+  user: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  membership: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+};

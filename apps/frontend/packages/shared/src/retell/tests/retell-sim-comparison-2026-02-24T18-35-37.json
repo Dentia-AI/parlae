@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-02-24T18:35:37.840Z",
+  "suite": "all",
+  "scenarioCount": 41,
+  "models": [
+    "gemini-3.0-flash"
+  ],
+  "results": [
+    {
+      "model": "gemini-3.0-flash",
+      "passRate": "0.0%",
+      "batch": {
+        "test_case_batch_job_id": "test_batch_30b762458a68",
+        "status": "complete",
+        "response_engine": {
+          "type": "retell-llm",
+          "llm_id": "llm_4413ef76c4d83a46ab59b176b3d2",
+          "version": 0
+        },
+        "pass_count": 0,
+        "fail_count": 0,
+        "error_count": 0,
+        "total_count": 41,
+        "creation_timestamp": 1771958132305,
+        "user_modified_timestamp": 1771958133821
+      },
+      "latency": {
+        "model": "gemini-3.0-flash",
+        "avgMs": 0,
+        "p95Ms": 0,
+        "maxMs": 0,
+        "minMs": 0,
+        "totalMs": 0
+      },
+      "runs": []
+    }
+  ]
+}
