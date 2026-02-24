@@ -275,13 +275,13 @@ export const RETELL_POST_CALL_ANALYSIS: Array<{
   name: string;
   type: 'string' | 'enum' | 'boolean' | 'number';
   description: string;
-  options?: string[];
+  choices?: string[];
 }> = [
   {
     name: 'call_outcome',
     type: 'enum',
     description: 'What was the final outcome of the call?',
-    options: [
+    choices: [
       'appointment_booked',
       'appointment_cancelled',
       'appointment_rescheduled',

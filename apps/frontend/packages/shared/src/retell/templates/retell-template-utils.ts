@@ -27,6 +27,7 @@ import {
   type RetellAgentSwapTool,
   type RetellEndCallTool,
   type RetellTransferCallTool,
+  type RetellTool,
   type RetellLlmResponse,
   type RetellAgentResponse,
 } from '../retell.service';
@@ -130,8 +131,7 @@ function buildAgentSwapTools(
     description: target.description,
     agent_id: agentIdMap[target.role],
     speak_during_execution: false,
-    post_call_analysis_setting: { target: 'source' },
-    webhook_setting: { target: 'source' },
+    post_call_analysis_setting: 'both_agents',
     keep_current_voice: true,
   }));
 }
@@ -201,6 +201,7 @@ export async function deployRetellSquad(
 
   const llmMap: Record<string, RetellLlmResponse> = {};
   const agentMap: Record<string, RetellAgentResponse> = {};
+  const originalToolsMap: Record<string, RetellTool[]> = {};
 
   for (const def of RETELL_AGENT_DEFINITIONS) {
     const hydratedPrompt = hydratePlaceholders(def.systemPrompt, templateVars);
@@ -208,16 +209,19 @@ export async function deployRetellSquad(
 
     const pmsTools = hydrateTools(resolveToolGroup(def.toolGroup), config);
 
+    const baseTools: RetellTool[] = [
+      ...pmsTools,
+      buildEndCallTool(),
+      ...(def.transferToClinic && config.clinicPhone
+        ? [buildTransferToClinicTool(config.clinicPhone)]
+        : []),
+    ];
+    originalToolsMap[def.role] = baseTools;
+
     const llmConfig: RetellLlmConfig = {
       general_prompt: hydratedPrompt,
-      general_tools: [
-        ...pmsTools,
-        buildEndCallTool(),
-        ...(def.transferToClinic && config.clinicPhone
-          ? [buildTransferToClinicTool(config.clinicPhone)]
-          : []),
-      ],
-      model: 'gpt-5.2',
+      general_tools: baseTools,
+      model: 'gpt-4.1',
       model_temperature: 0.3,
       tool_call_strict_mode: true,
       start_speaker: def.startSpeaker,
@@ -267,6 +271,8 @@ export async function deployRetellSquad(
   }
 
   // ── Pass 2: Wire agent_swap tools ─────────────────────────────────────
+  // Use our original tool definitions (not API response) to avoid schema
+  // mismatch — the API response includes extra fields that break oneOf.
 
   const agentIdMap: Record<RetellAgentRole, string> = {} as any;
   for (const role of RETELL_AGENT_ROLES) {
@@ -277,17 +283,15 @@ export async function deployRetellSquad(
     if (def.swapTargets.length === 0) continue;
 
     const swapTools = buildAgentSwapTools(def, agentIdMap);
-    const existingLlm = llmMap[def.role];
-
-    const existingTools = existingLlm.general_tools || [];
-    const updatedTools = [...existingTools, ...swapTools];
+    const baseTools = originalToolsMap[def.role] || [];
+    const updatedTools: RetellTool[] = [...baseTools, ...swapTools];
 
     logger.info(
       { funcName, role: def.role, swapCount: swapTools.length },
       '[Retell Deploy] Wiring agent_swap tools on LLM',
     );
 
-    await retell.updateRetellLlm(existingLlm.llm_id, {
+    await retell.updateRetellLlm(llmMap[def.role].llm_id, {
       general_tools: updatedTools,
     });
 

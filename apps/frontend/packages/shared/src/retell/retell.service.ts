@@ -96,8 +96,8 @@ export interface RetellAgentSwapTool {
   speak_during_execution?: boolean;
   execution_message_description?: string;
   execution_message_type?: 'prompt' | 'static_text';
-  post_call_analysis_setting: { target: string };
-  webhook_setting?: { target: string };
+  post_call_analysis_setting: 'both_agents' | 'only_destination_agent';
+  webhook_setting?: 'both_agents' | 'only_source_agent';
   keep_current_voice?: boolean;
 }
 
@@ -128,7 +128,7 @@ export interface RetellAgentConfig {
     type: 'string' | 'enum' | 'boolean' | 'number';
     description: string;
     examples?: string[];
-    options?: string[];
+    choices?: string[];
   }>;
   metadata?: Record<string, unknown>;
 }
