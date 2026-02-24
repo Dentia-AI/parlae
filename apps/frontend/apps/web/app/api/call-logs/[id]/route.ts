@@ -5,6 +5,7 @@ import { requireSession } from '~/lib/auth/get-session';
 import { isAdminUser } from '~/lib/auth/admin';
 import { getLogger } from '@kit/shared/logger';
 import { calculateBlendedCost, getPlatformPricing } from '@kit/shared/vapi/cost-calculator';
+import type { RetellCallResponse } from '@kit/shared/retell/retell.service';
 
 /**
  * GET /api/call-logs/[id]
@@ -44,6 +45,25 @@ export async function GET(
       },
     });
 
+    const callProvider = (callRef as any)?.provider || 'VAPI';
+
+    // Route to Retell if the CallReference says provider is RETELL
+    if (callProvider === 'RETELL') {
+      const { createRetellService } = await import('@kit/shared/retell/retell.service');
+      const retell = createRetellService();
+      const retellCall = await retell.getCall(vapiCallId);
+
+      if (!retellCall) {
+        return NextResponse.json({ error: 'Call not found' }, { status: 404 });
+      }
+
+      logger.info({
+        userId, callId: vapiCallId, provider: 'RETELL', action: 'viewed_call_detail',
+      }, '[Call Logs] Call detail accessed');
+
+      return NextResponse.json(mapRetellCallToDetail(retellCall));
+    }
+
     // Fetch full call data from Vapi
     const vapiService = createVapiService();
     const call = await vapiService.getCall(vapiCallId);
@@ -52,13 +72,11 @@ export async function GET(
       return NextResponse.json({ error: 'Call not found' }, { status: 404 });
     }
 
-    // Verify access: the call must belong to this account
     if (!callRef) {
       const phoneNumberId = call.phoneNumberId;
       let authorized = false;
 
       if (phoneNumberId) {
-        // Check VapiPhoneNumber table
         const vapiPhone = await prisma.vapiPhoneNumber.findFirst({
           where: { vapiPhoneId: phoneNumberId, accountId: account.id },
         });
@@ -66,7 +84,6 @@ export async function GET(
         if (vapiPhone) {
           authorized = true;
         } else {
-          // Fallback: check phoneIntegrationSettings.vapiPhoneId
           const fullAccount = await prisma.account.findUnique({
             where: { id: account.id },
             select: { phoneIntegrationSettings: true },
@@ -82,27 +99,19 @@ export async function GET(
         return NextResponse.json({ error: 'Call not found' }, { status: 404 });
       }
 
-      // Create a CallReference for future lookups
       try {
         await prisma.callReference.create({
-          data: {
-            vapiCallId,
-            accountId: account.id,
-          },
+          data: { vapiCallId, accountId: account.id },
         });
       } catch {
-        // Ignore duplicate key — another request may have created it
+        // Ignore duplicate key
       }
     }
 
-    // HIPAA: Log access
     logger.info({
-      userId,
-      vapiCallId,
-      action: 'viewed_call_detail',
+      userId, vapiCallId, action: 'viewed_call_detail',
     }, '[Call Logs] Call detail accessed');
 
-    // Fetch pricing rates and check admin status for cost visibility
     const isAdmin = isAdminUser(userId);
     const pricingRates = await getPlatformPricing(prisma);
 
@@ -292,4 +301,82 @@ function inferOutcome(structuredData: Record<string, any>): string {
       return 'OTHER';
     }
   }
+}
+
+function mapRetellCallToDetail(call: RetellCallResponse) {
+  const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+
+  let duration: number | null = null;
+  if (call.start_timestamp && call.end_timestamp) {
+    duration = Math.round((call.end_timestamp - call.start_timestamp) / 1000);
+  } else if (call.duration_ms) {
+    duration = Math.round(call.duration_ms / 1000);
+  }
+
+  const transcript = call.transcript || (call.transcript_object
+    ? call.transcript_object
+        .map((t) => `${t.role === 'agent' ? 'AI' : 'User'}: ${t.content}`)
+        .join('\n')
+    : null);
+
+  const startIso = call.start_timestamp
+    ? new Date(call.start_timestamp).toISOString()
+    : new Date().toISOString();
+  const endIso = call.end_timestamp
+    ? new Date(call.end_timestamp).toISOString()
+    : null;
+
+  const outcome = (() => {
+    const o = analysis?.call_outcome;
+    if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+    if (o === 'transferred_to_staff' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+    if (o === 'insurance_verified') return 'INSURANCE_INQUIRY';
+    if (o === 'payment_plan_discussed') return 'PAYMENT_PLAN';
+    if (o === 'information_provided') return 'INFORMATION';
+    return 'OTHER';
+  })();
+
+  return {
+    id: call.call_id,
+    vapiCallId: call.call_id,
+    phoneNumber: call.from_number || 'unknown',
+    callType: call.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
+    direction: call.direction || 'inbound',
+    duration,
+    status: call.call_status === 'ended' ? 'COMPLETED' : (call.call_status || 'COMPLETED').toUpperCase(),
+    outcome,
+    callReason: analysis.call_reason || null,
+    urgencyLevel: analysis.urgency_level || null,
+    contactName: analysis.patient_name || null,
+    contactEmail: analysis.patient_email || null,
+    transcript,
+    summary: analysis.call_summary || null,
+    recordingUrl: call.recording_url || null,
+    structuredData: Object.keys(analysis).length > 0 ? analysis : null,
+    appointmentSet: !!analysis.appointment_booked,
+    leadCaptured: !!analysis.patient_name || !!analysis.patient_email,
+    insuranceVerified: !!analysis.insurance_verified,
+    insuranceProvider: analysis.insurance_provider || null,
+    paymentPlanDiscussed: !!analysis.payment_discussed,
+    paymentPlanAmount: null,
+    transferredToStaff: !!analysis.transferred_to_staff,
+    transferredTo: analysis.transferred_to || null,
+    followUpRequired: !!analysis.follow_up_required,
+    followUpDate: null,
+    customerSentiment: analysis.customer_sentiment || null,
+    aiConfidence: null,
+    callQuality: null,
+    costCents: null,
+    metadata: {
+      retellAgentId: call.agent_id,
+      disconnectionReason: call.disconnection_reason,
+      publicLogUrl: call.public_log_url,
+    },
+    actions: null,
+    callNotes: null,
+    voiceAgent: null,
+    callStartedAt: startIso,
+    callEndedAt: endIso,
+    createdAt: startIso,
+  };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent } from '@kit/ui/card';
@@ -8,99 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@kit/ui/radio-group';
 import { Label } from '@kit/ui/label';
 import { Play, Pause } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
-
-// Cartesia Sonic 3 voices — ultra-low latency (~40ms), multilingual (42 languages).
-// Voice is automatically localized to the caller's language by Cartesia.
-const AVAILABLE_VOICES = [
-  {
-    id: 'katie-cartesia',
-    name: 'Katie',
-    subtitle: 'Friendly Fixer',
-    provider: 'cartesia' as const,
-    voiceId: 'f786b574-daa5-4673-aa0c-cbe3e8534c02',
-    gender: 'female',
-    accent: 'Multilingual',
-    description: 'Enunciating and professional, ideal for a receptionist',
-    previewUrl: '/audio/voices/katie-friendly-fixer.mp3',
-  },
-  {
-    id: 'jacqueline-cartesia',
-    name: 'Jacqueline',
-    subtitle: 'Reassuring Agent',
-    provider: 'cartesia' as const,
-    voiceId: '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc',
-    gender: 'female',
-    accent: 'Multilingual',
-    description: 'Confident and empathic, great for patient support',
-    previewUrl: '/audio/voices/jacqueline-reassuring-agent.mp3',
-  },
-  {
-    id: 'ariana-cartesia',
-    name: 'Ariana',
-    subtitle: 'Kind Friend',
-    provider: 'cartesia' as const,
-    voiceId: 'ec1e269e-9ca0-402f-8a18-58e0e022355a',
-    gender: 'female',
-    accent: 'Multilingual',
-    description: 'Friendly and approachable with a warm, welcoming tone',
-    previewUrl: '/audio/voices/ariana-kind-friend.mp3',
-  },
-  {
-    id: 'kira-cartesia',
-    name: 'Kira',
-    subtitle: 'Trusted Confidant',
-    provider: 'cartesia' as const,
-    voiceId: '57dcab65-68ac-45a6-8480-6c4c52ec1cd1',
-    gender: 'female',
-    accent: 'Multilingual',
-    description: 'Emotive and empathetic, builds trust with callers',
-    previewUrl: '/audio/voices/kira-trusted-confidant.mp3',
-  },
-  {
-    id: 'connie-cartesia',
-    name: 'Connie',
-    subtitle: 'Candid Conversationalist',
-    provider: 'cartesia' as const,
-    voiceId: '8d8ce8c9-44a4-46c4-b10f-9a927b99a853',
-    gender: 'female',
-    accent: 'Multilingual',
-    description: 'Natural and cheery, authentic conversational style',
-    previewUrl: '/audio/voices/connie-candid-conversationalist.mp3',
-  },
-  {
-    id: 'blake-cartesia',
-    name: 'Blake',
-    subtitle: 'Helpful Agent',
-    provider: 'cartesia' as const,
-    voiceId: 'a167e0f3-df7e-4d52-a9c3-f949145efdab',
-    gender: 'male',
-    accent: 'Multilingual',
-    description: 'Energetic and engaging, great for customer support',
-    previewUrl: '/audio/voices/blake-helpful-agent.mp3',
-  },
-  {
-    id: 'kiefer-cartesia',
-    name: 'Kiefer',
-    subtitle: 'Assured Tone',
-    provider: 'cartesia' as const,
-    voiceId: '228fca29-3a0a-435c-8728-5cb483251068',
-    gender: 'male',
-    accent: 'Multilingual',
-    description: 'Confident with strong clarity, composed and professional',
-    previewUrl: '/audio/voices/kiefer-agent.mp3',
-  },
-  {
-    id: 'kyle-cartesia',
-    name: 'Kyle',
-    subtitle: 'Approachable Friend',
-    provider: 'cartesia' as const,
-    voiceId: 'c961b81c-a935-4c17-bfb3-ba2239de8c2f',
-    gender: 'male',
-    accent: 'Multilingual',
-    description: 'Warm and conversational, instantly friendly',
-    previewUrl: '/audio/voices/kyle-approachable-friend.mp3',
-  },
-];
+import {
+  getVoicesForProvider,
+  type VoiceDefinition,
+} from '@kit/shared/voice-provider/voices';
 
 type VoiceFilter = 'all' | 'male' | 'female';
 
@@ -108,25 +19,27 @@ interface VoiceSelectionFormProps {
   accountId: string;
   businessName: string;
   initialVoice?: any;
-  onVoiceSelect?: (voice: typeof AVAILABLE_VOICES[0] | null) => void;
+  voiceProvider?: 'VAPI' | 'RETELL';
+  onVoiceSelect?: (voice: VoiceDefinition | null) => void;
 }
 
-export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVoiceSelect }: VoiceSelectionFormProps) {
+export function VoiceSelectionForm({ accountId, businessName, initialVoice, voiceProvider = 'VAPI', onVoiceSelect }: VoiceSelectionFormProps) {
   const { t } = useTranslation();
-  const [selectedVoice, setSelectedVoice] = useState<typeof AVAILABLE_VOICES[0] | null>(null);
+  const availableVoices = useMemo(() => getVoicesForProvider(voiceProvider), [voiceProvider]);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceDefinition | null>(null);
   const [filter, setFilter] = useState<VoiceFilter>('all');
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
-  // Load initial voice from saved progress
+  // Load initial voice from saved progress (search across both provider lists)
   useEffect(() => {
     if (initialVoice?.voiceId) {
-      const voice = AVAILABLE_VOICES.find(v => v.voiceId === initialVoice.voiceId);
+      const voice = availableVoices.find(v => v.voiceId === initialVoice.voiceId);
       if (voice) {
         setSelectedVoice(voice);
       }
     }
-  }, [initialVoice]);
+  }, [initialVoice, availableVoices]);
 
   // Create audio element for playing local preview files
   useEffect(() => {
@@ -149,18 +62,18 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
     };
   }, []);
 
-  const filteredVoices = AVAILABLE_VOICES.filter(voice => {
+  const filteredVoices = availableVoices.filter(voice => {
     if (filter === 'all') return true;
     return voice.gender === filter;
   });
 
-  const handleVoiceSelect = (voice: typeof AVAILABLE_VOICES[0] | null) => {
+  const handleVoiceSelect = (voice: VoiceDefinition | null) => {
     setSelectedVoice(voice);
     onVoiceSelect?.(voice);
   };
 
   const handlePlayPreview = async (voiceId: string) => {
-    const voice = AVAILABLE_VOICES.find(v => v.id === voiceId);
+    const voice = availableVoices.find(v => v.id === voiceId);
     if (!voice) return;
 
     if (audioElement) {
@@ -225,7 +138,7 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, onVo
       <RadioGroup
         value={selectedVoice?.id}
         onValueChange={(value) => {
-          const voice = AVAILABLE_VOICES.find((v) => v.id === value);
+          const voice = availableVoices.find((v) => v.id === value);
           handleVoiceSelect(voice || null);
         }}
         className="grid grid-cols-1 md:grid-cols-2 gap-3"

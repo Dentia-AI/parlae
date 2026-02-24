@@ -42,6 +42,11 @@ const navigation = [
     icon: GitBranch,
   },
   {
+    name: 'Retell Templates',
+    href: '/admin/retell-templates',
+    icon: FileStack,
+  },
+  {
     name: 'Billing Management',
     href: '/admin/billing',
     icon: Receipt,

@@ -773,6 +773,68 @@ export async function executeDeployment(
               { accountId: account.id, retellVersion: retellDeployResult?.version },
               '[Receptionist] Retell backup deployed alongside Vapi',
             );
+
+            // Import Twilio number into Retell and create a RetellPhoneNumber record
+            if (retellDeployResult?.agents?.receptionist?.agent_id && clinicOriginalNumber) {
+              try {
+                const importResult = await retellService.importPhoneNumber({
+                  phoneNumber: clinicOriginalNumber,
+                  terminationUri: undefined,
+                  inboundAgentId: retellDeployResult.agents.receptionist.agent_id,
+                  nickName: `${businessName} - Receptionist`,
+                });
+
+                if (importResult) {
+                  await prisma.retellPhoneNumber.upsert({
+                    where: { phoneNumber: clinicOriginalNumber },
+                    update: {
+                      retellAgentId: retellDeployResult.agents.receptionist.agent_id,
+                      retellAgentIds: retellDeployResult.agents,
+                      retellLlmIds: retellDeployResult.llms || null,
+                      isActive: true,
+                    },
+                    create: {
+                      accountId: account.id,
+                      retellPhoneId: importResult.phone_number_id || importResult.phone_number || clinicOriginalNumber,
+                      phoneNumber: clinicOriginalNumber,
+                      retellAgentId: retellDeployResult.agents.receptionist.agent_id,
+                      retellAgentIds: retellDeployResult.agents,
+                      retellLlmIds: retellDeployResult.llms || null,
+                    },
+                  });
+
+                  logger.info(
+                    { accountId: account.id, phone: clinicOriginalNumber },
+                    '[Receptionist] Twilio number imported into Retell',
+                  );
+                }
+              } catch (phoneErr: any) {
+                logger.warn(
+                  { error: phoneErr?.message, accountId: account.id },
+                  '[Receptionist] Non-fatal: Retell phone import failed',
+                );
+              }
+            }
+
+            // Store Retell agent IDs in phoneIntegrationSettings
+            if (retellDeployResult?.agents) {
+              await prisma.account.update({
+                where: { id: account.id },
+                data: {
+                  phoneIntegrationSettings: {
+                    ...((await prisma.account.findUnique({
+                      where: { id: account.id },
+                      select: { phoneIntegrationSettings: true },
+                    }))?.phoneIntegrationSettings as any || {}),
+                    retellReceptionistAgentId: retellDeployResult.agents.receptionist?.agent_id,
+                    retellAgentIds: Object.values(retellDeployResult.agents)
+                      .map((a: any) => a?.agent_id)
+                      .filter(Boolean),
+                    retellKnowledgeBaseId: retellKbIds[0] || null,
+                  },
+                },
+              });
+            }
           }
         }
       } catch (retellErr: any) {

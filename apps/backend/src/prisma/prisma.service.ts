@@ -155,6 +155,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.voiceProviderToggle;
   }
 
+  get retellAgentTemplate(): PrismaClient['retellAgentTemplate'] {
+    return this.client.retellAgentTemplate;
+  }
+
   // Call data is managed by Vapi API — only thin CallReference stored locally.
 
   // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {

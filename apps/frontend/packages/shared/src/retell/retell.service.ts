@@ -170,11 +170,24 @@ export interface RetellCallResponse {
   call_id: string;
   agent_id: string;
   call_status: string;
+  call_type?: string;
+  from_number?: string;
+  to_number?: string;
+  direction?: string;
   start_timestamp?: number;
   end_timestamp?: number;
+  duration_ms?: number;
   transcript?: string;
+  transcript_object?: Array<{
+    role: string;
+    content: string;
+    words?: Array<{ word: string; start: number; end: number }>;
+  }>;
   recording_url?: string;
+  public_log_url?: string;
   call_analysis?: Record<string, unknown>;
+  disconnection_reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RetellKnowledgeBaseSource {

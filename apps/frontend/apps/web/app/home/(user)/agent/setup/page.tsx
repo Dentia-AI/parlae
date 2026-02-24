@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { VoiceSelectionPageClient } from './_components/voice-selection-page-client';
 import { loadUserWorkspace } from '../../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
+import { getAccountProvider } from '@kit/shared/voice-provider';
 
 export const metadata = {
   title: 'AI Receptionist Setup - Voice Selection',
@@ -21,7 +22,6 @@ export default async function ReceptionistSetupPage({
     redirect('/auth/sign-in');
   }
 
-  // Get the personal account details
   const account = workspace.workspace.id 
     ? await prisma.account.findUnique({
         where: { id: workspace.workspace.id },
@@ -42,9 +42,7 @@ export default async function ReceptionistSetupPage({
 
   const integrationSettings = account.phoneIntegrationSettings as Record<string, unknown> | null;
   const vapiSquadId = (integrationSettings?.vapiSquadId as string) || '';
-
-  // Allow accessing setup even if already configured (for editing)
-  // Don't redirect if already has receptionist
+  const voiceProvider = await getAccountProvider(account.id);
 
   return (
     <VoiceSelectionPageClient 
@@ -54,6 +52,7 @@ export default async function ReceptionistSetupPage({
       savedClinicName={account.brandingBusinessName || ''}
       manage={manage}
       vapiSquadId={vapiSquadId}
+      voiceProvider={voiceProvider}
     />
   );
 }

@@ -178,8 +178,12 @@ async function deployTestAgents(model: string): Promise<DeployedAgent[]> {
   const agentMap: Record<string, string> = {};
   const originalToolsMap: Record<string, RetellTool[]> = {};
 
+  const SIM_ROUTING_ADDENDUM = SKIP_AGENT_SWAP
+    ? `\n\n## SIMULATION ROUTING RULE\nWhen you call any routing tool (route_to_booking, route_to_emergency, route_to_appointment_mgmt, route_to_patient_records, route_to_insurance_billing, route_to_receptionist, transfer_call) and it returns [ROUTE_COMPLETE], the transfer is done. You MUST immediately call end_call. Do NOT speak to the caller again, do NOT attempt to help further, do NOT retry the route. Just call end_call.`
+    : '';
+
   for (const def of rolesToDeploy) {
-    const prompt = hydratePlaceholders(def.systemPrompt, templateVars);
+    const prompt = hydratePlaceholders(def.systemPrompt, templateVars) + SIM_ROUTING_ADDENDUM;
     const beginMsg = hydratePlaceholders(def.beginMessage, templateVars);
     const pmsTools = hydrateTools(
       TOOL_GROUP_MAP[def.toolGroup] || [],
@@ -224,8 +228,47 @@ async function deployTestAgents(model: string): Promise<DeployedAgent[]> {
     await sleep(300);
   }
 
-  // Wire agent_swap tools (skip in simulation mode — Retell sim can't mock agent_swap)
-  if (!SKIP_AGENT_SWAP) {
+  if (SKIP_AGENT_SWAP) {
+    // SIMULATION MODE: Register routing targets as custom webhook tools
+    // so the Retell simulation framework can mock them by name.
+    // Without these, agents loop trying to route with no available tool.
+    for (const def of rolesToDeploy) {
+      if (def.swapTargets.length === 0 && !def.transferToClinic) continue;
+
+      const simRouteTools: RetellTool[] = def.swapTargets.map((t) => ({
+        type: 'custom' as const,
+        name: t.toolName,
+        description: t.description,
+        url: BACKEND_URL,
+        speak_during_execution: false,
+        speak_after_execution: false,
+        parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        headers: {},
+        execution_message_description: 'Routing caller',
+      }));
+
+      if (def.transferToClinic) {
+        simRouteTools.push({
+          type: 'custom' as const,
+          name: 'transfer_call',
+          description: 'Transfer caller to clinic staff for immediate assistance.',
+          url: BACKEND_URL,
+          speak_during_execution: false,
+          speak_after_execution: false,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+          headers: {},
+          execution_message_description: 'Transferring to clinic',
+        });
+      }
+
+      const baseTools = originalToolsMap[def.role] || [];
+      await retellRequest('PATCH', `/update-retell-llm/${llmMap[def.role]}`, {
+        general_tools: [...baseTools, ...simRouteTools],
+      });
+      await sleep(200);
+    }
+  } else {
+    // REAL MODE: Wire actual agent_swap built-in tools
     for (const def of rolesToDeploy) {
       if (def.swapTargets.length === 0) continue;
 

@@ -22,9 +22,10 @@ interface VoiceSelectionPageClientProps {
   savedClinicName?: string;
   manage?: boolean;
   vapiSquadId?: string;
+  voiceProvider?: 'VAPI' | 'RETELL';
 }
 
-export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName, manage = false, vapiSquadId }: VoiceSelectionPageClientProps) {
+export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName, manage = false, vapiSquadId, voiceProvider = 'VAPI' }: VoiceSelectionPageClientProps) {
   const router = useRouter();
   const { t } = useTranslation();
   const [selectedVoice, setSelectedVoice] = useState<any>(null);
@@ -224,6 +225,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
                 accountId={accountId}
                 businessName={businessName}
                 initialVoice={selectedVoice}
+                voiceProvider={voiceProvider}
                 onVoiceSelect={setSelectedVoice}
               />
             </CardContent>

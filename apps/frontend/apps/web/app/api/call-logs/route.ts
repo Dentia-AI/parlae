@@ -5,6 +5,8 @@ import { requireSession } from '~/lib/auth/get-session';
 import { isAdminUser } from '~/lib/auth/admin';
 import { calculateBlendedCost, getPlatformPricing, DEFAULT_PRICING_RATES } from '@kit/shared/vapi/cost-calculator';
 import type { PlatformPricingRates } from '@kit/shared/vapi/cost-calculator';
+import { getAccountProvider } from '@kit/shared/voice-provider';
+import type { RetellCallResponse } from '@kit/shared/retell/retell.service';
 
 import type { VapiCall } from '@kit/shared/vapi/vapi.service';
 
@@ -121,6 +123,93 @@ function inferOutcome(structuredData: Record<string, any>): string {
 }
 
 /**
+ * Map a Retell call to the same list-item shape used by Vapi calls.
+ */
+function mapRetellCallToListItem(call: RetellCallResponse): {
+  id: string;
+  vapiCallId: string;
+  phoneNumber: string;
+  callType: string;
+  duration: number | null;
+  status: string;
+  outcome: string;
+  callReason: string | null;
+  urgencyLevel: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  summary: string | null;
+  appointmentSet: boolean;
+  insuranceVerified: boolean;
+  paymentPlanDiscussed: boolean;
+  transferredToStaff: boolean;
+  transferredTo: string | null;
+  followUpRequired: boolean;
+  customerSentiment: string | null;
+  costCents: number | null;
+  callStartedAt: string;
+  callEndedAt: string | null;
+} {
+  const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+
+  let duration: number | null = null;
+  if (call.start_timestamp && call.end_timestamp) {
+    duration = Math.round((call.end_timestamp - call.start_timestamp) / 1000);
+  } else if (call.duration_ms) {
+    duration = Math.round(call.duration_ms / 1000);
+  }
+
+  const retellOutcome = inferRetellOutcome(analysis);
+  const startIso = call.start_timestamp
+    ? new Date(call.start_timestamp).toISOString()
+    : new Date().toISOString();
+  const endIso = call.end_timestamp
+    ? new Date(call.end_timestamp).toISOString()
+    : null;
+
+  return {
+    id: call.call_id,
+    vapiCallId: call.call_id,
+    phoneNumber: call.from_number || 'unknown',
+    callType: call.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
+    duration,
+    status: call.call_status === 'ended' ? 'COMPLETED' : (call.call_status || 'COMPLETED').toUpperCase(),
+    outcome: retellOutcome,
+    callReason: analysis.call_reason || null,
+    urgencyLevel: analysis.urgency_level || null,
+    contactName: analysis.patient_name || null,
+    contactEmail: analysis.patient_email || null,
+    summary: analysis.call_summary || null,
+    appointmentSet: !!analysis.appointment_booked,
+    insuranceVerified: !!analysis.insurance_verified,
+    paymentPlanDiscussed: !!analysis.payment_discussed,
+    transferredToStaff: !!analysis.transferred_to_staff,
+    transferredTo: analysis.transferred_to || null,
+    followUpRequired: !!analysis.follow_up_required,
+    customerSentiment: analysis.customer_sentiment || null,
+    costCents: null,
+    callStartedAt: startIso,
+    callEndedAt: endIso,
+  };
+}
+
+function inferRetellOutcome(analysis: Record<string, any>): string {
+  const outcome = analysis?.call_outcome;
+  switch (outcome) {
+    case 'appointment_booked': return 'BOOKED';
+    case 'transferred_to_staff': return 'TRANSFERRED';
+    case 'insurance_verified': return 'INSURANCE_INQUIRY';
+    case 'payment_plan_discussed': return 'PAYMENT_PLAN';
+    case 'information_provided': return 'INFORMATION';
+    case 'voicemail': return 'VOICEMAIL';
+    default: {
+      if (analysis?.appointment_booked) return 'BOOKED';
+      if (analysis?.transferred_to_staff) return 'TRANSFERRED';
+      return 'OTHER';
+    }
+  }
+}
+
+/**
  * GET /api/call-logs
  *
  * Returns paginated call logs for the current user's account.
@@ -158,73 +247,21 @@ export async function GET(request: NextRequest) {
     const outcome = searchParams.get('outcome');
     const search = searchParams.get('search');
 
-    // Vapi plan limits call history to the last 14 days.
-    // Clamp startDate so we never request beyond the retention window.
-    const RETENTION_DAYS = 14;
-    const earliestAllowed = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const rawStartDate = searchParams.get('startDate');
-    const startDate = rawStartDate && rawStartDate > earliestAllowed ? rawStartDate : earliestAllowed;
-    const endDate = searchParams.get('endDate');
-
-    // Get account's phone numbers from VapiPhoneNumber table
-    let phoneNumbers = await prisma.vapiPhoneNumber.findMany({
-      where: { accountId: account.id, isActive: true },
-      select: { vapiPhoneId: true },
-    });
-
-    // Fallback: if no VapiPhoneNumber records, try phoneIntegrationSettings
-    if (phoneNumbers.length === 0) {
-      const fullAccount = await prisma.account.findUnique({
-        where: { id: account.id },
-        select: { phoneIntegrationSettings: true },
-      });
-      const settings = fullAccount?.phoneIntegrationSettings as any;
-      if (settings?.vapiPhoneId) {
-        phoneNumbers = [{ vapiPhoneId: settings.vapiPhoneId }];
-      }
-    }
-
-    if (phoneNumbers.length === 0) {
-      console.log('[Call Logs] No phone numbers found for account', account.id);
-      return NextResponse.json({
-        calls: [],
-        pagination: { page, limit, total: 0, totalPages: 0, hasMore: false },
-        filters: { outcomes: [], reasons: [] },
-      });
-    }
-
-    console.log('[Call Logs] Fetching calls for phone IDs:', phoneNumbers.map(p => p.vapiPhoneId));
-
-    // Fetch calls from Vapi for each phone number
-    const vapiService = createVapiService();
-    const allCalls: VapiCall[] = [];
-
-    for (const phone of phoneNumbers) {
-      const calls = await vapiService.listCalls({
-        phoneNumberId: phone.vapiPhoneId,
-        limit: 1000,
-        createdAtGe: startDate || undefined,
-        createdAtLe: endDate || undefined,
-      });
-      console.log(`[Call Logs] Phone ${phone.vapiPhoneId}: ${calls.length} calls returned`);
-      allCalls.push(...calls);
-    }
-
-    // Sort by start time descending
-    allCalls.sort((a, b) => {
-      const aTime = new Date(a.startedAt || a.endedAt || 0).getTime();
-      const bTime = new Date(b.startedAt || b.endedAt || 0).getTime();
-      return bTime - aTime;
-    });
+    const activeProvider = await getAccountProvider(account.id);
 
     // Fetch pricing rates and check admin status for cost visibility
     const isAdmin = isAdminUser(userId);
     const pricingRates = isAdmin ? await getPlatformPricing(prisma) : DEFAULT_PRICING_RATES;
 
-    // Map to frontend shape
-    let mappedCalls = allCalls.map((call) =>
-      mapVapiCallToListItem(call, isAdmin, pricingRates)
-    );
+    let mappedCalls: ReturnType<typeof mapVapiCallToListItem>[] = [];
+
+    if (activeProvider === 'RETELL') {
+      mappedCalls = await fetchRetellCalls(account.id, searchParams);
+    } else {
+      mappedCalls = await fetchVapiCalls(
+        account.id, searchParams, isAdmin, pricingRates,
+      );
+    }
 
     // Apply client-side filters
     if (outcome) {
@@ -276,4 +313,129 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching call logs:', error);
     return NextResponse.json({ error: 'Failed to fetch call logs' }, { status: 500 });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Provider-specific fetch helpers
+// ---------------------------------------------------------------------------
+
+async function fetchVapiCalls(
+  accountId: string,
+  searchParams: URLSearchParams,
+  isAdmin: boolean,
+  pricingRates: PlatformPricingRates,
+) {
+  const RETENTION_DAYS = 14;
+  const earliestAllowed = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const rawStartDate = searchParams.get('startDate');
+  const startDate = rawStartDate && rawStartDate > earliestAllowed ? rawStartDate : earliestAllowed;
+  const endDate = searchParams.get('endDate');
+
+  let phoneNumbers = await prisma.vapiPhoneNumber.findMany({
+    where: { accountId, isActive: true },
+    select: { vapiPhoneId: true },
+  });
+
+  if (phoneNumbers.length === 0) {
+    const fullAccount = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { phoneIntegrationSettings: true },
+    });
+    const settings = fullAccount?.phoneIntegrationSettings as any;
+    if (settings?.vapiPhoneId) {
+      phoneNumbers = [{ vapiPhoneId: settings.vapiPhoneId }];
+    }
+  }
+
+  if (phoneNumbers.length === 0) return [];
+
+  const vapiService = createVapiService();
+  const allCalls: VapiCall[] = [];
+
+  for (const phone of phoneNumbers) {
+    const calls = await vapiService.listCalls({
+      phoneNumberId: phone.vapiPhoneId,
+      limit: 1000,
+      createdAtGe: startDate || undefined,
+      createdAtLe: endDate || undefined,
+    });
+    allCalls.push(...calls);
+  }
+
+  allCalls.sort((a, b) => {
+    const aTime = new Date(a.startedAt || a.endedAt || 0).getTime();
+    const bTime = new Date(b.startedAt || b.endedAt || 0).getTime();
+    return bTime - aTime;
+  });
+
+  return allCalls.map((call) => mapVapiCallToListItem(call, isAdmin, pricingRates));
+}
+
+async function fetchRetellCalls(
+  accountId: string,
+  searchParams: URLSearchParams,
+) {
+  const { createRetellService } = await import('@kit/shared/retell/retell.service');
+  const retell = createRetellService();
+
+  let retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId, isActive: true },
+    select: { retellPhoneNumberId: true },
+  });
+
+  // Fallback: check phoneIntegrationSettings for Retell agent IDs
+  if (retellPhones.length === 0) {
+    const fullAccount = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { phoneIntegrationSettings: true },
+    });
+    const settings = fullAccount?.phoneIntegrationSettings as any;
+    if (settings?.retellReceptionistAgentId) {
+      // Fetch calls filtered by agent_id instead
+      const agentIds: string[] = [];
+      if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
+      if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
+        agentIds.push(...settings.retellAgentIds);
+      }
+
+      const rawStartDate = searchParams.get('startDate');
+      const endDate = searchParams.get('endDate');
+
+      const allCalls: RetellCallResponse[] = [];
+      for (const agentId of [...new Set(agentIds)]) {
+        const calls = await retell.listCalls({
+          filter_criteria: {
+            agent_id: [agentId],
+            ...(rawStartDate ? { after_start_timestamp: new Date(rawStartDate).getTime() } : {}),
+            ...(endDate ? { before_start_timestamp: new Date(endDate).getTime() } : {}),
+          },
+          sort_order: 'descending',
+          limit: 1000,
+        });
+        allCalls.push(...(calls || []));
+      }
+
+      return allCalls.map(mapRetellCallToListItem);
+    }
+
+    return [];
+  }
+
+  const rawStartDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
+
+  const allCalls: RetellCallResponse[] = [];
+  for (const phone of retellPhones) {
+    const calls = await retell.listCalls({
+      filter_criteria: {
+        ...(rawStartDate ? { after_start_timestamp: new Date(rawStartDate).getTime() } : {}),
+        ...(endDate ? { before_start_timestamp: new Date(endDate).getTime() } : {}),
+      },
+      sort_order: 'descending',
+      limit: 1000,
+    });
+    allCalls.push(...(calls || []));
+  }
+
+  return allCalls.map(mapRetellCallToListItem);
 }

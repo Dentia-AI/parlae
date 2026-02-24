@@ -31,7 +31,10 @@
     "./retell/retell-pms-tools.config": "./src/retell/retell-pms-tools.config.ts",
     "./retell/templates/dental-clinic.retell-template": "./src/retell/templates/dental-clinic.retell-template.ts",
     "./retell/templates/retell-template-utils": "./src/retell/templates/retell-template-utils.ts",
-    "./twilio/server": "./src/twilio/server.ts"
+    "./twilio/server": "./src/twilio/server.ts",
+    "./voice-provider": "./src/voice-provider/index.ts",
+    "./voice-provider/voices": "./src/voice-provider/voices-client.ts",
+    "./retell/retell-kb.service": "./src/retell/retell-kb.service.ts"
   },
   "devDependencies": {
     "@types/react": "catalog:"

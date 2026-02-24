@@ -4,6 +4,8 @@ import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
 import { isAdminUser } from '~/lib/auth/admin';
 import { calculateBlendedCost, getPlatformPricing } from '@kit/shared/vapi/cost-calculator';
+import { getAccountProvider } from '@kit/shared/voice-provider';
+import type { RetellCallResponse } from '@kit/shared/retell/retell.service';
 
 import type { VapiCall, VapiAnalyticsQuery } from '@kit/shared/vapi/vapi.service';
 
@@ -85,6 +87,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(generateMockAnalytics(startDate, endDate));
       }
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    const activeProvider = await getAccountProvider(account.id);
+
+    if (activeProvider === 'RETELL') {
+      return NextResponse.json(
+        await computeRetellAnalytics(account.id, startDate, endDate),
+      );
     }
 
     // Get account's phone numbers from VapiPhoneNumber table
@@ -383,4 +393,101 @@ function inferOutcome(structuredData: Record<string, any>): string {
       return 'OTHER';
     }
   }
+}
+
+async function computeRetellAnalytics(
+  accountId: string,
+  startDate: Date,
+  endDate: Date,
+) {
+  const { createRetellService } = await import('@kit/shared/retell/retell.service');
+  const retell = createRetellService();
+
+  const fullAccount = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { phoneIntegrationSettings: true },
+  });
+  const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
+
+  const agentIds: string[] = [];
+  if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
+  if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
+    agentIds.push(...settings.retellAgentIds);
+  }
+
+  const allCalls: RetellCallResponse[] = [];
+  for (const agentId of [...new Set(agentIds)]) {
+    const calls = await retell.listCalls({
+      filter_criteria: {
+        agent_id: [agentId],
+        after_start_timestamp: startDate.getTime(),
+        before_start_timestamp: endDate.getTime(),
+      },
+      sort_order: 'descending',
+      limit: 1000,
+    });
+    allCalls.push(...(calls || []));
+  }
+
+  const totalCalls = allCalls.length;
+  let totalDuration = 0;
+  let durationCount = 0;
+  let bookedCount = 0;
+  const outcomeCounts = new Map<string, number>();
+  const dailyCounts = new Map<string, number>();
+
+  for (const call of allCalls) {
+    const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+
+    let dur = 0;
+    if (call.start_timestamp && call.end_timestamp) {
+      dur = Math.round((call.end_timestamp - call.start_timestamp) / 1000);
+    } else if (call.duration_ms) {
+      dur = Math.round(call.duration_ms / 1000);
+    }
+    if (dur > 0) { totalDuration += dur; durationCount++; }
+
+    const outcome = (() => {
+      const o = analysis?.call_outcome;
+      if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+      if (o === 'transferred_to_staff' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+      if (o === 'insurance_verified') return 'INSURANCE_INQUIRY';
+      if (o === 'information_provided') return 'INFORMATION';
+      return 'OTHER';
+    })();
+
+    outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
+    if (outcome === 'BOOKED') bookedCount++;
+
+    const dateKey = call.start_timestamp
+      ? new Date(call.start_timestamp).toISOString().slice(0, 10)
+      : '';
+    if (dateKey) dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+  }
+
+  const avgCallTime = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
+  const bookingRate = totalCalls > 0
+    ? Math.round((bookedCount / totalCalls) * 1000) / 10
+    : 0;
+
+  return {
+    dateRange: { start: startDate, end: endDate },
+    metrics: {
+      totalCalls,
+      bookingRate,
+      avgCallTime,
+      totalCost: 0,
+      insuranceVerified: 0,
+      paymentPlans: { count: 0, totalAmount: 0 },
+      collections: { count: 0, totalAmount: 0, recovered: 0, collectionRate: 0 },
+    },
+    activityTrend: Array.from(dailyCounts.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    outcomesDistribution: Array.from(outcomeCounts.entries()).map(([outcome, count]) => ({
+      outcome,
+      count,
+      percentage: totalCalls > 0 ? Math.round((count / totalCalls) * 1000) / 10 : 0,
+    })),
+  };
 }

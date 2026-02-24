@@ -10,6 +10,7 @@ import { DeployedBanner } from './_components/deployed-banner';
 import { DeployingAnimation } from './_components/deploying-animation';
 import { PhoneSetupCard } from './_components/phone-setup-card';
 import { PmsIntegrationCard } from './_components/pms-integration-card';
+import { getAccountProvider } from '@kit/shared/voice-provider';
 
 export const metadata = {
   title: 'AI Agents Dashboard',
@@ -69,12 +70,21 @@ export default async function ReceptionistDashboardPage({
     }
   }
 
-  // Check if receptionist is fully configured
-  // Must have method != 'none' AND have vapiSquadId in settings
-  const integrationSettings = account?.phoneIntegrationSettings as any;
-  const hasReceptionist = account?.phoneIntegrationMethod && 
+  if (!account) {
+    redirect('/home/agent/setup');
+  }
+
+  const integrationSettings = account.phoneIntegrationSettings as any;
+  const activeProvider = await getAccountProvider(account.id);
+
+  const hasVapiReceptionist = !!integrationSettings?.vapiSquadId;
+  const hasRetellReceptionist = !!(
+    integrationSettings?.retellAgentIds ||
+    integrationSettings?.retellReceptionistAgentId
+  );
+  const hasReceptionist = account.phoneIntegrationMethod &&
                           account.phoneIntegrationMethod !== 'none' &&
-                          integrationSettings?.vapiSquadId;
+                          (activeProvider === 'RETELL' ? hasRetellReceptionist : hasVapiReceptionist);
 
   const isDeploying = integrationSettings?.deploymentStatus === 'in_progress';
   const deploymentFailed = integrationSettings?.deploymentStatus === 'failed';
@@ -106,7 +116,7 @@ export default async function ReceptionistDashboardPage({
 
   const phoneNumber = integrationSettings?.phoneNumber || '+1 (555) 555-1234';
   const voiceConfig = integrationSettings?.voiceConfig;
-  const isActive = !!integrationSettings?.vapiSquadId;
+  const isActive = activeProvider === 'RETELL' ? hasRetellReceptionist : hasVapiReceptionist;
 
   const integrationMethodLabels: Record<string, string> = {
     forwarded: 'Call Forwarding',

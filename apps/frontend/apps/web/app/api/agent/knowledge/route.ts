@@ -3,6 +3,7 @@ import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/server';
 import { requireSession } from '~/lib/auth/get-session';
 import { getLogger } from '@kit/shared/logger';
+import { getAccountProvider } from '@kit/shared/voice-provider';
 import type { KnowledgeBaseConfig } from '@kit/shared/vapi/templates';
 
 /**
@@ -142,6 +143,38 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Sync to Retell if this account uses Retell
+    let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
+    const provider = await getAccountProvider(account.id);
+
+    if (provider === 'RETELL' && allFileIds.length > 0) {
+      try {
+        const { syncVapiKBToRetell } = await import(
+          '@kit/shared/retell/retell-kb.service'
+        );
+
+        const newKbId = await syncVapiKBToRetell(
+          account.id,
+          allFileIds,
+          businessName,
+          retellKnowledgeBaseId || undefined,
+        );
+
+        if (newKbId) {
+          retellKnowledgeBaseId = newKbId;
+          logger.info(
+            { accountId: account.id, retellKnowledgeBaseId: newKbId, fileCount: allFileIds.length },
+            '[KB API] Retell knowledge base synced',
+          );
+        }
+      } catch (retellErr: any) {
+        logger.error(
+          { error: retellErr?.message, accountId: account.id },
+          '[KB API] Retell KB sync failed (non-fatal)',
+        );
+      }
+    }
+
     // Save to DB
     await prisma.account.update({
       where: { id: account.id },
@@ -152,13 +185,14 @@ export async function PUT(request: NextRequest) {
           knowledgeBaseFileIds: allFileIds,
           queryToolId,
           queryToolName,
+          retellKnowledgeBaseId,
           knowledgeBaseUpdatedAt: new Date().toISOString(),
         },
       },
     });
 
     logger.info(
-      { accountId: account.id, queryToolId, totalFiles: allFileIds.length },
+      { accountId: account.id, queryToolId, totalFiles: allFileIds.length, provider },
       '[KB API] Knowledge base updated successfully',
     );
 

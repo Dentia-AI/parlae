@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { createVapiService } from '@kit/shared/vapi/vapi.service';
 import { requireSession } from '~/lib/auth/get-session';
+import { getAccountProvider } from '@kit/shared/voice-provider';
+import type { RetellCallResponse } from '@kit/shared/retell/retell.service';
 
 import type { VapiCall } from '@kit/shared/vapi/vapi.service';
 
@@ -85,6 +87,14 @@ export async function GET(request: NextRequest) {
         });
       }
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    const activeProvider = await getAccountProvider(account.id);
+
+    if (activeProvider === 'RETELL') {
+      return NextResponse.json(
+        await fetchRetellRecentCalls(account.id, limit, offset),
+      );
     }
 
     // Get account's phone numbers from VapiPhoneNumber table
@@ -220,4 +230,89 @@ function inferOutcome(structuredData: Record<string, any>): string {
       return 'OTHER';
     }
   }
+}
+
+async function fetchRetellRecentCalls(accountId: string, limit: number, offset: number) {
+  const { createRetellService } = await import('@kit/shared/retell/retell.service');
+  const retell = createRetellService();
+
+  const fullAccount = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { phoneIntegrationSettings: true },
+  });
+  const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
+
+  const agentIds: string[] = [];
+  if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
+  if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
+    agentIds.push(...settings.retellAgentIds);
+  }
+
+  if (agentIds.length === 0) {
+    return { calls: [], pagination: { total: 0, limit, offset, hasMore: false } };
+  }
+
+  const allCalls: RetellCallResponse[] = [];
+  for (const agentId of [...new Set(agentIds)]) {
+    const calls = await retell.listCalls({
+      filter_criteria: { agent_id: [agentId] },
+      sort_order: 'descending',
+      limit: limit + offset + 10,
+    });
+    allCalls.push(...(calls || []));
+  }
+
+  allCalls.sort((a, b) => (b.start_timestamp || 0) - (a.start_timestamp || 0));
+
+  const total = allCalls.length;
+  const paged = allCalls.slice(offset, offset + limit);
+
+  const mappedCalls = paged.map((call) => {
+    const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+
+    let duration: number | null = null;
+    if (call.start_timestamp && call.end_timestamp) {
+      duration = Math.round((call.end_timestamp - call.start_timestamp) / 1000);
+    } else if (call.duration_ms) {
+      duration = Math.round(call.duration_ms / 1000);
+    }
+
+    const outcome = (() => {
+      const o = analysis?.call_outcome;
+      if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+      if (o === 'transferred_to_staff') return 'TRANSFERRED';
+      if (o === 'insurance_verified') return 'INSURANCE_INQUIRY';
+      if (o === 'information_provided') return 'INFORMATION';
+      return 'OTHER';
+    })();
+
+    return {
+      id: call.call_id,
+      contactName: analysis.patient_name || null,
+      phoneNumber: call.from_number || 'unknown',
+      outcome,
+      status: call.call_status === 'ended' ? 'COMPLETED' : (call.call_status || 'COMPLETED').toUpperCase(),
+      callType: call.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
+      duration,
+      callStartedAt: call.start_timestamp
+        ? new Date(call.start_timestamp).toISOString()
+        : new Date().toISOString(),
+      appointmentSet: !!analysis.appointment_booked,
+      insuranceVerified: !!analysis.insurance_verified,
+      paymentPlanDiscussed: !!analysis.payment_discussed,
+      paymentPlanAmount: null,
+      transferredToStaff: !!analysis.transferred_to_staff,
+      transferredTo: analysis.transferred_to || null,
+      followUpRequired: !!analysis.follow_up_required,
+      customerSentiment: analysis.customer_sentiment || null,
+      callReason: analysis.call_reason || null,
+      summary: analysis.call_summary || null,
+      agent: null,
+    };
+  });
+
+  return {
+    calls: mappedCalls,
+    pagination: { total, limit, offset, hasMore: offset + limit < total },
+  };
 }

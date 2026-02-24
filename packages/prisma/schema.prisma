@@ -182,6 +182,7 @@ model Account {
   phoneIntegrationSettings Json?   @default("{}") @map("phone_integration_settings")
   advancedSetupEnabled     Boolean @default(false) @map("advanced_setup_enabled")
   agentTemplateId          String? @map("agent_template_id")
+  retellAgentTemplateId    String? @map("retell_agent_template_id")
 
   // Setup wizard progress tracking
   setupProgress    Json?     @default("{}") @map("setup_progress") // Stores progress for each step
@@ -228,6 +229,7 @@ model Account {
   impersonationSessions ImpersonationSession[]
   ghlSubAccounts        GhlSubAccount[]
   agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
+  retellAgentTemplate   RetellAgentTemplate?   @relation(fields: [retellAgentTemplateId], references: [id])
   pmsIntegrations       PmsIntegration[]
   vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account (Vapi)
   retellPhoneNumbers    RetellPhoneNumber[] // Phone numbers for this account (Retell)
@@ -1123,6 +1125,36 @@ model RetellPhoneNumber {
   @@index([accountId])
   @@index([pmsIntegrationId])
   @@map("retell_phone_numbers")
+}
+
+// Retell Agent Template: stores the configuration blueprint for Retell agents.
+// Separate from the Vapi AgentTemplate because Retell uses LLM + Agent + agent_swap
+// architecture rather than Vapi's Squad + Assistant model.
+model RetellAgentTemplate {
+  id          String  @id @default(uuid())
+  name        String  @unique // e.g., "retell-dental-v1"
+  displayName String  @map("display_name")
+  description String?
+  version     String // e.g., "v1", "v2"
+  isDefault   Boolean @default(false) @map("is_default")
+  isActive    Boolean @default(true) @map("is_active")
+
+  // Per-role LLM configs: { receptionist: { model, prompt, ... }, booking: { ... }, ... }
+  llmConfigs  Json @map("llm_configs")
+  // Per-role agent configs: { receptionist: { voiceId, ... }, booking: { ... }, ... }
+  agentConfigs Json @map("agent_configs")
+  // agent_swap routing config: how agents transfer between each other
+  swapConfig  Json @map("swap_config")
+  // Custom tool definitions (webhook tools) — optional, defaults come from code
+  toolsConfig Json? @map("tools_config")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  accounts Account[]
+
+  @@map("retell_agent_templates")
 }
 
 // Platform-wide pricing configuration for blended call cost calculation.
