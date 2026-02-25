@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
 import { VapiToolsController } from './vapi-tools.controller';
-import { VapiToolsService } from './vapi-tools.service';
+import { AgentToolsService } from '../agent-tools/agent-tools.service';
 
 describe('VapiToolsController', () => {
   let controller: VapiToolsController;
-  let vapiToolsService: any;
+  let agentToolsService: any;
 
-  const mockVapiToolsService = {
+  const mockAgentToolsService = {
     searchPatients: jest.fn().mockResolvedValue({ patients: [] }),
     getPatientInfo: jest.fn().mockResolvedValue({ patient: null }),
     createPatient: jest.fn().mockResolvedValue({ success: true }),
@@ -32,12 +32,12 @@ describe('VapiToolsController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VapiToolsController],
       providers: [
-        { provide: VapiToolsService, useValue: mockVapiToolsService },
+        { provide: AgentToolsService, useValue: mockAgentToolsService },
       ],
     }).compile();
 
     controller = module.get<VapiToolsController>(VapiToolsController);
-    vapiToolsService = module.get(VapiToolsService);
+    agentToolsService = module.get(AgentToolsService);
   });
 
   afterEach(() => {
@@ -87,37 +87,37 @@ describe('VapiToolsController', () => {
   describe('tool routing', () => {
     it('should route camelCase tool names', async () => {
       await controller.handleToolCall('searchPatients', { query: 'John' }, 'test-vapi-secret', '');
-      expect(vapiToolsService.searchPatients).toHaveBeenCalled();
+      expect(agentToolsService.searchPatients).toHaveBeenCalled();
     });
 
     it('should route kebab-case tool names', async () => {
       await controller.handleToolCall('search-patients', { query: 'John' }, 'test-vapi-secret', '');
-      expect(vapiToolsService.searchPatients).toHaveBeenCalled();
+      expect(agentToolsService.searchPatients).toHaveBeenCalled();
     });
 
     it('should route bookAppointment', async () => {
       await controller.handleToolCall('bookAppointment', {}, 'test-vapi-secret', '');
-      expect(vapiToolsService.bookAppointment).toHaveBeenCalled();
+      expect(agentToolsService.bookAppointment).toHaveBeenCalled();
     });
 
     it('should route book-appointment', async () => {
       await controller.handleToolCall('book-appointment', {}, 'test-vapi-secret', '');
-      expect(vapiToolsService.bookAppointment).toHaveBeenCalled();
+      expect(agentToolsService.bookAppointment).toHaveBeenCalled();
     });
 
     it('should route cancelAppointment', async () => {
       await controller.handleToolCall('cancelAppointment', {}, 'test-vapi-secret', '');
-      expect(vapiToolsService.cancelAppointment).toHaveBeenCalled();
+      expect(agentToolsService.cancelAppointment).toHaveBeenCalled();
     });
 
     it('should route getProviders', async () => {
       await controller.handleToolCall('getProviders', {}, 'test-vapi-secret', '');
-      expect(vapiToolsService.getProviders).toHaveBeenCalled();
+      expect(agentToolsService.getProviders).toHaveBeenCalled();
     });
 
     it('should route transferToHuman', async () => {
       await controller.handleToolCall('transferToHuman', {}, 'test-vapi-secret', '');
-      expect(vapiToolsService.transferToHuman).toHaveBeenCalled();
+      expect(agentToolsService.transferToHuman).toHaveBeenCalled();
     });
 
     it('should throw 404 for unknown tool', async () => {

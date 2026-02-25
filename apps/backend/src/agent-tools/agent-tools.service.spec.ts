@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { VapiToolsService } from './vapi-tools.service';
+import { AgentToolsService } from './agent-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -12,8 +12,8 @@ import { createMockNotificationsService } from '../test/mocks/notifications.mock
 import { createMockHipaaAuditService } from '../test/mocks/hipaa-audit.mock';
 import { createMockSecretsService } from '../test/mocks/secrets.mock';
 
-describe('VapiToolsService', () => {
-  let service: VapiToolsService;
+describe('AgentToolsService', () => {
+  let service: AgentToolsService;
   let prisma: any;
   let gcalService: any;
   let notificationsService: any;
@@ -27,7 +27,7 @@ describe('VapiToolsService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        VapiToolsService,
+        AgentToolsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: GoogleCalendarService, useValue: mockGcal },
         { provide: NotificationsService, useValue: mockNotifications },
@@ -40,7 +40,7 @@ describe('VapiToolsService', () => {
       ],
     }).compile();
 
-    service = module.get<VapiToolsService>(VapiToolsService);
+    service = module.get<AgentToolsService>(AgentToolsService);
     prisma = module.get(PrismaService);
     gcalService = module.get(GoogleCalendarService);
     notificationsService = module.get(NotificationsService);

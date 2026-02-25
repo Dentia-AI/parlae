@@ -43,8 +43,8 @@ function formatTimeForSpeech(dateInput: string | Date, tz?: string): string {
 }
 
 @Injectable()
-export class VapiToolsService {
-  private readonly logger = new StructuredLogger(VapiToolsService.name);
+export class AgentToolsService {
+  private readonly logger = new StructuredLogger(AgentToolsService.name);
 
   /**
    * Per-call patient cache: stores data from createPatient so bookAppointment
@@ -66,7 +66,7 @@ export class VapiToolsService {
     this.patientCache.set(callId, data);
     // Lazy cleanup of stale entries
     if (this.patientCache.size > 200) {
-      const cutoff = Date.now() - VapiToolsService.CACHE_TTL_MS;
+      const cutoff = Date.now() - AgentToolsService.CACHE_TTL_MS;
       for (const [key, val] of this.patientCache) {
         if (val.cachedAt < cutoff) this.patientCache.delete(key);
       }
@@ -76,7 +76,7 @@ export class VapiToolsService {
   private getCachedPatient(callId: string): CachedPatientData | undefined {
     const entry = this.patientCache.get(callId);
     if (!entry) return undefined;
-    if (Date.now() - entry.cachedAt > VapiToolsService.CACHE_TTL_MS) {
+    if (Date.now() - entry.cachedAt > AgentToolsService.CACHE_TTL_MS) {
       this.patientCache.delete(callId);
       return undefined;
     }
@@ -1811,7 +1811,7 @@ export class VapiToolsService {
 
     try {
       const callerPhone = call?.customer?.number;
-      let startTime = new Date(params.startTime || params.datetime);
+      let startTime = this.parseBookingStartTime(params);
       const now = new Date();
 
       // Safety: reject bookings in the past — bump to now + 1 hour
@@ -1946,6 +1946,76 @@ export class VapiToolsService {
           "I'm sorry, I had trouble booking that appointment. Let me take your information and have someone call you back.",
       };
     }
+  }
+
+  /**
+   * Parse the booking start time from AI-provided parameters.
+   * Handles multiple formats the AI might send:
+   *   - Full ISO: "2026-02-25T08:00:00"
+   *   - Date + time-only: date="2026-02-25", startTime="08:00"
+   *   - Date-only + time-only: date="2026-02-25", startTime="8:00 AM"
+   *   - Just datetime: datetime="2026-02-25T08:00"
+   */
+  private parseBookingStartTime(params: any): Date {
+    const raw = params.startTime || params.datetime;
+    const dateStr = params.date;
+
+    if (raw) {
+      const directParse = new Date(raw);
+      if (!isNaN(directParse.getTime())) {
+        return directParse;
+      }
+
+      // time-only string like "08:00" or "8:00 AM" — combine with date param
+      if (dateStr) {
+        const normalized = this.normalizeTimeString(raw);
+        const combined = new Date(`${dateStr}T${normalized}`);
+        if (!isNaN(combined.getTime())) {
+          return combined;
+        }
+      }
+
+      // Last resort: treat as time today
+      const today = new Date().toISOString().split('T')[0];
+      const normalized = this.normalizeTimeString(raw);
+      const todayParsed = new Date(`${today}T${normalized}`);
+      if (!isNaN(todayParsed.getTime())) {
+        return todayParsed;
+      }
+    }
+
+    if (dateStr) {
+      const dateParsed = new Date(dateStr);
+      if (!isNaN(dateParsed.getTime())) {
+        return dateParsed;
+      }
+    }
+
+    this.logger.warn({
+      startTime: raw,
+      date: dateStr,
+      msg: '[GCal Booking] Could not parse start time, defaulting to now + 1hr',
+    });
+    return new Date(Date.now() + 60 * 60 * 1000);
+  }
+
+  private normalizeTimeString(time: string): string {
+    const cleaned = time.trim().toUpperCase();
+    const match12 = cleaned.match(/^(\d{1,2}):?(\d{2})?\s*(AM|PM)$/);
+    if (match12) {
+      let hours = parseInt(match12[1], 10);
+      const minutes = match12[2] || '00';
+      if (match12[3] === 'PM' && hours < 12) hours += 12;
+      if (match12[3] === 'AM' && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, '0')}:${minutes}:00`;
+    }
+
+    const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24) {
+      return `${match24[1].padStart(2, '0')}:${match24[2]}:00`;
+    }
+
+    return time;
   }
 
   /**

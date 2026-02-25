@@ -9,7 +9,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { VapiToolsService } from './vapi-tools.service';
+import { AgentToolsService } from '../agent-tools/agent-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLogger } from '../common/structured-logger';
 
@@ -76,7 +76,7 @@ export class VapiWebhookController {
   }
 
   constructor(
-    private readonly vapiToolsService: VapiToolsService,
+    private readonly agentToolsService: AgentToolsService,
     private readonly prisma: PrismaService,
   ) {
     this.logger.log(`[Vapi Webhook] Backend ${VapiWebhookController.BACKEND_VERSION} initialized`);
@@ -306,40 +306,40 @@ export class VapiWebhookController {
       };
     }
 
-    const lookupPatientHandler = (p: any) => this.vapiToolsService.lookupPatient(p);
-    const saveInsuranceHandler = (p: any) => this.vapiToolsService.saveInsurance(p);
+    const lookupPatientHandler = (p: any) => this.agentToolsService.lookupPatient(p);
+    const saveInsuranceHandler = (p: any) => this.agentToolsService.saveInsurance(p);
 
     const toolMap: Record<string, (p: any) => Promise<any>> = {
       // v4.0 canonical names
       lookupPatient: lookupPatientHandler,
-      addNote: (p) => this.vapiToolsService.addPatientNote(p),
-      getInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
-      getBalance: (p) => this.vapiToolsService.getPatientBalance(p),
+      addNote: (p) => this.agentToolsService.addPatientNote(p),
+      getInsurance: (p) => this.agentToolsService.getPatientInsurance(p),
+      getBalance: (p) => this.agentToolsService.getPatientBalance(p),
       saveInsurance: saveInsuranceHandler,
 
       // v3.x backward-compat aliases → same handlers
       searchPatients: lookupPatientHandler,
       getPatientInfo: lookupPatientHandler,
-      addPatientNote: (p) => this.vapiToolsService.addPatientNote(p),
-      getPatientInsurance: (p) => this.vapiToolsService.getPatientInsurance(p),
-      getPatientBalance: (p) => this.vapiToolsService.getPatientBalance(p),
+      addPatientNote: (p) => this.agentToolsService.addPatientNote(p),
+      getPatientInsurance: (p) => this.agentToolsService.getPatientInsurance(p),
+      getPatientBalance: (p) => this.agentToolsService.getPatientBalance(p),
       addPatientInsurance: saveInsuranceHandler,
       updatePatientInsurance: saveInsuranceHandler,
 
       // Unchanged tools
-      createPatient: (p) => this.vapiToolsService.createPatient(p),
-      updatePatient: (p) => this.vapiToolsService.updatePatient(p),
-      checkAvailability: (p) => this.vapiToolsService.checkAvailability(p),
-      bookAppointment: (p) => this.vapiToolsService.bookAppointment(p),
-      rescheduleAppointment: (p) => this.vapiToolsService.rescheduleAppointment(p),
-      cancelAppointment: (p) => this.vapiToolsService.cancelAppointment(p),
-      getAppointments: (p) => this.vapiToolsService.getAppointments(p),
-      verifyInsuranceCoverage: (p) => this.vapiToolsService.verifyInsuranceCoverage(p),
-      getPaymentHistory: (p) => this.vapiToolsService.getPaymentHistory(p),
-      processPayment: (p) => this.vapiToolsService.processPayment(p),
-      createPaymentPlan: (p) => this.vapiToolsService.createPaymentPlan(p),
-      getProviders: (p) => this.vapiToolsService.getProviders(p),
-      transferToHuman: (p) => this.vapiToolsService.transferToHuman(p),
+      createPatient: (p) => this.agentToolsService.createPatient(p),
+      updatePatient: (p) => this.agentToolsService.updatePatient(p),
+      checkAvailability: (p) => this.agentToolsService.checkAvailability(p),
+      bookAppointment: (p) => this.agentToolsService.bookAppointment(p),
+      rescheduleAppointment: (p) => this.agentToolsService.rescheduleAppointment(p),
+      cancelAppointment: (p) => this.agentToolsService.cancelAppointment(p),
+      getAppointments: (p) => this.agentToolsService.getAppointments(p),
+      verifyInsuranceCoverage: (p) => this.agentToolsService.verifyInsuranceCoverage(p),
+      getPaymentHistory: (p) => this.agentToolsService.getPaymentHistory(p),
+      processPayment: (p) => this.agentToolsService.processPayment(p),
+      createPaymentPlan: (p) => this.agentToolsService.createPaymentPlan(p),
+      getProviders: (p) => this.agentToolsService.getProviders(p),
+      transferToHuman: (p) => this.agentToolsService.transferToHuman(p),
     };
 
     const handler = toolMap[toolName];

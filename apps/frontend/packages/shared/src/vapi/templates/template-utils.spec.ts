@@ -118,9 +118,9 @@ describe('template-utils', () => {
       expect(result).toContain('Bright Smiles Dental');
     });
 
-    it('uses default fallback for missing optional vars', () => {
+    it('uses empty string for missing optional vars', () => {
       const result = hydratePlaceholders('Hours: {{clinicHours}}', { clinicName: 'Test' });
-      expect(result).toBe('Hours: Contact us for current hours');
+      expect(result).toBe('Hours: ');
     });
 
     it('uses provided clinicInsurance when given', () => {

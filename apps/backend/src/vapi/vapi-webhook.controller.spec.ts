@@ -1,19 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
 import { VapiWebhookController } from './vapi-webhook.controller';
-import { VapiToolsService } from './vapi-tools.service';
+import { AgentToolsService } from '../agent-tools/agent-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
 
 describe('VapiWebhookController', () => {
   let controller: VapiWebhookController;
-  let vapiToolsService: any;
+  let agentToolsService: any;
   let prisma: any;
 
   beforeEach(async () => {
     const mockPrisma = createMockPrismaService();
 
-    const mockVapiTools = {
+    const mockAgentTools = {
       lookupPatient: jest.fn().mockResolvedValue({ result: { success: true } }),
       createPatient: jest.fn().mockResolvedValue({ result: { success: true } }),
       bookAppointment: jest.fn().mockResolvedValue({ result: { success: true } }),
@@ -37,13 +37,13 @@ describe('VapiWebhookController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VapiWebhookController],
       providers: [
-        { provide: VapiToolsService, useValue: mockVapiTools },
+        { provide: AgentToolsService, useValue: mockAgentTools },
         { provide: PrismaService, useValue: mockPrisma },
       ],
     }).compile();
 
     controller = module.get<VapiWebhookController>(VapiWebhookController);
-    vapiToolsService = module.get(VapiToolsService);
+    agentToolsService = module.get(AgentToolsService);
     prisma = module.get(PrismaService);
   });
 
@@ -147,7 +147,7 @@ describe('VapiWebhookController', () => {
         '',
       )) as { results?: Array<{ result: string }> };
       expect(result.results).toBeDefined();
-      expect(vapiToolsService.lookupPatient).toHaveBeenCalled();
+      expect(agentToolsService.lookupPatient).toHaveBeenCalled();
     });
 
     it('should dispatch bookAppointment', async () => {
@@ -156,7 +156,7 @@ describe('VapiWebhookController', () => {
         '',
         '',
       );
-      expect(vapiToolsService.bookAppointment).toHaveBeenCalled();
+      expect(agentToolsService.bookAppointment).toHaveBeenCalled();
     });
 
     it('should return error for unknown tool', async () => {
@@ -191,7 +191,7 @@ describe('VapiWebhookController', () => {
         },
       }, '', '')) as { results: Array<{ result: string }> };
       expect(result.results[0].result).toContain('VALIDATION ERROR');
-      expect(vapiToolsService.bookAppointment).not.toHaveBeenCalled();
+      expect(agentToolsService.bookAppointment).not.toHaveBeenCalled();
     });
 
     it('should reject checkAvailability with invalid date format', async () => {

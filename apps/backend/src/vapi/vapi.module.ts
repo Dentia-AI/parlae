@@ -1,15 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
-import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { AgentToolsModule } from '../agent-tools/agent-tools.module';
 import { VapiToolsController } from './vapi-tools.controller';
 import { VapiWebhookController } from './vapi-webhook.controller';
-import { VapiToolsService } from './vapi-tools.service';
 
 @Module({
-  imports: [PrismaModule, GoogleCalendarModule, NotificationsModule],
+  imports: [PrismaModule, AgentToolsModule],
   controllers: [VapiToolsController, VapiWebhookController],
-  providers: [VapiToolsService],
-  exports: [VapiToolsService],
 })
 export class VapiModule {}

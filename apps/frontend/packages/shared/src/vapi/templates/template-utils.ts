@@ -201,14 +201,10 @@ export function hydratePlaceholders(
 ): string {
   const defaults: Record<string, string> = {
     clinicName: vars.clinicName,
-    clinicHours: vars.clinicHours || 'Contact us for current hours',
+    clinicHours: vars.clinicHours || '',
     clinicLocation: vars.clinicLocation || '',
-    clinicInsurance:
-      vars.clinicInsurance ||
-      'We accept most major dental insurance plans including Blue Cross Blue Shield, Aetna, Cigna, UnitedHealthcare, Medicare, and Medicaid. We also offer competitive self-pay rates.',
-    clinicServices:
-      vars.clinicServices ||
-      'Full range of dental services including cleanings, exams, fillings, crowns, root canals, extractions, and cosmetic dentistry',
+    clinicInsurance: vars.clinicInsurance || '',
+    clinicServices: vars.clinicServices || '',
   };
 
   let result = text;
