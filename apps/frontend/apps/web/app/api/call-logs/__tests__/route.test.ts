@@ -1,7 +1,12 @@
 import { GET } from '../route';
 import { NextRequest } from 'next/server';
 
-const mockGetAccountProvider = jest.fn().mockResolvedValue('VAPI');
+jest.mock('@kit/shared/voice-provider', () => ({
+  getAccountProvider: jest.fn().mockResolvedValue('VAPI'),
+}));
+
+const { getAccountProvider: mockGetAccountProvider } =
+  jest.requireMock<{ getAccountProvider: jest.Mock }>('@kit/shared/voice-provider');
 
 jest.mock('@kit/prisma', () => ({
   prisma: {
@@ -41,9 +46,6 @@ jest.mock('@kit/shared/logger', () => ({
     warn: jest.fn(),
     debug: jest.fn(),
   }),
-}));
-jest.mock('@kit/shared/voice-provider', () => ({
-  getAccountProvider: mockGetAccountProvider,
 }));
 
 describe('GET /api/call-logs', () => {

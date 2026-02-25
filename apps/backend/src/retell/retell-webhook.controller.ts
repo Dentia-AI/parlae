@@ -34,6 +34,19 @@ export class RetellWebhookController {
     @Body() body: any,
     @Headers('x-retell-signature') signature: string,
   ) {
+    const apiKey = process.env.RETELL_API_KEY;
+    if (apiKey) {
+      const isValid = RetellWebhookController.verifySignature(
+        JSON.stringify(body),
+        signature,
+        apiKey,
+      );
+      if (!isValid) {
+        this.logger.error('[Retell Webhook] Invalid signature — rejecting request');
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
+    }
+
     const event = body?.event;
     const callId = body?.call?.call_id;
 
