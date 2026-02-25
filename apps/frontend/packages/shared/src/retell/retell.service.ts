@@ -466,15 +466,22 @@ export class RetellService {
 
   async importPhoneNumber(opts: {
     phoneNumber: string;
-    terminationUri?: string;
-    sipTrunkId?: string;
+    terminationUri: string;
+    sipTrunkAuthUsername?: string;
+    sipTrunkAuthPassword?: string;
     inboundAgentId?: string;
     outboundAgentId?: string;
     nickname?: string;
   }): Promise<RetellPhoneNumberResponse | null> {
-    logger.info({ phoneNumber: opts.phoneNumber }, '[Retell] Importing phone number');
-    return this.request<RetellPhoneNumberResponse>('POST', '/create-phone-number', {
+    logger.info(
+      { phoneNumber: opts.phoneNumber, terminationUri: opts.terminationUri },
+      '[Retell] Importing phone number via /import-phone-number',
+    );
+    return this.request<RetellPhoneNumberResponse>('POST', '/import-phone-number', {
       phone_number: opts.phoneNumber,
+      termination_uri: opts.terminationUri,
+      ...(opts.sipTrunkAuthUsername ? { sip_trunk_auth_username: opts.sipTrunkAuthUsername } : {}),
+      ...(opts.sipTrunkAuthPassword ? { sip_trunk_auth_password: opts.sipTrunkAuthPassword } : {}),
       ...(opts.inboundAgentId ? { inbound_agent_id: opts.inboundAgentId } : {}),
       ...(opts.outboundAgentId ? { outbound_agent_id: opts.outboundAgentId } : {}),
       ...(opts.nickname ? { nickname: opts.nickname } : {}),

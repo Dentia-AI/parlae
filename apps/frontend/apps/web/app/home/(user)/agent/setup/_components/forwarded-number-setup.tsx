@@ -34,6 +34,14 @@ interface ForwardedNumberSetupProps {
 
 type ForwardingType = 'all' | 'conditional';
 
+const COUNTRY_CODES = [
+  { code: '+1', label: '🇨🇦 Canada (+1)', country: 'CA' },
+  { code: '+1', label: '🇺🇸 USA (+1)', country: 'US' },
+  { code: '+44', label: '🇬🇧 UK (+44)', country: 'GB' },
+  { code: '+33', label: '🇫🇷 France (+33)', country: 'FR' },
+  { code: '+61', label: '🇦🇺 Australia (+61)', country: 'AU' },
+] as const;
+
 export function ForwardedNumberSetup({
   accountId,
   businessName,
@@ -43,6 +51,7 @@ export function ForwardedNumberSetup({
 }: ForwardedNumberSetupProps) {
   const { t } = useTranslation();
   const [pending, startTransition] = useTransition();
+  const [countryIndex, setCountryIndex] = useState(0);
   const [clinicNumber, setClinicNumber] = useState('');
   const [staffDirectNumber, setStaffDirectNumber] = useState('');
   const [forwardingType, setForwardingType] = useState<ForwardingType>('all');
@@ -81,14 +90,24 @@ export function ForwardedNumberSetup({
     onSetupStateChange?.(setupComplete);
   }, [setupComplete, onSetupStateChange]);
 
+  const selectedCountry = COUNTRY_CODES[countryIndex]!;
+
+  const buildFullNumber = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (raw.startsWith('+')) return raw;
+    return `${selectedCountry.code}${digits}`;
+  };
+
   const provisionTwilioNumber = () => {
     setIsProvisioning(true);
+    const fullClinic = buildFullNumber(clinicNumber);
 
     startTransition(async () => {
       try {
         const result = await setupForwardedNumberAction({
           accountId,
-          clinicNumber,
+          clinicNumber: fullClinic,
           staffDirectNumber: staffDirectNumber || undefined,
           forwardingType,
           businessName,
@@ -97,11 +116,11 @@ export function ForwardedNumberSetup({
         if (result.success) {
           setSetupComplete(true);
           sessionStorage.setItem('phoneIntegrationMethod', 'forwarded');
-          sessionStorage.setItem('phoneNumber', clinicNumber);
+          sessionStorage.setItem('phoneNumber', fullClinic);
           sessionStorage.setItem(
             'phoneIntegrationSettings',
             JSON.stringify({
-              clinicNumber,
+              clinicNumber: fullClinic,
               staffDirectNumber: staffDirectNumber || undefined,
               forwardingType,
             }),
@@ -151,7 +170,7 @@ export function ForwardedNumberSetup({
       try {
         await setupForwardedNumberAction({
           accountId,
-          clinicNumber,
+          clinicNumber: buildFullNumber(clinicNumber),
           staffDirectNumber: tempHumanLine || undefined,
           forwardingType,
           businessName,
@@ -181,21 +200,35 @@ export function ForwardedNumberSetup({
       {/* Step 1: Enter Clinic Number */}
       {!setupComplete && (
         <div className="space-y-5 animate-in slide-in-from-bottom-2 fade-in duration-300">
-          {/* Main clinic number */}
+          {/* Main clinic number with country code */}
           <div className="space-y-2">
             <Label htmlFor="clinicNumber">
               {t('common:setup.phone.forwarding.clinicNumber')}{' '}
               <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="clinicNumber"
-              type="tel"
-              placeholder="+1 (416) 555-1234"
-              value={clinicNumber}
-              onChange={(e) => setClinicNumber(e.target.value)}
-              disabled={isProvisioning}
-              className="h-11"
-            />
+            <div className="flex gap-2">
+              <select
+                value={countryIndex}
+                onChange={(e) => setCountryIndex(Number(e.target.value))}
+                disabled={isProvisioning}
+                className="h-11 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-w-[160px]"
+              >
+                {COUNTRY_CODES.map((c, i) => (
+                  <option key={`${c.country}-${i}`} value={i}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                id="clinicNumber"
+                type="tel"
+                placeholder="(416) 555-1234"
+                value={clinicNumber}
+                onChange={(e) => setClinicNumber(e.target.value)}
+                disabled={isProvisioning}
+                className="h-11 flex-1"
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               {t('common:setup.phone.forwarding.clinicNumberHint')}
             </p>

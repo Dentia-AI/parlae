@@ -10,9 +10,32 @@ import { toast } from '@kit/ui/sonner';
 import { Loader2, Upload, Eye } from 'lucide-react';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
+const COUNTRY_CODES = [
+  { code: '+1', label: '🇨🇦 Canada (+1)', country: 'CA' },
+  { code: '+1', label: '🇺🇸 USA (+1)', country: 'US' },
+  { code: '+44', label: '🇬🇧 UK (+44)', country: 'GB' },
+  { code: '+33', label: '🇫🇷 France (+33)', country: 'FR' },
+  { code: '+61', label: '🇦🇺 Australia (+61)', country: 'AU' },
+] as const;
+
+function detectCountryIndex(phone: string): number {
+  if (!phone) return 0;
+  if (phone.startsWith('+44')) return 2;
+  if (phone.startsWith('+33')) return 3;
+  if (phone.startsWith('+61')) return 4;
+  return 0;
+}
+
+function stripCountryCode(phone: string): string {
+  if (!phone) return '';
+  const stripped = phone.replace(/^\+1/, '').replace(/^\+44/, '').replace(/^\+33/, '').replace(/^\+61/, '');
+  return stripped;
+}
+
 export default function BrandingSettingsPage() {
   const { t } = useTranslation();
   const csrfToken = useCsrfToken();
+  const [phoneCountryIndex, setPhoneCountryIndex] = useState(0);
   const [branding, setBranding] = useState({
     logoUrl: '',
     primaryColor: '#3b82f6',
@@ -66,12 +89,14 @@ export default function BrandingSettingsPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.branding) {
+          const rawPhone = data.branding.brandingContactPhone || '';
+          setPhoneCountryIndex(detectCountryIndex(rawPhone));
           setBranding({
             logoUrl: data.branding.brandingLogoUrl || '',
             primaryColor: data.branding.brandingPrimaryColor || '#3b82f6',
             businessName: data.branding.brandingBusinessName || '',
             contactEmail: data.branding.brandingContactEmail || '',
-            contactPhone: data.branding.brandingContactPhone || '',
+            contactPhone: stripCountryCode(rawPhone),
             address: data.branding.brandingAddress || '',
             website: data.branding.brandingWebsite || '',
           });
@@ -91,6 +116,10 @@ export default function BrandingSettingsPage() {
 
     setIsLoading(true);
     try {
+      const selectedCode = COUNTRY_CODES[phoneCountryIndex]!.code;
+      const digits = branding.contactPhone.replace(/\D/g, '');
+      const fullPhone = digits ? `${selectedCode}${digits}` : '';
+
       const response = await fetch('/api/account/branding', {
         method: 'PATCH',
         headers: {
@@ -98,7 +127,7 @@ export default function BrandingSettingsPage() {
           'x-csrf-token': csrfToken,
         },
         credentials: 'include',
-        body: JSON.stringify(branding),
+        body: JSON.stringify({ ...branding, contactPhone: fullPhone }),
       });
 
       if (response.ok) {
@@ -187,14 +216,27 @@ export default function BrandingSettingsPage() {
             <Label htmlFor="contactPhone">
               {t('common:settings.branding.contactPhone')} <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="contactPhone"
-              type="tel"
-              placeholder="(555) 123-4567"
-              value={branding.contactPhone}
-              onChange={(e) => setBranding({ ...branding, contactPhone: e.target.value })}
-              className={errors.contactPhone ? 'border-destructive' : ''}
-            />
+            <div className="flex gap-2">
+              <select
+                value={phoneCountryIndex}
+                onChange={(e) => setPhoneCountryIndex(Number(e.target.value))}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[160px]"
+              >
+                {COUNTRY_CODES.map((c, i) => (
+                  <option key={`${c.country}-${i}`} value={i}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                id="contactPhone"
+                type="tel"
+                placeholder="(416) 555-1234"
+                value={branding.contactPhone}
+                onChange={(e) => setBranding({ ...branding, contactPhone: e.target.value })}
+                className={`flex-1 ${errors.contactPhone ? 'border-destructive' : ''}`}
+              />
+            </div>
             {errors.contactPhone ? (
               <p className="text-sm text-destructive">{errors.contactPhone}</p>
             ) : (

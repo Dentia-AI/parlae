@@ -22,32 +22,43 @@ import type {
   KnowledgeBaseConfig,
 } from '@kit/shared/vapi/templates';
 
+const CANADIAN_AREA_CODES = new Set([
+  '204', '226', '236', '249', '250', '263', '289',
+  '306', '343', '354', '365', '367', '368', '382',
+  '403', '416', '418', '428', '431', '437', '438', '450', '468',
+  '506', '514', '519', '548', '579', '581', '584', '587',
+  '600', '604', '613', '639', '647', '672', '683',
+  '705', '709', '742', '753', '778', '780', '782',
+  '807', '819', '825', '867', '873', '879',
+  '902', '905',
+]);
+
+/**
+ * Normalize a North American phone number to its 3-digit area code.
+ * Handles +1XXXXXXXXXX, 1XXXXXXXXXX, and raw 10-digit XXXXXXXXXX formats.
+ */
+function extractNanpAreaCode(digits: string): string | undefined {
+  if (digits.startsWith('1') && digits.length === 11) {
+    return digits.substring(1, 4);
+  }
+  if (!digits.startsWith('1') && digits.length === 10) {
+    return digits.substring(0, 3);
+  }
+  return undefined;
+}
+
 /**
  * Derive the Twilio country code (ISO 3166-1 alpha-2) from a phone number.
- * Canadian numbers start with +1 but have area codes in the 2xx-9xx range
- * that map to Canadian provinces. We check the well-known Canadian area codes.
+ * Handles +1XXXXXXXXXX, 1XXXXXXXXXX, and raw 10-digit XXXXXXXXXX formats.
+ * Canadian numbers share country code +1 with the US, distinguished by area code.
  */
 function detectCountryFromPhone(phone: string): string {
   if (!phone) return 'US';
   const digits = phone.replace(/\D/g, '');
 
-  // Canadian area codes (comprehensive list)
-  const canadianAreaCodes = new Set([
-    '204', '226', '236', '249', '250', '263', '289',
-    '306', '343', '354', '365', '367', '368', '382',
-    '403', '416', '418', '428', '431', '437', '438', '450', '468',
-    '506', '514', '519', '548', '579', '581', '584', '587',
-    '600', '604', '613', '639', '647', '672', '683',
-    '705', '709', '742', '753', '778', '780', '782',
-    '807', '819', '825', '867', '873', '879',
-    '902', '905',
-  ]);
-
-  // +1XXXXXXXXXX — check the 3-digit area code after the country code
-  if (digits.startsWith('1') && digits.length >= 4) {
-    const areaCode = digits.substring(1, 4);
-    if (canadianAreaCodes.has(areaCode)) return 'CA';
-    return 'US';
+  const areaCode = extractNanpAreaCode(digits);
+  if (areaCode) {
+    return CANADIAN_AREA_CODES.has(areaCode) ? 'CA' : 'US';
   }
 
   // International numbers
@@ -60,10 +71,7 @@ function detectCountryFromPhone(phone: string): string {
 
 function extractAreaCode(phone: string): string | undefined {
   const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('1') && digits.length >= 4) {
-    return digits.substring(1, 4);
-  }
-  return undefined;
+  return extractNanpAreaCode(digits);
 }
 
 const SetupPhoneSchema = z.object({
@@ -255,7 +263,18 @@ export async function executeDeployment(
           // Table may not exist yet
         }
 
-        const clinicNumber = phoneIntegrationSettings?.clinicNumber || '';
+        const clinicNumber =
+          phoneIntegrationSettings?.clinicNumber ||
+          setupProgress?.phone?.data?.settings?.clinicNumber ||
+          setupProgress?.phone?.data?.clinicNumber ||
+          account.brandingContactPhone ||
+          '';
+
+        logger.info(
+          { clinicNumber, source: phoneIntegrationSettings?.clinicNumber ? 'phoneIntegrationSettings' : setupProgress?.phone?.data?.settings?.clinicNumber ? 'setupProgress.settings' : setupProgress?.phone?.data?.clinicNumber ? 'setupProgress.data' : account.brandingContactPhone ? 'brandingContactPhone' : 'default' },
+          '[Receptionist] Resolved clinic number for country detection',
+        );
+
         const purchaseCountry = detectCountryFromPhone(clinicNumber);
         const clinicAreaCode = extractAreaCode(clinicNumber);
 
@@ -516,30 +535,90 @@ export async function executeDeployment(
           '[Receptionist] Conversation flow agent created successfully',
         );
 
-        // STEP 5: Import Twilio phone number into Retell
-        logger.info({ accountId: account.id }, '[Receptionist] STEP 5: Importing phone into Retell');
+        // STEP 5: Set up Twilio SIP Trunk and import phone number into Retell
+        logger.info({ accountId: account.id }, '[Receptionist] STEP 5: SIP Trunk + Retell phone import');
         let retellPhoneId: string | undefined;
         const e164Phone = phoneNumber.startsWith('+')
           ? phoneNumber
           : `+${phoneNumber}`;
 
         try {
-          const importResult = await retellService.importPhoneNumber({
-            phoneNumber: e164Phone,
-            inboundAgentId: flowResult.agentId,
-            nickname: `${businessName} - Conversation Flow`,
-          });
-          retellPhoneId = importResult?.phone_number;
-          if (importResult) {
-            logger.info(
-              { phone: e164Phone, retellPhoneId },
-              '[Receptionist] Phone imported into Retell',
+          // 5a: Ensure a Twilio Elastic SIP Trunk exists (one per Twilio account, reusable)
+          let terminationUri = phoneIntegrationSettings?.twilioTerminationUri as string | undefined;
+          let trunkSid = phoneIntegrationSettings?.twilioSipTrunkSid as string | undefined;
+
+          if (!terminationUri || !trunkSid) {
+            const domainSlug = `parlae-${account.id.slice(0, 8)}`;
+            const trunkResult = await twilioService.createSipTrunkForRetell(
+              `${businessName} - Retell`,
+              domainSlug,
+            );
+
+            if (trunkResult) {
+              trunkSid = trunkResult.trunkSid;
+              terminationUri = trunkResult.terminationUri;
+
+              const freshSettings2 = (await prisma.account.findUnique({
+                where: { id: account.id },
+                select: { phoneIntegrationSettings: true },
+              }))?.phoneIntegrationSettings as Record<string, unknown> || {};
+
+              await prisma.account.update({
+                where: { id: account.id },
+                data: {
+                  phoneIntegrationSettings: {
+                    ...freshSettings2,
+                    twilioSipTrunkSid: trunkSid,
+                    twilioTerminationUri: terminationUri,
+                  },
+                },
+              });
+              logger.info({ trunkSid, terminationUri }, '[Receptionist] SIP Trunk created and saved');
+            } else {
+              logger.error('[Receptionist] Failed to create SIP Trunk — phone import will fail');
+            }
+          } else {
+            logger.info({ trunkSid, terminationUri }, '[Receptionist] Reusing existing SIP Trunk');
+          }
+
+          // 5b: Associate phone number with the SIP trunk
+          if (trunkSid) {
+            const phoneSid = await twilioService.getPhoneNumberSid(e164Phone);
+            if (phoneSid) {
+              const associated = await twilioService.associateNumberWithTrunk(trunkSid, phoneSid);
+              if (associated) {
+                logger.info({ phoneSid, trunkSid }, '[Receptionist] Phone associated with SIP Trunk');
+              }
+            } else {
+              logger.warn({ phone: e164Phone }, '[Receptionist] Could not resolve phone SID for SIP trunk association');
+            }
+          }
+
+          // 5c: Import the number into Retell with the termination URI
+          if (terminationUri) {
+            const importResult = await retellService.importPhoneNumber({
+              phoneNumber: e164Phone,
+              terminationUri,
+              inboundAgentId: flowResult.agentId,
+              nickname: `${businessName} - Conversation Flow`,
+            });
+            retellPhoneId = importResult?.phone_number;
+            if (importResult) {
+              logger.info(
+                { phone: e164Phone, retellPhoneId },
+                '[Receptionist] Phone imported into Retell',
+              );
+            }
+          } else {
+            logger.error(
+              { phone: e164Phone },
+              '[Receptionist] No termination URI — cannot import phone into Retell',
             );
           }
         } catch (phoneErr: any) {
           logger.warn(
             { error: phoneErr?.message, phone: e164Phone },
-            '[Receptionist] Non-fatal: Retell phone import failed (phone may already be imported)',
+            '[Receptionist] Non-fatal: Retell phone import failed',
           );
         }
 
@@ -1238,7 +1317,6 @@ export const changePhoneNumberAction = enhanceAction(
       );
 
       if (changeProvider === 'RETELL') {
-        // Import to Retell
         const { createRetellService } = await import(
           '@kit/shared/retell/retell.service'
         );
@@ -1253,17 +1331,51 @@ export const changePhoneNumberAction = enhanceAction(
           ? newPhoneNumber
           : `+${newPhoneNumber}`;
 
-        const importResult = await retellService.importPhoneNumber({
-          phoneNumber: e164Phone,
-          inboundAgentId: receptionistAgentId,
-          nickname: `${businessName} - Receptionist`,
-        });
+        // Ensure SIP trunk exists and associate the new number
+        let terminationUri = settings.twilioTerminationUri as string | undefined;
+        let trunkSid = settings.twilioSipTrunkSid as string | undefined;
 
-        // Deactivate old RetellPhoneNumber
+        if (!terminationUri || !trunkSid) {
+          const domainSlug = `parlae-${account.id.slice(0, 8)}`;
+          const trunkResult = await twilioService.createSipTrunkForRetell(
+            `${businessName} - Retell`,
+            domainSlug,
+          );
+          if (trunkResult) {
+            trunkSid = trunkResult.trunkSid;
+            terminationUri = trunkResult.terminationUri;
+          }
+        }
+
+        if (trunkSid) {
+          const phoneSid = purchased.sid;
+          await twilioService.associateNumberWithTrunk(trunkSid, phoneSid);
+        }
+
+        const importResult = terminationUri
+          ? await retellService.importPhoneNumber({
+              phoneNumber: e164Phone,
+              terminationUri,
+              inboundAgentId: receptionistAgentId,
+              nickname: `${businessName} - Receptionist`,
+            })
+          : null;
+
+        // Delete old phone number from Retell
         if (settings.phoneNumber) {
+          const oldE164 = settings.phoneNumber.startsWith('+')
+            ? settings.phoneNumber
+            : `+${settings.phoneNumber}`;
+          try {
+            await retellService.deletePhoneNumber(oldE164);
+            logger.info({ phone: oldE164 }, '[Receptionist] Deleted old phone from Retell');
+          } catch {
+            logger.warn({ phone: oldE164 }, '[Receptionist] Non-fatal: could not delete old Retell phone');
+          }
+
           try {
             await (prisma as any).retellPhoneNumber.updateMany({
-              where: { phoneNumber: settings.phoneNumber, accountId: account.id },
+              where: { phoneNumber: oldE164, accountId: account.id },
               data: { isActive: false },
             });
           } catch { /* best effort */ }
@@ -1304,6 +1416,8 @@ export const changePhoneNumberAction = enhanceAction(
               ...settings,
               phoneNumber: newPhoneNumber,
               phoneChangeCount: changeCount + 1,
+              ...(trunkSid ? { twilioSipTrunkSid: trunkSid } : {}),
+              ...(terminationUri ? { twilioTerminationUri: terminationUri } : {}),
             },
           },
         });

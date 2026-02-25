@@ -507,6 +507,156 @@ class TwilioService {
     }
   }
 
+  // ── Elastic SIP Trunking (for Retell integration) ────────────────────────
+
+  /**
+   * Get or create a Twilio Elastic SIP Trunk with origination for Retell.
+   * Reuses an existing trunk with matching domain name if one exists.
+   */
+  async createSipTrunkForRetell(
+    friendlyName: string,
+    domainName: string,
+  ): Promise<{ trunkSid: string; terminationUri: string } | null> {
+    const logger = await getLogger();
+
+    if (!this.enabled) {
+      logger.warn('[Twilio] Integration disabled — cannot create SIP trunk');
+      return null;
+    }
+
+    const terminationUri = `${domainName}.pstn.twilio.com`;
+
+    try {
+      // Check for an existing trunk first
+      const listResp = await fetch('https://trunking.twilio.com/v1/Trunks?PageSize=50', {
+        method: 'GET',
+        headers: { Authorization: this.getAuthHeader() },
+      });
+
+      if (listResp.ok) {
+        const listData = await listResp.json();
+        const existing = (listData.trunks || []).find(
+          (t: any) => t.domain_name === domainName,
+        );
+        if (existing) {
+          logger.info(
+            { trunkSid: existing.sid, domainName },
+            '[Twilio] Reusing existing SIP Trunk',
+          );
+          return { trunkSid: existing.sid, terminationUri };
+        }
+      }
+
+      // Create a new trunk
+      const trunkBody = new URLSearchParams();
+      trunkBody.append('FriendlyName', friendlyName);
+      trunkBody.append('DomainName', domainName);
+
+      logger.info({ friendlyName, domainName }, '[Twilio] Creating Elastic SIP Trunk');
+
+      const trunkResp = await fetch('https://trunking.twilio.com/v1/Trunks', {
+        method: 'POST',
+        headers: {
+          Authorization: this.getAuthHeader(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: trunkBody,
+      });
+
+      if (!trunkResp.ok) {
+        const err = await trunkResp.text();
+        logger.error({ status: trunkResp.status, error: err }, '[Twilio] Failed to create SIP Trunk');
+        return null;
+      }
+
+      const trunk = await trunkResp.json();
+      const trunkSid: string = trunk.sid;
+      logger.info({ trunkSid, terminationUri }, '[Twilio] SIP Trunk created');
+
+      // Add Retell origination URL (for inbound calls)
+      const origBody = new URLSearchParams();
+      origBody.append('FriendlyName', 'Retell AI');
+      origBody.append('SipUrl', 'sip:sip.retellai.com');
+      origBody.append('Priority', '1');
+      origBody.append('Weight', '100');
+      origBody.append('Enabled', 'true');
+
+      const origResp = await fetch(
+        `https://trunking.twilio.com/v1/Trunks/${trunkSid}/OriginationUrls`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: this.getAuthHeader(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: origBody,
+        },
+      );
+
+      if (!origResp.ok) {
+        const err = await origResp.text();
+        logger.error({ status: origResp.status, error: err, trunkSid }, '[Twilio] Failed to add origination URL');
+      } else {
+        logger.info({ trunkSid }, '[Twilio] Retell origination URL added');
+      }
+
+      return { trunkSid, terminationUri };
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : error },
+        '[Twilio] Exception creating SIP Trunk',
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Associate a phone number with an Elastic SIP Trunk.
+   */
+  async associateNumberWithTrunk(trunkSid: string, phoneNumberSid: string): Promise<boolean> {
+    const logger = await getLogger();
+
+    if (!this.enabled) return false;
+
+    try {
+      const body = new URLSearchParams();
+      body.append('PhoneNumberSid', phoneNumberSid);
+
+      logger.info({ trunkSid, phoneNumberSid }, '[Twilio] Associating phone number with SIP Trunk');
+
+      const resp = await fetch(
+        `https://trunking.twilio.com/v1/Trunks/${trunkSid}/PhoneNumbers`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: this.getAuthHeader(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body,
+        },
+      );
+
+      if (!resp.ok) {
+        const err = await resp.text();
+        if (resp.status === 409 || err.includes('already associated')) {
+          logger.info({ trunkSid, phoneNumberSid }, '[Twilio] Phone number already associated with trunk');
+          return true;
+        }
+        logger.error({ status: resp.status, error: err, trunkSid, phoneNumberSid }, '[Twilio] Failed to associate number with trunk');
+        return false;
+      }
+
+      logger.info({ trunkSid, phoneNumberSid }, '[Twilio] Phone number associated with SIP Trunk');
+      return true;
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : error, trunkSid, phoneNumberSid },
+        '[Twilio] Exception associating number with trunk',
+      );
+      return false;
+    }
+  }
+
   /**
    * Look up the SID of a purchased phone number by its E.164 number.
    * Needed because purchaseNumber returns the SID, but when reusing an

@@ -18,6 +18,14 @@ interface SipTrunkSetupProps {
   onSetupStateChange?: (isComplete: boolean) => void;
 }
 
+const COUNTRY_CODES = [
+  { code: '+1', label: '🇨🇦 Canada (+1)', country: 'CA' },
+  { code: '+1', label: '🇺🇸 USA (+1)', country: 'US' },
+  { code: '+44', label: '🇬🇧 UK (+44)', country: 'GB' },
+  { code: '+33', label: '🇫🇷 France (+33)', country: 'FR' },
+  { code: '+61', label: '🇦🇺 Australia (+61)', country: 'AU' },
+] as const;
+
 export function SipTrunkSetup({ 
   accountId, 
   businessName, 
@@ -27,6 +35,7 @@ export function SipTrunkSetup({
 }: SipTrunkSetupProps) {
   const [pending, startTransition] = useTransition();
   const [pbxType, setPbxType] = useState('');
+  const [countryIndex, setCountryIndex] = useState(0);
   const [clinicNumber, setClinicNumber] = useState('');
   const [sipCredentials, setSipCredentials] = useState<{
     sipUrl: string;
@@ -39,17 +48,26 @@ export function SipTrunkSetup({
     onSetupStateChange?.(!!sipCredentials);
   }, [sipCredentials, onSetupStateChange]);
 
+  const buildFullNumber = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (raw.startsWith('+')) return raw;
+    return `${COUNTRY_CODES[countryIndex]!.code}${digits}`;
+  };
+
   const handleProvision = () => {
     if (!pbxType || !clinicNumber) {
       toast.error('Please fill in all fields');
       return;
     }
 
+    const fullClinic = buildFullNumber(clinicNumber);
+
     startTransition(async () => {
       try {
         const result = await setupSipTrunkAction({
           accountId,
-          clinicNumber,
+          clinicNumber: fullClinic,
           pbxType,
           businessName,
         });
@@ -57,7 +75,7 @@ export function SipTrunkSetup({
         if (result.success && result.sipCredentials) {
           setSipCredentials(result.sipCredentials);
           sessionStorage.setItem('phoneIntegrationMethod', 'sip');
-          sessionStorage.setItem('phoneNumber', clinicNumber);
+          sessionStorage.setItem('phoneNumber', fullClinic);
           toast.success('SIP trunk credentials generated!');
         } else {
           toast.error(result.error || 'Failed to setup SIP trunk');
@@ -89,15 +107,29 @@ export function SipTrunkSetup({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="clinicNumber">
-              Your Clinic's Phone Number <span className="text-destructive">*</span>
+              Your Clinic&apos;s Phone Number <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="clinicNumber"
-              type="tel"
-              placeholder="+1 (555) 123-4567"
-              value={clinicNumber}
-              onChange={(e) => setClinicNumber(e.target.value)}
-            />
+            <div className="flex gap-2">
+              <select
+                value={countryIndex}
+                onChange={(e) => setCountryIndex(Number(e.target.value))}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[160px]"
+              >
+                {COUNTRY_CODES.map((c, i) => (
+                  <option key={`${c.country}-${i}`} value={i}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                id="clinicNumber"
+                type="tel"
+                placeholder="(416) 555-1234"
+                value={clinicNumber}
+                onChange={(e) => setClinicNumber(e.target.value)}
+                className="flex-1"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

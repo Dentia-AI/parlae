@@ -6,6 +6,19 @@ import { getLogger } from '@kit/shared/logger';
 import { prisma } from '@kit/prisma';
 import { createTwilioService } from '@kit/shared/twilio/server';
 
+/**
+ * Normalize a phone number to E.164 format for NANP numbers.
+ * Handles raw 10-digit, 11-digit with leading 1, and already-prefixed +1 formats.
+ */
+function normalizePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (phone.startsWith('+')) return phone;
+  return phone;
+}
+
 // Schemas
 const SetupPortedNumberSchema = z.object({
   accountId: z.string(),
@@ -45,21 +58,23 @@ export const setupPortedNumberAction = enhanceAction(
     );
 
     try {
-      // Just save the port request information
-      // Actual porting is handled through Twilio support and doesn't require immediate payment
-      // Payment will be required when deploying the AI receptionist
-      
-      // Store port request information
+      const existing = await prisma.account.findUnique({
+        where: { id: data.accountId },
+        select: { phoneIntegrationSettings: true },
+      });
+      const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
+
       await prisma.account.update({
         where: { id: data.accountId },
         data: {
           phoneIntegrationMethod: 'ported',
           phoneIntegrationSettings: {
+            ...existingSettings,
             businessName: data.businessName,
-            phoneNumber: data.phoneNumber,
+            phoneNumber: normalizePhoneNumber(data.phoneNumber),
             currentCarrier: data.currentCarrier,
             accountNumber: data.accountNumber,
-            portStatus: 'pending_configuration', // Not submitted yet, just configured
+            portStatus: 'pending_configuration',
             configuredAt: new Date().toISOString(),
           },
         },
@@ -102,21 +117,28 @@ export const setupForwardedNumberAction = enhanceAction(
   async (data, user) => {
     const logger = await getLogger();
 
+    const normalizedClinic = normalizePhoneNumber(data.clinicNumber);
+
     logger.info(
-      { userId: user.id, clinicNumber: data.clinicNumber },
+      { userId: user.id, clinicNumber: data.clinicNumber, normalized: normalizedClinic },
       '[Phone Integration] Saving forwarded number configuration'
     );
 
     try {
-      // Just save the configuration - don't purchase anything yet
-      // The actual phone number purchase will happen during deployment after payment
+      const existing = await prisma.account.findUnique({
+        where: { id: data.accountId },
+        select: { phoneIntegrationSettings: true },
+      });
+      const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
+
       await prisma.account.update({
         where: { id: data.accountId },
         data: {
           phoneIntegrationMethod: 'forwarded',
           phoneIntegrationSettings: {
+            ...existingSettings,
             businessName: data.businessName,
-            clinicNumber: data.clinicNumber,
+            clinicNumber: normalizedClinic,
             staffDirectNumber: data.staffDirectNumber || null,
             forwardingType: data.forwardingType || 'all',
             needsPhoneNumber: true,
@@ -161,35 +183,37 @@ export const setupSipTrunkAction = enhanceAction(
   async (data, user) => {
     const logger = await getLogger();
 
+    const normalizedClinic = normalizePhoneNumber(data.clinicNumber);
+
     logger.info(
-      { userId: user.id, clinicNumber: data.clinicNumber, pbxType: data.pbxType },
+      { userId: user.id, clinicNumber: data.clinicNumber, normalized: normalizedClinic, pbxType: data.pbxType },
       '[Phone Integration] Setting up SIP trunk configuration'
     );
 
     try {
-      // Generate SIP credentials for user's PBX
-      // User's existing number routes through SIP trunk to Twilio/Vapi
-      // We still need a Twilio number to attach the Vapi assistant to
-      
       const sipUsername = `sip_${data.accountId.substring(0, 8)}`;
       const sipPassword = generateSecurePassword();
       const sipUrl = `sip:${sipUsername}@sip.twilio.com`;
 
-      // TODO: Create actual SIP trunk in Twilio during deployment
-      
-      // Store SIP configuration
+      const existing = await prisma.account.findUnique({
+        where: { id: data.accountId },
+        select: { phoneIntegrationSettings: true },
+      });
+      const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
+
       await prisma.account.update({
         where: { id: data.accountId },
         data: {
           phoneIntegrationMethod: 'sip',
           phoneIntegrationSettings: {
+            ...existingSettings,
             businessName: data.businessName,
-            clinicNumber: data.clinicNumber, // User's existing number on their PBX
+            clinicNumber: normalizedClinic,
             pbxType: data.pbxType,
             sipUrl,
             sipUsername,
-            sipPassword, // In production, encrypt this!
-            needsPhoneNumber: true, // We need a Twilio number for the Vapi endpoint
+            sipPassword,
+            needsPhoneNumber: true,
             configuredAt: new Date().toISOString(),
           },
         },
