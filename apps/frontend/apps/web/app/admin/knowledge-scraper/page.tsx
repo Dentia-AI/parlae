@@ -140,12 +140,12 @@ export default function AdminKnowledgeScraperPage() {
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
 
   return (
-    <div className="space-y-6">
+    <div className="container max-w-7xl py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-3xl font-bold tracking-tight">
           Knowledge Base Scraper
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-2">
           Scrape a client&apos;s website and auto-generate knowledge base
           documents organized by category.
         </p>

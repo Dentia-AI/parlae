@@ -79,32 +79,32 @@ async function fetchAccounts(params: {
   return response.json();
 }
 
-// API function to fetch templates
+// API function to fetch flow templates (Retell conversation flow)
 async function fetchTemplates() {
-  const response = await fetch('/api/admin/agent-templates/list');
+  const response = await fetch('/api/admin/retell-templates/conversation-flow/list');
   
   if (!response.ok) {
-    throw new Error('Failed to fetch templates');
+    throw new Error('Failed to fetch flow templates');
   }
 
   return response.json();
 }
 
-// API function to assign template
+// API function to assign flow template
 async function assignTemplate(accountId: string, templateId: string, csrfToken: string) {
-  const response = await fetch('/api/admin/agent-templates/assign-single', {
+  const response = await fetch('/api/admin/accounts/assign-flow-template', {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       'x-csrf-token': csrfToken,
     },
     credentials: 'include',
-    body: JSON.stringify({ accountId, templateId }),
+    body: JSON.stringify({ accountId, flowTemplateId: templateId }),
   });
-  
+
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || 'Failed to assign template');
+    throw new Error(error.error || 'Failed to assign flow template');
   }
 
   return response.json();
@@ -315,7 +315,7 @@ export function AccountsListContainer({
               <TableHead>Account</TableHead>
               <TableHead>Primary Owner</TableHead>
               <TableHead>Members</TableHead>
-              <TableHead>Agent Template</TableHead>
+              <TableHead>Flow Template</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Actions</TableHead>
@@ -384,7 +384,7 @@ export function AccountsListContainer({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Select
-                        value={account.agentTemplate?.id || 'none'}
+                        value={account.retellFlowTemplate?.id || 'none'}
                         onValueChange={(value) => handleTemplateChange(account.id, value)}
                         disabled={assigningAccount === account.id}
                       >
@@ -392,10 +392,10 @@ export function AccountsListContainer({
                           <SelectValue placeholder="No template">
                             {assigningAccount === account.id ? (
                               <span className="text-muted-foreground">Assigning...</span>
-                            ) : account.agentTemplate ? (
+                            ) : account.retellFlowTemplate ? (
                               <div className="flex items-center gap-1">
                                 <Layers className="h-3 w-3" />
-                                <span className="text-xs">{account.agentTemplate.displayName}</span>
+                                <span className="text-xs">{account.retellFlowTemplate.displayName}</span>
                               </div>
                             ) : (
                               <span className="text-muted-foreground">No template</span>
@@ -414,7 +414,7 @@ export function AccountsListContainer({
                                 )}
                                 <span>{template.displayName}</span>
                                 <span className="text-muted-foreground text-xs">
-                                  v{template.version}
+                                  {template.version}
                                 </span>
                               </div>
                             </SelectItem>
@@ -465,18 +465,18 @@ export function AccountsListContainer({
       <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bulk Assign Template</DialogTitle>
+            <DialogTitle>Bulk Assign Flow Template</DialogTitle>
             <DialogDescription>
-              Assign a template to {selectedAccounts.size} selected account(s). User-specific settings (voice, knowledge base, phone) will be preserved.
+              Assign a Retell conversation flow template to {selectedAccounts.size} selected account(s).
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Select Template</label>
+              <label className="text-sm font-medium">Select Flow Template</label>
               <Select value={bulkTemplateId} onValueChange={setBulkTemplateId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose a template" />
+                  <SelectValue placeholder="Choose a flow template" />
                 </SelectTrigger>
                 <SelectContent>
                   {templates.map((template: any) => (
@@ -489,7 +489,7 @@ export function AccountsListContainer({
                         )}
                         <span>{template.displayName}</span>
                         <span className="text-muted-foreground text-xs">
-                          v{template.version}
+                          {template.version}
                         </span>
                       </div>
                     </SelectItem>

@@ -23,6 +23,12 @@ export interface AccountListItem {
     displayName: string;
     version: string;
   } | null;
+  retellFlowTemplate?: {
+    id: string;
+    name: string;
+    displayName: string;
+    version: string;
+  } | null;
 }
 
 export interface SearchAccountsParams {
@@ -101,6 +107,14 @@ export const searchAccounts = cache(
               version: true,
             },
           },
+          retellFlowTemplate: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              version: true,
+            },
+          },
           _count: {
             select: { memberships: true },
           },
@@ -126,6 +140,7 @@ export const searchAccounts = cache(
       createdAt: account.createdAt,
       updatedAt: account.updatedAt,
       agentTemplate: account.agentTemplate,
+      retellFlowTemplate: account.retellFlowTemplate,
     }));
 
     return {
