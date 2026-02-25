@@ -85,7 +85,7 @@ export default async function PhoneIntegrationSettingsPage() {
           day: 'numeric',
         })
       : null;
-  const isActive = !!settings.vapiSquadId;
+  const isActive = !!(settings.vapiSquadId || settings.retellReceptionistAgentId || settings.deployType === 'conversation_flow');
 
   return (
     <div className="container max-w-4xl py-8 space-y-6">

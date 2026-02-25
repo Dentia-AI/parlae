@@ -433,7 +433,11 @@ async function computeRetellAnalytics(
   let totalDuration = 0;
   let durationCount = 0;
   let bookedCount = 0;
+  let satisfiedCount = 0;
+  let unsatisfiedCount = 0;
+  let satisfactionUnknown = 0;
   const outcomeCounts = new Map<string, number>();
+  const appointmentTypes = new Map<string, number>();
   const dailyCounts = new Map<string, number>();
 
   for (const call of allCalls) {
@@ -450,14 +454,27 @@ async function computeRetellAnalytics(
     const outcome = (() => {
       const o = analysis?.call_outcome;
       if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
-      if (o === 'transferred_to_staff' || analysis?.transferred_to_staff) return 'TRANSFERRED';
-      if (o === 'insurance_verified') return 'INSURANCE_INQUIRY';
-      if (o === 'information_provided') return 'INFORMATION';
+      if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+      if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
+      if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
+      if (o === 'caller_hung_up') return 'HUNG_UP';
+      if (o === 'emergency_handled') return 'EMERGENCY';
+      if (o === 'appointment_rescheduled') return 'RESCHEDULED';
+      if (o === 'appointment_cancelled') return 'CANCELLED';
       return 'OTHER';
     })();
 
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
     if (outcome === 'BOOKED') bookedCount++;
+
+    if (analysis.caller_satisfied === true) satisfiedCount++;
+    else if (analysis.caller_satisfied === false) unsatisfiedCount++;
+    else satisfactionUnknown++;
+
+    const apptType = analysis.appointment_type as string | undefined;
+    if (apptType) {
+      appointmentTypes.set(apptType, (appointmentTypes.get(apptType) || 0) + 1);
+    }
 
     const dateKey = call.start_timestamp
       ? new Date(call.start_timestamp).toISOString().slice(0, 10)
@@ -477,9 +494,6 @@ async function computeRetellAnalytics(
       bookingRate,
       avgCallTime,
       totalCost: 0,
-      insuranceVerified: 0,
-      paymentPlans: { count: 0, totalAmount: 0 },
-      collections: { count: 0, totalAmount: 0, recovered: 0, collectionRate: 0 },
     },
     activityTrend: Array.from(dailyCounts.entries())
       .map(([date, count]) => ({ date, count }))
@@ -489,5 +503,13 @@ async function computeRetellAnalytics(
       count,
       percentage: totalCalls > 0 ? Math.round((count / totalCalls) * 1000) / 10 : 0,
     })),
+    satisfactionBreakdown: [
+      { label: 'Satisfied', count: satisfiedCount, percentage: totalCalls > 0 ? Math.round((satisfiedCount / totalCalls) * 1000) / 10 : 0 },
+      { label: 'Not Satisfied', count: unsatisfiedCount, percentage: totalCalls > 0 ? Math.round((unsatisfiedCount / totalCalls) * 1000) / 10 : 0 },
+      { label: 'Unknown', count: satisfactionUnknown, percentage: totalCalls > 0 ? Math.round((satisfactionUnknown / totalCalls) * 1000) / 10 : 0 },
+    ],
+    appointmentTypes: Array.from(appointmentTypes.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count),
   };
 }

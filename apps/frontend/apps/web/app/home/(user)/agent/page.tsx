@@ -10,6 +10,7 @@ import { DeployedBanner } from './_components/deployed-banner';
 import { DeployingAnimation } from './_components/deploying-animation';
 import { PhoneSetupCard } from './_components/phone-setup-card';
 import { PmsIntegrationCard } from './_components/pms-integration-card';
+import { CallForwardingInstructions } from './_components/call-forwarding-instructions';
 import { getAccountProvider } from '@kit/shared/voice-provider';
 
 export const metadata = {
@@ -155,9 +156,13 @@ export default async function ReceptionistDashboardPage({
 
   return (
     <div className="container max-w-6xl py-8 space-y-6">
-      {/* Deployment success banner */}
+      {/* Deployment success banner + forwarding instructions */}
       {params.deployed === 'true' && (
-        <DeployedBanner phoneNumber={phoneNumber} />
+        <DeployedBanner
+          phoneNumber={phoneNumber}
+          clinicNumber={integrationSettings?.clinicNumber}
+          integrationMethod={account.phoneIntegrationMethod || undefined}
+        />
       )}
 
       {/* Header */}
@@ -283,6 +288,15 @@ export default async function ReceptionistDashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Call Forwarding Instructions (always visible for forwarded method) */}
+      {account.phoneIntegrationMethod === 'forwarded' && params.deployed !== 'true' && (
+        <CallForwardingInstructions
+          twilioNumber={phoneNumber}
+          clinicNumber={integrationSettings?.clinicNumber}
+          defaultExpanded={false}
+        />
+      )}
 
       {/* Integrations */}
       <div>

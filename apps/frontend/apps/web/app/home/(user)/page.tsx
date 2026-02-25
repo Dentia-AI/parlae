@@ -37,7 +37,7 @@ async function UserHomePage() {
       const hasCompletedSetup =
         account?.phoneIntegrationMethod &&
         account.phoneIntegrationMethod !== 'none' &&
-        settings?.vapiSquadId;
+        (settings?.vapiSquadId || settings?.retellReceptionistAgentId || settings?.deployType === 'conversation_flow');
 
       if (!hasCompletedSetup) {
         redirect('/home/agent/setup');

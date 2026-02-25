@@ -9,16 +9,18 @@ import {
   TrendingUp,
   Clock,
   Calendar,
-  DollarSign,
-  CheckCircle,
-  ArrowRight,
 } from 'lucide-react';
-import { formatCurrency } from '@kit/shared/utils';
 
-import { CallMetricsCards } from './call-metrics-cards';
 import { CallOutcomesChart } from './call-outcomes-chart';
+import { SatisfactionChart } from './satisfaction-chart';
 import { RecentCallsList } from './recent-calls-list';
 import { ActivityChart } from './activity-chart';
+
+interface SatisfactionEntry {
+  label: string;
+  count: number;
+  percentage: number;
+}
 
 interface AnalyticsData {
   dateRange: {
@@ -29,17 +31,6 @@ interface AnalyticsData {
     totalCalls: number;
     bookingRate: number;
     avgCallTime: number;
-    insuranceVerified: number;
-    paymentPlans: {
-      count: number;
-      totalAmount: number;
-    };
-    collections: {
-      count: number;
-      totalAmount: number;
-      recovered: number;
-      collectionRate: number;
-    };
   };
   activityTrend: Array<{
     date: string;
@@ -50,6 +41,7 @@ interface AnalyticsData {
     count: number;
     percentage: number;
   }>;
+  satisfactionBreakdown?: SatisfactionEntry[];
 }
 
 export function CallAnalyticsDashboard() {
@@ -104,8 +96,6 @@ export function CallAnalyticsDashboard() {
       </div>
     );
   }
-
-  const locale = 'en-US';
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -214,90 +204,14 @@ export function CallAnalyticsDashboard() {
         </Card>
       </div>
 
-      {/* Secondary Metrics */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Insurance Verified</CardTitle>
-            <div className="rounded-md bg-cyan-500/10 p-2">
-              <CheckCircle className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.metrics.insuranceVerified.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.metrics.totalCalls > 0 
-                ? Math.round((data.metrics.insuranceVerified / data.metrics.totalCalls) * 100) 
-                : 0}% verification rate
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Payment Plans</CardTitle>
-            <div className="rounded-md bg-indigo-500/10 p-2">
-              <DollarSign className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency({
-                value: data.metrics.paymentPlans.totalAmount / 100,
-                currencyCode: 'USD',
-                locale,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.metrics.paymentPlans.count} plans discussed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Collections</CardTitle>
-            <div className="rounded-md bg-emerald-500/10 p-2">
-              <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {formatCurrency({
-                value: data.metrics.collections.recovered / 100,
-                currencyCode: 'USD',
-                locale,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              recovered from outstanding
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
-            <div className="rounded-md bg-teal-500/10 p-2">
-              <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-teal-600 dark:text-teal-400">
-              {data.metrics.collections.collectionRate}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.metrics.collections.count > 0 ? `${data.metrics.collections.count} collected` : '--'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts */}
+      {/* Donut Charts */}
       <div className="grid gap-4 md:grid-cols-2">
-        <ActivityChart data={data.activityTrend} />
         <CallOutcomesChart data={data.outcomesDistribution} />
+        <SatisfactionChart data={data.satisfactionBreakdown ?? []} />
       </div>
+
+      {/* Activity Trend */}
+      <ActivityChart data={data.activityTrend} />
 
       {/* Recent Calls */}
       <RecentCallsList />

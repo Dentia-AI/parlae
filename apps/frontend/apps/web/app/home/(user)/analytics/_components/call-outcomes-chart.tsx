@@ -26,29 +26,34 @@ const outcomeColors: Record<string, { dot: string; bar: string; label: string }>
     bar: 'bg-gradient-to-r from-violet-500 to-violet-400',
     label: 'Insurance Inquiry',
   },
-  PAYMENT_PLAN: {
-    dot: 'bg-amber-500',
-    bar: 'bg-gradient-to-r from-amber-500 to-amber-400',
-    label: 'Payment Plan',
-  },
   INFORMATION: {
     dot: 'bg-cyan-500',
     bar: 'bg-gradient-to-r from-cyan-500 to-cyan-400',
-    label: 'Information',
+    label: 'General Inquiry',
   },
-  VOICEMAIL: {
-    dot: 'bg-slate-500',
-    bar: 'bg-gradient-to-r from-slate-500 to-slate-400',
-    label: 'Voicemail',
+  HUNG_UP: {
+    dot: 'bg-rose-500',
+    bar: 'bg-gradient-to-r from-rose-500 to-rose-400',
+    label: 'Hung Up',
   },
-  NO_ANSWER: {
-    dot: 'bg-rose-400',
-    bar: 'bg-gradient-to-r from-rose-400 to-rose-300',
-    label: 'No Answer',
+  EMERGENCY: {
+    dot: 'bg-red-500',
+    bar: 'bg-gradient-to-r from-red-500 to-red-400',
+    label: 'Emergency',
   },
-  OTHER: {
+  RESCHEDULED: {
+    dot: 'bg-amber-500',
+    bar: 'bg-gradient-to-r from-amber-500 to-amber-400',
+    label: 'Rescheduled',
+  },
+  CANCELLED: {
     dot: 'bg-orange-500',
     bar: 'bg-gradient-to-r from-orange-500 to-orange-400',
+    label: 'Cancelled',
+  },
+  OTHER: {
+    dot: 'bg-slate-500',
+    bar: 'bg-gradient-to-r from-slate-500 to-slate-400',
     label: 'Other',
   },
 };
@@ -83,7 +88,7 @@ export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
                 <div key={index} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${config.dot} ring-2 ring-offset-2 ring-offset-background ring-${config.dot.replace('bg-', '')}/30`} />
+                      <div className={`w-2.5 h-2.5 rounded-full ${config.dot}`} />
                       <span className="font-medium">{config.label}</span>
                     </div>
                     <div className="flex items-center gap-1.5 tabular-nums">
