@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
     const account = await prisma.account.findFirst({
       where: {
         primaryOwnerId: session.user.id,
-        isPersonalAccount: true,
       },
     });
 

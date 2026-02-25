@@ -162,15 +162,15 @@ export async function executeDeployment(
   data: { voice: any; files?: any[]; knowledgeBaseConfig?: Record<string, string[]> },
 ) {
   const logger = await getLogger();
-  const vapiService = createVapiService();
+  const stepStart = Date.now();
 
   logger.info(
-    { userId },
-    '[Receptionist] Deploying AI receptionist'
+    { userId, voiceId: data.voice?.voiceId },
+    '[Receptionist] ▶ Deploying AI receptionist',
   );
 
   try {
-    // Get account info
+    // NOTE: Vapi service is only created inside the VAPI path below, not unconditionally
     const account = await prisma.account.findFirst({
       where: {
         primaryOwnerId: userId,
@@ -198,18 +198,9 @@ export async function executeDeployment(
         throw new Error('Account not found');
       }
 
-      // VERIFY PAYMENT METHOD BEFORE PROCEEDING
-      if (!account.paymentMethodVerified || !account.stripePaymentMethodId) {
-        logger.error(
-          { accountId: account.id },
-          '[Receptionist] Payment method not verified'
-        );
-        throw new Error('Payment method required. Please add a payment method before deploying.');
-      }
-
       logger.info(
-        { accountId: account.id, paymentMethodVerified: true },
-        '[Receptionist] Payment method verified, proceeding with deployment'
+        { accountId: account.id, paymentMethodVerified: account.paymentMethodVerified },
+        '[Receptionist] Account loaded, proceeding with deployment',
       );
 
       const phoneIntegrationSettings = account.phoneIntegrationSettings as any;
@@ -217,6 +208,7 @@ export async function executeDeployment(
       const setupProgress = (account.setupProgress as Record<string, any>) ?? {};
 
       // STEP 1: Get or provision a real Twilio phone number
+      logger.info({ accountId: account.id }, '[Receptionist] STEP 1: Twilio phone number');
       const { createTwilioService } = await import('@kit/shared/twilio/server');
       const twilioService = createTwilioService();
 
@@ -383,15 +375,24 @@ export async function executeDeployment(
       // ═══════════════════════════════════════════════════════════════════════
       // PROVIDER RESOLUTION — Retell is the default, Vapi is the fallback
       // ═══════════════════════════════════════════════════════════════════════
-      const { getAccountProviderFromOverride } = await import(
-        '@kit/shared/voice-provider/resolve-provider'
-      );
-      const provider = await getAccountProviderFromOverride(
-        account.voiceProviderOverride,
-      );
+      logger.info({ accountId: account.id }, '[Receptionist] STEP 2: Resolving voice provider');
+      let provider: string = 'RETELL';
+      try {
+        const { getAccountProviderFromOverride } = await import(
+          '@kit/shared/voice-provider/resolve-provider'
+        );
+        provider = await getAccountProviderFromOverride(
+          account.voiceProviderOverride,
+        );
+      } catch (providerErr) {
+        logger.warn(
+          { error: providerErr instanceof Error ? providerErr.message : String(providerErr) },
+          '[Receptionist] Failed to resolve provider, defaulting to RETELL',
+        );
+      }
 
       logger.info(
-        { accountId: account.id, provider },
+        { accountId: account.id, provider, elapsedMs: Date.now() - stepStart },
         '[Receptionist] Resolved voice provider',
       );
 
@@ -399,16 +400,21 @@ export async function executeDeployment(
       // PRIMARY PATH: Deploy to Retell (default for all new accounts)
       // ═══════════════════════════════════════════════════════════════════════
       if (provider === 'RETELL') {
+        logger.info({ accountId: account.id }, '[Receptionist] STEP 3: Retell deployment path');
+
         const { createRetellService } = await import(
           '@kit/shared/retell/retell.service'
         );
         const retellService = createRetellService();
 
         if (!retellService.isEnabled()) {
+          logger.error('[Receptionist] RETELL_API_KEY is not configured');
           throw new Error(
             'RETELL_API_KEY is not configured. Cannot deploy Retell agents.',
           );
         }
+
+        logger.info('[Receptionist] Retell service enabled, importing modules');
 
         const {
           deployRetellConversationFlow,
@@ -428,6 +434,11 @@ export async function executeDeployment(
           process.env.BACKEND_API_URL ||
           '';
 
+        logger.info(
+          { retellBackendUrl: retellBackendUrl ? '(set)' : '(empty)' },
+          '[Receptionist] Backend webhook URL resolved',
+        );
+
         // KB: Sync from Vapi file IDs if present
         const kbConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};
         const kbFileIds: string[] = data.files?.map((f: any) => f.id) || [];
@@ -440,12 +451,14 @@ export async function executeDeployment(
         const retellKbIds: string[] = [];
         if (allKBFileIds.length > 0) {
           try {
+            logger.info({ fileCount: allKBFileIds.length }, '[Receptionist] Syncing KB to Retell');
             const kbId = await ensureRetellKnowledgeBase(
               account.id,
               allKBFileIds,
               businessName,
             );
             if (kbId) retellKbIds.push(kbId);
+            logger.info({ kbId }, '[Receptionist] KB synced');
           } catch (kbErr: any) {
             logger.warn(
               { error: kbErr?.message },
@@ -461,7 +474,7 @@ export async function executeDeployment(
           const existingFlowId = existingSettings?.conversationFlowId;
           if (existingAgentId && existingFlowId) {
             logger.info(
-              { accountId: account.id },
+              { accountId: account.id, existingAgentId, existingFlowId },
               '[Receptionist] Tearing down existing conversation flow agent',
             );
             await teardownRetellConversationFlow(
@@ -490,15 +503,21 @@ export async function executeDeployment(
         };
 
         logger.info(
-          { accountId: account.id, clinicName: businessName },
-          '[Receptionist] Deploying conversation flow agent (primary)',
+          { accountId: account.id, clinicName: businessName, voiceId: flowConfig.voiceId },
+          '[Receptionist] STEP 4: Creating conversation flow agent in Retell',
         );
         const flowResult = await deployRetellConversationFlow(
           retellService,
           flowConfig,
         );
 
-        // Import Twilio phone number into Retell
+        logger.info(
+          { agentId: flowResult.agentId, flowId: flowResult.conversationFlowId },
+          '[Receptionist] Conversation flow agent created successfully',
+        );
+
+        // STEP 5: Import Twilio phone number into Retell
+        logger.info({ accountId: account.id }, '[Receptionist] STEP 5: Importing phone into Retell');
         let retellPhoneId: string | undefined;
         const e164Phone = phoneNumber.startsWith('+')
           ? phoneNumber
@@ -520,7 +539,7 @@ export async function executeDeployment(
         } catch (phoneErr: any) {
           logger.warn(
             { error: phoneErr?.message, phone: e164Phone },
-            '[Receptionist] Non-fatal: Retell phone import failed',
+            '[Receptionist] Non-fatal: Retell phone import failed (phone may already be imported)',
           );
         }
 
@@ -553,15 +572,21 @@ export async function executeDeployment(
           );
         }
 
-        // Ensure default flow template exists in DB and link to account
+        // STEP 6: Ensure default flow template exists in DB
+        logger.info('[Receptionist] STEP 6: Ensuring flow template in DB');
         let flowTemplateId: string | undefined;
         try {
           flowTemplateId = await ensureDefaultFlowTemplate(prisma);
-        } catch {
-          // Table may not exist yet
+          logger.info({ flowTemplateId }, '[Receptionist] Flow template ensured');
+        } catch (tmplErr) {
+          logger.warn(
+            { error: tmplErr instanceof Error ? tmplErr.message : String(tmplErr) },
+            '[Receptionist] Non-fatal: flow template seeding failed (table may not exist)',
+          );
         }
 
-        // Update account settings
+        // STEP 7: Update account settings
+        logger.info('[Receptionist] STEP 7: Saving deployment to account');
         const existingMethod =
           account.phoneIntegrationMethod &&
           account.phoneIntegrationMethod !== 'none'
@@ -607,8 +632,9 @@ export async function executeDeployment(
             agentId: flowResult.agentId,
             flowId: flowResult.conversationFlowId,
             phoneNumber,
+            elapsedMs: Date.now() - stepStart,
           },
-          '[Receptionist] Conversation flow deployment complete (primary)',
+          '[Receptionist] ✅ Conversation flow deployment complete',
         );
 
         revalidatePath('/home/agent');
@@ -626,6 +652,8 @@ export async function executeDeployment(
       // ═══════════════════════════════════════════════════════════════════════
       // FALLBACK PATH: Deploy to Vapi (for accounts with voiceProviderOverride=VAPI)
       // ═══════════════════════════════════════════════════════════════════════
+      logger.info({ accountId: account.id }, '[Receptionist] VAPI fallback path');
+      const vapiService = createVapiService();
 
       // STEP 2: Collect knowledge base file IDs (categorized or flat)
       const knowledgeBaseConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};

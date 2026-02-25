@@ -14,12 +14,10 @@ import { SetupPaymentForm } from '../_components/setup-payment-form';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@kit/ui/collapsible';
 import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
-import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 export default function ReviewPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const csrfToken = useCsrfToken();
   const [pending, startTransition] = useTransition();
   
   const [paymentCompleted, setPaymentCompleted] = useState(false);
@@ -123,43 +121,40 @@ export default function ReviewPage() {
 
     startTransition(async () => {
       try {
-        // Charge the $5 activation fee first
-        const chargeResponse = await fetch('/api/stripe/charge-activation', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
-          },
-          body: JSON.stringify({}),
-        });
+        console.log('[Deploy] Starting deployment flow…');
 
-        if (!chargeResponse.ok) {
-          let errorMsg = 'Failed to process activation fee';
-          try {
-            const chargeResult = await chargeResponse.json();
-            errorMsg = chargeResult.error || errorMsg;
-          } catch {
-            // Response wasn't JSON
-          }
-          toast.error(errorMsg);
-          return;
+        // Mark deployment as started (best-effort, non-blocking).
+        // The /api/agent/deploy route also marks in_progress independently.
+        try {
+          await markDeploymentStartedAction();
+          console.log('[Deploy] Marked deployment as started');
+        } catch (e) {
+          console.warn('[Deploy] markDeploymentStartedAction failed (non-fatal):', e);
         }
-
-        // Mark deployment as started in the DB so the overview page
-        // shows the deploying animation immediately after redirect.
-        await markDeploymentStartedAction();
 
         // Fire deployment in background — don't await the response.
         // `keepalive: true` ensures the request survives page navigation.
+        const deployPayload = {
+          voice: config.voice,
+          files: config.files || [],
+          knowledgeBaseConfig: config.knowledgeBaseConfig,
+        };
+        console.log('[Deploy] Firing /api/agent/deploy with payload:', JSON.stringify(deployPayload).slice(0, 200));
+
         fetch('/api/agent/deploy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            voice: config.voice,
-            files: config.files || [],
-            knowledgeBaseConfig: config.knowledgeBaseConfig,
-          }),
+          body: JSON.stringify(deployPayload),
           keepalive: true,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            console.error(`[Deploy] /api/agent/deploy returned ${res.status}:`, body);
+          } else {
+            console.log('[Deploy] /api/agent/deploy accepted');
+          }
+        }).catch((err) => {
+          console.error('[Deploy] /api/agent/deploy network error:', err);
         });
 
         // Clear session storage
@@ -175,8 +170,8 @@ export default function ReviewPage() {
         // Redirect to overview page — the deploying animation takes over
         router.push('/home/agent?deploying=true');
       } catch (error) {
+        console.error('[Deploy] handleDeploy caught error:', error);
         toast.error(t('common:setup.review.deployErrorGeneric'));
-        console.error(error);
       }
     });
   };
@@ -480,10 +475,10 @@ export default function ReviewPage() {
           </Button>
           <Button
             onClick={handleDeploy}
-            disabled={pending || !config.voice || !paymentCompleted}
+            disabled={pending || !config.voice}
           >
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {paymentCompleted ? t('common:setup.review.deployButton') : t('common:setup.review.completePaymentToDeploy')}
+            {t('common:setup.review.deployButton')}
           </Button>
         </div>
       </div>
