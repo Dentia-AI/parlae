@@ -32,6 +32,7 @@ export default function ReviewPage() {
     voice?: any;
     files?: any[];
     knowledgeBaseConfig?: Record<string, string[]>;
+    websiteUrl?: string;
   }>({});
   const [integrations, setIntegrations] = useState<{
     googleCalendar: boolean;
@@ -64,12 +65,14 @@ export default function ReviewPage() {
     }
 
     const kbConfigStr = sessionStorage.getItem('knowledgeBaseConfig');
+    const storedWebsiteUrl = sessionStorage.getItem('websiteUrl');
 
     setConfig({
       accountId,
       businessName,
       voice: voice ? JSON.parse(voice) : null,
       files: files ? JSON.parse(files) : [],
+      websiteUrl: storedWebsiteUrl || undefined,
       knowledgeBaseConfig: kbConfigStr ? JSON.parse(kbConfigStr) : undefined,
     });
 
@@ -165,6 +168,7 @@ export default function ReviewPage() {
         sessionStorage.removeItem('knowledgeBaseConfig');
         sessionStorage.removeItem('accountId');
         sessionStorage.removeItem('businessName');
+        sessionStorage.removeItem('websiteUrl');
 
         toast.success(t('common:setup.review.deployStarted'));
 
@@ -329,6 +333,19 @@ export default function ReviewPage() {
                         <Trans i18nKey="common:setup.review.knowledgeBase" />
                       </h3>
                     </div>
+                    {config.websiteUrl && (
+                      <Card className="bg-blue-50/50 dark:bg-blue-950/20 mb-2">
+                        <CardContent className="p-3">
+                          <div className="flex items-center gap-2 text-xs">
+                            <CheckCircle2 className="h-3 w-3 text-blue-600 flex-shrink-0" />
+                            <span className="font-medium text-blue-700 dark:text-blue-400">
+                              Website will be auto-scanned on deploy:
+                            </span>
+                            <span className="text-muted-foreground truncate">{config.websiteUrl}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                     {config.files && config.files.length > 0 ? (
                       <Card className="bg-muted/50">
                         <CardContent className="p-3">

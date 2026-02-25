@@ -326,30 +326,36 @@ class VapiService {
       let response;
 
       if (file.url) {
-        // Upload from URL
+        // Download from URL first, then upload as multipart form data
+        const urlResponse = await fetch(file.url);
+        if (!urlResponse.ok) {
+          logger.error({ url: file.url, status: urlResponse.status }, '[Vapi] Failed to download file from URL');
+          return null;
+        }
+        const buffer = await urlResponse.arrayBuffer();
+        const formData = new FormData();
+        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+        formData.append('file', blob, file.name);
+
         response = await fetch(`${this.baseUrl}/file`, {
           method: 'POST',
           headers: {
             'Authorization': this.getAuthHeader(),
-            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            name: file.name,
-            url: file.url,
-          }),
+          body: formData as any,
         });
       } else if (file.content) {
-        // Upload text content
+        // Vapi /file only accepts multipart/form-data — convert text to a Blob
+        const formData = new FormData();
+        const blob = new Blob([file.content], { type: 'text/plain' });
+        formData.append('file', blob, file.name);
+
         response = await fetch(`${this.baseUrl}/file`, {
           method: 'POST',
           headers: {
             'Authorization': this.getAuthHeader(),
-            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            name: file.name,
-            content: file.content,
-          }),
+          body: formData as any,
         });
       } else {
         logger.error('[Vapi] No file content or URL provided');

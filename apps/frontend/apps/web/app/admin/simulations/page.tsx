@@ -233,7 +233,7 @@ export default function AdminSimulationsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <FlaskConical className="h-8 w-8" />
-            AI Simulations
+            Vapi Simulations
           </h1>
           <p className="text-muted-foreground mt-2">
             Run deterministic chat tests against your Vapi squad

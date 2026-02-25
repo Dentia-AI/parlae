@@ -172,6 +172,7 @@ export async function saveKnowledgeProgressAction(
   accountId: string,
   files: KnowledgeBaseFile[],
   categorizedFiles?: KnowledgeBaseCategoryData,
+  websiteUrl?: string,
 ) {
   try {
     // Verify user is authenticated
@@ -186,9 +187,9 @@ export async function saveKnowledgeProgressAction(
     const hasCategorizedFiles = categorizedFiles &&
       Object.values(categorizedFiles).some((catFiles) => catFiles && catFiles.length > 0);
 
-    // Only save if there are files in either format
-    if ((!files || files.length === 0) && !hasCategorizedFiles) {
-      console.log('[Setup Actions] Skipping knowledge base save - no files provided');
+    // Allow save even with no files if websiteUrl is provided (scrape happens after payment)
+    if ((!files || files.length === 0) && !hasCategorizedFiles && !websiteUrl) {
+      console.log('[Setup Actions] Skipping knowledge base save - no files or website URL provided');
       return { success: true };
     }
 
@@ -204,6 +205,7 @@ export async function saveKnowledgeProgressAction(
         data: {
           files,
           ...(hasCategorizedFiles ? { categorizedFiles } : {}),
+          ...(websiteUrl ? { websiteUrl } : {}),
         },
         completedAt: new Date().toISOString(),
       },
@@ -215,6 +217,7 @@ export async function saveKnowledgeProgressAction(
         setupProgress: updatedProgress,
         setupLastStep: 'knowledge',
         updatedAt: new Date(),
+        ...(websiteUrl ? { brandingWebsite: websiteUrl } : {}),
       },
     });
 

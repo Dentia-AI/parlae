@@ -34,19 +34,24 @@
     "./twilio/server": "./src/twilio/server.ts",
     "./voice-provider": "./src/voice-provider/index.ts",
     "./voice-provider/voices": "./src/voice-provider/voices-client.ts",
-    "./retell/retell-kb.service": "./src/retell/retell-kb.service.ts"
+    "./retell/retell-kb.service": "./src/retell/retell-kb.service.ts",
+    "./scraper/website-scraper": "./src/scraper/website-scraper.ts",
+    "./scraper/categorize-content": "./src/scraper/categorize-content.ts"
   },
   "devDependencies": {
-    "@types/react": "catalog:"
+    "@types/react": "catalog:",
+    "@types/xml2js": "^0.4.14"
   },
   "dependencies": {
     "@kit/next": "workspace:*",
     "@kit/prisma": "workspace:*",
     "@tanstack/react-query": "5.90.5",
     "axios": "^1.7.9",
+    "cheerio": "^1.2.0",
     "formdata-node": "^6.0.3",
     "next-auth": "^5.0.0-beta.20",
     "pino": "^10.1.0",
+    "xml2js": "^0.6.2",
     "zod": "^3.25.74"
   },
   "typesVersions": {

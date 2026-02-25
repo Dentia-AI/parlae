@@ -54,6 +54,26 @@ import {
 import { hydratePlaceholders } from '../../vapi/templates/template-utils';
 
 // ---------------------------------------------------------------------------
+// Voice model resolution — each Retell voice provider requires a specific
+// voice_model value. Passing the wrong one causes a 400 error.
+// ---------------------------------------------------------------------------
+
+function resolveVoiceModel(voiceId: string): string | undefined {
+  const prefix = voiceId.split('-')[0]?.toLowerCase();
+  switch (prefix) {
+    case '11labs':
+      return 'eleven_turbo_v2_5';
+    case 'cartesia':
+      return 'sonic-3';
+    case 'minimax':
+      return 'speech-02-turbo';
+    // retell-*, inworld-*, and others: let Retell pick the provider default
+    default:
+      return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -196,7 +216,7 @@ export async function deployRetellSquad(
   };
 
   const defaultVoiceId = config.voiceId || 'retell-Chloe';
-  const defaultVoiceModel = config.voiceModel || 'eleven_turbo_v2_5';
+  const defaultVoiceModel = config.voiceModel ?? resolveVoiceModel(defaultVoiceId);
   const webhookUrl = config.webhookBaseUrl || config.webhookUrl;
 
   // ── Pass 1: Create LLMs and Agents ────────────────────────────────────
@@ -250,7 +270,7 @@ export async function deployRetellSquad(
         llm_id: llm.llm_id,
       },
       voice_id: defaultVoiceId,
-      voice_model: defaultVoiceModel,
+      ...(defaultVoiceModel ? { voice_model: defaultVoiceModel } : {}),
       ...SHARED_RETELL_AGENT_CONFIG,
       webhook_url: `${webhookUrl}/retell/webhook`,
       webhook_events: ['call_started', 'call_ended', 'call_analyzed'],

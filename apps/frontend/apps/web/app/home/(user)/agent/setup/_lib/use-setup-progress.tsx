@@ -80,18 +80,20 @@ export function useSetupProgress(accountId: string) {
 
   // Save knowledge progress mutation (supports both flat and categorized)
   const saveKnowledgeMutation = useMutation({
-    mutationFn: async (args: KnowledgeBaseFile[] | { files: KnowledgeBaseFile[]; categorizedFiles?: KnowledgeBaseCategoryData }) => {
+    mutationFn: async (args: KnowledgeBaseFile[] | { files: KnowledgeBaseFile[]; categorizedFiles?: KnowledgeBaseCategoryData; websiteUrl?: string }) => {
       let files: KnowledgeBaseFile[];
       let categorizedFiles: KnowledgeBaseCategoryData | undefined;
+      let websiteUrl: string | undefined;
 
       if (Array.isArray(args)) {
         files = args;
       } else {
         files = args.files;
         categorizedFiles = args.categorizedFiles;
+        websiteUrl = args.websiteUrl;
       }
 
-      const result = await saveKnowledgeProgressAction(accountId, files, categorizedFiles);
+      const result = await saveKnowledgeProgressAction(accountId, files, categorizedFiles, websiteUrl);
       if (!result.success) {
         throw new Error(result.error || 'Failed to save knowledge progress');
       }

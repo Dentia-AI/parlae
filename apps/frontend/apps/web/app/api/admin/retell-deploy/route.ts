@@ -18,11 +18,12 @@ import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service'
  * Creates 6 Retell LLMs + 6 Agents, wires agent_swap tools, and optionally
  * provisions a Retell phone number.
  *
+ * Existing agents for the account are automatically torn down before redeploying.
+ *
  * Body:
  * {
  *   accountId: string           // Required
  *   phoneNumber?: string        // E.164 phone number to import into Retell
- *   deleteExisting?: boolean    // Delete previous Retell agents first (default: false)
  *   voiceId?: string            // Retell voice ID (default: retell-Chloe)
  * }
  */
@@ -67,13 +68,20 @@ export async function POST(request: NextRequest) {
     const clinicName = account.brandingBusinessName || account.name;
     const clinicPhone = account.brandingContactPhone || undefined;
 
-    // Optionally teardown existing Retell agents
-    if (deleteExisting && account.retellPhoneNumbers.length > 0) {
+    // Always teardown existing Retell agents on redeploy to prevent duplicates
+    if (account.retellPhoneNumbers.length > 0) {
       const existing = account.retellPhoneNumbers[0];
       const agentIds = existing.retellAgentIds as Record<RetellAgentRole, { agentId: string; llmId: string }> | null;
       if (agentIds) {
-        logger.info({ funcName, accountId }, '[Retell Deploy] Tearing down existing agents');
-        await teardownRetellSquad(retell, agentIds);
+        logger.info({ funcName, accountId }, '[Retell Deploy] Tearing down existing agents before redeploy');
+        try {
+          await teardownRetellSquad(retell, agentIds);
+        } catch (teardownErr) {
+          logger.warn(
+            { error: teardownErr instanceof Error ? teardownErr.message : teardownErr },
+            '[Retell Deploy] Non-fatal: teardown of old agents failed, continuing with fresh deploy',
+          );
+        }
       }
     }
 

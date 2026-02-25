@@ -21,6 +21,9 @@ import {
   Users,
   ScrollText,
   HelpCircle,
+  Globe,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
@@ -116,12 +119,31 @@ export default function KnowledgeBasePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [accountId, setAccountId] = useState<string>('');
 
+  // Website URL state (scraping happens after payment)
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteUrlSaved, setWebsiteUrlSaved] = useState(false);
+
+  // DEV-ONLY: local scrape testing state
+  const isDev = process.env.NODE_ENV === 'development';
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeStatus, setScrapeStatus] = useState('');
+  const [scrapeResult, setScrapeResult] = useState<{
+    pagesScraped: number;
+    documentsUploaded: number;
+    categories: Record<string, { fileId: string; charCount: number; sourcePages: string[] }>;
+  } | null>(null);
+
   const { progress, saveKnowledge, isLoading } = useSetupProgress(accountId);
 
   useEffect(() => {
     const storedAccountId = sessionStorage.getItem('accountId');
     if (storedAccountId) {
       setAccountId(storedAccountId);
+    }
+    const storedWebsiteUrl = sessionStorage.getItem('websiteUrl');
+    if (storedWebsiteUrl) {
+      setWebsiteUrl(storedWebsiteUrl);
+      setWebsiteUrlSaved(true);
     }
   }, []);
 
@@ -151,7 +173,16 @@ export default function KnowledgeBasePage() {
         }
         return next;
       });
-    } else if (data.files && Array.isArray(data.files)) {
+    }
+
+    // Restore saved website URL from DB progress
+    if (data.websiteUrl && !websiteUrl) {
+      setWebsiteUrl(data.websiteUrl);
+      setWebsiteUrlSaved(true);
+      sessionStorage.setItem('websiteUrl', data.websiteUrl);
+    }
+
+    if (data.files && Array.isArray(data.files) && !categorizedFiles) {
       // Legacy: flat file list — put all files in the first category
       const legacyFiles: UploadedFile[] = data.files.map((f: any) => ({
         id: f.id,
@@ -324,6 +355,90 @@ export default function KnowledgeBasePage() {
     }
   };
 
+  const handleSaveWebsiteUrl = () => {
+    let url = websiteUrl.trim();
+    if (!url) return;
+
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+      setWebsiteUrl(url);
+    }
+
+    sessionStorage.setItem('websiteUrl', url);
+    setWebsiteUrlSaved(true);
+    toast.success('Website URL saved. It will be scanned automatically after payment.');
+  };
+
+  const handleScrapeNow = async () => {
+    let url = websiteUrl.trim();
+    if (!url) return;
+
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+      setWebsiteUrl(url);
+    }
+
+    setIsScraping(true);
+    setScrapeStatus('Discovering pages...');
+    setScrapeResult(null);
+
+    try {
+      const response = await fetch('/api/agent/knowledge/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        body: JSON.stringify({ websiteUrl: url }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Scrape failed' }));
+        throw new Error(errorData.error || `Scrape failed (${response.status})`);
+      }
+
+      const result = await response.json();
+
+      setScrapeResult({
+        pagesScraped: result.pagesScraped,
+        documentsUploaded: result.documentsUploaded,
+        categories: result.categories,
+      });
+
+      if (result.categories) {
+        setCategories((prev) => {
+          const next = { ...prev };
+          for (const [catId, catData] of Object.entries(result.categories) as [string, any][]) {
+            if (next[catId]) {
+              const newFile: UploadedFile = {
+                id: catData.fileId,
+                name: `Website - ${KB_CATEGORIES.find((c) => c.id === catId)?.label || catId}`,
+                size: catData.charCount,
+                status: 'uploaded',
+                vapiFileId: catData.fileId,
+              };
+              next[catId] = {
+                ...next[catId]!,
+                files: [...next[catId]!.files, newFile],
+              };
+            }
+          }
+          return next;
+        });
+      }
+
+      toast.success(
+        `Scraped ${result.pagesScraped} pages → ${result.documentsUploaded} documents`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Scrape failed');
+      setScrapeStatus('');
+    } finally {
+      setIsScraping(false);
+      setScrapeStatus('');
+    }
+  };
+
   const handleContinue = async () => {
     const selectedVoice = sessionStorage.getItem('selectedVoice');
     if (!selectedVoice) {
@@ -353,10 +468,11 @@ export default function KnowledgeBasePage() {
         }
       }
 
-      // Save to database (categorized format)
+      // Save to database (categorized format + website URL)
       await saveKnowledge({
         files: allFiles,
         categorizedFiles,
+        websiteUrl: websiteUrl.trim() || undefined,
       });
 
       // Build knowledgeBaseConfig for sessionStorage (category → fileIds)
@@ -367,6 +483,10 @@ export default function KnowledgeBasePage() {
 
       sessionStorage.setItem('knowledgeBaseFiles', JSON.stringify(allFiles));
       sessionStorage.setItem('knowledgeBaseConfig', JSON.stringify(knowledgeBaseConfig));
+
+      if (websiteUrl.trim()) {
+        sessionStorage.setItem('websiteUrl', websiteUrl.trim());
+      }
 
       const totalFiles = allFiles.length;
       if (totalFiles > 0) {
@@ -425,6 +545,125 @@ export default function KnowledgeBasePage() {
       {/* Scrollable Content */}
       <div className="flex-1 relative min-h-0">
         <div className="absolute inset-0 overflow-y-auto space-y-3 pb-4">
+          {/* Website URL Section */}
+          <div className="rounded-xl bg-card shadow-sm ring-1 ring-border/40 overflow-hidden">
+            <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30">
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Globe className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Your Website</span>
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    Auto-Scanned
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add your website URL — we&apos;ll automatically scan and organize your content after payment
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  type="url"
+                  placeholder="https://www.yourclinic.com"
+                  value={websiteUrl}
+                  onChange={(e) => {
+                    setWebsiteUrl(e.target.value);
+                    setWebsiteUrlSaved(false);
+                  }}
+                  className="flex-1 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveWebsiteUrl();
+                  }}
+                />
+                <Button
+                  onClick={handleSaveWebsiteUrl}
+                  disabled={!websiteUrl.trim() || websiteUrlSaved}
+                  size="sm"
+                  variant={websiteUrlSaved ? 'outline' : 'default'}
+                  className="px-4"
+                >
+                  {websiteUrlSaved ? (
+                    <>
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                      Saved
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="mr-1.5 h-3.5 w-3.5" />
+                      Save URL
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* DEV: Scan Now button for local testing */}
+              {isDev && (
+                <Button
+                  onClick={handleScrapeNow}
+                  disabled={isScraping || !websiteUrl.trim()}
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-dashed border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                >
+                  {isScraping ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      Scan &amp; Categorize Now (Dev Only)
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {isScraping && scrapeStatus && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {scrapeStatus}
+                </div>
+              )}
+
+              {scrapeResult && (
+                <div className="rounded-lg bg-green-500/5 ring-1 ring-green-500/20 px-3 py-2.5 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-green-700 dark:text-green-400 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Website scanned successfully
+                  </div>
+                  <div className="text-muted-foreground pl-5">
+                    Scraped {scrapeResult.pagesScraped} pages and created{' '}
+                    {scrapeResult.documentsUploaded} documents across{' '}
+                    {Object.keys(scrapeResult.categories).length} categories
+                  </div>
+                </div>
+              )}
+
+              {websiteUrlSaved && !scrapeResult && (
+                <div className="rounded-lg bg-blue-500/5 ring-1 ring-blue-500/20 px-3 py-2.5 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-medium">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Website will be scanned automatically
+                  </div>
+                  <div className="text-muted-foreground pl-5">
+                    After you complete payment and deploy, we&apos;ll scan your website, extract content,
+                    and use AI to organize it into your knowledge base categories.
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[10px] text-muted-foreground/60">
+                You can also upload additional files manually in the categories below.
+              </p>
+            </div>
+          </div>
+
           {/* Summary banner */}
           {totalUploadedFiles > 0 && (
             <div className="rounded-lg bg-primary/5 ring-1 ring-primary/20 px-4 py-2.5 text-sm">

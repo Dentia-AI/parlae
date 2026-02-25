@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { CheckCircle2, Plus, Settings, Users } from 'lucide-react';
+import { CheckCircle2, Plus, Download, Settings, Users } from 'lucide-react';
 import Link from 'next/link';
 import { prisma } from '@kit/prisma';
 import { getSessionUser } from '@kit/shared/auth';
@@ -44,12 +44,20 @@ export default async function RetellTemplatesPage() {
             Manage Retell AI agent configurations (LLM prompts, agent settings, routing)
           </p>
         </div>
-        <Link href="/admin/retell-templates/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            New Template
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/retell-templates/fetch">
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Fetch from Account
+            </Button>
+          </Link>
+          <Link href="/admin/retell-templates/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              New Template
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {templates.length === 0 ? (
