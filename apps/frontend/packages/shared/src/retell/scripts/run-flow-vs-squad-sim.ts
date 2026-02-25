@@ -316,7 +316,7 @@ async function deployFlowAgent(): Promise<DeployedFlowAgent> {
 
   const flowConfig = buildDentalClinicFlow({
     clinicName: 'Test Dental Clinic',
-    clinicPhone: '+10000000000',
+    // No clinicPhone — omit transfer_clinic node so sim doesn't fail on E.164 validation
     webhookUrl: BACKEND_URL,
     webhookSecret: RETELL_WEBHOOK_SECRET,
     accountId: 'sim-test',
@@ -381,13 +381,42 @@ async function createSquadTestCases(
   return cases;
 }
 
+// Default mocks for all PMS tools — ensures cross-node transitions don't hit unmocked URLs
+const FLOW_DEFAULT_TOOL_MOCKS: ToolMock[] = [
+  { tool_name: 'getProviders', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Available providers: Dr. Smith (General), Dr. Rivera (Emergency), Dr. Lee (Orthodontics).' }) },
+  { tool_name: 'lookupPatient', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Patient found: Lisa Chen (pat_101). Phone: 555-0101.' }) },
+  { tool_name: 'createPatient', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Patient created. ID: pat_test123. [NEXT STEP] Call bookAppointment with patientId, appointmentType, startTime, duration.' }) },
+  { tool_name: 'checkAvailability', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Available slots for tomorrow: 9:00 AM, 10:30 AM, 2:00 PM, 3:30 PM. [NEXT STEP] Ask which slot the patient prefers, then look up or create the patient.' }) },
+  { tool_name: 'bookAppointment', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Appointment booked. Confirmation: Tomorrow at 9:00 AM for Dental Cleaning with Dr. Smith. Duration: 60 minutes.' }) },
+  { tool_name: 'getAppointments', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Upcoming: Dental Cleaning on Thursday Feb 27 at 3:30 PM. ID: appt_500.' }) },
+  { tool_name: 'rescheduleAppointment', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Appointment rescheduled to the new requested time.' }) },
+  { tool_name: 'cancelAppointment', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Appointment cancelled.' }) },
+  { tool_name: 'updatePatient', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Patient record updated.' }) },
+  { tool_name: 'addNote', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Note added to patient record.' }) },
+  { tool_name: 'getInsurance', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Insurance: Blue Cross Blue Shield PPO. Member ID: BC12345. Coverage active through Dec 2026.' }) },
+  { tool_name: 'verifyInsuranceCoverage', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Procedure covered at 80% after $50 deductible.' }) },
+  { tool_name: 'getBalance', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Current balance: $150.00.' }) },
+  { tool_name: 'processPayment', input_match_rule: { type: 'any' }, output: JSON.stringify({ result: '[SUCCESS] Payment of $150.00 processed.' }) },
+];
+
+function mergeWithDefaults(scenarioMocks: ToolMock[]): ToolMock[] {
+  const scenarioToolNames = new Set(scenarioMocks.map((m) => m.tool_name));
+  const merged = [...scenarioMocks];
+  for (const def of FLOW_DEFAULT_TOOL_MOCKS) {
+    if (!scenarioToolNames.has(def.tool_name)) {
+      merged.push(def);
+    }
+  }
+  return merged;
+}
+
 async function createFlowTestCases(
   flowId: string,
   scenarios: RetellTestScenario[],
 ): Promise<TestCaseMapping[]> {
   const cases: TestCaseMapping[] = [];
   for (const s of scenarios) {
-    const flowMocks = stripRoutingMocks(s.toolMocks);
+    const flowMocks = mergeWithDefaults(stripRoutingMocks(s.toolMocks));
     const tc = await retellRequest<any>('POST', '/create-test-case-definition', {
       name: `[FLOW] ${s.name}`,
       response_engine: {
@@ -447,7 +476,7 @@ async function runBatchTest(
 }
 
 // ---------------------------------------------------------------------------
-// Latency extraction
+// Latency extraction — focused on agent response time after user messages
 // ---------------------------------------------------------------------------
 
 interface LatencyStats {
@@ -459,61 +488,97 @@ interface LatencyStats {
   count: number;
 }
 
+function emptyStats(): LatencyStats {
+  return { avgMs: 0, p95Ms: 0, maxMs: 0, minMs: 0, totalMs: 0, count: 0 };
+}
+
+function statsFromValues(values: number[]): LatencyStats {
+  if (values.length === 0) return emptyStats();
+  const sorted = [...values].sort((a, b) => a - b);
+  const sum = sorted.reduce((s, d) => s + d, 0);
+  const p95Idx = Math.min(Math.floor(sorted.length * 0.95), sorted.length - 1);
+  return {
+    avgMs: Math.round(sum / sorted.length),
+    p95Ms: sorted[p95Idx]!,
+    maxMs: sorted[sorted.length - 1]!,
+    minMs: sorted[0]!,
+    totalMs: sum,
+    count: sorted.length,
+  };
+}
+
+function getTranscript(run: any): any[] {
+  return (
+    run?.transcript_snapshot?.transcript ??
+    run?.test_case_result?.transcript ??
+    run?.transcript ??
+    []
+  );
+}
+
+/** Extract all user→agent response times from a single run's transcript */
+function extractResponseTimes(run: any): number[] {
+  const transcript = getTranscript(run);
+  if (transcript.length < 2) return [];
+
+  const times: number[] = [];
+  for (let i = 0; i < transcript.length - 1; i++) {
+    const msg = transcript[i];
+    if (msg?.role !== 'user' || !msg?.created_timestamp) continue;
+
+    // Find the next agent message (skip tool calls in between)
+    for (let j = i + 1; j < transcript.length; j++) {
+      const next = transcript[j];
+      if (next?.role === 'agent' && next?.created_timestamp) {
+        const delta = next.created_timestamp - msg.created_timestamp;
+        if (delta > 0) times.push(delta);
+        break;
+      }
+      if (next?.role === 'user') break;
+    }
+  }
+  return times;
+}
+
+/** Compute overall call duration from transcript timestamps */
 function computeRunDuration(run: any): number | null {
   if (run?.call_duration_ms) return run.call_duration_ms;
   if (run?.duration_ms) return run.duration_ms;
 
-  // Derive from transcript timestamps (first msg → last msg)
-  const transcript: any[] =
-    run?.test_case_result?.transcript ?? run?.transcript ?? [];
+  const transcript = getTranscript(run);
   if (transcript.length >= 2) {
     const stamps = transcript
       .map((m: any) => m.created_timestamp)
       .filter((t: any): t is number => typeof t === 'number' && t > 0);
-    if (stamps.length >= 2) {
-      const min = Math.min(...stamps);
-      const max = Math.max(...stamps);
-      if (max > min) return max - min;
-    }
+    if (stamps.length >= 2) return Math.max(...stamps) - Math.min(...stamps);
   }
 
-  // Derive from job timestamps
   if (run?.creation_timestamp && run?.user_modified_timestamp) {
     const diff = run.user_modified_timestamp - run.creation_timestamp;
     if (diff > 0) return diff;
   }
-
   return null;
 }
 
-function extractLatencyStats(runs: any[]): LatencyStats {
+/** Aggregate response time stats across all runs */
+function extractResponseTimeStats(runs: any[]): LatencyStats {
+  const allTimes = runs.flatMap(extractResponseTimes);
+  return statsFromValues(allTimes);
+}
+
+/** Aggregate call duration stats across all runs */
+function extractDurationStats(runs: any[]): LatencyStats {
   const durations = runs
     .map(computeRunDuration)
     .filter((d): d is number => d !== null && d > 0);
-
-  if (durations.length === 0) {
-    return { avgMs: 0, p95Ms: 0, maxMs: 0, minMs: 0, totalMs: 0, count: 0 };
-  }
-
-  durations.sort((a, b) => a - b);
-  const sum = durations.reduce((s, d) => s + d, 0);
-  const p95Idx = Math.min(
-    Math.floor(durations.length * 0.95),
-    durations.length - 1,
-  );
-
-  return {
-    avgMs: Math.round(sum / durations.length),
-    p95Ms: durations[p95Idx]!,
-    maxMs: durations[durations.length - 1]!,
-    minMs: durations[0]!,
-    totalMs: sum,
-    count: durations.length,
-  };
+  return statsFromValues(durations);
 }
 
-function getRunDurationMs(run: any): number | null {
-  return computeRunDuration(run);
+/** Per-run average response time (shown in per-test detail) */
+function getRunAvgResponseMs(run: any): number | null {
+  const times = extractResponseTimes(run);
+  if (times.length === 0) return null;
+  return Math.round(times.reduce((s, t) => s + t, 0) / times.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,33 +630,59 @@ function printComparison(squad: ArchResult, flow: ArchResult): void {
     );
   }
 
-  // Latency
-  const squadLat = extractLatencyStats(squad.runs);
-  const flowLat = extractLatencyStats(flow.runs);
-  const hasLatency = squadLat.avgMs > 0 || flowLat.avgMs > 0;
+  // Response Time (user msg → agent reply)
+  const squadRT = extractResponseTimeStats(squad.runs);
+  const flowRT = extractResponseTimeStats(flow.runs);
+  const hasRT = squadRT.count > 0 || flowRT.count > 0;
 
-  if (hasLatency) {
+  // Call Duration (overall)
+  const squadDur = extractDurationStats(squad.runs);
+  const flowDur = extractDurationStats(flow.runs);
+
+  const fmt = (ms: number) => (ms > 0 ? `${(ms / 1000).toFixed(1)}s` : 'N/A');
+  const fmtMs = (ms: number) => (ms > 0 ? `${ms}ms` : 'N/A');
+
+  if (hasRT) {
     console.log('');
     console.log('  ' + '─'.repeat(METRIC + COL * 2));
-    console.log('  LATENCY');
+    console.log('  RESPONSE TIME (user msg → agent reply)');
     console.log('  ' + '─'.repeat(METRIC + COL * 2));
 
-    const fmt = (ms: number) => (ms > 0 ? `${(ms / 1000).toFixed(1)}s` : 'N/A');
-    const latRows: [string, string, string][] = [
-      ['Avg Call Duration', fmt(squadLat.avgMs), fmt(flowLat.avgMs)],
-      ['P95 Call Duration', fmt(squadLat.p95Ms), fmt(flowLat.p95Ms)],
-      ['Max Call Duration', fmt(squadLat.maxMs), fmt(flowLat.maxMs)],
-      ['Min Call Duration', fmt(squadLat.minMs), fmt(flowLat.minMs)],
+    const rtRows: [string, string, string][] = [
+      ['Avg Response Time', fmtMs(squadRT.avgMs), fmtMs(flowRT.avgMs)],
+      ['P95 Response Time', fmtMs(squadRT.p95Ms), fmtMs(flowRT.p95Ms)],
+      ['Max Response Time', fmtMs(squadRT.maxMs), fmtMs(flowRT.maxMs)],
+      ['Min Response Time', fmtMs(squadRT.minMs), fmtMs(flowRT.minMs)],
+      ['Sample Count', `${squadRT.count}`, `${flowRT.count}`],
     ];
-    for (const [metric, sVal, fVal] of latRows) {
+    for (const [metric, sVal, fVal] of rtRows) {
       console.log(
         '  ' + metric.padEnd(METRIC) + sVal.padStart(COL) + fVal.padStart(COL),
       );
     }
   } else {
     console.log(
-      '\n  (Latency data not available — Retell may not expose per-run timing)',
+      '\n  (Response time data not available — transcripts may lack timestamps)',
     );
+  }
+
+  if (squadDur.count > 0 || flowDur.count > 0) {
+    console.log('');
+    console.log('  ' + '─'.repeat(METRIC + COL * 2));
+    console.log('  CALL DURATION (overall)');
+    console.log('  ' + '─'.repeat(METRIC + COL * 2));
+
+    const durRows: [string, string, string][] = [
+      ['Avg Duration', fmt(squadDur.avgMs), fmt(flowDur.avgMs)],
+      ['P95 Duration', fmt(squadDur.p95Ms), fmt(flowDur.p95Ms)],
+      ['Max Duration', fmt(squadDur.maxMs), fmt(flowDur.maxMs)],
+      ['Min Duration', fmt(squadDur.minMs), fmt(flowDur.minMs)],
+    ];
+    for (const [metric, sVal, fVal] of durRows) {
+      console.log(
+        '  ' + metric.padEnd(METRIC) + sVal.padStart(COL) + fVal.padStart(COL),
+      );
+    }
   }
 
   // Per-category
@@ -659,9 +750,9 @@ function printComparison(squad: ArchResult, flow: ArchResult): void {
     const fmtRun = (run: any) => {
       if (!run) return '?';
       const icon = run.status === 'pass' ? '✅' : run.status === 'fail' ? '❌' : '💥';
-      const dur = getRunDurationMs(run);
-      const durStr = dur ? ` ${(dur / 1000).toFixed(1)}s` : '';
-      return `${icon} ${run.status}${durStr}`;
+      const avgRT = getRunAvgResponseMs(run);
+      const rtStr = avgRT ? ` ${avgRT}ms` : '';
+      return `${icon} ${run.status}${rtStr}`;
     };
 
     console.log(
@@ -700,7 +791,8 @@ function saveResults(squad: ArchResult, flow: ArchResult): string {
               ? `${((squad.batch.pass_count / squad.batch.total_count) * 100).toFixed(1)}%`
               : 'N/A',
           batch: squad.batch,
-          latency: extractLatencyStats(squad.runs),
+          responseTime: extractResponseTimeStats(squad.runs),
+          callDuration: extractDurationStats(squad.runs),
           runs: squad.runs,
         },
         flow: {
@@ -709,7 +801,8 @@ function saveResults(squad: ArchResult, flow: ArchResult): string {
               ? `${((flow.batch.pass_count / flow.batch.total_count) * 100).toFixed(1)}%`
               : 'N/A',
           batch: flow.batch,
-          latency: extractLatencyStats(flow.runs),
+          responseTime: extractResponseTimeStats(flow.runs),
+          callDuration: extractDurationStats(flow.runs),
           runs: flow.runs,
         },
       },

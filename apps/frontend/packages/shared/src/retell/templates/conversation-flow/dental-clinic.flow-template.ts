@@ -200,6 +200,10 @@ export function buildDentalClinicFlow(
         'faq',
       ),
       promptEdge(
+        'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing, or the conversation is going in circles.',
+        'end_call',
+      ),
+      promptEdge(
         'Caller says goodbye, hangs up, or conversation is complete.',
         'end_call',
       ),
@@ -215,6 +219,7 @@ export function buildDentalClinicFlow(
       'createPatient',
       'checkAvailability',
       'bookAppointment',
+      'rescheduleAppointment',
     ],
     edges: [
       promptEdge(
@@ -256,6 +261,10 @@ export function buildDentalClinicFlow(
         'booking',
       ),
       promptEdge(
+        'Agent has refused a privacy/third-party request multiple times and the caller keeps pressing, or the conversation is going in circles.',
+        'end_call',
+      ),
+      promptEdge(
         'Task is complete or caller needs general help.',
         'receptionist',
       ),
@@ -288,6 +297,10 @@ export function buildDentalClinicFlow(
       promptEdge(
         'Caller wants to update insurance or check billing.',
         'insurance_billing',
+      ),
+      promptEdge(
+        'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing, or the conversation is going in circles.',
+        'end_call',
       ),
       promptEdge(
         'Task is complete or caller needs general help.',
@@ -325,6 +338,10 @@ export function buildDentalClinicFlow(
         'patient_records',
       ),
       promptEdge(
+        'Agent has already answered the insurance/billing question and offered a callback, but the caller keeps asking repeated detailed follow-up questions. The conversation is going in circles.',
+        'end_call',
+      ),
+      promptEdge(
         'Task is complete or caller needs general help.',
         'receptionist',
       ),
@@ -346,6 +363,10 @@ export function buildDentalClinicFlow(
       'bookAppointment',
     ],
     edges: [
+      promptEdge(
+        'Agent has given the same advice (call 911, or refused medication advice, or refused medical guidance) at least twice and the caller keeps repeating themselves or the conversation is going in circles.',
+        'end_call',
+      ),
       ...(config.clinicPhone
         ? [
             promptEdge(
@@ -446,6 +467,8 @@ export function buildDentalClinicFlow(
     '7. Use natural spoken dates and times (e.g. "tomorrow at 2 PM"), never raw ISO formats.',
     '8. Phone numbers: read digit by digit with natural grouping.',
     '9. If a tool returns [ERROR], the action FAILED. Never tell the caller it succeeded.',
+    '10. **AVOID LOOPS**: If you have already refused a request or given the same advice twice and the caller keeps repeating the same thing, do NOT repeat yourself endlessly. Give your final answer, then say goodbye and end the call. Never get stuck repeating the same response.',
+    '11. **PRIVACY**: Only discuss patient details with the patient themselves. If a third party calls on behalf of a patient, refuse politely up to 2 times, then end the call gracefully.',
     '',
     '## SHARED STATE',
     'Dynamic variables {{patient_id}}, {{patient_name}}, and {{customer_phone}} persist across all nodes.',
