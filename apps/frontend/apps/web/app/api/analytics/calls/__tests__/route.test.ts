@@ -39,6 +39,9 @@ jest.mock('@kit/shared/logger', () => ({
     debug: jest.fn(),
   }),
 }));
+jest.mock('@kit/shared/voice-provider', () => ({
+  getAccountProvider: jest.fn().mockResolvedValue('VAPI'),
+}));
 
 describe('GET /api/analytics/calls', () => {
   afterEach(() => jest.clearAllMocks());
