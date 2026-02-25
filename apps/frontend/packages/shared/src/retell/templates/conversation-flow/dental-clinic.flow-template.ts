@@ -404,14 +404,19 @@ export function buildDentalClinicFlow(
         type: 'predefined',
         number: config.clinicPhone.startsWith('+') ? config.clinicPhone : `+${config.clinicPhone}`,
       },
+      transfer_option: {
+        type: 'cold_transfer',
+      },
+      edge: {
+        id: 'edge_transfer_failed',
+        transition_condition: { type: 'prompt', prompt: 'Transfer failed' },
+        destination_node_id: 'end_call',
+      },
       speak_during_execution: true,
       instruction: {
         type: 'prompt',
         text: 'Let me get you help right now.',
       },
-      edges: [
-        promptEdge('Transfer complete.', 'end_call'),
-      ],
     });
   }
 

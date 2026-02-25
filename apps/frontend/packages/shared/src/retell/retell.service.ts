@@ -147,6 +147,11 @@ export interface ConversationFlowTransferCallNode extends ConversationFlowNodeBa
     number: string;
     ignore_e164_validation?: boolean;
   };
+  transfer_option: {
+    type: 'cold_transfer' | 'warm_transfer';
+    show_transferee_as_caller?: boolean;
+  };
+  edge: ConversationFlowEdge;
   speak_during_execution?: boolean;
   instruction?: { type: 'prompt'; text: string };
 }
