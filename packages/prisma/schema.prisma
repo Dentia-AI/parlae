@@ -183,6 +183,7 @@ model Account {
   advancedSetupEnabled     Boolean @default(false) @map("advanced_setup_enabled")
   agentTemplateId          String? @map("agent_template_id")
   retellAgentTemplateId    String? @map("retell_agent_template_id")
+  retellFlowTemplateId     String? @map("retell_flow_template_id")
 
   // Setup wizard progress tracking
   setupProgress    Json?     @default("{}") @map("setup_progress") // Stores progress for each step
@@ -230,6 +231,7 @@ model Account {
   ghlSubAccounts        GhlSubAccount[]
   agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
   retellAgentTemplate   RetellAgentTemplate?   @relation(fields: [retellAgentTemplateId], references: [id])
+  retellFlowTemplate    RetellConversationFlowTemplate? @relation(fields: [retellFlowTemplateId], references: [id])
   pmsIntegrations       PmsIntegration[]
   vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account (Vapi)
   retellPhoneNumbers    RetellPhoneNumber[] // Phone numbers for this account (Retell)
@@ -1155,6 +1157,33 @@ model RetellAgentTemplate {
   accounts Account[]
 
   @@map("retell_agent_templates")
+}
+
+// Retell Conversation Flow Template: stores the full conversation flow config
+// (global prompt, per-node prompts, tools, edges, model config) with versioning.
+// Replaces the multi-agent squad architecture with a single flow agent.
+model RetellConversationFlowTemplate {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  displayName String  @map("display_name")
+  description String?
+  version     String // e.g., "cf-v1.0"
+  isDefault   Boolean @default(false) @map("is_default")
+  isActive    Boolean @default(true) @map("is_active")
+
+  globalPrompt String @map("global_prompt") @db.Text
+  nodePrompts  Json   @map("node_prompts") // { receptionist: "...", booking: "...", ... }
+  nodeTools    Json   @map("node_tools") // { receptionist: ["getProviders"], booking: ["lookupPatient", ...], ... }
+  edgeConfig   Json   @map("edge_config") // Edge routing config per node
+  modelConfig  Json   @map("model_config") // { model: "gpt-4.1", temperature: 0.3 }
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  accounts Account[]
+
+  @@map("retell_conversation_flow_templates")
 }
 
 // Platform-wide pricing configuration for blended call cost calculation.

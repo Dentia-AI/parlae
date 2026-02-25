@@ -48,10 +48,16 @@ const navGroups: NavGroup[] = [
   {
     label: 'Retell (Primary)',
     items: [
-      { name: 'Retell Templates', href: '/admin/retell-templates', icon: FileStack },
-      { name: 'Retell Versions', href: '/admin/retell-templates/versions', icon: GitBranch },
-      { name: 'Conversation Flow', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
+      { name: 'Flow Templates', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
+      { name: 'Flow Versions', href: '/admin/retell-templates/conversation-flow/versions', icon: GitBranch },
       { name: 'Retell Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
+    ],
+  },
+  {
+    label: 'Retell Legacy (Squad)',
+    items: [
+      { name: 'Squad Templates', href: '/admin/retell-templates', icon: FileStack },
+      { name: 'Squad Versions', href: '/admin/retell-templates/versions', icon: GitBranch },
     ],
   },
   {

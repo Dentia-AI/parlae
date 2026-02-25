@@ -31,6 +31,7 @@ export const createMockAccount = (overrides?: Partial<Account>): Account => ({
   advancedSetupEnabled: false,
   agentTemplateId: null,
   retellAgentTemplateId: null,
+  retellFlowTemplateId: null,
   setupProgress: {},
   setupCompletedAt: null,
   setupLastStep: null,

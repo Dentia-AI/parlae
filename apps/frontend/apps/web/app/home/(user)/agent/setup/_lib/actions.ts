@@ -333,6 +333,14 @@ export async function executeDeployment(
         }
       }
 
+      // Determine the phone number for emergency human transfers.
+      // Defined here so it's available to both Retell and Vapi paths.
+      const clinicOriginalNumber =
+        phoneIntegrationSettings?.staffDirectNumber ||
+        phoneIntegrationSettings?.clinicNumber ||
+        account.brandingContactPhone ||
+        undefined;
+
       // ═══════════════════════════════════════════════════════════════════════
       // PROVIDER RESOLUTION — Retell is the default, Vapi is the fallback
       // ═══════════════════════════════════════════════════════════════════════
@@ -364,13 +372,16 @@ export async function executeDeployment(
         }
 
         const {
-          deployRetellSquad,
-          teardownRetellSquad,
+          deployRetellConversationFlow,
+          teardownRetellConversationFlow,
         } = await import(
-          '@kit/shared/retell/templates/retell-template-utils'
+          '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils'
         );
         const { ensureRetellKnowledgeBase } = await import(
           '@kit/shared/retell/retell-kb.service'
+        );
+        const { ensureDefaultFlowTemplate } = await import(
+          '@kit/shared/retell/templates/conversation-flow/flow-template-seed'
         );
 
         const retellBackendUrl =
@@ -378,7 +389,7 @@ export async function executeDeployment(
           process.env.BACKEND_API_URL ||
           '';
 
-        // KB: Sync from Vapi file IDs if present (Phase 3 will change to direct upload)
+        // KB: Sync from Vapi file IDs if present
         const kbConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};
         const kbFileIds: string[] = data.files?.map((f: any) => f.id) || [];
         const hasKB =
@@ -404,28 +415,28 @@ export async function executeDeployment(
           }
         }
 
-        // Teardown any existing Retell agents before redeploying
+        // Teardown any existing conversation flow agent before redeploying
         try {
-          const existingRetell = await (prisma as any).retellPhoneNumber.findFirst({
-            where: { accountId: account.id },
-            select: { retellAgentIds: true },
-          });
-          if (existingRetell?.retellAgentIds) {
+          const existingSettings = account.phoneIntegrationSettings as any;
+          const existingAgentId = existingSettings?.retellReceptionistAgentId;
+          const existingFlowId = existingSettings?.conversationFlowId;
+          if (existingAgentId && existingFlowId) {
             logger.info(
               { accountId: account.id },
-              '[Receptionist] Tearing down existing Retell agents',
+              '[Receptionist] Tearing down existing conversation flow agent',
             );
-            await teardownRetellSquad(
+            await teardownRetellConversationFlow(
               retellService,
-              existingRetell.retellAgentIds,
+              existingAgentId,
+              existingFlowId,
             ).catch(() => {});
           }
         } catch {
-          // Table may not exist or no prior deployment
+          // No prior deployment
         }
 
-        // Deploy Retell squad
-        const retellConfig = {
+        // Deploy conversation flow (single agent, single flow)
+        const flowConfig = {
           clinicName: businessName,
           clinicPhone: clinicOriginalNumber,
           webhookUrl: retellBackendUrl,
@@ -435,18 +446,17 @@ export async function executeDeployment(
             '',
           accountId: account.id,
           voiceId: data.voice?.voiceId || 'retell-Chloe',
-          webhookBaseUrl: retellBackendUrl,
           knowledgeBaseIds:
             retellKbIds.length > 0 ? retellKbIds : undefined,
         };
 
         logger.info(
           { accountId: account.id, clinicName: businessName },
-          '[Receptionist] Deploying Retell squad (primary)',
+          '[Receptionist] Deploying conversation flow agent (primary)',
         );
-        const retellResult = await deployRetellSquad(
+        const flowResult = await deployRetellConversationFlow(
           retellService,
-          retellConfig,
+          flowConfig,
         );
 
         // Import Twilio phone number into Retell
@@ -458,8 +468,8 @@ export async function executeDeployment(
         try {
           const importResult = await retellService.importPhoneNumber({
             phoneNumber: e164Phone,
-            inboundAgentId: retellResult.agents.receptionist.agentId,
-            nickname: `${businessName} - Receptionist`,
+            inboundAgentId: flowResult.agentId,
+            nickname: `${businessName} - Conversation Flow`,
           });
           retellPhoneId = importResult?.phone_number;
           if (importResult) {
@@ -475,25 +485,14 @@ export async function executeDeployment(
           );
         }
 
-        // Build agent ID maps
-        const { RETELL_AGENT_ROLES } = await import(
-          '@kit/shared/retell/templates/dental-clinic.retell-template'
-        );
-        const agentIds: Record<string, { agentId: string; llmId: string }> = {};
-        const llmIds: Record<string, string> = {};
-        for (const role of RETELL_AGENT_ROLES) {
-          agentIds[role] = retellResult.agents[role];
-          llmIds[role] = retellResult.agents[role].llmId;
-        }
-
         // Create or update RetellPhoneNumber record
         try {
           await (prisma as any).retellPhoneNumber.upsert({
             where: { phoneNumber: e164Phone },
             update: {
-              retellAgentId: retellResult.agents.receptionist.agentId,
-              retellAgentIds: agentIds,
-              retellLlmIds: llmIds,
+              retellAgentId: flowResult.agentId,
+              retellAgentIds: { conversationFlow: { agentId: flowResult.agentId, flowId: flowResult.conversationFlowId } },
+              retellLlmIds: null,
               isActive: true,
             },
             create: {
@@ -501,10 +500,10 @@ export async function executeDeployment(
               retellPhoneId:
                 retellPhoneId || `pending-${account.id}`,
               phoneNumber: e164Phone,
-              retellAgentId: retellResult.agents.receptionist.agentId,
-              retellAgentIds: agentIds,
-              retellLlmIds: llmIds,
-              name: `${businessName} - Retell`,
+              retellAgentId: flowResult.agentId,
+              retellAgentIds: { conversationFlow: { agentId: flowResult.agentId, flowId: flowResult.conversationFlowId } },
+              retellLlmIds: null,
+              name: `${businessName} - Conversation Flow`,
               isActive: true,
             },
           });
@@ -515,18 +514,12 @@ export async function executeDeployment(
           );
         }
 
-        // Link Retell template to account
-        let retellTemplateId = account.retellAgentTemplateId;
-        if (!retellTemplateId) {
-          try {
-            const defaultTemplate = await (prisma as any).retellAgentTemplate.findFirst({
-              where: { isDefault: true, isActive: true },
-              select: { id: true },
-            });
-            retellTemplateId = defaultTemplate?.id ?? undefined;
-          } catch {
-            // Table may not exist
-          }
+        // Ensure default flow template exists in DB and link to account
+        let flowTemplateId: string | undefined;
+        try {
+          flowTemplateId = await ensureDefaultFlowTemplate(prisma);
+        } catch {
+          // Table may not exist yet
         }
 
         // Update account settings
@@ -541,12 +534,11 @@ export async function executeDeployment(
           voiceConfig: data.voice,
           phoneNumber,
           deployedAt: new Date().toISOString(),
-          retellReceptionistAgentId:
-            retellResult.agents.receptionist.agentId,
-          retellAgentIds: agentIds,
-          retellLlmIds: llmIds,
+          retellReceptionistAgentId: flowResult.agentId,
+          conversationFlowId: flowResult.conversationFlowId,
           retellKnowledgeBaseId: retellKbIds[0] || null,
-          retellVersion: retellResult.version,
+          retellVersion: flowResult.version,
+          deployType: 'conversation_flow',
         };
 
         if (allKBFileIds.length > 0) {
@@ -560,8 +552,8 @@ export async function executeDeployment(
           phoneIntegrationMethod: existingMethod,
           phoneIntegrationSettings: retellSettings as any,
         };
-        if (retellTemplateId) {
-          retellAccountUpdate.retellAgentTemplateId = retellTemplateId;
+        if (flowTemplateId) {
+          retellAccountUpdate.retellFlowTemplateId = flowTemplateId;
         }
 
         await prisma.account.update({
@@ -572,11 +564,12 @@ export async function executeDeployment(
         logger.info(
           {
             accountId: account.id,
-            version: retellResult.version,
-            agentCount: Object.keys(retellResult.agents).length,
+            version: flowResult.version,
+            agentId: flowResult.agentId,
+            flowId: flowResult.conversationFlowId,
             phoneNumber,
           },
-          '[Receptionist] Retell deployment complete (primary)',
+          '[Receptionist] Conversation flow deployment complete (primary)',
         );
 
         revalidatePath('/home/agent');
@@ -585,7 +578,7 @@ export async function executeDeployment(
         return {
           success: true,
           phoneNumber,
-          templateVersion: retellResult.version,
+          templateVersion: flowResult.version,
           retellDeployed: true,
           provider: 'RETELL' as const,
         };
@@ -619,14 +612,6 @@ export async function executeDeployment(
         clinicInsurance: setupProgress.insuranceInfo,
         clinicServices: setupProgress.servicesOffered,
       };
-
-      // Determine the phone number for emergency human transfers.
-      // Prefer the staff direct line (no forwarding loop risk), fall back to clinic number.
-      const clinicOriginalNumber =
-        phoneIntegrationSettings?.staffDirectNumber ||
-        phoneIntegrationSettings?.clinicNumber ||
-        account.brandingContactPhone ||
-        undefined;
 
       // Webhook URL should point to the NestJS backend API directly.
       const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
@@ -1392,6 +1377,7 @@ export const updateVoiceAction = enhanceAction(
         select: {
           id: true,
           phoneIntegrationSettings: true,
+          voiceProviderOverride: true,
         },
       });
 
@@ -1400,13 +1386,71 @@ export const updateVoiceAction = enhanceAction(
       }
 
       const settings = (account.phoneIntegrationSettings as Record<string, unknown>) || {};
+
+      // Check if this is a Retell conversation flow agent
+      const retellAgentId = settings.retellReceptionistAgentId as string | undefined;
+      const deployType = settings.deployType as string | undefined;
+
+      if (retellAgentId && deployType === 'conversation_flow') {
+        // Update voice on the single Retell conversation flow agent
+        const { createRetellService } = await import('@kit/shared/retell/retell.service');
+        const retellService = createRetellService();
+
+        if (!retellService.isEnabled()) {
+          return { success: false, error: 'Retell not configured' };
+        }
+
+        const voiceId = data.voice.voiceId || 'retell-Chloe';
+        await retellService.updateAgent(retellAgentId, {
+          voice_id: voiceId,
+        } as any);
+
+        logger.info(
+          { agentId: retellAgentId, voiceId },
+          '[Voice Update] Retell flow agent voice updated',
+        );
+
+        const updatedSettings = {
+          ...settings,
+          voiceConfig: {
+            id: data.voice.id,
+            name: data.voice.name,
+            provider: data.voice.provider,
+            voiceId: data.voice.voiceId,
+            gender: data.voice.gender,
+            accent: data.voice.accent,
+            description: data.voice.description,
+          },
+        };
+
+        const updateData: Record<string, unknown> = {
+          phoneIntegrationSettings: updatedSettings,
+        };
+        if (data.clinicName) {
+          updateData.brandingBusinessName = data.clinicName;
+        }
+
+        await prisma.account.update({
+          where: { id: account.id },
+          data: updateData as any,
+        });
+
+        revalidatePath('/home/agent');
+
+        return {
+          success: true,
+          assistantsUpdated: 1,
+          assistantsFailed: 0,
+        };
+      }
+
+      // Fallback: Vapi squad voice update
       const vapiSquadId = settings.vapiSquadId as string | undefined;
 
       if (!vapiSquadId) {
-        return { success: false, error: 'No deployed squad found. Please complete the setup wizard first.' };
+        return { success: false, error: 'No deployed agent found. Please complete the setup wizard first.' };
       }
 
-      // Fetch squad to get all assistant IDs
       const squad = await vapiService.getSquad(vapiSquadId);
 
       if (!squad || !squad.members) {
@@ -1421,7 +1465,6 @@ export const updateVoiceAction = enhanceAction(
         return { success: false, error: 'No assistants found in squad' };
       }
 
-      // Update voice on all assistants in parallel
       const voicePayload = {
         provider: data.voice.provider,
         voiceId: data.voice.voiceId,
@@ -1445,7 +1488,6 @@ export const updateVoiceAction = enhanceAction(
         return { success: false, error: 'Failed to update voice on any assistant' };
       }
 
-      // Persist voice config and clinic name to DB
       const updatedSettings = {
         ...settings,
         voiceConfig: {
