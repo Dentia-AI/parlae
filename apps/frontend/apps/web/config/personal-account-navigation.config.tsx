@@ -51,14 +51,14 @@ const routes = [
             Icon: <BookOpen className={iconClasses} />,
           },
           {
-            label: 'common:routes.phoneSettings',
-            path: '/home/agent/phone-settings',
-            Icon: <Phone className={iconClasses} />,
-          },
-          {
             label: 'common:routes.integrations',
             path: '/home/agent/integrations',
             Icon: <Plug2 className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.phoneSettings',
+            path: '/home/agent/phone-settings',
+            Icon: <Phone className={iconClasses} />,
           },
           {
             label: 'common:routes.advancedSetup',

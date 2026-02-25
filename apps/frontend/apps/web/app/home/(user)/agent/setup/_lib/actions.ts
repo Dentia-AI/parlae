@@ -58,6 +58,14 @@ function detectCountryFromPhone(phone: string): string {
   return 'US';
 }
 
+function extractAreaCode(phone: string): string | undefined {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('1') && digits.length >= 4) {
+    return digits.substring(1, 4);
+  }
+  return undefined;
+}
+
 const SetupPhoneSchema = z.object({
   accountId: z.string(),
   areaCode: z.string().length(3),
@@ -255,29 +263,60 @@ export async function executeDeployment(
           // Table may not exist yet
         }
 
+        const clinicNumber = phoneIntegrationSettings?.clinicNumber || '';
+        const purchaseCountry = detectCountryFromPhone(clinicNumber);
+        const clinicAreaCode = extractAreaCode(clinicNumber);
+
         const existingNumbers = await twilioService.listNumbers();
-        const unassignedNumber = existingNumbers.find(
+        const unassignedNumbers = existingNumbers.filter(
           (n: any) => !assignedNumbers.has(n.phoneNumber)
         );
 
-        if (unassignedNumber) {
-          phoneNumber = unassignedNumber.phoneNumber;
+        // Prefer unassigned number matching clinic's area code, then country, then any
+        const sameAreaCode = clinicAreaCode
+          ? unassignedNumbers.find((n: any) => {
+              const ac = extractAreaCode(n.phoneNumber);
+              return ac === clinicAreaCode;
+            })
+          : undefined;
+
+        const sameCountry = !sameAreaCode
+          ? unassignedNumbers.find((n: any) => {
+              return detectCountryFromPhone(n.phoneNumber) === purchaseCountry;
+            })
+          : undefined;
+
+        const bestMatch = sameAreaCode || sameCountry;
+
+        if (bestMatch) {
+          phoneNumber = bestMatch.phoneNumber;
           logger.info(
-            { phoneNumber, accountId: account.id },
-            '[Receptionist] Using unassigned Twilio phone number'
+            { phoneNumber, accountId: account.id, matchType: sameAreaCode ? 'areaCode' : 'country' },
+            '[Receptionist] Using unassigned Twilio phone number (country/area match)'
           );
         } else {
-          // All existing numbers are taken — search for and purchase a new one
-          const purchaseCountry = detectCountryFromPhone(phoneIntegrationSettings?.clinicNumber || '');
+          // No country-matching unassigned number — purchase a new one
           logger.info(
-            { accountId: account.id, purchaseCountry, clinicNumber: phoneIntegrationSettings?.clinicNumber },
-            '[Receptionist] All Twilio numbers assigned, purchasing a new one'
+            { accountId: account.id, purchaseCountry, clinicAreaCode, clinicNumber },
+            '[Receptionist] No matching unassigned number, purchasing a new one'
           );
           try {
-            const availableNumbers = await twilioService.searchAvailableNumbers(purchaseCountry, 'Local', {
-              voiceEnabled: true,
-              limit: 1,
-            });
+            // Try same area code first, then fall back to same country
+            let availableNumbers = clinicAreaCode
+              ? await twilioService.searchAvailableNumbers(purchaseCountry, 'Local', {
+                  areaCode: clinicAreaCode,
+                  voiceEnabled: true,
+                  limit: 1,
+                })
+              : [];
+
+            if (!availableNumbers || availableNumbers.length === 0) {
+              availableNumbers = await twilioService.searchAvailableNumbers(purchaseCountry, 'Local', {
+                voiceEnabled: true,
+                limit: 1,
+              });
+            }
+
             if (!availableNumbers || availableNumbers.length === 0) {
               throw new Error('No phone numbers available for purchase');
             }
@@ -290,7 +329,7 @@ export async function executeDeployment(
             }
             phoneNumber = purchased.phoneNumber;
             logger.info(
-              { phoneNumber, accountId: account.id },
+              { phoneNumber, accountId: account.id, purchaseCountry, clinicAreaCode },
               '[Receptionist] Purchased new Twilio phone number'
             );
           } catch (purchaseError) {
@@ -1097,16 +1136,28 @@ export const changePhoneNumberAction = enhanceAction(
       }
 
       const businessName = account.brandingBusinessName || account.name;
-      const changeCountry = detectCountryFromPhone(settings?.clinicNumber || settings?.phoneNumber || '');
+      const changeClinicNumber = settings?.clinicNumber || settings?.phoneNumber || '';
+      const changeCountry = detectCountryFromPhone(changeClinicNumber);
+      const changeAreaCode = extractAreaCode(changeClinicNumber);
 
-      // Search for a new Twilio number in the same country as the clinic
+      // Search for a new Twilio number matching the clinic's area code, then country
       const { createTwilioService } = await import('@kit/shared/twilio/server');
       const twilioService = createTwilioService();
 
-      const availableNumbers = await twilioService.searchAvailableNumbers(changeCountry, 'Local', {
-        voiceEnabled: true,
-        limit: 1,
-      });
+      let availableNumbers = changeAreaCode
+        ? await twilioService.searchAvailableNumbers(changeCountry, 'Local', {
+            areaCode: changeAreaCode,
+            voiceEnabled: true,
+            limit: 1,
+          })
+        : [];
+
+      if (!availableNumbers || availableNumbers.length === 0) {
+        availableNumbers = await twilioService.searchAvailableNumbers(changeCountry, 'Local', {
+          voiceEnabled: true,
+          limit: 1,
+        });
+      }
 
       if (!availableNumbers || availableNumbers.length === 0) {
         throw new Error('No phone numbers available for purchase. Please try again later.');
