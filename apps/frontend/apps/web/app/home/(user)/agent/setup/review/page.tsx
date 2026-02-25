@@ -14,10 +14,12 @@ import { SetupPaymentForm } from '../_components/setup-payment-form';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@kit/ui/collapsible';
 import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
+import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
 export default function ReviewPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const csrfToken = useCsrfToken();
   const [pending, startTransition] = useTransition();
   
   const [paymentCompleted, setPaymentCompleted] = useState(false);
@@ -143,7 +145,10 @@ export default function ReviewPage() {
 
         fetch('/api/agent/deploy', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken,
+          },
           body: JSON.stringify(deployPayload),
           keepalive: true,
         }).then(async (res) => {
