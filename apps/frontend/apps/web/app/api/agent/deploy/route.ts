@@ -81,73 +81,126 @@ export async function POST(request: NextRequest) {
       try {
         const { scrapeWebsite } = await import('@kit/shared/scraper/website-scraper');
         const { categorizeContent } = await import('@kit/shared/scraper/categorize-content');
-        const { createVapiService } = await import('@kit/shared/vapi/server');
+        const { getAccountProvider } = await import('@kit/shared/voice-provider');
+        const provider = await getAccountProvider(account.id);
 
         const scrapeResult = await scrapeWebsite(account.brandingWebsite);
 
         if (scrapeResult.pages.length > 0) {
           const categorizationResult = await categorizeContent(scrapeResult.pages);
-          const vapiService = createVapiService();
           const businessName = account.brandingBusinessName || account.name || 'Clinic';
           const existingConfig: Record<string, string[]> = {};
 
-          for (const doc of categorizationResult.documents) {
-            const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '-')}-${doc.categoryId}.txt`;
-            const fileId = await vapiService.uploadKnowledgeFile({
-              name: fileName,
-              content: doc.content,
-              type: 'text',
-            });
+          if (provider === 'RETELL') {
+            // Upload directly to Retell KB
+            const { createRetellService } = await import('@kit/shared/retell/retell.service');
+            const retellService = createRetellService();
 
-            if (fileId) {
-              if (!existingConfig[doc.categoryId]) existingConfig[doc.categoryId] = [];
-              existingConfig[doc.categoryId]!.push(fileId);
+            if (retellService.isEnabled() && categorizationResult.documents.length > 0) {
+              const textSnippets = categorizationResult.documents.map((doc) => ({
+                title: `${businessName} - ${doc.categoryId}`,
+                text: doc.content,
+              }));
+
+              const kb = await retellService.createKnowledgeBase({
+                name: `kb-${account.id.slice(0, 8)}`,
+                texts: textSnippets,
+              });
+
+              if (kb) {
+                await retellService.waitForKnowledgeBase(kb.knowledge_base_id);
+
+                for (const doc of categorizationResult.documents) {
+                  if (!existingConfig[doc.categoryId]) existingConfig[doc.categoryId] = [];
+                }
+
+                const freshSettings = (await prisma.account.findUnique({
+                  where: { id: account.id },
+                  select: { phoneIntegrationSettings: true },
+                }))?.phoneIntegrationSettings as Record<string, unknown> || {};
+
+                await prisma.account.update({
+                  where: { id: account.id },
+                  data: {
+                    phoneIntegrationSettings: {
+                      ...freshSettings,
+                      knowledgeBaseConfig: existingConfig,
+                      retellKnowledgeBaseId: kb.knowledge_base_id,
+                      websiteScrapedUrl: account.brandingWebsite,
+                      websiteScrapedAt: new Date().toISOString(),
+                    },
+                  },
+                });
+
+                logger.info(
+                  { accountId: account.id, retellKbId: kb.knowledge_base_id },
+                  '[Deploy API] Website KB uploaded to Retell',
+                );
+              }
             }
-          }
+          } else {
+            // Fallback: Upload to Vapi
+            const { createVapiService } = await import('@kit/shared/vapi/server');
+            const vapiService = createVapiService();
 
-          const allFileIds = Object.values(existingConfig).flat().filter(Boolean);
+            for (const doc of categorizationResult.documents) {
+              const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '-')}-${doc.categoryId}.txt`;
+              const fileId = await vapiService.uploadKnowledgeFile({
+                name: fileName,
+                content: doc.content,
+                type: 'text',
+              });
 
-          if (allFileIds.length > 0) {
-            body.knowledgeBaseConfig = existingConfig;
-
-            let queryToolId = (settings as any).queryToolId;
-            let queryToolName = (settings as any).queryToolName;
-
-            const toolResult = await vapiService.ensureClinicQueryTool(
-              account.id,
-              allFileIds,
-              (settings as any).templateVersion || 'v2.0',
-              businessName,
-            );
-            if (toolResult) {
-              queryToolId = toolResult.toolId;
-              queryToolName = toolResult.toolName;
+              if (fileId) {
+                if (!existingConfig[doc.categoryId]) existingConfig[doc.categoryId] = [];
+                existingConfig[doc.categoryId]!.push(fileId);
+              }
             }
 
-            const freshSettings = (await prisma.account.findUnique({
-              where: { id: account.id },
-              select: { phoneIntegrationSettings: true },
-            }))?.phoneIntegrationSettings as Record<string, unknown> || {};
+            const allFileIds = Object.values(existingConfig).flat().filter(Boolean);
 
-            await prisma.account.update({
-              where: { id: account.id },
-              data: {
-                phoneIntegrationSettings: {
-                  ...freshSettings,
-                  knowledgeBaseConfig: existingConfig,
-                  knowledgeBaseFileIds: allFileIds,
-                  queryToolId,
-                  queryToolName,
-                  websiteScrapedUrl: account.brandingWebsite,
-                  websiteScrapedAt: new Date().toISOString(),
+            if (allFileIds.length > 0) {
+              body.knowledgeBaseConfig = existingConfig;
+
+              let queryToolId = (settings as any).queryToolId;
+              let queryToolName = (settings as any).queryToolName;
+
+              const toolResult = await vapiService.ensureClinicQueryTool(
+                account.id,
+                allFileIds,
+                (settings as any).templateVersion || 'v2.0',
+                businessName,
+              );
+              if (toolResult) {
+                queryToolId = toolResult.toolId;
+                queryToolName = toolResult.toolName;
+              }
+
+              const freshSettings = (await prisma.account.findUnique({
+                where: { id: account.id },
+                select: { phoneIntegrationSettings: true },
+              }))?.phoneIntegrationSettings as Record<string, unknown> || {};
+
+              await prisma.account.update({
+                where: { id: account.id },
+                data: {
+                  phoneIntegrationSettings: {
+                    ...freshSettings,
+                    knowledgeBaseConfig: existingConfig,
+                    knowledgeBaseFileIds: allFileIds,
+                    queryToolId,
+                    queryToolName,
+                    websiteScrapedUrl: account.brandingWebsite,
+                    websiteScrapedAt: new Date().toISOString(),
+                  },
                 },
-              },
-            });
+              });
 
-            logger.info(
-              { accountId: account.id, fileCount: allFileIds.length },
-              '[Deploy API] Website KB scrape complete',
-            );
+              logger.info(
+                { accountId: account.id, fileCount: allFileIds.length },
+                '[Deploy API] Website KB scrape complete (Vapi)',
+              );
+            }
           }
         }
       } catch (scrapeErr) {

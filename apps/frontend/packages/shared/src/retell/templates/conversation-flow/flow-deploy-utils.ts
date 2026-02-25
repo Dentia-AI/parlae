@@ -94,7 +94,7 @@ export async function deployRetellConversationFlow(
   const agent = await retell.createAgent({
     agent_name: `${config.clinicName} - Conversation Flow`,
     response_engine: {
-      type: 'conversation_flow',
+      type: 'conversation-flow',
       conversation_flow_id: flow.conversation_flow_id,
     },
     voice_id: voiceId,

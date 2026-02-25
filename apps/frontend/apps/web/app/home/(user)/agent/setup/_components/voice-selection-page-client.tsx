@@ -25,7 +25,7 @@ interface VoiceSelectionPageClientProps {
   voiceProvider?: 'VAPI' | 'RETELL';
 }
 
-export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName, manage = false, vapiSquadId, voiceProvider = 'VAPI' }: VoiceSelectionPageClientProps) {
+export function VoiceSelectionPageClient({ accountId, businessName, accountEmail, savedClinicName, manage = false, vapiSquadId, voiceProvider = 'RETELL' }: VoiceSelectionPageClientProps) {
   const router = useRouter();
   const { t } = useTranslation();
   const [selectedVoice, setSelectedVoice] = useState<any>(null);

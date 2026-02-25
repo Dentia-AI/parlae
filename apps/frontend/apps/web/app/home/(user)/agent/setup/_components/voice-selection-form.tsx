@@ -23,7 +23,7 @@ interface VoiceSelectionFormProps {
   onVoiceSelect?: (voice: VoiceDefinition | null) => void;
 }
 
-export function VoiceSelectionForm({ accountId, businessName, initialVoice, voiceProvider = 'VAPI', onVoiceSelect }: VoiceSelectionFormProps) {
+export function VoiceSelectionForm({ accountId, businessName, initialVoice, voiceProvider = 'RETELL', onVoiceSelect }: VoiceSelectionFormProps) {
   const { t } = useTranslation();
   const availableVoices = useMemo(() => getVoicesForProvider(voiceProvider), [voiceProvider]);
   const [selectedVoice, setSelectedVoice] = useState<VoiceDefinition | null>(null);

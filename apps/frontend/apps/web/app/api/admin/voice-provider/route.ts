@@ -19,7 +19,7 @@ export async function GET() {
     });
 
     return NextResponse.json({
-      activeProvider: toggle?.activeProvider || 'VAPI',
+      activeProvider: toggle?.activeProvider || 'RETELL',
       switchedAt: toggle?.switchedAt || null,
       switchedBy: toggle?.switchedBy || null,
     });
@@ -57,23 +57,6 @@ export async function PATCH(request: NextRequest) {
         { error: 'provider must be "VAPI" or "RETELL"' },
         { status: 400 },
       );
-    }
-
-    // If switching to RETELL, verify at least one account has Retell agents deployed
-    if (provider === 'RETELL') {
-      const retellCount = await prisma.retellPhoneNumber.count({
-        where: { isActive: true },
-      });
-
-      if (retellCount === 0) {
-        return NextResponse.json(
-          {
-            error: 'No Retell agents deployed. Deploy Retell agents for at least one account first.',
-            hint: 'Use POST /api/admin/retell-deploy to deploy Retell agents',
-          },
-          { status: 409 },
-        );
-      }
     }
 
     const result = await prisma.voiceProviderToggle.upsert({

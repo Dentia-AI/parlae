@@ -95,7 +95,7 @@ export default function AdminVoiceProvidersPage() {
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         setStatus({
-          activeProvider: statusData.activeProvider || 'VAPI',
+          activeProvider: statusData.activeProvider || 'RETELL',
           switchedAt: statusData.switchedAt,
           vapiPhoneNumbers: statusData.vapiPhoneNumbers ?? 0,
           retellPhoneNumbers: statusData.retellPhoneNumbers ?? 0,
@@ -278,7 +278,7 @@ export default function AdminVoiceProvidersPage() {
     );
   }
 
-  const globalProvider = status?.activeProvider || 'VAPI';
+  const globalProvider = status?.activeProvider || 'RETELL';
   const isRetellGlobal = globalProvider === 'RETELL';
 
   return (

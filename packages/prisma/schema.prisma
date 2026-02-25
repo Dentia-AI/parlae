@@ -851,7 +851,7 @@ model CallReference {
   id         String        @id @default(uuid())
   vapiCallId String        @unique @map("vapi_call_id") // Also used for Retell call IDs
   accountId  String        @map("account_id")
-  provider   VoiceProvider @default(VAPI) @map("provider")
+  provider   VoiceProvider @default(RETELL) @map("provider")
   createdAt  DateTime      @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -1084,7 +1084,7 @@ enum VoiceProvider {
 
 model VoiceProviderToggle {
   id             Int           @id @default(1)
-  activeProvider VoiceProvider @default(VAPI) @map("active_provider")
+  activeProvider VoiceProvider @default(RETELL) @map("active_provider")
   switchedAt     DateTime      @default(now()) @map("switched_at")
   switchedBy     String?       @map("switched_by")
   updatedAt      DateTime      @updatedAt @map("updated_at")

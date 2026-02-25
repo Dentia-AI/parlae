@@ -112,66 +112,67 @@ export async function PUT(request: NextRequest) {
     const settings = (account.phoneIntegrationSettings as any) ?? {};
     const businessName = account.brandingBusinessName || account.name || 'Clinic';
 
-    // Merge all file IDs across categories
     const allFileIds = Object.values(knowledgeBaseConfig).flat().filter(Boolean);
+    const provider = await getAccountProvider(account.id);
 
     logger.info(
-      { accountId: account.id, totalFiles: allFileIds.length, categories: Object.keys(knowledgeBaseConfig).length },
+      { accountId: account.id, totalFiles: allFileIds.length, categories: Object.keys(knowledgeBaseConfig).length, provider },
       '[KB API] Updating knowledge base',
     );
 
-    // Update or create the Vapi query tool
-    const vapiService = createVapiService();
     let queryToolId = settings.queryToolId;
     let queryToolName = settings.queryToolName;
-
-    if (allFileIds.length > 0) {
-      const result = await vapiService.ensureClinicQueryTool(
-        account.id,
-        allFileIds,
-        settings.templateVersion || 'v2.0',
-        businessName,
-      );
-
-      if (result) {
-        queryToolId = result.toolId;
-        queryToolName = result.toolName;
-        logger.info(
-          { queryToolId, queryToolName, fileCount: allFileIds.length },
-          '[KB API] Clinic query tool updated',
-        );
-      }
-    }
-
-    // Sync to Retell if this account uses Retell
     let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
-    const provider = await getAccountProvider(account.id);
 
-    if (provider === 'RETELL' && allFileIds.length > 0) {
-      try {
-        const { syncVapiKBToRetell } = await import(
-          '@kit/shared/retell/retell-kb.service'
-        );
+    if (provider === 'RETELL') {
+      // PRIMARY: Sync to Retell KB directly
+      if (allFileIds.length > 0) {
+        try {
+          const { syncVapiKBToRetell } = await import(
+            '@kit/shared/retell/retell-kb.service'
+          );
 
-        const newKbId = await syncVapiKBToRetell(
-          account.id,
-          allFileIds,
-          businessName,
-          retellKnowledgeBaseId || undefined,
-        );
+          const newKbId = await syncVapiKBToRetell(
+            account.id,
+            allFileIds,
+            businessName,
+            retellKnowledgeBaseId || undefined,
+          );
 
-        if (newKbId) {
-          retellKnowledgeBaseId = newKbId;
-          logger.info(
-            { accountId: account.id, retellKnowledgeBaseId: newKbId, fileCount: allFileIds.length },
-            '[KB API] Retell knowledge base synced',
+          if (newKbId) {
+            retellKnowledgeBaseId = newKbId;
+            logger.info(
+              { accountId: account.id, retellKnowledgeBaseId: newKbId, fileCount: allFileIds.length },
+              '[KB API] Retell knowledge base updated',
+            );
+          }
+        } catch (retellErr: any) {
+          logger.error(
+            { error: retellErr?.message, accountId: account.id },
+            '[KB API] Retell KB sync failed (non-fatal)',
           );
         }
-      } catch (retellErr: any) {
-        logger.error(
-          { error: retellErr?.message, accountId: account.id },
-          '[KB API] Retell KB sync failed (non-fatal)',
+      }
+    } else {
+      // FALLBACK: Update Vapi query tool
+      const vapiService = createVapiService();
+
+      if (allFileIds.length > 0) {
+        const result = await vapiService.ensureClinicQueryTool(
+          account.id,
+          allFileIds,
+          settings.templateVersion || 'v2.0',
+          businessName,
         );
+
+        if (result) {
+          queryToolId = result.toolId;
+          queryToolName = result.toolName;
+          logger.info(
+            { queryToolId, queryToolName, fileCount: allFileIds.length },
+            '[KB API] Vapi clinic query tool updated',
+          );
+        }
       }
     }
 
@@ -198,8 +199,10 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      provider,
       queryToolId,
       queryToolName,
+      retellKnowledgeBaseId,
       totalFiles: allFileIds.length,
     });
   } catch (error: any) {

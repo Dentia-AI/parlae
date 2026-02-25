@@ -45,7 +45,7 @@ export async function GET(
       },
     });
 
-    const callProvider = (callRef as any)?.provider || 'VAPI';
+    const callProvider = (callRef as any)?.provider || 'RETELL';
 
     // Route to Retell if the CallReference says provider is RETELL
     if (callProvider === 'RETELL') {

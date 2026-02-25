@@ -68,7 +68,7 @@ const DeployReceptionistSchema = z.object({
   voice: z.object({
     id: z.string(),
     name: z.string(),
-    provider: z.enum(['11labs', 'elevenlabs', 'openai', 'playht', 'azure', 'deepgram', 'cartesia', 'rime-ai']),
+    provider: z.string(),
     voiceId: z.string(),
     gender: z.string(),
     accent: z.string(),
@@ -176,11 +176,13 @@ export async function executeDeployment(
           paymentMethodVerified: true,
           stripePaymentMethodId: true,
           agentTemplateId: true,
+          retellAgentTemplateId: true,
           brandingBusinessName: true,
           brandingContactPhone: true,
           googleCalendarConnected: true,
           setupProgress: true,
           twilioMessagingServiceSid: true,
+          voiceProviderOverride: true,
         },
       });
 
@@ -330,6 +332,268 @@ export async function executeDeployment(
           );
         }
       }
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // PROVIDER RESOLUTION — Retell is the default, Vapi is the fallback
+      // ═══════════════════════════════════════════════════════════════════════
+      const { getAccountProviderFromOverride } = await import(
+        '@kit/shared/voice-provider/resolve-provider'
+      );
+      const provider = await getAccountProviderFromOverride(
+        account.voiceProviderOverride,
+      );
+
+      logger.info(
+        { accountId: account.id, provider },
+        '[Receptionist] Resolved voice provider',
+      );
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // PRIMARY PATH: Deploy to Retell (default for all new accounts)
+      // ═══════════════════════════════════════════════════════════════════════
+      if (provider === 'RETELL') {
+        const { createRetellService } = await import(
+          '@kit/shared/retell/retell.service'
+        );
+        const retellService = createRetellService();
+
+        if (!retellService.isEnabled()) {
+          throw new Error(
+            'RETELL_API_KEY is not configured. Cannot deploy Retell agents.',
+          );
+        }
+
+        const {
+          deployRetellSquad,
+          teardownRetellSquad,
+        } = await import(
+          '@kit/shared/retell/templates/retell-template-utils'
+        );
+        const { ensureRetellKnowledgeBase } = await import(
+          '@kit/shared/retell/retell-kb.service'
+        );
+
+        const retellBackendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL ||
+          process.env.BACKEND_API_URL ||
+          '';
+
+        // KB: Sync from Vapi file IDs if present (Phase 3 will change to direct upload)
+        const kbConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};
+        const kbFileIds: string[] = data.files?.map((f: any) => f.id) || [];
+        const hasKB =
+          Object.values(kbConfig).some((ids) => ids && ids.length > 0);
+        const allKBFileIds: string[] = hasKB
+          ? Object.values(kbConfig).flat().filter(Boolean)
+          : kbFileIds;
+
+        const retellKbIds: string[] = [];
+        if (allKBFileIds.length > 0) {
+          try {
+            const kbId = await ensureRetellKnowledgeBase(
+              account.id,
+              allKBFileIds,
+              businessName,
+            );
+            if (kbId) retellKbIds.push(kbId);
+          } catch (kbErr: any) {
+            logger.warn(
+              { error: kbErr?.message },
+              '[Receptionist] Non-fatal: Retell KB sync failed',
+            );
+          }
+        }
+
+        // Teardown any existing Retell agents before redeploying
+        try {
+          const existingRetell = await (prisma as any).retellPhoneNumber.findFirst({
+            where: { accountId: account.id },
+            select: { retellAgentIds: true },
+          });
+          if (existingRetell?.retellAgentIds) {
+            logger.info(
+              { accountId: account.id },
+              '[Receptionist] Tearing down existing Retell agents',
+            );
+            await teardownRetellSquad(
+              retellService,
+              existingRetell.retellAgentIds,
+            ).catch(() => {});
+          }
+        } catch {
+          // Table may not exist or no prior deployment
+        }
+
+        // Deploy Retell squad
+        const retellConfig = {
+          clinicName: businessName,
+          clinicPhone: clinicOriginalNumber,
+          webhookUrl: retellBackendUrl,
+          webhookSecret:
+            process.env.RETELL_WEBHOOK_SECRET ||
+            process.env.VAPI_WEBHOOK_SECRET ||
+            '',
+          accountId: account.id,
+          voiceId: data.voice?.voiceId || 'retell-Chloe',
+          webhookBaseUrl: retellBackendUrl,
+          knowledgeBaseIds:
+            retellKbIds.length > 0 ? retellKbIds : undefined,
+        };
+
+        logger.info(
+          { accountId: account.id, clinicName: businessName },
+          '[Receptionist] Deploying Retell squad (primary)',
+        );
+        const retellResult = await deployRetellSquad(
+          retellService,
+          retellConfig,
+        );
+
+        // Import Twilio phone number into Retell
+        let retellPhoneId: string | undefined;
+        const e164Phone = phoneNumber.startsWith('+')
+          ? phoneNumber
+          : `+${phoneNumber}`;
+
+        try {
+          const importResult = await retellService.importPhoneNumber({
+            phoneNumber: e164Phone,
+            inboundAgentId: retellResult.agents.receptionist.agentId,
+            nickname: `${businessName} - Receptionist`,
+          });
+          retellPhoneId = importResult?.phone_number;
+          if (importResult) {
+            logger.info(
+              { phone: e164Phone, retellPhoneId },
+              '[Receptionist] Phone imported into Retell',
+            );
+          }
+        } catch (phoneErr: any) {
+          logger.warn(
+            { error: phoneErr?.message, phone: e164Phone },
+            '[Receptionist] Non-fatal: Retell phone import failed',
+          );
+        }
+
+        // Build agent ID maps
+        const { RETELL_AGENT_ROLES } = await import(
+          '@kit/shared/retell/templates/dental-clinic.retell-template'
+        );
+        const agentIds: Record<string, { agentId: string; llmId: string }> = {};
+        const llmIds: Record<string, string> = {};
+        for (const role of RETELL_AGENT_ROLES) {
+          agentIds[role] = retellResult.agents[role];
+          llmIds[role] = retellResult.agents[role].llmId;
+        }
+
+        // Create or update RetellPhoneNumber record
+        try {
+          await (prisma as any).retellPhoneNumber.upsert({
+            where: { phoneNumber: e164Phone },
+            update: {
+              retellAgentId: retellResult.agents.receptionist.agentId,
+              retellAgentIds: agentIds,
+              retellLlmIds: llmIds,
+              isActive: true,
+            },
+            create: {
+              accountId: account.id,
+              retellPhoneId:
+                retellPhoneId || `pending-${account.id}`,
+              phoneNumber: e164Phone,
+              retellAgentId: retellResult.agents.receptionist.agentId,
+              retellAgentIds: agentIds,
+              retellLlmIds: llmIds,
+              name: `${businessName} - Retell`,
+              isActive: true,
+            },
+          });
+        } catch (recErr: any) {
+          logger.warn(
+            { error: recErr?.message },
+            '[Receptionist] Non-fatal: could not upsert RetellPhoneNumber',
+          );
+        }
+
+        // Link Retell template to account
+        let retellTemplateId = account.retellAgentTemplateId;
+        if (!retellTemplateId) {
+          try {
+            const defaultTemplate = await (prisma as any).retellAgentTemplate.findFirst({
+              where: { isDefault: true, isActive: true },
+              select: { id: true },
+            });
+            retellTemplateId = defaultTemplate?.id ?? undefined;
+          } catch {
+            // Table may not exist
+          }
+        }
+
+        // Update account settings
+        const existingMethod =
+          account.phoneIntegrationMethod &&
+          account.phoneIntegrationMethod !== 'none'
+            ? account.phoneIntegrationMethod
+            : 'forwarded';
+
+        const retellSettings: Record<string, unknown> = {
+          ...(phoneIntegrationSettings || {}),
+          voiceConfig: data.voice,
+          phoneNumber,
+          deployedAt: new Date().toISOString(),
+          retellReceptionistAgentId:
+            retellResult.agents.receptionist.agentId,
+          retellAgentIds: agentIds,
+          retellLlmIds: llmIds,
+          retellKnowledgeBaseId: retellKbIds[0] || null,
+          retellVersion: retellResult.version,
+        };
+
+        if (allKBFileIds.length > 0) {
+          retellSettings.knowledgeBaseFileIds = allKBFileIds;
+        }
+        if (hasKB) {
+          retellSettings.knowledgeBaseConfig = kbConfig;
+        }
+
+        const retellAccountUpdate: Record<string, unknown> = {
+          phoneIntegrationMethod: existingMethod,
+          phoneIntegrationSettings: retellSettings as any,
+        };
+        if (retellTemplateId) {
+          retellAccountUpdate.retellAgentTemplateId = retellTemplateId;
+        }
+
+        await prisma.account.update({
+          where: { id: account.id },
+          data: retellAccountUpdate as any,
+        });
+
+        logger.info(
+          {
+            accountId: account.id,
+            version: retellResult.version,
+            agentCount: Object.keys(retellResult.agents).length,
+            phoneNumber,
+          },
+          '[Receptionist] Retell deployment complete (primary)',
+        );
+
+        revalidatePath('/home/agent');
+        revalidatePath('/home/agent/knowledge');
+
+        return {
+          success: true,
+          phoneNumber,
+          templateVersion: retellResult.version,
+          retellDeployed: true,
+          provider: 'RETELL' as const,
+        };
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // FALLBACK PATH: Deploy to Vapi (for accounts with voiceProviderOverride=VAPI)
+      // ═══════════════════════════════════════════════════════════════════════
 
       // STEP 2: Collect knowledge base file IDs (categorized or flat)
       const knowledgeBaseConfig: KnowledgeBaseConfig = data.knowledgeBaseConfig || {};
@@ -716,134 +980,6 @@ export async function executeDeployment(
         '[Receptionist] AI receptionist deployed successfully'
       );
 
-      // STEP 11: Deploy to Retell as backup (non-blocking)
-      // If the account has voiceProviderOverride=RETELL or we want dual-deploy,
-      // also create Retell agents with the same KB and config.
-      let retellDeployResult: any = null;
-      try {
-        const accountWithProvider = await prisma.account.findUnique({
-          where: { id: account.id },
-          select: { voiceProviderOverride: true },
-        });
-
-        const shouldDeployRetell =
-          accountWithProvider?.voiceProviderOverride === 'RETELL';
-
-        if (shouldDeployRetell) {
-          const { createRetellService } = await import('@kit/shared/retell/retell.service');
-          const retellService = createRetellService();
-
-          if (retellService.isEnabled()) {
-            const { deployRetellSquad } = await import(
-              '@kit/shared/retell/templates/retell-template-utils'
-            );
-            const { ensureRetellKnowledgeBase } = await import(
-              '@kit/shared/retell/retell-kb.service'
-            );
-
-            const retellBackendUrl =
-              process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
-
-            // Sync KB to Retell
-            const retellKbIds: string[] = [];
-            if (allKBFileIds.length > 0) {
-              const kbId = await ensureRetellKnowledgeBase(
-                account.id,
-                allKBFileIds,
-                businessName,
-              );
-              if (kbId) retellKbIds.push(kbId);
-            }
-
-            const retellConfig = {
-              clinicName: businessName,
-              clinicPhone: clinicOriginalNumber,
-              webhookUrl: retellBackendUrl,
-              webhookSecret:
-                process.env.RETELL_WEBHOOK_SECRET ||
-                process.env.VAPI_WEBHOOK_SECRET ||
-                '',
-              accountId: account.id,
-              webhookBaseUrl: retellBackendUrl,
-              knowledgeBaseIds: retellKbIds.length > 0 ? retellKbIds : undefined,
-            };
-
-            retellDeployResult = await deployRetellSquad(retellService, retellConfig);
-            logger.info(
-              { accountId: account.id, retellVersion: retellDeployResult?.version },
-              '[Receptionist] Retell backup deployed alongside Vapi',
-            );
-
-            // Import Twilio number into Retell and create a RetellPhoneNumber record
-            if (retellDeployResult?.agents?.receptionist?.agent_id && clinicOriginalNumber) {
-              try {
-                const importResult = await retellService.importPhoneNumber({
-                  phoneNumber: clinicOriginalNumber,
-                  terminationUri: undefined,
-                  inboundAgentId: retellDeployResult.agents.receptionist.agent_id,
-                  nickName: `${businessName} - Receptionist`,
-                });
-
-                if (importResult) {
-                  await prisma.retellPhoneNumber.upsert({
-                    where: { phoneNumber: clinicOriginalNumber },
-                    update: {
-                      retellAgentId: retellDeployResult.agents.receptionist.agent_id,
-                      retellAgentIds: retellDeployResult.agents,
-                      retellLlmIds: retellDeployResult.llms || null,
-                      isActive: true,
-                    },
-                    create: {
-                      accountId: account.id,
-                      retellPhoneId: importResult.phone_number_id || importResult.phone_number || clinicOriginalNumber,
-                      phoneNumber: clinicOriginalNumber,
-                      retellAgentId: retellDeployResult.agents.receptionist.agent_id,
-                      retellAgentIds: retellDeployResult.agents,
-                      retellLlmIds: retellDeployResult.llms || null,
-                    },
-                  });
-
-                  logger.info(
-                    { accountId: account.id, phone: clinicOriginalNumber },
-                    '[Receptionist] Twilio number imported into Retell',
-                  );
-                }
-              } catch (phoneErr: any) {
-                logger.warn(
-                  { error: phoneErr?.message, accountId: account.id },
-                  '[Receptionist] Non-fatal: Retell phone import failed',
-                );
-              }
-            }
-
-            // Store Retell agent IDs in phoneIntegrationSettings
-            if (retellDeployResult?.agents) {
-              await prisma.account.update({
-                where: { id: account.id },
-                data: {
-                  phoneIntegrationSettings: {
-                    ...((await prisma.account.findUnique({
-                      where: { id: account.id },
-                      select: { phoneIntegrationSettings: true },
-                    }))?.phoneIntegrationSettings as any || {}),
-                    retellReceptionistAgentId: retellDeployResult.agents.receptionist?.agent_id,
-                    retellAgentIds: Object.values(retellDeployResult.agents)
-                      .map((a: any) => a?.agent_id)
-                      .filter(Boolean),
-                    retellKnowledgeBaseId: retellKbIds[0] || null,
-                  },
-                },
-              });
-            }
-          }
-        }
-      } catch (retellErr: any) {
-        logger.warn(
-          { error: retellErr?.message, accountId: account.id },
-          '[Receptionist] Non-fatal: Retell backup deployment failed',
-        );
-      }
-
       // Revalidate the overview page so it renders with fresh data after redirect
       revalidatePath('/home/agent');
       revalidatePath('/home/agent/knowledge');
@@ -855,7 +991,7 @@ export async function executeDeployment(
         phoneNumber: phoneNumber,
         templateVersion,
         memberCount: squad.members?.length || 0,
-        retellDeployed: !!retellDeployResult,
+        provider: 'VAPI' as const,
       };
   } catch (error) {
     logger.error(
@@ -953,6 +1089,7 @@ export const changePhoneNumberAction = enhanceAction(
           phoneIntegrationSettings: true,
           brandingBusinessName: true,
           twilioMessagingServiceSid: true,
+          voiceProviderOverride: true,
         },
       });
 
@@ -961,7 +1098,8 @@ export const changePhoneNumberAction = enhanceAction(
       }
 
       const settings = account.phoneIntegrationSettings as any;
-      if (!settings?.vapiSquadId) {
+      const hasDeployment = settings?.vapiSquadId || settings?.retellReceptionistAgentId;
+      if (!hasDeployment) {
         throw new Error('No deployed agent found. Please deploy first.');
       }
 
@@ -1027,94 +1165,173 @@ export const changePhoneNumberAction = enhanceAction(
         );
       }
 
-      // Import new number to Vapi and link to squad
-      const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID!;
-      const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN!;
-
-      // Check if number already exists in Vapi
-      const vapiPhoneNumbers = await vapiService.listPhoneNumbers();
-      const existingVapiPhone = vapiPhoneNumbers.find(
-        (p: any) => p.number === newPhoneNumber
+      // Import new number based on active provider
+      const { getAccountProviderFromOverride } = await import(
+        '@kit/shared/voice-provider/resolve-provider'
+      );
+      const changeProvider = await getAccountProviderFromOverride(
+        account.voiceProviderOverride,
       );
 
-      let vapiPhone;
-
-      if (existingVapiPhone) {
-        vapiPhone = await vapiService.updatePhoneNumber(
-          existingVapiPhone.id,
-          settings.vapiSquadId,
-          true
+      if (changeProvider === 'RETELL') {
+        // Import to Retell
+        const { createRetellService } = await import(
+          '@kit/shared/retell/retell.service'
         );
-      } else {
-        vapiPhone = await vapiService.importPhoneNumber(
-          newPhoneNumber,
-          twilioAccountSid,
-          twilioAuthToken,
-          settings.vapiSquadId,
-          true
-        );
-      }
+        const retellService = createRetellService();
+        const receptionistAgentId = settings.retellReceptionistAgentId;
 
-      if (!vapiPhone) {
-        throw new Error('Failed to import phone number to Vapi');
-      }
+        if (!retellService.isEnabled()) {
+          throw new Error('RETELL_API_KEY not configured');
+        }
 
-      // Unlink old number from Vapi squad (optional cleanup)
-      if (settings.vapiPhoneId && settings.vapiPhoneId !== vapiPhone.id) {
+        const e164Phone = newPhoneNumber.startsWith('+')
+          ? newPhoneNumber
+          : `+${newPhoneNumber}`;
+
+        const importResult = await retellService.importPhoneNumber({
+          phoneNumber: e164Phone,
+          inboundAgentId: receptionistAgentId,
+          nickname: `${businessName} - Receptionist`,
+        });
+
+        // Deactivate old RetellPhoneNumber
+        if (settings.phoneNumber) {
+          try {
+            await (prisma as any).retellPhoneNumber.updateMany({
+              where: { phoneNumber: settings.phoneNumber, accountId: account.id },
+              data: { isActive: false },
+            });
+          } catch { /* best effort */ }
+        }
+
+        // Create new RetellPhoneNumber record
         try {
-          await vapiService.updatePhoneNumber(settings.vapiPhoneId, null, false);
-        } catch {
-          logger.warn('[Receptionist] Could not unlink old Vapi phone number');
+          await (prisma as any).retellPhoneNumber.upsert({
+            where: { phoneNumber: e164Phone },
+            update: {
+              retellAgentId: receptionistAgentId,
+              retellAgentIds: settings.retellAgentIds || null,
+              retellLlmIds: settings.retellLlmIds || null,
+              isActive: true,
+            },
+            create: {
+              accountId: account.id,
+              retellPhoneId: importResult?.phone_number || `pending-${account.id}`,
+              phoneNumber: e164Phone,
+              retellAgentId: receptionistAgentId,
+              retellAgentIds: settings.retellAgentIds || null,
+              retellLlmIds: settings.retellLlmIds || null,
+              name: `${businessName} - Retell`,
+              isActive: true,
+            },
+          });
+        } catch (err: any) {
+          logger.warn(
+            { error: err?.message },
+            '[Receptionist] Non-fatal: could not upsert RetellPhoneNumber on change',
+          );
+        }
+
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            phoneIntegrationSettings: {
+              ...settings,
+              phoneNumber: newPhoneNumber,
+              phoneChangeCount: changeCount + 1,
+            },
+          },
+        });
+      } else {
+        // Fallback: Import to Vapi
+        const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID!;
+        const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN!;
+
+        const vapiPhoneNumbers = await vapiService.listPhoneNumbers();
+        const existingVapiPhone = vapiPhoneNumbers.find(
+          (p: any) => p.number === newPhoneNumber,
+        );
+
+        let vapiPhone;
+
+        if (existingVapiPhone) {
+          vapiPhone = await vapiService.updatePhoneNumber(
+            existingVapiPhone.id,
+            settings.vapiSquadId,
+            true,
+          );
+        } else {
+          vapiPhone = await vapiService.importPhoneNumber(
+            newPhoneNumber,
+            twilioAccountSid,
+            twilioAuthToken,
+            settings.vapiSquadId,
+            true,
+          );
+        }
+
+        if (!vapiPhone) {
+          throw new Error('Failed to import phone number to Vapi');
+        }
+
+        if (settings.vapiPhoneId && settings.vapiPhoneId !== vapiPhone.id) {
+          try {
+            await vapiService.updatePhoneNumber(settings.vapiPhoneId, null, false);
+          } catch {
+            logger.warn('[Receptionist] Could not unlink old Vapi phone number');
+          }
+        }
+
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            phoneIntegrationSettings: {
+              ...settings,
+              vapiPhoneId: vapiPhone.id,
+              phoneNumber: newPhoneNumber,
+              phoneChangeCount: changeCount + 1,
+            },
+          },
+        });
+
+        if (settings.vapiPhoneId) {
+          try {
+            await prisma.vapiPhoneNumber.updateMany({
+              where: { vapiPhoneId: settings.vapiPhoneId },
+              data: { isActive: false },
+            });
+          } catch { /* best effort */ }
+        }
+        try {
+          await prisma.vapiPhoneNumber.upsert({
+            where: { vapiPhoneId: vapiPhone.id },
+            update: {
+              accountId: account.id,
+              phoneNumber: newPhoneNumber,
+              vapiSquadId: settings.vapiSquadId || null,
+              isActive: true,
+            },
+            create: {
+              accountId: account.id,
+              vapiPhoneId: vapiPhone.id,
+              phoneNumber: newPhoneNumber,
+              vapiSquadId: settings.vapiSquadId || null,
+              name: 'Main Line',
+              isActive: true,
+            },
+          });
+        } catch (err: any) {
+          logger.warn(
+            { error: err?.message },
+            '[Receptionist] Non-fatal: could not upsert VapiPhoneNumber on change',
+          );
         }
       }
 
-      // Update account settings and increment the change counter
-      await prisma.account.update({
-        where: { id: account.id },
-        data: {
-          phoneIntegrationSettings: {
-            ...settings,
-            vapiPhoneId: vapiPhone.id,
-            phoneNumber: newPhoneNumber,
-            phoneChangeCount: changeCount + 1,
-          },
-        },
-      });
-
-      // Deactivate old VapiPhoneNumber and create new one
-      if (settings.vapiPhoneId) {
-        try {
-          await prisma.vapiPhoneNumber.updateMany({
-            where: { vapiPhoneId: settings.vapiPhoneId },
-            data: { isActive: false },
-          });
-        } catch { /* best effort */ }
-      }
-      try {
-        await prisma.vapiPhoneNumber.upsert({
-          where: { vapiPhoneId: vapiPhone.id },
-          update: {
-            accountId: account.id,
-            phoneNumber: newPhoneNumber,
-            vapiSquadId: settings.vapiSquadId || null,
-            isActive: true,
-          },
-          create: {
-            accountId: account.id,
-            vapiPhoneId: vapiPhone.id,
-            phoneNumber: newPhoneNumber,
-            vapiSquadId: settings.vapiSquadId || null,
-            name: 'Main Line',
-            isActive: true,
-          },
-        });
-      } catch (err: any) {
-        logger.warn({ error: err?.message }, '[Receptionist] Non-fatal: could not upsert VapiPhoneNumber on change');
-      }
-
       logger.info(
-        { accountId: account.id, oldPhone: settings.phoneNumber, newPhone: newPhoneNumber },
-        '[Receptionist] Phone number changed successfully'
+        { accountId: account.id, oldPhone: settings.phoneNumber, newPhone: newPhoneNumber, provider: changeProvider },
+        '[Receptionist] Phone number changed successfully',
       );
 
       return {
@@ -1150,7 +1367,7 @@ const UpdateVoiceSchema = z.object({
   voice: z.object({
     id: z.string(),
     name: z.string(),
-    provider: z.enum(['11labs', 'elevenlabs', 'openai', 'playht', 'azure', 'deepgram', 'cartesia', 'rime-ai']),
+    provider: z.string(),
     voiceId: z.string(),
     gender: z.string(),
     accent: z.string(),

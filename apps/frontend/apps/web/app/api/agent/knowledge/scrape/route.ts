@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { createVapiService } from '@kit/shared/vapi/server';
 import { requireSession } from '~/lib/auth/get-session';
 import { isAdmin } from '~/lib/auth/is-admin';
 import { getLogger } from '@kit/shared/logger';
@@ -145,37 +144,141 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Upload each category document to Vapi
-    const vapiService = createVapiService();
+    // 3. Upload categorized documents
     const settings = (account.phoneIntegrationSettings as any) ?? {};
-    const existingConfig: Record<string, string[]> =
-      settings.knowledgeBaseConfig || {};
+    const provider = await getAccountProvider(account.id);
 
     const uploadedCategories: Record<
       string,
-      { fileId: string; charCount: number; sourcePages: string[] }
+      { fileId?: string; charCount: number; sourcePages: string[] }
     > = {};
 
-    for (const doc of categorizationResult.documents) {
-      const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '-')}-${doc.categoryId}.txt`;
+    let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
+    let queryToolId = settings.queryToolId;
+    let queryToolName = settings.queryToolName;
+    const existingConfig: Record<string, string[]> =
+      settings.knowledgeBaseConfig || {};
+    let allFileIds: string[] = [];
 
-      const fileId = await vapiService.uploadKnowledgeFile({
-        name: fileName,
-        content: doc.content,
-        type: 'text',
+    if (provider === 'RETELL') {
+      // ── PRIMARY: Upload directly to Retell KB as text snippets ──────
+      const { createRetellService } = await import(
+        '@kit/shared/retell/retell.service'
+      );
+      const retellService = createRetellService();
+
+      if (!retellService.isEnabled()) {
+        return NextResponse.json(
+          { error: 'RETELL_API_KEY is not configured' },
+          { status: 503 },
+        );
+      }
+
+      // Delete old Retell KB if it exists
+      if (retellKnowledgeBaseId) {
+        try {
+          await retellService.deleteKnowledgeBase(retellKnowledgeBaseId);
+          logger.info(
+            { kbId: retellKnowledgeBaseId },
+            '[KB Scrape] Deleted old Retell KB before re-upload',
+          );
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      const textSnippets = categorizationResult.documents.map((doc) => ({
+        title: `${businessName} - ${doc.categoryId}`,
+        text: doc.content,
+      }));
+
+      const kb = await retellService.createKnowledgeBase({
+        name: `kb-${accountId.slice(0, 8)}`,
+        texts: textSnippets,
       });
 
-      if (fileId) {
+      if (!kb) {
+        return NextResponse.json(
+          { error: 'Failed to create Retell knowledge base' },
+          { status: 500 },
+        );
+      }
+
+      // Wait for processing
+      const finalKb = await retellService.waitForKnowledgeBase(
+        kb.knowledge_base_id,
+      );
+
+      if (finalKb?.status === 'error') {
+        return NextResponse.json(
+          { error: 'Retell knowledge base processing failed' },
+          { status: 500 },
+        );
+      }
+
+      retellKnowledgeBaseId = kb.knowledge_base_id;
+
+      for (const doc of categorizationResult.documents) {
         uploadedCategories[doc.categoryId] = {
-          fileId,
           charCount: doc.charCount,
           sourcePages: doc.sourcePages,
         };
-
         if (!existingConfig[doc.categoryId]) {
           existingConfig[doc.categoryId] = [];
         }
-        existingConfig[doc.categoryId]!.push(fileId);
+      }
+
+      logger.info(
+        {
+          funcName,
+          accountId,
+          retellKbId: retellKnowledgeBaseId,
+          categories: Object.keys(uploadedCategories).length,
+        },
+        '[KB Scrape] Uploaded directly to Retell KB',
+      );
+    } else {
+      // ── FALLBACK: Upload to Vapi Files API ──────────────────────────
+      const { createVapiService } = await import('@kit/shared/vapi/server');
+      const vapiService = createVapiService();
+
+      for (const doc of categorizationResult.documents) {
+        const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '-')}-${doc.categoryId}.txt`;
+
+        const fileId = await vapiService.uploadKnowledgeFile({
+          name: fileName,
+          content: doc.content,
+          type: 'text',
+        });
+
+        if (fileId) {
+          uploadedCategories[doc.categoryId] = {
+            fileId,
+            charCount: doc.charCount,
+            sourcePages: doc.sourcePages,
+          };
+
+          if (!existingConfig[doc.categoryId]) {
+            existingConfig[doc.categoryId] = [];
+          }
+          existingConfig[doc.categoryId]!.push(fileId);
+        }
+      }
+
+      allFileIds = Object.values(existingConfig).flat().filter(Boolean);
+
+      // Update Vapi query tool
+      if (allFileIds.length > 0) {
+        const result = await vapiService.ensureClinicQueryTool(
+          account.id,
+          allFileIds,
+          settings.templateVersion || 'v2.0',
+          businessName,
+        );
+        if (result) {
+          queryToolId = result.toolId;
+          queryToolName = result.toolName;
+        }
       }
     }
 
@@ -183,63 +286,19 @@ export async function POST(request: NextRequest) {
 
     if (uploadedCount === 0) {
       return NextResponse.json(
-        { error: 'Failed to upload any documents to Vapi' },
+        { error: 'Failed to upload any documents' },
         { status: 500 },
       );
     }
 
-    // 4. Update query tool with all file IDs
-    const allFileIds = Object.values(existingConfig).flat().filter(Boolean);
-    let queryToolId = settings.queryToolId;
-    let queryToolName = settings.queryToolName;
-
-    if (allFileIds.length > 0) {
-      const result = await vapiService.ensureClinicQueryTool(
-        account.id,
-        allFileIds,
-        settings.templateVersion || 'v2.0',
-        businessName,
-      );
-      if (result) {
-        queryToolId = result.toolId;
-        queryToolName = result.toolName;
-      }
-    }
-
-    // 5. Sync to Retell if needed
-    let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
-    const provider = await getAccountProvider(account.id);
-
-    if (provider === 'RETELL' && allFileIds.length > 0) {
-      try {
-        const { syncVapiKBToRetell } = await import(
-          '@kit/shared/retell/retell-kb.service'
-        );
-        const newKbId = await syncVapiKBToRetell(
-          account.id,
-          allFileIds,
-          businessName,
-          retellKnowledgeBaseId || undefined,
-        );
-        if (newKbId) {
-          retellKnowledgeBaseId = newKbId;
-        }
-      } catch (retellErr: any) {
-        logger.error(
-          { error: retellErr?.message, accountId },
-          '[KB Scrape] Retell KB sync failed (non-fatal)',
-        );
-      }
-    }
-
-    // 6. Save to DB
+    // Save to DB
     await prisma.account.update({
       where: { id: account.id },
       data: {
         phoneIntegrationSettings: {
           ...settings,
           knowledgeBaseConfig: existingConfig,
-          knowledgeBaseFileIds: allFileIds,
+          knowledgeBaseFileIds: allFileIds.length > 0 ? allFileIds : undefined,
           queryToolId,
           queryToolName,
           retellKnowledgeBaseId,
@@ -254,8 +313,8 @@ export async function POST(request: NextRequest) {
       {
         funcName,
         accountId,
+        provider,
         uploadedCategories: uploadedCount,
-        totalFiles: allFileIds.length,
         pagesScraped: scrapeResult.scrapedCount,
       },
       '[KB Scrape] Website scrape and KB upload complete',
@@ -263,13 +322,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      provider,
       pagesDiscovered: scrapeResult.totalDiscovered,
       pagesScraped: scrapeResult.scrapedCount,
       capped: scrapeResult.capped,
       sectionsFound: categorizationResult.totalSections,
       documentsUploaded: uploadedCount,
       categories: uploadedCategories,
-      totalFiles: allFileIds.length,
+      retellKnowledgeBaseId: provider === 'RETELL' ? retellKnowledgeBaseId : undefined,
+      totalFiles: allFileIds.length || uploadedCount,
       queryToolId,
     });
   } catch (error: any) {

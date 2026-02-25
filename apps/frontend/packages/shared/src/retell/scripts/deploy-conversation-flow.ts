@@ -209,7 +209,7 @@ async function main() {
   const agentConfig = {
     agent_name: `${CLINIC_NAME} - Conversation Flow`,
     response_engine: {
-      type: 'conversation_flow',
+      type: 'conversation-flow',
       conversation_flow_id: flow.conversation_flow_id,
     },
     voice_id: VOICE_ID,

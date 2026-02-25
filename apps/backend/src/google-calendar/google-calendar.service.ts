@@ -311,10 +311,19 @@ export class GoogleCalendarService {
 
       const account = await this.prisma.account.findUnique({
         where: { id: accountId },
-        select: { googleCalendarId: true, name: true },
+        select: { googleCalendarId: true, googleCalendarEmail: true, name: true },
       });
 
       const calendarId = account?.googleCalendarId || 'primary';
+
+      this.logger.log({
+        accountId,
+        accountName: account?.name,
+        googleCalendarEmail: account?.googleCalendarEmail,
+        calendarId,
+        timezone: tz,
+        msg: '[GCal] Creating event on calendar',
+      });
 
       // Calculate end time
       const endTime = new Date(appointment.startTime);
@@ -380,7 +389,10 @@ export class GoogleCalendarService {
 
       this.logger.log({
         accountId,
+        googleCalendarEmail: account?.googleCalendarEmail,
+        calendarId,
         eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         appointmentType: appointment.appointmentType,
         startTime: appointment.startTime,

@@ -187,7 +187,8 @@ export interface ConversationFlowConfig {
   start_speaker: 'user' | 'agent';
   model_choice: {
     type: 'cascading';
-    models: Array<{ provider: string; model: string }>;
+    model: string;
+    high_priority?: boolean;
   };
   global_prompt?: string;
   default_dynamic_variables?: Record<string, string>;
@@ -209,7 +210,7 @@ export interface ConversationFlowResponse {
 
 export type RetellResponseEngine =
   | { type: 'retell-llm'; llm_id: string; version?: number }
-  | { type: 'conversation_flow'; conversation_flow_id: string; version?: number };
+  | { type: 'conversation-flow'; conversation_flow_id: string; version?: number };
 
 export interface RetellAgentConfig {
   agent_name?: string;

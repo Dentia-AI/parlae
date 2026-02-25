@@ -93,7 +93,10 @@ export default async function ReceptionistDashboardPage({
       });
       if (retellPhone?.retellAgentIds) {
         hasRetellDeployment = true;
-        retellVoiceInfo = { voiceId: 'retell-Chloe', voiceName: 'Chloe (Retell)' };
+        const savedVoice = integrationSettings?.voiceConfig;
+        retellVoiceInfo = savedVoice
+          ? { voiceId: savedVoice.voiceId, voiceName: `${savedVoice.name} (Retell)` }
+          : { voiceId: 'retell-Chloe', voiceName: 'Chloe (Retell)' };
       }
     } catch {
       // RetellPhoneNumber model may not be generated yet

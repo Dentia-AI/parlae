@@ -451,7 +451,7 @@ export function buildDentalClinicFlow(
     start_speaker: 'agent',
     model_choice: {
       type: 'cascading',
-      models: [{ provider: 'openai', model: 'gpt-4.1' }],
+      model: 'gpt-4.1',
     },
     global_prompt: globalPrompt,
     default_dynamic_variables: {

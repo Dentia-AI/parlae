@@ -46,7 +46,16 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Vapi',
+    label: 'Retell (Primary)',
+    items: [
+      { name: 'Retell Templates', href: '/admin/retell-templates', icon: FileStack },
+      { name: 'Retell Versions', href: '/admin/retell-templates/versions', icon: GitBranch },
+      { name: 'Conversation Flow', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
+      { name: 'Retell Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
+    ],
+  },
+  {
+    label: 'Vapi (Fallback)',
     items: [
       { name: 'Agent Templates', href: '/admin/agent-templates', icon: Layers },
       { name: 'Version Overview', href: '/admin/agent-templates/versions', icon: GitBranch },
@@ -55,15 +64,6 @@ const navGroups: NavGroup[] = [
       ...(isDev
         ? [{ name: 'Setup Test Agent', href: '/admin/setup-vapi', icon: Settings }]
         : []),
-    ],
-  },
-  {
-    label: 'Retell',
-    items: [
-      { name: 'Retell Templates', href: '/admin/retell-templates', icon: FileStack },
-      { name: 'Retell Versions', href: '/admin/retell-templates/versions', icon: GitBranch },
-      { name: 'Conversation Flow', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
-      { name: 'Retell Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
     ],
   },
   {

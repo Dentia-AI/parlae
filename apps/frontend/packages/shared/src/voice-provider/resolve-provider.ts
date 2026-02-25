@@ -10,7 +10,7 @@ export type VoiceProviderType = 'VAPI' | 'RETELL';
  * Priority:
  *   1. Account-level override (`voiceProviderOverride`)
  *   2. Global toggle (`VoiceProviderToggle.activeProvider`)
- *   3. Default: VAPI
+ *   3. Default: RETELL
  */
 export async function getAccountProvider(
   accountId: string,
@@ -36,7 +36,7 @@ export async function getAccountProvider(
     // Table may not exist yet in some environments
   }
 
-  return 'VAPI';
+  return 'RETELL';
 }
 
 /**
@@ -62,5 +62,5 @@ export async function getAccountProviderFromOverride(
     // Table may not exist yet
   }
 
-  return 'VAPI';
+  return 'RETELL';
 }
