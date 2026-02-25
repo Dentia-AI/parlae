@@ -164,7 +164,7 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, voic
                         </Label>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-muted-foreground italic">
-                            {voice.subtitle}
+                            {t(`common:setup.voice.voices.${voice.id}.subtitle`, { defaultValue: voice.subtitle })}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {'\u00B7'} {voice.gender === 'male' ? t('common:setup.voice.genderMale') : t('common:setup.voice.genderFemale')}
@@ -173,7 +173,7 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, voic
                       </div>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2 ml-7">
-                      {voice.description}
+                      {t(`common:setup.voice.voices.${voice.id}.description`, { defaultValue: voice.description })}
                     </p>
                   </div>
                 </div>

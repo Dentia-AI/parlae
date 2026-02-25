@@ -117,7 +117,69 @@
       "stop": "Arrêter",
       "noVoicesFound": "Aucune voix trouvée pour ce filtre",
       "previewError": "Impossible de lire {{name}}. Veuillez réessayer.",
-      "previewLoadError": "Impossible de lire l'aperçu vocal"
+      "previewLoadError": "Impossible de lire l'aperçu vocal",
+      "voices": {
+        "retell-chloe": {
+          "subtitle": "Professionnelle chaleureuse",
+          "description": "Chaleureuse et professionnelle, parfaite pour accueillir les appelants"
+        },
+        "retell-grace": {
+          "subtitle": "Calme et bienveillante",
+          "description": "Calme et attentionnée, met les patients à l'aise"
+        },
+        "retell-kate": {
+          "subtitle": "Communicatrice claire",
+          "description": "Claire et articulée, excellente pour les informations détaillées"
+        },
+        "retell-victoria": {
+          "subtitle": "Posée et raffinée",
+          "description": "Raffinée et sophistiquée, inspire confiance"
+        },
+        "retell-brian": {
+          "subtitle": "Guide amical",
+          "description": "Amical et fiable, facile à comprendre"
+        },
+        "retell-joe": {
+          "subtitle": "Aide décontracté",
+          "description": "Détendu et accessible, naturellement conversationnel"
+        },
+        "retell-max": {
+          "subtitle": "Confiant et direct",
+          "description": "Confiant et direct, communicateur efficace"
+        },
+        "katie-cartesia": {
+          "subtitle": "Assistante amicale",
+          "description": "Articulée et professionnelle, idéale pour une réceptionniste"
+        },
+        "jacqueline-cartesia": {
+          "subtitle": "Agente rassurante",
+          "description": "Confiante et empathique, excellente pour le soutien aux patients"
+        },
+        "ariana-cartesia": {
+          "subtitle": "Amie bienveillante",
+          "description": "Amicale et accessible avec un ton chaleureux et accueillant"
+        },
+        "kira-cartesia": {
+          "subtitle": "Confidente de confiance",
+          "description": "Émotive et empathique, inspire la confiance des appelants"
+        },
+        "connie-cartesia": {
+          "subtitle": "Conversationnaliste franche",
+          "description": "Naturelle et joyeuse, style conversationnel authentique"
+        },
+        "blake-cartesia": {
+          "subtitle": "Agent serviable",
+          "description": "Énergique et engageant, excellent pour le service client"
+        },
+        "kiefer-cartesia": {
+          "subtitle": "Ton assuré",
+          "description": "Confiant avec une grande clarté, composé et professionnel"
+        },
+        "kyle-cartesia": {
+          "subtitle": "Ami accessible",
+          "description": "Chaleureux et conversationnel, instantanément amical"
+        }
+      }
     },
     "knowledge": {
       "title": "Base de connaissances",
