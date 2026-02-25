@@ -77,14 +77,34 @@ export default async function ReceptionistDashboardPage({
   const integrationSettings = account.phoneIntegrationSettings as any;
   const activeProvider = await getAccountProvider(account.id);
 
-  const hasVapiReceptionist = !!integrationSettings?.vapiSquadId;
-  const hasRetellReceptionist = !!(
+  // Look up Retell deployment info if this account uses Retell
+  let retellVoiceInfo: { voiceId: string; voiceName: string } | null = null;
+  let hasRetellDeployment = !!(
     integrationSettings?.retellAgentIds ||
     integrationSettings?.retellReceptionistAgentId
   );
+
+  if (activeProvider === 'RETELL' && account.id) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const retellPhone = await (prisma as any).retellPhoneNumber.findFirst({
+        where: { accountId: account.id },
+        select: { retellAgentIds: true },
+      });
+      if (retellPhone?.retellAgentIds) {
+        hasRetellDeployment = true;
+        retellVoiceInfo = { voiceId: 'retell-Chloe', voiceName: 'Chloe (Retell)' };
+      }
+    } catch {
+      // RetellPhoneNumber model may not be generated yet
+    }
+  }
+
+  const hasVapiReceptionist = !!integrationSettings?.vapiSquadId;
+
   const hasReceptionist = account.phoneIntegrationMethod &&
                           account.phoneIntegrationMethod !== 'none' &&
-                          (activeProvider === 'RETELL' ? hasRetellReceptionist : hasVapiReceptionist);
+                          (activeProvider === 'RETELL' ? hasRetellDeployment : hasVapiReceptionist);
 
   const isDeploying = integrationSettings?.deploymentStatus === 'in_progress';
   const deploymentFailed = integrationSettings?.deploymentStatus === 'failed';
@@ -116,7 +136,11 @@ export default async function ReceptionistDashboardPage({
 
   const phoneNumber = integrationSettings?.phoneNumber || '+1 (555) 555-1234';
   const voiceConfig = integrationSettings?.voiceConfig;
-  const isActive = activeProvider === 'RETELL' ? hasRetellReceptionist : hasVapiReceptionist;
+  const isActive = activeProvider === 'RETELL' ? hasRetellDeployment : hasVapiReceptionist;
+
+  const displayVoice = activeProvider === 'RETELL' && retellVoiceInfo
+    ? { name: retellVoiceInfo.voiceName, gender: 'female', accent: 'Retell AI' }
+    : voiceConfig;
 
   const integrationMethodLabels: Record<string, string> = {
     forwarded: 'Call Forwarding',
@@ -180,23 +204,28 @@ export default async function ReceptionistDashboardPage({
 
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Mic className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Voice</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mic className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Voice</CardTitle>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {activeProvider}
+              </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            {voiceConfig ? (
+            {displayVoice ? (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div>
                     <p className="text-sm text-muted-foreground">Voice</p>
-                    <p className="font-semibold">{voiceConfig.name}</p>
+                    <p className="font-semibold">{displayVoice.name}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Type</p>
                     <p className="font-semibold capitalize">
-                      {voiceConfig.gender} • {voiceConfig.accent}
+                      {displayVoice.gender} • {displayVoice.accent}
                     </p>
                   </div>
                 </div>
