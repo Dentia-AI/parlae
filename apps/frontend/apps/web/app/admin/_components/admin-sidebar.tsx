@@ -16,6 +16,7 @@ import {
   Radio,
   Globe,
   Workflow,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
@@ -51,6 +52,7 @@ const navGroups: NavGroup[] = [
       { name: 'Flow Templates', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
       { name: 'Flow Versions', href: '/admin/retell-templates/conversation-flow/versions', icon: GitBranch },
       { name: 'Flow Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
+      { name: 'Retell Agents', href: '/admin/retell-agents', icon: Bot },
     ],
   },
   {
