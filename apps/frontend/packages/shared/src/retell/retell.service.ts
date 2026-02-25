@@ -101,13 +101,119 @@ export interface RetellAgentSwapTool {
   keep_current_voice?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Conversation Flow Types
+// ---------------------------------------------------------------------------
+
+export interface ConversationFlowTransitionCondition {
+  type: 'prompt' | 'equation';
+  prompt?: string;
+  equation?: string;
+}
+
+export interface ConversationFlowEdge {
+  id: string;
+  description?: string;
+  transition_condition: ConversationFlowTransitionCondition;
+  destination_node_id: string;
+}
+
+export interface ConversationFlowNodeBase {
+  id: string;
+  edges?: ConversationFlowEdge[];
+  else_edge?: { destination_node_id: string };
+}
+
+export interface ConversationFlowConversationNode extends ConversationFlowNodeBase {
+  type: 'conversation';
+  instruction: { type: 'prompt'; text: string };
+  tool_ids?: string[];
+  global_tool_ids?: string[];
+}
+
+export interface ConversationFlowFunctionNode extends ConversationFlowNodeBase {
+  type: 'function';
+  tool_id: string;
+  tool_type: 'local' | 'shared';
+  wait_for_result?: boolean;
+  speak_during_execution?: boolean;
+  instruction?: { type: 'prompt'; text: string };
+}
+
+export interface ConversationFlowTransferCallNode extends ConversationFlowNodeBase {
+  type: 'transfer_call';
+  transfer_destination: {
+    type: 'predefined';
+    number: string;
+    ignore_e164_validation?: boolean;
+  };
+  speak_during_execution?: boolean;
+  instruction?: { type: 'prompt'; text: string };
+}
+
+export interface ConversationFlowEndNode extends ConversationFlowNodeBase {
+  type: 'end';
+  speak_during_execution?: boolean;
+  instruction?: { type: 'prompt'; text: string };
+}
+
+export type ConversationFlowNode =
+  | ConversationFlowConversationNode
+  | ConversationFlowFunctionNode
+  | ConversationFlowTransferCallNode
+  | ConversationFlowEndNode;
+
+export interface ConversationFlowTool {
+  type: 'custom';
+  tool_id: string;
+  name: string;
+  description: string;
+  url: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  headers?: Record<string, string>;
+  parameters?: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+  speak_during_execution?: boolean;
+  speak_after_execution?: boolean;
+  execution_message_description?: string;
+  timeout_ms?: number;
+  response_variables?: Record<string, string>;
+}
+
+export interface ConversationFlowConfig {
+  start_speaker: 'user' | 'agent';
+  model_choice: {
+    type: 'cascading';
+    models: Array<{ provider: string; model: string }>;
+  };
+  global_prompt?: string;
+  default_dynamic_variables?: Record<string, string>;
+  tools?: ConversationFlowTool[];
+  start_node_id: string;
+  nodes: ConversationFlowNode[];
+  knowledge_base_ids?: string[];
+}
+
+export interface ConversationFlowResponse {
+  conversation_flow_id: string;
+  version: number;
+  last_modification_timestamp: number;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Types
+// ---------------------------------------------------------------------------
+
+export type RetellResponseEngine =
+  | { type: 'retell-llm'; llm_id: string; version?: number }
+  | { type: 'conversation_flow'; conversation_flow_id: string; version?: number };
+
 export interface RetellAgentConfig {
   agent_name?: string;
-  response_engine: {
-    type: 'retell-llm';
-    llm_id: string;
-    version?: number;
-  };
+  response_engine: RetellResponseEngine;
   voice_id: string;
   voice_model?: string;
   language?: string;
@@ -149,7 +255,7 @@ export interface RetellAgentResponse {
   agent_id: string;
   version: number;
   agent_name?: string;
-  response_engine: { type: string; llm_id: string; version?: number };
+  response_engine: { type: string; llm_id?: string; conversation_flow_id?: string; version?: number };
   voice_id: string;
   language?: string;
   webhook_url?: string;
@@ -522,6 +628,33 @@ export class RetellService {
 
     logger.warn({ kbId }, '[Retell] Knowledge base polling timed out');
     return this.getKnowledgeBase(kbId);
+  }
+
+  // ── Conversation Flow Management ──────────────────────────────────────
+
+  async createConversationFlow(
+    config: ConversationFlowConfig,
+  ): Promise<ConversationFlowResponse | null> {
+    logger.info('[Retell] Creating conversation flow');
+    return this.request<ConversationFlowResponse>(
+      'POST',
+      '/create-conversation-flow',
+      config,
+    );
+  }
+
+  async getConversationFlow(
+    flowId: string,
+  ): Promise<ConversationFlowResponse | null> {
+    return this.request<ConversationFlowResponse>(
+      'GET',
+      `/get-conversation-flow/${flowId}`,
+    );
+  }
+
+  async deleteConversationFlow(flowId: string): Promise<void> {
+    logger.info({ flowId }, '[Retell] Deleting conversation flow');
+    await this.request('DELETE', `/delete-conversation-flow/${flowId}`);
   }
 
   // ── Web Call Management ────────────────────────────────────────────────

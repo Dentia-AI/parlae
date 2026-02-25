@@ -34,6 +34,8 @@
     "./twilio/server": "./src/twilio/server.ts",
     "./voice-provider": "./src/voice-provider/index.ts",
     "./voice-provider/voices": "./src/voice-provider/voices-client.ts",
+    "./retell/templates/conversation-flow/dental-clinic.flow-template": "./src/retell/templates/conversation-flow/dental-clinic.flow-template.ts",
+    "./retell/templates/conversation-flow/flow-deploy-utils": "./src/retell/templates/conversation-flow/flow-deploy-utils.ts",
     "./retell/retell-kb.service": "./src/retell/retell-kb.service.ts",
     "./scraper/website-scraper": "./src/scraper/website-scraper.ts",
     "./scraper/categorize-content": "./src/scraper/categorize-content.ts"

@@ -139,12 +139,13 @@ export async function POST(request: NextRequest) {
     logger.info({ funcName, accountId, clinicName }, '[Retell Deploy] Deploying squad');
     const result = await deployRetellSquad(retell, deployConfig);
 
-    // Import phone number if provided
+    // Import phone number if provided (must be E.164 format)
     let retellPhoneId: string | undefined;
     if (phoneNumber) {
-      logger.info({ funcName, phoneNumber }, '[Retell Deploy] Importing phone number');
+      const e164Phone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+      logger.info({ funcName, phoneNumber: e164Phone }, '[Retell Deploy] Importing phone number');
       const phoneResult = await retell.importPhoneNumber({
-        phoneNumber,
+        phoneNumber: e164Phone,
         inboundAgentId: result.agents.receptionist.agentId,
         nickname: `${clinicName} - Retell Backup`,
       });
