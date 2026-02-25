@@ -11,7 +11,6 @@ import {
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Label } from '@kit/ui/label';
-import { Textarea } from '@kit/ui/textarea';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Badge } from '@kit/ui/badge';
 import {
@@ -20,7 +19,6 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   Save,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
@@ -43,6 +41,13 @@ interface AccountOption {
   hasRetell: boolean;
 }
 
+interface FetchedSummary {
+  accountName: string;
+  roles: string[];
+  agentCount: number;
+  currentTemplateId: string | null;
+}
+
 export default function FetchRetellFromAccountPage() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -52,7 +57,7 @@ export default function FetchRetellFromAccountPage() {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [loadingAccounts, setLoadingAccounts] = useState(true);
 
-  const [fetchedData, setFetchedData] = useState<any>(null);
+  const [fetchedSummary, setFetchedSummary] = useState<FetchedSummary | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [templateName, setTemplateName] = useState('');
@@ -65,7 +70,6 @@ export default function FetchRetellFromAccountPage() {
   const [existingTemplates, setExistingTemplates] = useState<ExistingTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
-  // Load accounts on mount
   useEffect(() => {
     async function loadAccounts() {
       try {
@@ -95,7 +99,6 @@ export default function FetchRetellFromAccountPage() {
     loadAccounts();
   }, []);
 
-  // Load existing templates for update mode
   useEffect(() => {
     async function loadTemplates() {
       try {
@@ -118,7 +121,7 @@ export default function FetchRetellFromAccountPage() {
     }
 
     setFetchError(null);
-    setFetchedData(null);
+    setFetchedSummary(null);
 
     startTransition(async () => {
       try {
@@ -137,9 +140,9 @@ export default function FetchRetellFromAccountPage() {
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'Failed to fetch');
 
-        setFetchedData(result);
+        setFetchedSummary(result);
         toast.success(
-          `Fetched ${result.roles?.length || 0} role(s) from "${result.accountName}"`,
+          `Found ${result.agentCount} agent(s) for "${result.accountName}"`,
         );
 
         if (!displayName) {
@@ -160,8 +163,8 @@ export default function FetchRetellFromAccountPage() {
   };
 
   const handleSave = async () => {
-    if (!fetchedData) {
-      toast.error('Fetch configs first');
+    if (!fetchedSummary) {
+      toast.error('Verify account first');
       return;
     }
 
@@ -180,14 +183,12 @@ export default function FetchRetellFromAccountPage() {
               'x-csrf-token': csrfToken,
             },
             body: JSON.stringify({
+              sourceAccountId: selectedAccountId,
               name: templateName,
               displayName,
               description,
               version,
               isDefault,
-              llmConfigs: fetchedData.llmConfigs,
-              agentConfigs: fetchedData.agentConfigs,
-              swapConfig: fetchedData.swapConfig || {},
             }),
           });
 
@@ -210,9 +211,7 @@ export default function FetchRetellFromAccountPage() {
             },
             body: JSON.stringify({
               id: selectedTemplateId,
-              llmConfigs: fetchedData.llmConfigs,
-              agentConfigs: fetchedData.agentConfigs,
-              swapConfig: fetchedData.swapConfig || {},
+              sourceAccountId: selectedAccountId,
               ...(version ? { version } : {}),
             }),
           });
@@ -232,7 +231,7 @@ export default function FetchRetellFromAccountPage() {
   };
 
   return (
-    <div className="container max-w-5xl py-8 space-y-6">
+    <div className="container max-w-3xl py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/admin/retell-templates">
@@ -245,8 +244,8 @@ export default function FetchRetellFromAccountPage() {
             Fetch Retell Config from Account
           </h1>
           <p className="text-sm text-muted-foreground">
-            Pull live Retell agent &amp; LLM configs from a deployed account and
-            save as a template
+            Pull live Retell agent configs from a deployed account and save as
+            a template
           </p>
         </div>
       </div>
@@ -297,7 +296,7 @@ export default function FetchRetellFromAccountPage() {
                 ) : (
                   <Download className="h-4 w-4 mr-2" />
                 )}
-                Fetch Configs
+                Verify Account
               </Button>
             </div>
           )}
@@ -311,72 +310,32 @@ export default function FetchRetellFromAccountPage() {
         </CardContent>
       </Card>
 
-      {/* Step 2: Review Fetched Data */}
-      {fetchedData && (
+      {/* Step 2: Summary + Save */}
+      {fetchedSummary && (
         <>
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
                 <div>
-                  <CardTitle className="text-lg">2. Review Configs</CardTitle>
+                  <CardTitle className="text-lg">
+                    2. Verified: {fetchedSummary.accountName}
+                  </CardTitle>
                   <CardDescription>
-                    Fetched from &quot;{fetchedData.accountName}&quot; &mdash;{' '}
-                    {fetchedData.roles?.length || 0} role(s)
+                    {fetchedSummary.agentCount} deployed agent(s) found.
+                    Configs will be pulled server-side when saving.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                {fetchedData.roles?.map((role: string) => (
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {fetchedSummary.roles.map((role) => (
                   <Badge key={role} variant="secondary">
                     {role}
                   </Badge>
                 ))}
               </div>
-
-              {/* LLM Configs Preview */}
-              <div>
-                <Label className="text-sm font-medium">LLM Configs</Label>
-                <Textarea
-                  readOnly
-                  value={JSON.stringify(fetchedData.llmConfigs, null, 2)}
-                  rows={8}
-                  className="font-mono text-xs mt-1"
-                />
-              </div>
-
-              {/* Agent Configs Preview */}
-              <div>
-                <Label className="text-sm font-medium">Agent Configs</Label>
-                <Textarea
-                  readOnly
-                  value={JSON.stringify(fetchedData.agentConfigs, null, 2)}
-                  rows={6}
-                  className="font-mono text-xs mt-1"
-                />
-              </div>
-
-              {/* Swap Config Preview */}
-              {fetchedData.swapConfig &&
-                Object.keys(fetchedData.swapConfig).length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium">
-                      Swap Config
-                    </Label>
-                    <Textarea
-                      readOnly
-                      value={JSON.stringify(
-                        fetchedData.swapConfig,
-                        null,
-                        2,
-                      )}
-                      rows={4}
-                      className="font-mono text-xs mt-1"
-                    />
-                  </div>
-                )}
             </CardContent>
           </Card>
 
@@ -389,7 +348,6 @@ export default function FetchRetellFromAccountPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Save mode toggle */}
               <div className="flex gap-2">
                 <Button
                   variant={saveMode === 'new' ? 'default' : 'outline'}

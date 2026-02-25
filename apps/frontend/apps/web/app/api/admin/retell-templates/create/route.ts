@@ -3,7 +3,19 @@ import { getSessionUser } from '@kit/shared/auth';
 import { requireAdmin } from '~/lib/auth/is-admin';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
+import { fetchRetellConfigsFromAccount } from '../fetch-from-account/route';
 
+/**
+ * POST /api/admin/retell-templates/create
+ *
+ * Create a new Retell agent template.
+ *
+ * Two modes:
+ *   1. From account: { sourceAccountId, name, displayName, version, ... }
+ *      → Configs are fetched server-side from the deployed account's agents
+ *   2. Direct: { llmConfigs, agentConfigs, swapConfig, name, displayName, version, ... }
+ *      → Configs are provided directly (for programmatic use)
+ */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
 
@@ -12,11 +24,45 @@ export async function POST(request: NextRequest) {
     const session = await getSessionUser();
 
     const body = await request.json();
-    const { name, displayName, description, version, llmConfigs, agentConfigs, swapConfig, toolsConfig, isDefault } = body;
+    const {
+      name,
+      displayName,
+      description,
+      version,
+      isDefault,
+      sourceAccountId,
+      llmConfigs: directLlmConfigs,
+      agentConfigs: directAgentConfigs,
+      swapConfig: directSwapConfig,
+    } = body;
 
-    if (!name || !displayName || !version || !llmConfigs || !agentConfigs || !swapConfig) {
+    if (!name || !displayName || !version) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: name, displayName, version, llmConfigs, agentConfigs, swapConfig' },
+        { success: false, error: 'Missing required fields: name, displayName, version' },
+        { status: 400 },
+      );
+    }
+
+    let llmConfigs: any;
+    let agentConfigs: any;
+    let swapConfig: any;
+
+    if (sourceAccountId) {
+      logger.info(
+        { sourceAccountId, templateName: name },
+        '[Retell Templates] Fetching configs from account for new template',
+      );
+      const configs = await fetchRetellConfigsFromAccount(sourceAccountId);
+      llmConfigs = configs.llmConfigs;
+      agentConfigs = configs.agentConfigs;
+      swapConfig = configs.swapConfig;
+    } else if (directLlmConfigs && directAgentConfigs) {
+      llmConfigs = directLlmConfigs;
+      agentConfigs = directAgentConfigs;
+      swapConfig = directSwapConfig || {};
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Either sourceAccountId or llmConfigs+agentConfigs is required' },
         { status: 400 },
       );
     }
@@ -36,10 +82,9 @@ export async function POST(request: NextRequest) {
         version,
         llmConfigs,
         agentConfigs,
-        swapConfig,
-        toolsConfig: toolsConfig || null,
+        swapConfig: swapConfig || {},
         isDefault: isDefault ?? false,
-        createdBy: session.id,
+        createdBy: session?.id ?? 'system',
       },
     });
 
@@ -48,7 +93,7 @@ export async function POST(request: NextRequest) {
       '[Retell Templates] Created new template',
     );
 
-    return NextResponse.json({ success: true, template });
+    return NextResponse.json({ success: true, template: { id: template.id, name: template.name } });
   } catch (error) {
     logger.error({ error }, '[Retell Templates] Create failed');
     return NextResponse.json(
