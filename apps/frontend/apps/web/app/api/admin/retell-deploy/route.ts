@@ -201,6 +201,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Link account to the default Retell template (or the one specified)
+    const templateId = body.templateId as string | undefined;
+    try {
+      let assignedTemplateId = templateId;
+
+      if (!assignedTemplateId) {
+        const defaultTemplate = await prisma.retellAgentTemplate.findFirst({
+          where: { isDefault: true, isActive: true },
+          select: { id: true },
+        });
+        assignedTemplateId = defaultTemplate?.id ?? undefined;
+      }
+
+      if (assignedTemplateId) {
+        await prisma.account.update({
+          where: { id: accountId },
+          data: { retellAgentTemplateId: assignedTemplateId },
+        });
+        logger.info({ funcName, accountId, templateId: assignedTemplateId }, '[Retell Deploy] Linked account to template');
+      }
+    } catch (templateLinkErr) {
+      logger.warn(
+        { error: templateLinkErr instanceof Error ? templateLinkErr.message : templateLinkErr },
+        '[Retell Deploy] Non-fatal: could not link template to account',
+      );
+    }
+
     logger.info({ funcName, accountId, version: result.version }, '[Retell Deploy] Complete');
 
     return NextResponse.json({

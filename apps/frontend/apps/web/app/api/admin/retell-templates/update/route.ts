@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@kit/shared/auth';
-import { isAdminUser } from '~/lib/auth/admin';
+import { requireAdmin } from '~/lib/auth/is-admin';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
 
@@ -8,10 +7,7 @@ export async function PATCH(request: NextRequest) {
   const logger = await getLogger();
 
   try {
-    const session = await getSessionUser();
-    if (!session || !isAdminUser(session.id)) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    await requireAdmin();
 
     const body = await request.json();
     const { id, ...updates } = body;

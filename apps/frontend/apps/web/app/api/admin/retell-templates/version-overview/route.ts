@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSessionUser } from '@kit/shared/auth';
-import { isAdminUser } from '~/lib/auth/admin';
+import { requireAdmin } from '~/lib/auth/is-admin';
 import { prisma } from '@kit/prisma';
 
 /**
@@ -11,14 +10,7 @@ import { prisma } from '@kit/prisma';
  */
 export async function GET() {
   try {
-    const session = await getSessionUser();
-
-    if (!session || !isAdminUser(session.id)) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 401 },
-      );
-    }
+    await requireAdmin();
 
     const accounts = await prisma.account.findMany({
       select: {

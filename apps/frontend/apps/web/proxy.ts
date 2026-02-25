@@ -282,12 +282,14 @@ function shouldBypassCsrf(request: NextRequest) {
   }
 
   // External webhook endpoints (have their own signature validation)
+  // and admin API routes (protected by requireAdmin() DB role check)
   const webhookPaths = [
     '/api/stripe/webhook',
     '/api/vapi/webhook',
     '/api/pms/sikka/oauth/callback',
     '/api/google-calendar/callback',
     '/api/vapi/upload-file', // File upload with FormData
+    '/api/admin/', // Admin API routes have their own auth checks
   ];
 
   if (webhookPaths.some((webhookPath) => path.startsWith(webhookPath))) {
