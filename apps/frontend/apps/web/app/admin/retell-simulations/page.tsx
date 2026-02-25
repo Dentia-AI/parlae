@@ -76,16 +76,6 @@ const MODELS = [
   { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
 ];
 
-const AGENT_ROLES = [
-  { value: '', label: 'All Roles' },
-  { value: 'receptionist', label: 'Receptionist' },
-  { value: 'booking', label: 'Booking' },
-  { value: 'appointmentMgmt', label: 'Appointment Mgmt' },
-  { value: 'patientRecords', label: 'Patient Records' },
-  { value: 'insuranceBilling', label: 'Insurance & Billing' },
-  { value: 'emergency', label: 'Emergency' },
-];
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -93,7 +83,6 @@ const AGENT_ROLES = [
 export default function AdminRetellSimulationsPage() {
   const [suite, setSuite] = useState('all');
   const [selectedModels, setSelectedModels] = useState<string[]>(['gpt-4.1']);
-  const [agentRole, setAgentRole] = useState('');
   const [keepAgents, setKeepAgents] = useState(false);
 
   const [running, setRunning] = useState(false);
@@ -136,7 +125,6 @@ export default function AdminRetellSimulationsPage() {
         suite,
         models: selectedModels,
       };
-      if (agentRole) body.agentRole = agentRole;
       if (keepAgents) body.keepAgents = true;
 
       const res = await fetch('/api/admin/retell-simulations/run', {
@@ -204,7 +192,7 @@ export default function AdminRetellSimulationsPage() {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [suite, selectedModels, agentRole, keepAgents]);
+  }, [suite, selectedModels, keepAgents]);
 
   const handleStop = () => {
     abortRef.current?.abort();
@@ -217,11 +205,11 @@ export default function AdminRetellSimulationsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <FlaskConical className="h-8 w-8" />
-            Retell Simulations
+            Flow Simulations
           </h1>
           <p className="text-muted-foreground mt-2">
-            Run batch tests against Retell agents using Retell&apos;s native
-            simulation API
+            Run batch tests against the conversation flow agent using
+            Retell&apos;s native simulation API
           </p>
         </div>
         <div className="flex gap-2">
@@ -264,38 +252,21 @@ export default function AdminRetellSimulationsPage() {
         </CardHeader>
         {!configCollapsed && (
           <CardContent className="space-y-6">
-            {/* Suite + Role row */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Test Suite</Label>
-                <select
-                  value={suite}
-                  onChange={(e) => setSuite(e.target.value)}
-                  disabled={running}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {SUITES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Agent Role Filter</Label>
-                <select
-                  value={agentRole}
-                  onChange={(e) => setAgentRole(e.target.value)}
-                  disabled={running}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {AGENT_ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Suite selection */}
+            <div className="space-y-2">
+              <Label>Test Suite</Label>
+              <select
+                value={suite}
+                onChange={(e) => setSuite(e.target.value)}
+                disabled={running}
+                className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {SUITES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <Separator />
@@ -305,7 +276,7 @@ export default function AdminRetellSimulationsPage() {
               <Label>
                 Models to Compare{' '}
                 <span className="text-muted-foreground font-normal">
-                  — deploys separate test agents per model
+                  — deploys a conversation flow agent per model
                 </span>
               </Label>
               <div className="flex flex-wrap gap-2">

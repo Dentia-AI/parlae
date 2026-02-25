@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, UseGuards } from '@nestjs/common';
+import { DevAuthGuard } from '../auth/dev-auth.guard';
 import { NotificationsService } from './notifications.service';
 
 interface PatientInfo {
@@ -17,6 +18,7 @@ interface AppointmentInfo {
 }
 
 @Controller('notifications')
+@UseGuards(DevAuthGuard)
 export class NotificationsController {
   private readonly logger = new Logger(NotificationsController.name);
 

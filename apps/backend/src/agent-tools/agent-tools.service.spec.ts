@@ -273,4 +273,117 @@ describe('AgentToolsService', () => {
       expect(result === undefined || typeof result === 'object').toBe(true);
     });
   });
+
+  // ── Retell call paths (agent_id-based resolution) ──────────────────
+
+  describe('transferToHuman (Retell path)', () => {
+    it('should resolve phone record via retellPhoneNumber by agent_id', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({
+        id: 'rpn-1',
+        accountId: 'acc-retell',
+        phoneNumber: '+14165550001',
+        retellAgentId: 'retell-agent-1',
+        account: {
+          id: 'acc-retell',
+          name: 'Retell Clinic',
+          phoneIntegrationSettings: {
+            staffForwardNumber: '+14165550002',
+          },
+        },
+      });
+
+      const result = await service.transferToHuman({
+        accountId: 'acc-retell',
+        call: { id: 'retell-call-1', agent_id: 'retell-agent-1' },
+        message: { functionCall: { parameters: { reason: 'Emergency' } } },
+      });
+
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('object');
+    });
+
+    it('should handle missing Retell phone record gracefully', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+
+      const result = await service.transferToHuman({
+        accountId: undefined,
+        call: { id: 'retell-call-2', agent_id: 'unknown-agent' },
+        message: { functionCall: { parameters: {} } },
+      });
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('checkAvailability (Retell path)', () => {
+    it('should use GCal fallback via retellPhoneNumber resolution', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-retell',
+        account: {
+          id: 'acc-retell',
+          googleCalendarConnected: true,
+          brandingTimezone: 'America/Toronto',
+        },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.checkFreeBusy.mockResolvedValue({
+        success: true,
+        availableSlots: [{ startTime: '2026-03-01T09:00:00Z', endTime: '2026-03-01T12:00:00Z' }],
+      });
+
+      const result = await service.checkAvailability({
+        accountId: 'acc-retell',
+        call: { id: 'retell-call-3', agent_id: 'retell-agent-2' },
+        functionCall: { parameters: { date: '2026-03-01' } },
+      });
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('bookAppointment (Retell path)', () => {
+    it('should use GCal when Retell call has no PMS', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-retell',
+        account: {
+          id: 'acc-retell',
+          googleCalendarConnected: true,
+          brandingTimezone: 'America/Toronto',
+          name: 'Retell Dental',
+        },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true,
+        eventId: 'evt-retell',
+        htmlLink: 'https://cal/evt-retell',
+      });
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-retell',
+        call: { id: 'retell-call-4', agent_id: 'retell-agent-2' },
+        message: {
+          functionCall: {
+            parameters: {
+              patientId: 'p-retell',
+              startTime: '2026-03-01T10:00:00Z',
+              appointmentType: 'Checkup',
+              firstName: 'Alice',
+              lastName: 'Wong',
+              email: 'alice@test.com',
+            },
+          },
+        },
+      });
+
+      expect(result).toBeDefined();
+    });
+  });
 });

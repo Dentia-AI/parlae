@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
+import { DevAuthGuard } from '../auth/dev-auth.guard';
+import { CognitoJwtVerifierService } from '../auth/cognito-jwt-verifier.service';
 import { createMockNotificationsService } from '../test/mocks/notifications.mock';
 
 describe('NotificationsController', () => {
@@ -11,7 +14,12 @@ describe('NotificationsController', () => {
     const mockService = createMockNotificationsService();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NotificationsController],
-      providers: [{ provide: NotificationsService, useValue: mockService }],
+      providers: [
+        { provide: NotificationsService, useValue: mockService },
+        DevAuthGuard,
+        { provide: CognitoJwtVerifierService, useValue: { verifyToken: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+      ],
     }).compile();
 
     controller = module.get<NotificationsController>(NotificationsController);

@@ -50,7 +50,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Flow Templates', href: '/admin/retell-templates/conversation-flow', icon: Workflow },
       { name: 'Flow Versions', href: '/admin/retell-templates/conversation-flow/versions', icon: GitBranch },
-      { name: 'Retell Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
+      { name: 'Flow Simulations', href: '/admin/retell-simulations', icon: FlaskConical },
     ],
   },
   {

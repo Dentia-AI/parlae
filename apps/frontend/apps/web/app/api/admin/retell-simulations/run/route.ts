@@ -58,10 +58,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { suite, models, agentRole, keepAgents } = body as {
+  const { suite, models, keepAgents } = body as {
     suite?: string;
     models?: string[];
-    agentRole?: string;
     keepAgents?: boolean;
   };
 
@@ -78,7 +77,7 @@ export async function POST(request: NextRequest) {
 
   const scriptPath = path.resolve(
     process.cwd(),
-    '../../packages/shared/src/retell/tests/run-retell-sim.ts',
+    '../../packages/shared/src/retell/tests/run-flow-sim.ts',
   );
 
   const encoder = new TextEncoder();
@@ -94,15 +93,12 @@ export async function POST(request: NextRequest) {
       try {
         send(
           'log',
-          `Starting Retell simulation: suite=${suite} models=${selectedModels.join(',')}`,
+          `Starting conversation flow simulation: suite=${suite} models=${selectedModels.join(',')}`,
         );
         send('log', '\u2500'.repeat(60));
 
         const args = ['tsx', scriptPath, '--suite', suite, '--models', selectedModels.join(',')];
 
-        if (agentRole) {
-          args.push('--agent-role', agentRole);
-        }
         if (keepAgents) {
           args.push('--keep');
         }
@@ -166,7 +162,7 @@ export async function POST(request: NextRequest) {
           try {
             const files = fs
               .readdirSync(testsDir)
-              .filter((f: string) => f.startsWith('retell-sim-comparison-'))
+              .filter((f: string) => f.startsWith('flow-sim-'))
               .sort();
             if (files.length > 0) {
               const latestFile = path.join(testsDir, files[files.length - 1]!);

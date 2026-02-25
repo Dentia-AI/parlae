@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { PmsController } from './pms.controller';
 import { PmsService } from './pms.service';
 import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
@@ -130,6 +131,23 @@ describe('PmsController', () => {
       await expect(
         controller.exchangeSikkaCode({ code: 'code-1', accountId: '' }),
       ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('auth guards', () => {
+    it('should have CognitoAuthGuard on exchangeSikkaCode', () => {
+      const guards = Reflect.getMetadata('__guards__', PmsController.prototype.exchangeSikkaCode);
+      expect(guards).toBeDefined();
+      expect(guards.length).toBeGreaterThan(0);
+      const guardNames = guards.map((g: any) => g.name || g.constructor?.name);
+      expect(guardNames).toContain('CognitoAuthGuard');
+    });
+
+    it('should have CognitoAuthGuard on setupPms', () => {
+      const guards = Reflect.getMetadata('__guards__', PmsController.prototype.setupPms);
+      expect(guards).toBeDefined();
+      const guardNames = guards.map((g: any) => g.name || g.constructor?.name);
+      expect(guardNames).toContain('CognitoAuthGuard');
     });
   });
 });

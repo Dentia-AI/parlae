@@ -5,8 +5,10 @@ import {
   Body,
   Res,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { DevAuthGuard } from '../auth/dev-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLogger } from '../common/structured-logger';
 
@@ -147,6 +149,7 @@ export class VoiceRoutingController {
    * Returns the current routing status (for admin dashboard).
    */
   @Get('status')
+  @UseGuards(DevAuthGuard)
   async getStatus() {
     const toggle = await this.prisma.voiceProviderToggle.findFirst({
       where: { id: 1 },

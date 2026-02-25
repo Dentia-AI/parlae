@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Param, Delete, Patch, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Param, Delete, Patch, Logger, UseGuards } from '@nestjs/common';
+import { DevAuthGuard } from '../auth/dev-auth.guard';
 import { GoogleCalendarService } from './google-calendar.service';
 
 interface PatientInfo {
@@ -18,6 +19,7 @@ interface AppointmentDetails {
 }
 
 @Controller('google-calendar')
+@UseGuards(DevAuthGuard)
 export class GoogleCalendarController {
   private readonly logger = new Logger(GoogleCalendarController.name);
 

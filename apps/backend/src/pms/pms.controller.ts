@@ -112,6 +112,7 @@ export class PmsController {
    * Called by frontend after OAuth redirect
    */
   @Post('sikka/exchange-code')
+  @UseGuards(CognitoAuthGuard)
   async exchangeSikkaCode(
     @Body() body: { code: string; accountId: string },
   ) {
