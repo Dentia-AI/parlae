@@ -1,9 +1,12 @@
 import { GET } from '../route';
 import { NextRequest } from 'next/server';
 
+const mockGetAccountProvider = jest.fn().mockResolvedValue('VAPI');
+
 jest.mock('@kit/prisma', () => ({
   prisma: {
     vapiPhoneNumber: { findMany: jest.fn().mockResolvedValue([{ vapiPhoneId: 'pn-1' }]) },
+    retellPhoneNumber: { findMany: jest.fn().mockResolvedValue([]) },
     account: {
       findFirst: jest.fn().mockResolvedValue({ id: 'acc-1' }),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -40,15 +43,56 @@ jest.mock('@kit/shared/logger', () => ({
   }),
 }));
 jest.mock('@kit/shared/voice-provider', () => ({
-  getAccountProvider: jest.fn().mockResolvedValue('VAPI'),
+  getAccountProvider: mockGetAccountProvider,
 }));
 
 describe('GET /api/call-logs', () => {
   afterEach(() => jest.clearAllMocks());
 
-  it('should return call logs', async () => {
+  it('should return call logs for VAPI provider', async () => {
+    mockGetAccountProvider.mockResolvedValue('VAPI');
     const request = new NextRequest('http://localhost/api/call-logs');
     const response = await GET(request);
     expect(response.status).toBe(200);
+  });
+
+  it('should return call logs for RETELL provider', async () => {
+    mockGetAccountProvider.mockResolvedValue('RETELL');
+
+    const { prisma } = require('@kit/prisma');
+    prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([]);
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationSettings: {
+        retellReceptionistAgentId: 'agent-retell-1',
+      },
+    });
+
+    jest.mock('@kit/shared/retell/retell.service', () => ({
+      createRetellService: jest.fn().mockReturnValue({
+        listCalls: jest.fn().mockResolvedValue([
+          {
+            call_id: 'retell-call-1',
+            call_status: 'ended',
+            start_timestamp: Date.now() - 60_000,
+            end_timestamp: Date.now(),
+            from_number: '+14165551234',
+            direction: 'inbound',
+            call_analysis: {
+              call_outcome: 'appointment_booked',
+              patient_name: 'Test Patient',
+              call_summary: 'Patient booked a cleaning',
+            },
+          },
+        ]),
+      }),
+    }), { virtual: true });
+
+    const request = new NextRequest('http://localhost/api/call-logs');
+    const response = await GET(request);
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.calls).toBeDefined();
+    expect(data.pagination).toBeDefined();
   });
 });

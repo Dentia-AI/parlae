@@ -329,10 +329,14 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
   const outcome = (() => {
     const o = analysis?.call_outcome;
     if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
-    if (o === 'transferred_to_staff' || analysis?.transferred_to_staff) return 'TRANSFERRED';
-    if (o === 'insurance_verified') return 'INSURANCE_INQUIRY';
+    if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+    if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
+    if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
+    if (o === 'caller_hung_up') return 'HUNG_UP';
+    if (o === 'emergency_handled') return 'EMERGENCY';
+    if (o === 'appointment_rescheduled') return 'RESCHEDULED';
+    if (o === 'appointment_cancelled') return 'CANCELLED';
     if (o === 'payment_plan_discussed') return 'PAYMENT_PLAN';
-    if (o === 'information_provided') return 'INFORMATION';
     return 'OTHER';
   })();
 

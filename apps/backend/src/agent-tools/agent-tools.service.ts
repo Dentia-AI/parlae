@@ -92,14 +92,11 @@ export class AgentToolsService {
         phoneNumberId: call.phoneNumberId,
       });
 
-      // Get clinic and phone configuration
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { account: true },
-      });
+      // Resolve the phone record (works for both Vapi and Retell)
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord) {
-        this.logger.error({ phoneNumberId: call.phoneNumberId });
+        this.logger.error({ phoneNumberId: call.phoneNumberId, accountId: payload.accountId });
         return {
           error: 'Configuration not found',
           message:
@@ -108,7 +105,6 @@ export class AgentToolsService {
       }
 
       // Check if transfer is enabled
-      // TODO: Add transferEnabled and staffForwardNumber to schema
       const transferEnabled = (phoneRecord as any).transferEnabled;
       const staffForwardNumber = (phoneRecord as any).staffForwardNumber;
       
@@ -125,21 +121,11 @@ export class AgentToolsService {
       }
 
       // Get function call parameters
-      const functionCall = message.functionCall;
-      const reason = functionCall.parameters.reason || 'emergency';
-      const summary =
-        functionCall.parameters.summary || 'Patient requested transfer';
-      const patientInfo = functionCall.parameters.patientInfo || {};
-
-      // Log the transfer request
-      // Call data is managed by Vapi — no local call log to update.
-      // await this.prisma.callReference.findFirst({
-      //   where: { vapiCallId: call.id },
-      //     transferReason: reason,
-      //     transferSummary: summary,
-      //     updatedAt: new Date(),
-      //   },
-      // });
+      const functionCall = message?.functionCall || payload?.functionCall;
+      const params = functionCall?.parameters || {};
+      const reason = params.reason || 'emergency';
+      const summary = params.summary || 'Patient requested transfer';
+      const patientInfo = params.patientInfo || {};
 
       // Alert staff via SMS
       if (process.env.TWILIO_MESSAGING_SERVICE_SID) {
@@ -794,10 +780,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true },
-      });
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
         return {
@@ -963,10 +946,10 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) {
         // ── Google Calendar Fallback ──
-        return this.getAppointmentsViaGoogleCalendar(call, params);
+        return this.getAppointmentsViaGoogleCalendar(call, params, sikkaService.accountId);
       }
 
       const today = new Date();
@@ -1038,10 +1021,10 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) {
         // ── Google Calendar Fallback ──
-        return this.rescheduleAppointmentViaGoogleCalendar(call, params);
+        return this.rescheduleAppointmentViaGoogleCalendar(call, params, sikkaService.accountId);
       }
 
       const updates: any = {};
@@ -1134,7 +1117,7 @@ export class AgentToolsService {
         };
       }
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) {
         return sikkaService.error || {
           error: 'PMS not available',
@@ -1197,7 +1180,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.getPatientInsurance(params.patientId);
@@ -1258,7 +1241,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.getPatientBalance(params.patientId);
@@ -1313,7 +1296,7 @@ export class AgentToolsService {
     try {
       const { call } = payload;
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.getProviders();
@@ -1367,6 +1350,17 @@ export class AgentToolsService {
   // ============================================================================
 
   /**
+   * Resolve PMS integration for an account (provider-agnostic).
+   * Used when we have an accountId but no VapiPhoneNumber record
+   * (e.g. Retell calls).
+   */
+  private async resolvePmsForAccount(accountId: string) {
+    return this.prisma.pmsIntegration.findFirst({
+      where: { accountId },
+    });
+  }
+
+  /**
    * Unified save (add or update) insurance — routes based on presence of insuranceId.
    */
   async saveInsurance(payload: any) {
@@ -1387,7 +1381,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.addPatientInsurance(params.patientId, {
@@ -1424,7 +1418,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.updatePatientInsurance(params.patientId, params.insuranceId, {
@@ -1459,7 +1453,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const insuranceResult = await sikkaService.service.getPatientInsurance(params.patientId);
@@ -1496,7 +1490,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.getPaymentHistory(params.patientId);
@@ -1532,7 +1526,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      const sikkaService = await this.getSikkaService(call);
+      const sikkaService = await this.getSikkaService(call, payload.accountId);
       if (!sikkaService.service) return sikkaService.error;
 
       const result = await sikkaService.service.processPayment({
@@ -1593,39 +1587,60 @@ export class AgentToolsService {
     }
   }
 
-  private async getSikkaService(call: any): Promise<{
+  private async getSikkaService(call: any, fallbackAccountId?: string): Promise<{
     service: any;
     pmsIntegrationId: string;
     accountId?: string;
     error?: any;
   }> {
     try {
-      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-        where: { vapiPhoneId: call.phoneNumberId },
-        include: { pmsIntegration: true },
-      });
-
-      if (!phoneRecord?.pmsIntegration) {
-        return {
-          service: null,
-          pmsIntegrationId: '',
-          accountId: phoneRecord?.accountId,
-        };
+      // 1. Try VapiPhoneNumber (Vapi calls)
+      if (call?.phoneNumberId) {
+        const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
+          where: { vapiPhoneId: call.phoneNumberId },
+          include: { pmsIntegration: true },
+        });
+        if (phoneRecord?.pmsIntegration) {
+          const { PmsService } = await import('../pms/pms.service');
+          const pmsService = new PmsService(this.prisma, this.secretsService);
+          const service = await pmsService.getPmsService(
+            phoneRecord.accountId,
+            phoneRecord.pmsIntegration.provider,
+            phoneRecord.pmsIntegration.config,
+          );
+          return { service, pmsIntegrationId: phoneRecord.pmsIntegration.id, accountId: phoneRecord.accountId };
+        }
+        if (phoneRecord) {
+          return { service: null, pmsIntegrationId: '', accountId: phoneRecord.accountId };
+        }
       }
 
-      const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
-      const service = await pmsService.getPmsService(
-        phoneRecord.accountId,
-        phoneRecord.pmsIntegration.provider,
-        phoneRecord.pmsIntegration.config,
-      );
+      // 2. Resolve accountId from Retell agent or fallback
+      let accountId = fallbackAccountId;
+      if (!accountId && call?.agent_id) {
+        const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
+          where: { retellAgentId: call.agent_id },
+          select: { accountId: true },
+        });
+        accountId = retellPhone?.accountId;
+      }
 
-      return {
-        service,
-        pmsIntegrationId: phoneRecord.pmsIntegration.id,
-        accountId: phoneRecord.accountId,
-      };
+      if (accountId) {
+        const pmsIntegration = await this.resolvePmsForAccount(accountId);
+        if (pmsIntegration) {
+          const { PmsService } = await import('../pms/pms.service');
+          const pmsService = new PmsService(this.prisma, this.secretsService);
+          const service = await pmsService.getPmsService(
+            accountId,
+            pmsIntegration.provider,
+            pmsIntegration.config,
+          );
+          return { service, pmsIntegrationId: pmsIntegration.id, accountId };
+        }
+        return { service: null, pmsIntegrationId: '', accountId };
+      }
+
+      return { service: null, pmsIntegrationId: '' };
     } catch (error) {
       this.logger.error(error);
       return {
@@ -1645,14 +1660,30 @@ export class AgentToolsService {
   // ============================================================================
 
   /**
-   * Helper: Get accountId from Vapi call context
+   * Helper: Get accountId from call context (supports both Vapi and Retell)
    */
-  private async getAccountIdFromCall(call: any): Promise<string | null> {
-    const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-      where: { vapiPhoneId: call.phoneNumberId },
-      select: { accountId: true },
-    });
-    return phoneRecord?.accountId || null;
+  private async getAccountIdFromCall(call: any, fallbackAccountId?: string): Promise<string | null> {
+    if (fallbackAccountId) return fallbackAccountId;
+
+    // Vapi: lookup by phoneNumberId
+    if (call?.phoneNumberId) {
+      const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
+        where: { vapiPhoneId: call.phoneNumberId },
+        select: { accountId: true },
+      });
+      if (vapiPhone) return vapiPhone.accountId;
+    }
+
+    // Retell: lookup by agent_id
+    if (call?.agent_id) {
+      const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
+        where: { retellAgentId: call.agent_id },
+        select: { accountId: true },
+      });
+      if (retellPhone) return retellPhone.accountId;
+    }
+
+    return null;
   }
 
   /**
@@ -1664,24 +1695,46 @@ export class AgentToolsService {
    * when the vapiPhoneNumber table is out of sync.
    */
   private async resolvePhoneRecord(call: any, fallbackAccountId?: string) {
-    const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
-      where: { vapiPhoneId: call?.phoneNumberId },
-      include: { pmsIntegration: true, account: true },
-    });
+    // 1. Try VapiPhoneNumber (Vapi calls have phoneNumberId)
+    if (call?.phoneNumberId) {
+      const phoneRecord = await this.prisma.vapiPhoneNumber.findFirst({
+        where: { vapiPhoneId: call.phoneNumberId },
+        include: { pmsIntegration: true, account: true },
+      });
+      if (phoneRecord) return phoneRecord;
+    }
 
-    if (phoneRecord) return phoneRecord;
+    // 2. Try RetellPhoneNumber by agent_id (Retell calls)
+    if (call?.agent_id) {
+      const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
+        where: { retellAgentId: call.agent_id },
+        include: { account: true },
+      });
+      if (retellPhone) {
+        const pmsIntegration = await this.resolvePmsForAccount(retellPhone.accountId);
+        return {
+          accountId: retellPhone.accountId,
+          phoneNumber: retellPhone.phoneNumber,
+          pmsIntegration,
+          account: retellPhone.account,
+        } as any;
+      }
+    }
 
-    // vapiPhoneNumber table doesn't have this phone — use the fallback accountId
-    // that the webhook controller resolved via phoneIntegrationSettings.
+    // 3. Fallback: use the pre-resolved accountId from the webhook controller
     if (fallbackAccountId) {
       this.logger.warn(
-        `[resolvePhoneRecord] No vapiPhoneNumber record for vapiPhoneId=${call?.phoneNumberId}, using fallback accountId=${fallbackAccountId}`,
+        `[resolvePhoneRecord] No phone record found, using fallback accountId=${fallbackAccountId}`,
       );
+      const [account, pmsIntegration] = await Promise.all([
+        this.prisma.account.findUnique({ where: { id: fallbackAccountId } }),
+        this.resolvePmsForAccount(fallbackAccountId),
+      ]);
       return {
         accountId: fallbackAccountId,
         vapiPhoneId: call?.phoneNumberId,
-        pmsIntegration: null,
-        account: await this.prisma.account.findUnique({ where: { id: fallbackAccountId } }),
+        pmsIntegration,
+        account,
       } as any;
     }
 
@@ -2203,8 +2256,9 @@ export class AgentToolsService {
   private async getAppointmentsViaGoogleCalendar(
     call: any,
     params: any,
+    fallbackAccountId?: string,
   ) {
-    const accountId = await this.getAccountIdFromCall(call);
+    const accountId = await this.getAccountIdFromCall(call, fallbackAccountId);
     const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
 
     if (!gcAvailable) {
@@ -2294,8 +2348,9 @@ export class AgentToolsService {
   private async rescheduleAppointmentViaGoogleCalendar(
     call: any,
     params: any,
+    fallbackAccountId?: string,
   ) {
-    const accountId = await this.getAccountIdFromCall(call);
+    const accountId = await this.getAccountIdFromCall(call, fallbackAccountId);
     const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
 
     if (!gcAvailable) {

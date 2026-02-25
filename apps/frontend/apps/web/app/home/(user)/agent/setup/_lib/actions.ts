@@ -1495,11 +1495,11 @@ export const updateVoiceAction = enhanceAction(
         };
       }
 
-      // Fallback: Vapi squad voice update
+      // Fallback: Vapi squad voice update (only reached for non-Retell accounts)
       const vapiSquadId = settings.vapiSquadId as string | undefined;
 
       if (!vapiSquadId) {
-        return { success: false, error: 'No deployed agent found. Please complete the setup wizard first.' };
+        return { success: false, error: 'No deployed agent found. Please re-run the setup wizard.' };
       }
 
       const squad = await vapiService.getSquad(vapiSquadId);

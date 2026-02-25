@@ -56,9 +56,9 @@ export class VoiceRoutingController {
       // Resolution order:
       // 1. Account.voiceProviderOverride (per-account testing)
       // 2. VoiceProviderToggle.activeProvider (global emergency switch)
-      // 3. Default: VAPI
+      // 3. Default: RETELL
 
-      // Look up the account that owns this number
+      // Look up the account that owns this number (check both providers)
       const vapiPhone = await this.prisma.vapiPhoneNumber.findFirst({
         where: { phoneNumber: calledNumber },
         select: {
@@ -68,30 +68,46 @@ export class VoiceRoutingController {
         },
       });
 
+      const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
+        where: { phoneNumber: calledNumber, isActive: true },
+        select: {
+          accountId: true,
+          phoneNumber: true,
+          account: { select: { voiceProviderOverride: true } },
+        },
+      });
+
+      const ownerAccount = vapiPhone?.account || retellPhone?.account;
+      const ownerAccountId = vapiPhone?.accountId || retellPhone?.accountId;
+
       // Determine effective provider: per-account override > global toggle > default
       let activeProvider: string;
 
-      if (vapiPhone?.account?.voiceProviderOverride) {
-        activeProvider = vapiPhone.account.voiceProviderOverride;
+      if (ownerAccount?.voiceProviderOverride) {
+        activeProvider = ownerAccount.voiceProviderOverride;
         this.logger.log(
-          `[VoiceRouting] Per-account override active for ${vapiPhone.accountId}: ${activeProvider}`,
+          `[VoiceRouting] Per-account override active for ${ownerAccountId}: ${activeProvider}`,
         );
       } else {
         const toggle = await this.prisma.voiceProviderToggle.findFirst({
           where: { id: 1 },
         });
-        activeProvider = toggle?.activeProvider || 'VAPI';
+        activeProvider = toggle?.activeProvider || 'RETELL';
       }
 
       let forwardTo: string | null = null;
 
       if (activeProvider === 'RETELL') {
-        if (vapiPhone) {
-          const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
-            where: { accountId: vapiPhone.accountId, isActive: true },
+        // If the inbound number IS already a Retell number, route directly
+        if (retellPhone) {
+          forwardTo = retellPhone.phoneNumber;
+        } else if (ownerAccountId) {
+          // Number belongs to Vapi, but provider is RETELL — find Retell number for same account
+          const accountRetellPhone = await this.prisma.retellPhoneNumber.findFirst({
+            where: { accountId: ownerAccountId, isActive: true },
             select: { phoneNumber: true },
           });
-          forwardTo = retellPhone?.phoneNumber || null;
+          forwardTo = accountRetellPhone?.phoneNumber || null;
         }
 
         if (!forwardTo) {

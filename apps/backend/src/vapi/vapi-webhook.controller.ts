@@ -881,7 +881,7 @@ export class VapiWebhookController {
     try {
       await this.prisma.callReference.upsert({
         where: { vapiCallId },
-        create: { vapiCallId, accountId },
+        create: { vapiCallId, accountId, provider: 'VAPI' },
         update: {},
       });
 
