@@ -177,6 +177,14 @@ function buildEndCallTool(): RetellEndCallTool {
 // Build transfer_call tool (for Emergency agent → clinic phone)
 // ---------------------------------------------------------------------------
 
+function normalizeToE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.length >= 12) return `+${digits}`;
+  return phone.startsWith('+') ? phone : `+${phone}`;
+}
+
 function buildTransferToClinicTool(clinicPhone: string): RetellTransferCallTool {
   return {
     type: 'transfer_call',
@@ -185,7 +193,7 @@ function buildTransferToClinicTool(clinicPhone: string): RetellTransferCallTool 
       'Transfer the caller directly to clinic staff for immediate assistance. Use for emergencies that need human intervention.',
     transfer_destination: {
       type: 'predefined',
-      number: clinicPhone,
+      number: normalizeToE164(clinicPhone),
     },
     transfer_option: {
       type: 'warm_transfer',

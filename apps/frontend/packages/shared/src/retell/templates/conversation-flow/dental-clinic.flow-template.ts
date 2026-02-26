@@ -74,6 +74,26 @@ function hydratePrompt(text: string, clinicName: string): string {
   return text.replace(/\{\{clinicName\}\}/g, clinicName);
 }
 
+/**
+ * Normalize a phone number to E.164 format.
+ * Handles: 5858578357, +5858578357, 15858578357, +15858578357, (585) 857-8357
+ * Returns null if the number can't be normalized.
+ */
+function normalizeToE164(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+
+  // 10-digit North American: assume +1
+  if (digits.length === 10) return `+1${digits}`;
+
+  // 11-digit starting with 1: already has country code
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+
+  // Already looks international (12+ digits): just add +
+  if (digits.length >= 12) return `+${digits}`;
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Tool conversion: RetellCustomTool -> ConversationFlowTool
 // ---------------------------------------------------------------------------
@@ -416,14 +436,15 @@ export function buildDentalClinicFlow(
     faqNode,
   ];
 
-  // Transfer call node (only if clinic phone is configured)
-  if (config.clinicPhone) {
+  // Transfer call node (only if clinic phone is configured and valid E.164)
+  const normalizedClinicPhone = config.clinicPhone ? normalizeToE164(config.clinicPhone) : null;
+  if (normalizedClinicPhone) {
     nodes.push({
       id: 'transfer_clinic',
       type: 'transfer_call',
       transfer_destination: {
         type: 'predefined',
-        number: config.clinicPhone.startsWith('+') ? config.clinicPhone : `+${config.clinicPhone}`,
+        number: normalizedClinicPhone,
       },
       transfer_option: {
         type: 'cold_transfer',
