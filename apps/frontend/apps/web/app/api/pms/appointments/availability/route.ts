@@ -58,7 +58,7 @@ async function authenticateRequest(request: NextRequest) {
     authenticated: true, 
     accountId, 
     data, 
-    vapiCallId: data.call?.id 
+    callId: data.call?.id 
   };
 }
 
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const { accountId, vapiCallId } = auth;
+    const { accountId, callId } = auth;
     
     // 2. Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         action: 'checkAvailability',
         endpoint: '/api/pms/appointments/availability',
         method: 'GET',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(query),

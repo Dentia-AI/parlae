@@ -21,7 +21,7 @@ export async function GET(
   try {
     const session = await requireSession();
     const userId = session.user?.id;
-    const { id: vapiCallId } = await params;
+    const { id: callId } = await params;
     const logger = await getLogger();
 
     if (!userId) {
@@ -40,7 +40,7 @@ export async function GET(
     // Verify the call belongs to this account via CallReference
     const callRef = await prisma.callReference.findFirst({
       where: {
-        vapiCallId,
+        callId,
         accountId: account.id,
       },
     });
@@ -51,14 +51,14 @@ export async function GET(
     if (callProvider === 'RETELL') {
       const { createRetellService } = await import('@kit/shared/retell/retell.service');
       const retell = createRetellService();
-      const retellCall = await retell.getCall(vapiCallId);
+      const retellCall = await retell.getCall(callId);
 
       if (!retellCall) {
         return NextResponse.json({ error: 'Call not found' }, { status: 404 });
       }
 
       logger.info({
-        userId, callId: vapiCallId, provider: 'RETELL', action: 'viewed_call_detail',
+        userId, callId: callId, provider: 'RETELL', action: 'viewed_call_detail',
       }, '[Call Logs] Call detail accessed');
 
       return NextResponse.json(mapRetellCallToDetail(retellCall));
@@ -66,7 +66,7 @@ export async function GET(
 
     // Fetch full call data from Vapi
     const vapiService = createVapiService();
-    const call = await vapiService.getCall(vapiCallId);
+    const call = await vapiService.getCall(callId);
 
     if (!call) {
       return NextResponse.json({ error: 'Call not found' }, { status: 404 });
@@ -101,7 +101,7 @@ export async function GET(
 
       try {
         await prisma.callReference.create({
-          data: { vapiCallId, accountId: account.id },
+          data: { callId, accountId: account.id },
         });
       } catch {
         // Ignore duplicate key
@@ -109,7 +109,7 @@ export async function GET(
     }
 
     logger.info({
-      userId, vapiCallId, action: 'viewed_call_detail',
+      userId, callId, action: 'viewed_call_detail',
     }, '[Call Logs] Call detail accessed');
 
     const isAdmin = isAdminUser(userId);
@@ -201,7 +201,7 @@ function mapVapiCallToDetail(
 
   return {
     id: call.id,
-    vapiCallId: call.id,
+    callId: call.id,
 
     phoneNumber: call.customer?.number || call.phoneNumber?.number || 'unknown',
     callType: call.type === 'outboundPhoneCall' ? 'OUTBOUND' : 'INBOUND',
@@ -342,7 +342,7 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
 
   return {
     id: call.call_id,
-    vapiCallId: call.call_id,
+    callId: call.call_id,
     phoneNumber: call.from_number || 'unknown',
     callType: call.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
     direction: call.direction || 'inbound',

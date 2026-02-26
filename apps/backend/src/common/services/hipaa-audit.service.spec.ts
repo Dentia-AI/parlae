@@ -32,7 +32,7 @@ describe('HipaaAuditService', () => {
       action: 'lookupPatient',
       endpoint: '/patients/search',
       method: 'GET',
-      vapiCallId: 'call-123',
+      callId: 'call-123',
       requestSummary: 'Patient lookup',
       responseStatus: 200,
       responseTime: 150,

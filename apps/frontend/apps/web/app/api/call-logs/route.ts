@@ -76,7 +76,7 @@ function mapVapiCallToListItem(
 
   return {
     id: call.id,
-    vapiCallId: call.id,
+    callId: call.id,
     phoneNumber: call.customer?.number || call.phoneNumber?.number || 'unknown',
     callType: call.type === 'outboundPhoneCall' ? 'OUTBOUND' : 'INBOUND',
     duration,
@@ -127,7 +127,7 @@ function inferOutcome(structuredData: Record<string, any>): string {
  */
 function mapRetellCallToListItem(call: RetellCallResponse): {
   id: string;
-  vapiCallId: string;
+  callId: string;
   phoneNumber: string;
   callType: string;
   duration: number | null;
@@ -168,7 +168,7 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
 
   return {
     id: call.call_id,
-    vapiCallId: call.call_id,
+    callId: call.call_id,
     phoneNumber: call.from_number || 'unknown',
     callType: call.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
     duration,

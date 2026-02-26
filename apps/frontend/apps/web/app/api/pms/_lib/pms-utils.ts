@@ -73,7 +73,7 @@ export async function logPmsAccess(params: {
   endpoint: string;
   method: string;
   userId?: string;
-  vapiCallId?: string;
+  callId?: string;
   ipAddress?: string;
   userAgent?: string;
   requestSummary?: string;
@@ -92,7 +92,7 @@ export async function logPmsAccess(params: {
         endpoint: params.endpoint,
         method: params.method,
         userId: params.userId,
-        vapiCallId: params.vapiCallId,
+        callId: params.callId,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
         requestSummary: params.requestSummary,

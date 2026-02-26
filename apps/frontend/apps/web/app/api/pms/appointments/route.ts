@@ -115,7 +115,7 @@ async function authenticateRequest(request: NextRequest) {
     authenticated: true, 
     accountId, 
     data, 
-    vapiCallId: data.call?.id 
+    callId: data.call?.id 
   };
 }
 
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const { accountId, vapiCallId } = auth;
+    const { accountId, callId } = auth;
     
     // 2. Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
         action: 'getAppointments',
         endpoint: '/api/pms/appointments',
         method: 'GET',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(redactPhi(filters)),
@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { accountId, data, vapiCallId } = auth;
+    const { accountId, data, callId } = auth;
     
     // 2. Validate request body
     const validation = bookAppointmentSchema.safeParse(data.data || data);
@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
           action: 'bookAppointment',
           endpoint: '/api/pms/appointments',
           method: 'POST',
-          vapiCallId,
+          callId,
           ipAddress: request.headers.get('x-forwarded-for') || undefined,
           userAgent: request.headers.get('user-agent') || undefined,
           requestSummary: JSON.stringify(redactPhi(appointmentData)),
@@ -399,7 +399,7 @@ export async function POST(request: NextRequest) {
           notes: appointmentData.notes,
           providerId: appointmentData.providerId,
         },
-        vapiCallId,
+        callId,
       );
       
       // Send confirmation if requested and booking succeeded
@@ -464,7 +464,7 @@ export async function PATCH(
       );
     }
     
-    const { accountId, data, vapiCallId } = auth;
+    const { accountId, data, callId } = auth;
     
     // 2. Validate request body
     const validation = rescheduleAppointmentSchema.safeParse(data.data || data);
@@ -519,7 +519,7 @@ export async function PATCH(
         action: 'rescheduleAppointment',
         endpoint: `/api/pms/appointments/${appointmentId}`,
         method: 'PATCH',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(redactPhi(updates)),
@@ -591,7 +591,7 @@ export async function DELETE(
       );
     }
     
-    const { accountId, data, vapiCallId } = auth;
+    const { accountId, data, callId } = auth;
     
     // 2. Validate request body
     const validation = cancelAppointmentSchema.safeParse(data.data || data);
@@ -638,7 +638,7 @@ export async function DELETE(
         action: 'cancelAppointment',
         endpoint: `/api/pms/appointments/${appointmentId}`,
         method: 'DELETE',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(redactPhi(cancelData)),

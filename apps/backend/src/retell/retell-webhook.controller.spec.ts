@@ -10,7 +10,7 @@ describe('RetellWebhookController', () => {
 
   const mockPrisma = {
     callReference: {
-      upsert: jest.fn().mockResolvedValue({ vapiCallId: 'call-1', accountId: 'acc-1' }),
+      upsert: jest.fn().mockResolvedValue({ callId: 'call-1', accountId: 'acc-1' }),
     },
     retellPhoneNumber: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -113,9 +113,9 @@ describe('RetellWebhookController', () => {
       expect(result).toEqual({ received: true });
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { vapiCallId: 'retell-call-1' },
+          where: { callId: 'retell-call-1' },
           create: expect.objectContaining({
-            vapiCallId: 'retell-call-1',
+            callId: 'retell-call-1',
             accountId: 'acc-1',
             provider: 'RETELL',
           }),

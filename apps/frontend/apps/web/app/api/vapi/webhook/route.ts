@@ -12,7 +12,7 @@ import { getLogger } from '@kit/shared/logger';
  * - function-call: When AI wants to execute a function
  *
  * All call data (transcripts, recordings, analytics) lives in Vapi.
- * We only store a thin CallReference (vapiCallId -> accountId) for scoping.
+ * We only store a thin CallReference (callId -> accountId) for scoping.
  */
 export async function POST(request: Request) {
   const logger = await getLogger();
@@ -147,14 +147,14 @@ async function handleEndOfCall(payload: any) {
   const logger = await getLogger();
 
   const { call } = payload.message;
-  const vapiCallId = call?.id;
+  const callId = call?.id;
 
   logger.info({
-    callId: vapiCallId,
+    callId: callId,
     duration: call?.duration,
   }, '[Vapi Webhook] Call ended — creating call reference');
 
-  if (!vapiCallId) {
+  if (!callId) {
     logger.warn('[Vapi Webhook] No call ID in end-of-call report');
     return NextResponse.json({ received: true });
   }
@@ -163,34 +163,34 @@ async function handleEndOfCall(payload: any) {
     const accountId = await resolveAccountFromCall(call, logger);
 
     if (!accountId) {
-      logger.warn({ callId: vapiCallId }, '[Vapi Webhook] Skipping call reference — no account found');
+      logger.warn({ callId: callId }, '[Vapi Webhook] Skipping call reference — no account found');
       return NextResponse.json({ received: true });
     }
 
     const callRef = await prisma.callReference.create({
       data: {
-        vapiCallId,
+        callId,
         accountId,
       },
     });
 
     logger.info({
-      callId: vapiCallId,
+      callId: callId,
       callRefId: callRef.id,
       accountId,
     }, '[Vapi Webhook] Call reference created');
 
     return NextResponse.json({ received: true, callRefId: callRef.id });
   } catch (error) {
-    // If duplicate vapiCallId, that's fine — reference already exists
+    // If duplicate callId, that's fine — reference already exists
     if (error instanceof Error && error.message.includes('Unique constraint')) {
-      logger.info({ callId: vapiCallId }, '[Vapi Webhook] Call reference already exists');
+      logger.info({ callId: callId }, '[Vapi Webhook] Call reference already exists');
       return NextResponse.json({ received: true });
     }
 
     logger.error({
       error: error instanceof Error ? error.message : error,
-      callId: vapiCallId,
+      callId: callId,
     }, '[Vapi Webhook] Failed to create call reference');
 
     return NextResponse.json({ received: true, error: 'Failed to create call reference' });

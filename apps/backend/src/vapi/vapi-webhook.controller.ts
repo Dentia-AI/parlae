@@ -467,11 +467,11 @@ export class VapiWebhookController {
   private async handleStatusUpdate(payload: any) {
     const status = payload?.message?.status;
     const call = payload?.message?.call || {};
-    const vapiCallId = call.id;
+    const callId = call.id;
 
-    this.logger.log(`Status update: ${status} for call ${vapiCallId}`);
+    this.logger.log(`Status update: ${status} for call ${callId}`);
 
-    if (status === 'in-progress' && vapiCallId) {
+    if (status === 'in-progress' && callId) {
       await this.ensureCallReference(call, payload?.message);
     }
 
@@ -485,11 +485,11 @@ export class VapiWebhookController {
    * since all call data stays in Vapi as the source of truth.
    */
   private async handleEndOfCall(payload: any) {
-    const vapiCallId = payload?.message?.call?.id;
-    this.logger.log(`End-of-call for ${vapiCallId}`);
+    const callId = payload?.message?.call?.id;
+    this.logger.log(`End-of-call for ${callId}`);
 
     // Safety net: create CallReference if status-update didn't fire
-    if (vapiCallId) {
+    if (callId) {
       await this.ensureCallReference(payload?.message?.call || {}, payload?.message);
     }
 
@@ -867,30 +867,30 @@ export class VapiWebhookController {
    * Uses upsert for idempotency — no duplicate-key errors.
    */
   private async ensureCallReference(call: any, message?: any): Promise<void> {
-    const vapiCallId = call.id;
-    if (!vapiCallId) return;
+    const callId = call.id;
+    if (!callId) return;
 
     const accountId = await this.resolveAccountFromCall(call, message);
     if (!accountId) {
       this.logger.warn(
-        `Skipping call reference for ${vapiCallId} — no account found`,
+        `Skipping call reference for ${callId} — no account found`,
       );
       return;
     }
 
     try {
       await this.prisma.callReference.upsert({
-        where: { vapiCallId },
-        create: { vapiCallId, accountId, provider: 'VAPI' },
+        where: { callId },
+        create: { callId, accountId, provider: 'VAPI' },
         update: {},
       });
 
       this.logger.log(
-        `Call reference ensured for call ${vapiCallId}`,
+        `Call reference ensured for call ${callId}`,
       );
     } catch (dbError: any) {
       this.logger.error(
-        `Failed to save call reference for ${vapiCallId}: ${dbError instanceof Error ? dbError.message : dbError}`,
+        `Failed to save call reference for ${callId}: ${dbError instanceof Error ? dbError.message : dbError}`,
       );
     }
   }

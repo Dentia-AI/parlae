@@ -10,7 +10,7 @@ export interface VapiCallContext {
   pmsIntegrationId: string;
   phoneNumber: string;
   vapiPhoneId?: string;
-  vapiCallId?: string;
+  callId?: string;
   customerPhone?: string;
   customerName?: string;
 }
@@ -70,7 +70,7 @@ export async function getContextFromVapiCall(vapiPayload: any): Promise<VapiCall
     pmsIntegrationId: vapiPhone.pmsIntegration.id,
     phoneNumber: vapiPhone.phoneNumber,
     vapiPhoneId: vapiPhone.vapiPhoneId,
-    vapiCallId: call.id,
+    callId: call.id,
     customerPhone: customer?.number,
     customerName: customer?.name
   };

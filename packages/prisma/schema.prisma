@@ -852,7 +852,7 @@ model KnowledgeBase {
 // All call data (transcripts, recordings, analytics) is fetched from the provider API on demand.
 model CallReference {
   id         String        @id @default(uuid())
-  vapiCallId String        @unique @map("vapi_call_id") // Also used for Retell call IDs
+  callId     String        @unique @map("call_id")
   accountId  String        @map("account_id")
   provider   VoiceProvider @default(RETELL) @map("provider")
   createdAt  DateTime      @default(now()) @map("created_at")
@@ -987,7 +987,7 @@ model PmsAuditLog {
 
   // User/Agent Context
   userId     String? @map("user_id")
-  vapiCallId String? @map("vapi_call_id")
+  callId     String? @map("call_id")
   ipAddress  String? @map("ip_address")
   userAgent  String? @map("user_agent")
 
@@ -1013,7 +1013,7 @@ model PmsAuditLog {
   @@index([pmsIntegrationId])
   @@index([createdAt])
   @@index([action])
-  @@index([vapiCallId])
+  @@index([callId])
   @@index([patientId])
   @@map("pms_audit_logs")
 }

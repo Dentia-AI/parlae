@@ -352,7 +352,7 @@ export interface PmsAuditLog {
   endpoint: string;
   method: string;
   userId?: string;
-  vapiCallId?: string;
+  callId?: string;
   ipAddress?: string;
   userAgent?: string;
   requestSummary?: string;

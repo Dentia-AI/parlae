@@ -36,7 +36,7 @@ export class GoogleCalendarController {
       accountId: string;
       patient: PatientInfo;
       appointment: AppointmentDetails;
-      vapiCallId?: string;
+      callId?: string;
     },
   ) {
     try {
@@ -44,7 +44,7 @@ export class GoogleCalendarController {
         accountId: body.accountId,
         patientName: `${body.patient.firstName} ${body.patient.lastName}`,
         appointmentType: body.appointment.appointmentType,
-        vapiCallId: body.vapiCallId,
+        callId: body.callId,
         msg: 'Creating appointment in Google Calendar',
       });
 

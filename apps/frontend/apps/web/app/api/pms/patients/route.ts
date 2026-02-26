@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
+    const { accountId, pmsIntegrationId: contextPmsIntegrationId, callId } = context;
     pmsIntegrationId = contextPmsIntegrationId;
     
     // 2. Parse query params
@@ -190,7 +190,7 @@ export async function GET(request: NextRequest) {
         action: 'searchPatients',
         endpoint: '/api/pms/patients/search',
         method: 'GET',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify({ query: searchQuery.query }),
@@ -264,7 +264,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { accountId, pmsIntegrationId: contextPmsIntegrationId, vapiCallId } = context;
+    const { accountId, pmsIntegrationId: contextPmsIntegrationId, callId } = context;
     pmsIntegrationId = contextPmsIntegrationId;
     
     // 2. Validate request body
@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
         action: 'createPatient',
         endpoint: '/api/pms/patients',
         method: 'POST',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(redactPhi(patientData)),

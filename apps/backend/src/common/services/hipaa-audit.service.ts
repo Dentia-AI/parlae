@@ -8,7 +8,7 @@ export interface AuditLogEntry {
   endpoint: string;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   userId?: string;
-  vapiCallId?: string;
+  callId?: string;
   ipAddress?: string;
   requestSummary?: string;
   responseStatus: number;
@@ -43,7 +43,7 @@ export class HipaaAuditService {
           "endpoint",
           "method",
           "user_id",
-          "vapi_call_id",
+          "call_id",
           "ip_address",
           "request_summary",
           "response_status",
@@ -59,7 +59,7 @@ export class HipaaAuditService {
           ${entry.endpoint},
           ${entry.method},
           ${entry.userId || null},
-          ${entry.vapiCallId || null},
+          ${entry.callId || null},
           ${entry.ipAddress || null},
           ${entry.requestSummary || null},
           ${entry.responseStatus},

@@ -35,7 +35,7 @@ import {
 
 interface CallLogDetail {
   id: string;
-  vapiCallId: string | null;
+  callId: string | null;
   phoneNumber: string;
   callType: string;
   direction: string;
@@ -570,7 +570,7 @@ export function CallLogDetail({ callId }: { callId: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <DetailRow label="Call ID" value={call.vapiCallId} mono />
+              <DetailRow label="Call ID" value={call.callId} mono />
               <DetailRow label="Type" value={call.callType} />
               <DetailRow label="Status" value={call.status} />
               <DetailRow label="Started" value={formatDateTime(call.callStartedAt)} />

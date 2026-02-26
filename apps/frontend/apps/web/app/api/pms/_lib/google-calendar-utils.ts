@@ -30,7 +30,7 @@ export async function bookGoogleCalendarAppointment(
   accountId: string,
   patient: PatientInfo,
   appointment: AppointmentDetails,
-  vapiCallId?: string,
+  callId?: string,
 ) {
   try {
     // Call backend Google Calendar service
@@ -45,7 +45,7 @@ export async function bookGoogleCalendarAppointment(
           accountId,
           patient,
           appointment,
-          vapiCallId,
+          callId,
         }),
       },
     );

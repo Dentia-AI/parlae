@@ -60,7 +60,7 @@ async function authenticateRequest(request: NextRequest) {
     authenticated: true, 
     accountId, 
     data, 
-    vapiCallId: data.call?.id 
+    callId: data.call?.id 
   };
 }
 
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { accountId, data, vapiCallId } = auth;
+    const { accountId, data, callId } = auth;
     
     // 2. Validate request body
     const validation = createPaymentSchema.safeParse(data.data || data);
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
         action: 'processPayment',
         endpoint: '/api/pms/payments',
         method: 'POST',
-        vapiCallId,
+        callId,
         ipAddress: request.headers.get('x-forwarded-for') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
         requestSummary: JSON.stringify(redactPhi(paymentData)),

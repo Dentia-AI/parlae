@@ -87,9 +87,9 @@ export class RetellWebhookController {
     if (accountId) {
       try {
         await this.prisma.callReference.upsert({
-          where: { vapiCallId: callId },
+          where: { callId: callId },
           create: {
-            vapiCallId: callId,
+            callId: callId,
             accountId,
             provider: 'RETELL',
           },

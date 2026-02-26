@@ -525,7 +525,7 @@ export class RetellService {
     sort_order?: 'ascending' | 'descending';
     limit?: number;
   }): Promise<RetellCallResponse[]> {
-    const result = await this.request<RetellCallResponse[]>('POST', '/list-calls', opts || {});
+    const result = await this.request<RetellCallResponse[]>('POST', '/v2/list-calls', opts || {});
     return result || [];
   }
 

@@ -183,8 +183,8 @@ async function testPmsIntegration() {
       if (log.patientId) {
         console.log(`     Patient: ${log.patientId}`);
       }
-      if (log.vapiCallId) {
-        console.log(`     Vapi Call: ${log.vapiCallId}`);
+      if (log.callId) {
+        console.log(`     Call: ${log.callId}`);
       }
     });
     

@@ -37,7 +37,7 @@ import {
 
 interface CallLog {
   id: string;
-  vapiCallId: string | null;
+  callId: string | null;
   phoneNumber: string;
   callType: string;
   duration: number | null;
