@@ -285,7 +285,7 @@ export class AgentToolsService {
         duration: params.duration || 30,
         summary: `Booked ${params.appointmentType || params.type || 'General'} appointment, ${params.duration || 30} min${appointment.providerName ? ` with ${appointment.providerName}` : ''}`,
         pmsProvider: phoneRecord.pmsIntegration?.provider,
-        writebackId: appointment.writebackId,
+        writebackId: appointment.metadata?.writebackId as string | undefined,
       }).catch(() => {});
 
       return {
@@ -2068,13 +2068,13 @@ export class AgentToolsService {
         action: 'book_appointment',
         category: 'appointment',
         callId: call?.id,
-        externalResourceId: result.eventId,
+        externalResourceId: result.eventId ?? undefined,
         externalResourceType: 'event',
         appointmentTime: startTime.toISOString(),
         appointmentType,
         duration,
         summary: `Booked ${appointmentType} appointment, ${duration} min on Google Calendar`,
-        calendarEventId: result.eventId,
+        calendarEventId: result.eventId ?? undefined,
       }).catch(() => {});
 
       // Fire-and-forget: send clinic notification email about the new booking

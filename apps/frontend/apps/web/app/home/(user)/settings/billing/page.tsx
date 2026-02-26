@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Button } from '@kit/ui/button';
 import { Slider } from '@kit/ui/slider';
-
 
 import {
   Phone,
@@ -19,6 +18,9 @@ import {
   Sparkles,
   Info,
   Lock,
+  ExternalLink,
+  FileText,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
 import { toast } from '@kit/ui/sonner';
@@ -60,6 +62,23 @@ const INCLUDED_BADGES = [
   'Call Logs', 'SMS Confirm', 'Email Confirm',
 ];
 
+const CARD_BRAND_LABELS: Record<string, string> = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'American Express',
+  discover: 'Discover',
+  diners: 'Diners Club',
+  jcb: 'JCB',
+  unionpay: 'UnionPay',
+};
+
+interface CardInfo {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
 export default function SettingsBillingPage() {
   const csrfToken = useCsrfToken();
   const [locations, setLocations] = useState(1);
@@ -67,6 +86,58 @@ export default function SettingsBillingPage() {
   const [callVolume, setCallVolume] = useState(500);
   const [currency, setCurrency] = useState<Currency>('C$');
   const [isSaving, setIsSaving] = useState(false);
+
+  const [cardInfo, setCardInfo] = useState<CardInfo | null>(null);
+  const [hasPaymentMethod, setHasPaymentMethod] = useState(false);
+  const [cardLoading, setCardLoading] = useState(true);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+
+  const loadPaymentMethod = useCallback(async () => {
+    try {
+      setCardLoading(true);
+      const resp = await fetch('/api/stripe/payment-method');
+      if (resp.ok) {
+        const data = await resp.json();
+        setHasPaymentMethod(data.hasPaymentMethod);
+        setCardInfo(data.card ?? null);
+      }
+    } catch {
+      // Silently fail — card info is non-critical
+    } finally {
+      setCardLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPaymentMethod();
+  }, [loadPaymentMethod]);
+
+  const openBillingPortal = async (flow?: 'payment_method_update') => {
+    const setLoading = flow === 'payment_method_update' ? setPortalLoading : setInvoiceLoading;
+    setLoading(true);
+    try {
+      const resp = await fetch('/api/stripe/billing-portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify(flow ? { flow } : {}),
+      });
+      if (resp.ok) {
+        const { url } = await resp.json();
+        window.open(url, '_blank');
+      } else {
+        toast.error('Failed to open billing portal');
+      }
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // In the future, this will be loaded from the account's billing config set by admin
   const [billingEnabled, setBillingEnabled] = useState(false);
@@ -178,6 +249,100 @@ export default function SettingsBillingPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* Payment Method & Invoices */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Payment &amp; Invoices</CardTitle>
+              <CardDescription>
+                Manage your payment method and view past invoices
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Current Payment Method */}
+            <div className="rounded-xl border border-border/50 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <CreditCard className="h-4 w-4" />
+                Payment Method
+              </div>
+
+              {cardLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Loading...
+                </div>
+              ) : cardInfo ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">
+                      {CARD_BRAND_LABELS[cardInfo.brand] ?? cardInfo.brand.toUpperCase()}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      •••• {cardInfo.last4}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Expires {String(cardInfo.expMonth).padStart(2, '0')}/{cardInfo.expYear}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {hasPaymentMethod
+                    ? 'Card on file'
+                    : 'No payment method added yet'}
+                </p>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => openBillingPortal('payment_method_update')}
+                disabled={portalLoading}
+              >
+                {portalLoading ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin mr-2" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5 mr-2" />
+                )}
+                {hasPaymentMethod ? 'Update Card' : 'Add Payment Method'}
+              </Button>
+            </div>
+
+            {/* Invoices */}
+            <div className="rounded-xl border border-border/50 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <FileText className="h-4 w-4" />
+                Invoices
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                View and download your invoices, receipts, and billing history on Stripe.
+              </p>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => openBillingPortal()}
+                disabled={invoiceLoading}
+              >
+                {invoiceLoading ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin mr-2" />
+                ) : (
+                  <ExternalLink className="h-3.5 w-3.5 mr-2" />
+                )}
+                View Invoices
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Status Banner */}
       {!billingEnabled && (
         <div className="rounded-xl bg-blue-50/70 dark:bg-blue-950/30 px-4 py-3 flex items-start gap-2.5">
