@@ -58,6 +58,7 @@ export function RetellAgentsList() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [updatingAnalysis, setUpdatingAnalysis] = useState(false);
+  const [updatingFlow, setUpdatingFlow] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -186,6 +187,50 @@ export function RetellAgentsList() {
     }
   }
 
+  async function handleUpdateFlow() {
+    const selectedAgents = agents.filter((a) => selectedIds.has(a.agentId));
+    const accountIds = [...new Set(
+      selectedAgents
+        .filter((a) => a.conversationFlowId && a.linkedAccount)
+        .map((a) => a.linkedAccount!.id),
+    )];
+
+    if (accountIds.length === 0) {
+      toast.error('No conversation flow agents with linked accounts selected');
+      return;
+    }
+
+    setUpdatingFlow(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const accountId of accountIds) {
+      try {
+        const res = await fetch('/api/admin/update-retell-flow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+        } else {
+          failCount++;
+          toast.error(`Account ${accountId}: ${data.error}`);
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        `Updated conversation flow for ${successCount} account${successCount !== 1 ? 's' : ''}${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      );
+    }
+    setUpdatingFlow(false);
+  }
+
   function formatDate(timestamp: number) {
     if (!timestamp) return '—';
     return new Date(timestamp).toLocaleString();
@@ -267,6 +312,19 @@ export function RetellAgentsList() {
                 Select All Orphaned ({summary.orphaned})
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedIds.size === 0 || updatingFlow}
+              onClick={handleUpdateFlow}
+            >
+              {updatingFlow ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Update Flow
+            </Button>
             <Button
               variant="outline"
               size="sm"

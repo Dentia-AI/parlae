@@ -665,6 +665,18 @@ export class RetellService {
     );
   }
 
+  async updateConversationFlow(
+    flowId: string,
+    config: Partial<ConversationFlowConfig>,
+  ): Promise<ConversationFlowResponse | null> {
+    logger.info({ flowId }, '[Retell] Updating conversation flow');
+    return this.request<ConversationFlowResponse>(
+      'PATCH',
+      `/update-conversation-flow/${flowId}`,
+      config,
+    );
+  }
+
   async deleteConversationFlow(flowId: string): Promise<void> {
     logger.info({ flowId }, '[Retell] Deleting conversation flow');
     await this.request('DELETE', `/delete-conversation-flow/${flowId}`);
