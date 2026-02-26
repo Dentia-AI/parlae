@@ -1,7 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 
@@ -12,10 +11,8 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  // Increase body parser limit for Vapi webhook payloads
-  // (end-of-call-report can include full transcripts and be several MB)
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { limit: '10mb', extended: true } as any);
 
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');

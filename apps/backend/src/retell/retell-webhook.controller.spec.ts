@@ -4,6 +4,10 @@ import * as crypto from 'crypto';
 import { RetellWebhookController } from './retell-webhook.controller';
 import { PrismaService } from '../prisma/prisma.service';
 
+function createMockReq(body: any, rawBody?: Buffer) {
+  return { rawBody, body } as any;
+}
+
 describe('RetellWebhookController', () => {
   let controller: RetellWebhookController;
   let prisma: any;
@@ -75,29 +79,52 @@ describe('RetellWebhookController', () => {
     const API_KEY = 'test-api-key-456';
     const body = { event: 'call_ended', call: { call_id: 'c-1' } };
 
-    function signBody(payload: any, timestamp: number = Date.now()): string {
-      const raw = JSON.stringify(payload);
+    function signRaw(raw: string, timestamp: number = Date.now()): string {
       const digest = crypto.createHmac('sha256', API_KEY).update(raw + timestamp).digest('hex');
       return `v=${timestamp},d=${digest}`;
     }
 
     it('should reject request with invalid signature when API key is set', async () => {
       process.env.RETELL_API_KEY = API_KEY;
+      const req = createMockReq(body);
       await expect(
-        controller.handleWebhook(body, 'v=123,d=bad'),
+        controller.handleWebhook(body, 'v=123,d=bad', req),
       ).rejects.toThrow(HttpException);
     });
 
-    it('should accept request with valid signature', async () => {
+    it('should accept request when rawBody matches signature', async () => {
       process.env.RETELL_API_KEY = API_KEY;
-      const sig = signBody(body);
-      const result = await controller.handleWebhook(body, sig);
+      const rawStr = JSON.stringify(body);
+      const rawBody = Buffer.from(rawStr);
+      const sig = signRaw(rawStr);
+      const req = createMockReq(body, rawBody);
+      const result = await controller.handleWebhook(body, sig, req);
+      expect(result).toEqual({ received: true });
+    });
+
+    it('should use rawBody over JSON.stringify for verification', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const rawStr = '{"event":"call_ended","call":{"call_id":"c-1"}}';
+      const rawBody = Buffer.from(rawStr);
+      const sig = signRaw(rawStr);
+      const reorderedBody = { call: { call_id: 'c-1' }, event: 'call_ended' };
+      const req = createMockReq(reorderedBody, rawBody);
+      const result = await controller.handleWebhook(reorderedBody, sig, req);
+      expect(result).toEqual({ received: true });
+    });
+
+    it('should fall back to JSON.stringify when rawBody is undefined', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const sig = signRaw(JSON.stringify(body));
+      const req = createMockReq(body);
+      const result = await controller.handleWebhook(body, sig, req);
       expect(result).toEqual({ received: true });
     });
 
     it('should skip verification when no API key is configured', async () => {
       delete process.env.RETELL_API_KEY;
-      const result = await controller.handleWebhook(body, '');
+      const req = createMockReq(body);
+      const result = await controller.handleWebhook(body, '', req);
       expect(result).toEqual({ received: true });
     });
   });
@@ -112,7 +139,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-1', agent_id: 'agent-1' },
       };
-      const result = await controller.handleWebhook(body, '');
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -131,7 +158,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-2', metadata: { accountId: 'acc-meta' } },
       };
-      await controller.handleWebhook(body, '');
+      await controller.handleWebhook(body, '', createMockReq(body));
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ accountId: 'acc-meta' }),
@@ -148,7 +175,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-3', agent_id: 'unknown', to_number: '+14165551234' },
       };
-      await controller.handleWebhook(body, '');
+      await controller.handleWebhook(body, '', createMockReq(body));
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ accountId: 'acc-phone' }),
@@ -161,7 +188,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-4' },
       };
-      await controller.handleWebhook(body, '');
+      await controller.handleWebhook(body, '', createMockReq(body));
       expect(prisma.callReference.upsert).not.toHaveBeenCalled();
     });
   });
@@ -172,7 +199,7 @@ describe('RetellWebhookController', () => {
         event: 'call_ended',
         call: { call_id: 'c-1', call_status: 'ended', start_timestamp: 1000, end_timestamp: 2000 },
       };
-      const result = await controller.handleWebhook(body, '');
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
     });
   });
@@ -183,7 +210,7 @@ describe('RetellWebhookController', () => {
         event: 'call_analyzed',
         call: { call_id: 'c-1', call_analysis: { call_outcome: 'appointment_booked' } },
       };
-      const result = await controller.handleWebhook(body, '');
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
     });
   });
@@ -191,7 +218,7 @@ describe('RetellWebhookController', () => {
   describe('unhandled event', () => {
     it('should return received for unknown events', async () => {
       const body = { event: 'some_future_event', call: {} };
-      const result = await controller.handleWebhook(body, '');
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
     });
   });

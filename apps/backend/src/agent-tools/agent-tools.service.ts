@@ -2266,6 +2266,9 @@ export class AgentToolsService {
       const daySlots = dayResult.availableSlots || [];
       const tz = dayResult.timezone;
 
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const requestedDow = dayNames[new Date(`${date}T12:00:00`).getDay()];
+
       if (daySlots.length > 0) {
         const spokenDate = formatDateForSpeech(date + 'T12:00:00', tz);
         const slotDescriptions = daySlots.map((slot) => {
@@ -2279,12 +2282,14 @@ export class AgentToolsService {
             success: true,
             integrationType: 'google_calendar',
             requestedDate: date,
+            requestedDayOfWeek: requestedDow,
             availableSlots: daySlots.map((slot) => ({
               date,
+              dayOfWeek: requestedDow,
               time: slot.startTime,
               endTime: slot.endTime,
             })),
-            message: `We have ${daySlots.length} available time window(s) on ${spokenDate}: ${slotDescriptions.join(', ')}. Which time works best for you?`,
+            message: `We have ${daySlots.length} available time window(s) on ${requestedDow} ${spokenDate}: ${slotDescriptions.join(', ')}. Which time works best for you?`,
           },
         };
       }
@@ -2313,7 +2318,9 @@ export class AgentToolsService {
 
       if (nextSlots.length > 0) {
         const slotDescriptions = nextSlots.map((s) => {
-          return `${formatDateForSpeech(s.startTime, multiTz)} at ${formatTimeForSpeech(s.startTime, multiTz)}`;
+          const d = new Date(s.startTime);
+          const dow = !isNaN(d.getTime()) ? dayNames[d.getDay()] : '';
+          return `${dow} ${formatDateForSpeech(s.startTime, multiTz)} at ${formatTimeForSpeech(s.startTime, multiTz)}`;
         });
 
         return {
@@ -2321,13 +2328,18 @@ export class AgentToolsService {
             success: true,
             integrationType: 'google_calendar',
             requestedDate: date,
+            requestedDayOfWeek: requestedDow,
             requestedDateAvailable: false,
-            availableSlots: nextSlots.map((slot) => ({
-              date: slot.date,
-              time: slot.startTime,
-              endTime: slot.endTime,
-            })),
-            message: `Unfortunately ${date} is fully booked. The next available times are: ${slotDescriptions.join(', ')}. Would any of those work for you?`,
+            availableSlots: nextSlots.map((slot) => {
+              const d = new Date(slot.startTime);
+              return {
+                date: slot.date,
+                dayOfWeek: !isNaN(d.getTime()) ? dayNames[d.getDay()] : undefined,
+                time: slot.startTime,
+                endTime: slot.endTime,
+              };
+            }),
+            message: `Unfortunately ${requestedDow} ${date} is fully booked. The next available times are: ${slotDescriptions.join(', ')}. Would any of those work for you?`,
           },
         };
       }
@@ -2471,17 +2483,23 @@ export class AgentToolsService {
         events = result.events || [];
       }
 
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
       return {
         result: {
           success: true,
           integrationType: 'google_calendar',
-          appointments: events.map((evt: any) => ({
-            id: evt.id,
-            date: evt.startTime,
-            endTime: evt.endTime,
-            type: evt.summary,
-            status: evt.status,
-          })),
+          appointments: events.map((evt: any) => {
+            const d = new Date(evt.startTime);
+            return {
+              id: evt.id,
+              date: evt.startTime,
+              dayOfWeek: !isNaN(d.getTime()) ? dayNames[d.getDay()] : undefined,
+              endTime: evt.endTime,
+              type: evt.summary,
+              status: evt.status,
+            };
+          }),
           count: events.length,
           message:
             events.length > 0
@@ -2527,7 +2545,12 @@ export class AgentToolsService {
     });
 
     try {
-      const newStartTime = new Date(params.startTime);
+      const rescheduleParams = {
+        startTime: params.startTime || params.newStartTime,
+        date: params.date || params.newDate,
+        datetime: params.datetime,
+      };
+      const newStartTime = this.parseBookingStartTime(rescheduleParams);
       const duration = params.duration || 30;
       const newEndTime = new Date(newStartTime);
       newEndTime.setMinutes(newEndTime.getMinutes() + duration);

@@ -5,7 +5,9 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLogger } from '../common/structured-logger';
 import * as crypto from 'crypto';
@@ -33,10 +35,12 @@ export class RetellWebhookController {
   async handleWebhook(
     @Body() body: any,
     @Headers('x-retell-signature') signature: string,
+    @Req() req: Request,
   ) {
     const apiKey = process.env.RETELL_API_KEY;
     if (apiKey) {
-      const bodyStr = JSON.stringify(body);
+      const rawBody = (req as any).rawBody;
+      const bodyStr = rawBody ? rawBody.toString('utf8') : JSON.stringify(body);
       const isValid = await RetellWebhookController.verifySignature(
         bodyStr,
         signature,
