@@ -775,11 +775,17 @@ export function SidebarNavigation({
         }
 
         if ('children' in item) {
+          const anyChildActive = item.children.some((child) =>
+            'path' in child
+              ? isRouteActive(child.path, currentPath, child.end ?? false)
+              : false,
+          );
+
           const Container = (props: React.PropsWithChildren) => {
             if (item.collapsible) {
               return (
                 <Collapsible
-                  defaultOpen={!item.collapsed}
+                  defaultOpen={!item.collapsed || anyChildActive}
                   className={'group/collapsible'}
                 >
                   {props.children}
@@ -827,11 +833,20 @@ export function SidebarNavigation({
                   <SidebarMenu>
                     <ContentContainer>
                       {item.children.map((child, childIndex) => {
+                        const childHasActiveDescendant =
+                          'children' in child &&
+                          Array.isArray(child.children) &&
+                          child.children.some((gc: { path?: string; end?: boolean }) =>
+                            gc.path
+                              ? isRouteActive(gc.path, currentPath, gc.end ?? false)
+                              : false,
+                          );
+
                         const Container = (props: React.PropsWithChildren) => {
                           if ('collapsible' in child && child.collapsible) {
                             return (
                               <Collapsible
-                                defaultOpen={!child.collapsed}
+                                defaultOpen={!child.collapsed || childHasActiveDescendant}
                                 className={'group/collapsible'}
                               >
                                 {props.children}

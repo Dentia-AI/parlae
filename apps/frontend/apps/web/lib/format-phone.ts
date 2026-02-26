@@ -4,6 +4,25 @@
  * Handles North American numbers (+1XXXXXXXXXX) → +1 (XXX) XXX-XXXX
  * and falls back to grouping digits for other formats.
  */
+/**
+ * Format a phone number as space-separated digits for carrier dial codes.
+ * +15145551234 → "1 514 555 1234"
+ */
+export function formatPhoneDialable(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `1 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  }
+
+  return digits;
+}
+
 export function formatPhoneDisplay(phone: string | null | undefined): string {
   if (!phone) return '';
 

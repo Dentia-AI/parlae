@@ -430,6 +430,22 @@ function inferOutcome(structuredData: Record<string, any>): string {
   }
 }
 
+function inferRetellOutcome(analysis: Record<string, any>): string {
+  const o = analysis?.call_outcome;
+  if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+  if (o === 'patient_created') return 'BOOKED';
+  if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+  if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
+  if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
+  if (o === 'caller_hung_up') return 'HUNG_UP';
+  if (o === 'emergency_handled') return 'EMERGENCY';
+  if (o === 'appointment_rescheduled') return 'RESCHEDULED';
+  if (o === 'appointment_cancelled') return 'CANCELLED';
+  if (o === 'payment_plan_discussed' || o === 'payment_processed') return 'PAYMENT_PLAN';
+  if (o === 'voicemail') return 'VOICEMAIL';
+  return 'OTHER';
+}
+
 async function computeRetellAnalytics(
   accountId: string,
   startDate: Date,
@@ -487,24 +503,14 @@ async function computeRetellAnalytics(
     }
     if (dur > 0) { totalDuration += dur; durationCount++; callDurations.push({ duration: dur }); }
 
-    const outcome = (() => {
-      const o = analysis?.call_outcome;
-      if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
-      if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
-      if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
-      if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
-      if (o === 'caller_hung_up') return 'HUNG_UP';
-      if (o === 'emergency_handled') return 'EMERGENCY';
-      if (o === 'appointment_rescheduled') return 'RESCHEDULED';
-      if (o === 'appointment_cancelled') return 'CANCELLED';
-      return 'OTHER';
-    })();
+    const outcome = inferRetellOutcome(analysis);
 
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
     if (outcome === 'BOOKED') bookedCount++;
 
-    if (analysis.caller_satisfied === true) satisfiedCount++;
-    else if (analysis.caller_satisfied === false) unsatisfiedCount++;
+    const sentiment = analysis.customer_sentiment || null;
+    if (sentiment === 'very_positive' || sentiment === 'positive' || analysis.caller_satisfied === true) satisfiedCount++;
+    else if (sentiment === 'negative' || sentiment === 'very_negative' || analysis.caller_satisfied === false) unsatisfiedCount++;
     else satisfactionUnknown++;
 
     const apptType = analysis.appointment_type as string | undefined;

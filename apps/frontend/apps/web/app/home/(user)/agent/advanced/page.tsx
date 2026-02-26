@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
+import { Card, CardContent } from '@kit/ui/card';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Lock, Mail } from 'lucide-react';
+import { Trans } from '@kit/ui/trans';
 import { loadUserWorkspace } from '../../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { AdvancedSetupContent } from './_components/advanced-setup-content';
@@ -17,7 +18,6 @@ export default async function AdvancedSetupPage() {
     redirect('/auth/sign-in');
   }
 
-  // Get the personal account to check access
   const account = workspace.workspace.id 
     ? await prisma.account.findUnique({
         where: { id: workspace.workspace.id },
@@ -33,15 +33,15 @@ export default async function AdvancedSetupPage() {
   if (!hasAccess) {
     return (
       <div className="container max-w-4xl py-8 space-y-6">
-        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Advanced Setup</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            <Trans i18nKey={'advancedPage.title'} defaults="Advanced Setup" />
+          </h1>
           <p className="text-muted-foreground mt-2">
-            Advanced configuration for AI agent settings
+            <Trans i18nKey={'advancedPage.description'} defaults="Advanced configuration for AI agent settings" />
           </p>
         </div>
 
-        {/* Locked State */}
         <Card className="border-border bg-muted/30">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center space-y-6 py-8">
@@ -50,26 +50,25 @@ export default async function AdvancedSetupPage() {
               </div>
               
               <div className="space-y-2 max-w-lg">
-                <h3 className="text-xl font-semibold">Access Required</h3>
+                <h3 className="text-xl font-semibold">
+                  <Trans i18nKey={'advancedPage.accessRequired'} defaults="Access Required" />
+                </h3>
                 <p className="text-muted-foreground">
-                  Advanced setup is restricted and only available in exceptional cases. 
-                  The default configuration is optimized for most use cases and typically 
-                  does not require modification.
+                  <Trans i18nKey={'advancedPage.accessDescription'} defaults="Advanced setup is restricted and only available in exceptional cases. The default configuration is optimized for most use cases and typically does not require modification." />
                 </p>
               </div>
 
               <Alert className="max-w-md">
                 <Mail className="h-4 w-4" />
                 <AlertDescription>
-                  If you believe you need access to advanced settings, please contact your 
-                  administrator. They can review your request and enable access if appropriate.
+                  <Trans i18nKey={'advancedPage.contactAdmin'} defaults="If you believe you need access to advanced settings, please contact your administrator. They can review your request and enable access if appropriate." />
                 </AlertDescription>
               </Alert>
 
               <div className="text-sm text-muted-foreground pt-4">
                 <p>
-                  <strong>Note:</strong> Standard setup options available in the main wizard 
-                  are sufficient for the majority of configurations.
+                  <strong><Trans i18nKey={'advancedPage.note'} defaults="Note:" /></strong>{' '}
+                  <Trans i18nKey={'advancedPage.standardNote'} defaults="Standard setup options available in the main wizard are sufficient for the majority of configurations." />
                 </p>
               </div>
             </div>
@@ -79,6 +78,5 @@ export default async function AdvancedSetupPage() {
     );
   }
 
-  // User has access, show the full advanced setup
   return <AdvancedSetupContent />;
 }

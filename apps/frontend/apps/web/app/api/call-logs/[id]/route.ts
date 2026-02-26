@@ -303,6 +303,22 @@ function inferOutcome(structuredData: Record<string, any>): string {
   }
 }
 
+function inferRetellOutcome(analysis: Record<string, any>): string {
+  const o = analysis?.call_outcome;
+  if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+  if (o === 'patient_created') return 'BOOKED';
+  if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+  if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
+  if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
+  if (o === 'caller_hung_up') return 'HUNG_UP';
+  if (o === 'emergency_handled') return 'EMERGENCY';
+  if (o === 'appointment_rescheduled') return 'RESCHEDULED';
+  if (o === 'appointment_cancelled') return 'CANCELLED';
+  if (o === 'payment_plan_discussed' || o === 'payment_processed') return 'PAYMENT_PLAN';
+  if (o === 'voicemail') return 'VOICEMAIL';
+  return 'OTHER';
+}
+
 function mapRetellCallToDetail(call: RetellCallResponse) {
   const analysis = (call.call_analysis ?? {}) as Record<string, any>;
 
@@ -326,19 +342,10 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
     ? new Date(call.end_timestamp).toISOString()
     : null;
 
-  const outcome = (() => {
-    const o = analysis?.call_outcome;
-    if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
-    if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
-    if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
-    if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
-    if (o === 'caller_hung_up') return 'HUNG_UP';
-    if (o === 'emergency_handled') return 'EMERGENCY';
-    if (o === 'appointment_rescheduled') return 'RESCHEDULED';
-    if (o === 'appointment_cancelled') return 'CANCELLED';
-    if (o === 'payment_plan_discussed') return 'PAYMENT_PLAN';
-    return 'OTHER';
-  })();
+  const outcome = inferRetellOutcome(analysis);
+
+  const sentiment = analysis.customer_sentiment
+    || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
 
   return {
     id: call.call_id,
@@ -357,17 +364,17 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
     summary: analysis.call_summary || null,
     recordingUrl: call.recording_url || null,
     structuredData: Object.keys(analysis).length > 0 ? analysis : null,
-    appointmentSet: !!analysis.appointment_booked,
+    appointmentSet: !!analysis.appointment_booked || outcome === 'BOOKED',
     leadCaptured: !!analysis.patient_name || !!analysis.patient_email,
     insuranceVerified: !!analysis.insurance_verified,
     insuranceProvider: analysis.insurance_provider || null,
     paymentPlanDiscussed: !!analysis.payment_discussed,
     paymentPlanAmount: null,
-    transferredToStaff: !!analysis.transferred_to_staff,
+    transferredToStaff: !!analysis.transferred_to_staff || outcome === 'TRANSFERRED',
     transferredTo: analysis.transferred_to || null,
     followUpRequired: !!analysis.follow_up_required,
     followUpDate: null,
-    customerSentiment: analysis.customer_sentiment || null,
+    customerSentiment: sentiment,
     aiConfidence: null,
     callQuality: null,
     costCents: null,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   CardContent,
@@ -18,7 +19,6 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
@@ -35,6 +35,7 @@ interface CalendarStatus {
 }
 
 export default function IntegrationsManagementPage() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [pmsStatus, setPmsStatus] = useState<PmsStatus>({ connected: false });
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus>({ connected: false });
@@ -82,12 +83,12 @@ export default function IntegrationsManagementPage() {
         window.location.href = data.url;
       }
     } catch {
-      toast.error('Failed to start Google Calendar connection');
+      toast.error(t('integrationsPage.connectFailed'));
     }
   };
 
   const handleDisconnectCalendar = async () => {
-    if (!confirm('Disconnect Google Calendar? Appointments will fall back to PMS only.')) return;
+    if (!confirm(t('integrationsPage.disconnectConfirm'))) return;
     try {
       const res = await fetch('/api/google-calendar/disconnect', {
         method: 'POST',
@@ -95,10 +96,10 @@ export default function IntegrationsManagementPage() {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to disconnect');
-      toast.success('Google Calendar disconnected');
+      toast.success(t('integrationsPage.disconnected'));
       setCalendarStatus({ connected: false });
     } catch {
-      toast.error('Failed to disconnect Google Calendar');
+      toast.error(t('integrationsPage.disconnectFailed'));
     }
   };
 
@@ -114,14 +115,14 @@ export default function IntegrationsManagementPage() {
     <div className="container max-w-3xl py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('integrationsPage.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your practice management system and calendar connections
+            {t('integrationsPage.description')}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchStatus}>
           <RefreshCw className="h-4 w-4 mr-1" />
-          Refresh
+          {t('integrationsPage.refresh')}
         </Button>
       </div>
 
@@ -134,21 +135,21 @@ export default function IntegrationsManagementPage() {
                 <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-300" />
               </div>
               <div>
-                <CardTitle className="text-lg">Practice Management System</CardTitle>
+                <CardTitle className="text-lg">{t('integrationsPage.pmsTitle')}</CardTitle>
                 <CardDescription>
-                  Connect Sikka or another PMS for automated patient and appointment management
+                  {t('integrationsPage.pmsDescription')}
                 </CardDescription>
               </div>
             </div>
             {pmsStatus.connected ? (
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                Connected
+                {t('integrationsPage.connected')}
               </Badge>
             ) : (
               <Badge variant="outline" className="text-muted-foreground">
                 <XCircle className="h-3 w-3 mr-1" />
-                Not Connected
+                {t('integrationsPage.notConnected')}
               </Badge>
             )}
           </div>
@@ -157,29 +158,29 @@ export default function IntegrationsManagementPage() {
           {pmsStatus.connected ? (
             <div className="space-y-2">
               <div className="text-sm">
-                <span className="text-muted-foreground">Provider:</span>{' '}
-                <span className="font-medium">{pmsStatus.provider || 'Unknown'}</span>
+                <span className="text-muted-foreground">{t('integrationsPage.provider')}</span>{' '}
+                <span className="font-medium">{pmsStatus.provider || t('integrationsPage.unknown')}</span>
               </div>
               {pmsStatus.practiceName && (
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Practice:</span>{' '}
+                  <span className="text-muted-foreground">{t('integrationsPage.practice')}</span>{' '}
                   <span className="font-medium">{pmsStatus.practiceName}</span>
                 </div>
               )}
               <Button variant="outline" size="sm" onClick={handleConnectPms}>
-                Reconnect
+                {t('integrationsPage.reconnect')}
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
               <Alert>
                 <AlertDescription>
-                  Without a PMS connection, appointment scheduling will use Google Calendar as a fallback.
+                  {t('integrationsPage.noPmsAlert')}
                 </AlertDescription>
               </Alert>
               <Button onClick={handleConnectPms}>
                 <Building2 className="h-4 w-4 mr-2" />
-                Connect PMS
+                {t('integrationsPage.connectPms')}
               </Button>
             </div>
           )}
@@ -195,23 +196,23 @@ export default function IntegrationsManagementPage() {
                 <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
               </div>
               <div>
-                <CardTitle className="text-lg">Google Calendar</CardTitle>
+                <CardTitle className="text-lg">{t('integrationsPage.calendarTitle')}</CardTitle>
                 <CardDescription>
                   {pmsStatus.connected
-                    ? 'Fallback for scheduling when PMS is unavailable'
-                    : 'Primary calendar for appointment scheduling'}
+                    ? t('integrationsPage.calendarDescPms')
+                    : t('integrationsPage.calendarDescPrimary')}
                 </CardDescription>
               </div>
             </div>
             {calendarStatus.connected ? (
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                Connected
+                {t('integrationsPage.connected')}
               </Badge>
             ) : (
               <Badge variant="outline" className="text-muted-foreground">
                 <XCircle className="h-3 w-3 mr-1" />
-                Not Connected
+                {t('integrationsPage.notConnected')}
               </Badge>
             )}
           </div>
@@ -221,14 +222,14 @@ export default function IntegrationsManagementPage() {
             <div className="space-y-2">
               {calendarStatus.email && (
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Account:</span>{' '}
+                  <span className="text-muted-foreground">{t('integrationsPage.account')}</span>{' '}
                   <span className="font-medium">{calendarStatus.email}</span>
                 </div>
               )}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={handleConnectCalendar}>
                   <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                  Reconnect
+                  {t('integrationsPage.reconnect')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -236,14 +237,14 @@ export default function IntegrationsManagementPage() {
                   className="text-destructive"
                   onClick={handleDisconnectCalendar}
                 >
-                  Disconnect
+                  {t('integrationsPage.disconnect')}
                 </Button>
               </div>
             </div>
           ) : (
             <Button onClick={handleConnectCalendar}>
               <Calendar className="h-4 w-4 mr-2" />
-              Connect Google Calendar
+              {t('integrationsPage.connectCalendar')}
             </Button>
           )}
         </CardContent>

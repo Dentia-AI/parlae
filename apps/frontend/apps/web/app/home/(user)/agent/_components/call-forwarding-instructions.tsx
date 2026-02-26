@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@kit/ui/button';
 import { toast } from '@kit/ui/sonner';
-import { formatPhoneDisplay } from '~/lib/format-phone';
+import { formatPhoneDisplay, formatPhoneDialable } from '~/lib/format-phone';
 
 interface CallForwardingInstructionsProps {
   twilioNumber: string;
@@ -32,6 +32,7 @@ export function CallForwardingInstructions({
   const [copied, setCopied] = useState(false);
   const displayNumber = formatPhoneDisplay(twilioNumber);
   const displayClinic = clinicNumber ? formatPhoneDisplay(clinicNumber) : undefined;
+  const dialDigits = formatPhoneDialable(twilioNumber);
 
   const copyNumber = () => {
     navigator.clipboard.writeText(twilioNumber);
@@ -98,7 +99,7 @@ export function CallForwardingInstructions({
           <CarrierCode
             label={t('callForwarding.noAnswerForwarding')}
             desc={t('callForwarding.noAnswerDesc')}
-            activate={`*92 + ${twilioNumber}`}
+            activate={`*92 ${dialDigits}`}
             disable="*93"
             recommendedLabel={t('callForwarding.recommended')}
             recommended
@@ -106,7 +107,7 @@ export function CallForwardingInstructions({
           <CarrierCode
             label={t('callForwarding.busyForwarding')}
             desc={t('callForwarding.busyDesc')}
-            activate={`*90 + ${twilioNumber}`}
+            activate={`*90 ${dialDigits}`}
             disable="*91"
             recommendedLabel={t('callForwarding.recommended')}
             recommended
@@ -114,7 +115,7 @@ export function CallForwardingInstructions({
           <CarrierCode
             label={t('callForwarding.allCalls')}
             desc={t('callForwarding.allCallsDesc')}
-            activate={`*72 + ${twilioNumber}`}
+            activate={`*72 ${dialDigits}`}
             disable="*73"
             recommendedLabel={t('callForwarding.recommended')}
           />
@@ -129,21 +130,21 @@ export function CallForwardingInstructions({
         <div className="space-y-2">
           <CarrierCode
             label={t('callForwarding.noAnswerForwarding')}
-            activate={`*61*${twilioNumber}#`}
+            activate={`*61* ${dialDigits} #`}
             disable="#61#"
             recommendedLabel={t('callForwarding.recommended')}
             recommended
           />
           <CarrierCode
             label={t('callForwarding.busyForwarding')}
-            activate={`*67*${twilioNumber}#`}
+            activate={`*67* ${dialDigits} #`}
             disable="#67#"
             recommendedLabel={t('callForwarding.recommended')}
             recommended
           />
           <CarrierCode
             label={t('callForwarding.allCalls')}
-            activate={`*21*${twilioNumber}#`}
+            activate={`*21* ${dialDigits} #`}
             disable="#21#"
             recommendedLabel={t('callForwarding.recommended')}
           />
@@ -158,7 +159,7 @@ export function CallForwardingInstructions({
         <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
           <li>{t('callForwarding.voipStep1')}</li>
           <li>{t('callForwarding.voipStep2')}</li>
-          <li>{t('callForwarding.voipStep3', { number: twilioNumber })}</li>
+          <li>{t('callForwarding.voipStep3', { number: displayNumber })}</li>
           <li>{t('callForwarding.voipStep4')}</li>
           <li>{t('callForwarding.voipStep5')}</li>
         </ol>

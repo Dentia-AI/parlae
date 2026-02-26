@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
@@ -21,6 +22,7 @@ import {
 import { toast } from '@kit/ui/sonner';
 
 export function AdvancedSetupContent() {
+  const { t } = useTranslation();
   const [pending, startTransition] = useTransition();
 
   // Assistant Configuration
@@ -51,14 +53,14 @@ export function AdvancedSetupContent() {
 
   const handleSave = () => {
     startTransition(() => {
-      toast.success('Advanced configuration saved (feature in development)');
+      toast.success(t('advancedPage.saved'));
     });
   };
 
   const handleReset = () => {
-    if (confirm('Are you sure you want to reset all advanced settings to defaults?')) {
+    if (confirm(t('advancedPage.resetConfirm'))) {
       startTransition(() => {
-        toast.info('Settings reset to defaults');
+        toast.info(t('advancedPage.resetDone'));
       });
     }
   };
@@ -70,16 +72,16 @@ export function AdvancedSetupContent() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Wrench className="h-8 w-8" />
-            Advanced Setup
+            {t('advancedPage.title')}
           </h1>
           <p className="text-muted-foreground mt-2">
-            Fine-tune your AI agent's behavior and capabilities
+            {t('advancedPage.fineTune')}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleReset} disabled={pending}>
             <RefreshCw className="h-4 w-4 mr-2" />
-            Reset
+            {t('advancedPage.reset')}
           </Button>
           <Button onClick={handleSave} disabled={pending}>
             {pending ? (
@@ -87,7 +89,7 @@ export function AdvancedSetupContent() {
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Changes
+            {t('advancedPage.saveChanges')}
           </Button>
         </div>
       </div>
@@ -95,33 +97,32 @@ export function AdvancedSetupContent() {
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          These are advanced settings. Changes can significantly affect your AI agent's behavior.
-          Proceed with caution and test thoroughly after making changes.
+          {t('advancedPage.warningMessage')}
         </AlertDescription>
       </Alert>
 
       <Tabs defaultValue="assistant" className="space-y-6">
         <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="assistant">Assistant</TabsTrigger>
-          <TabsTrigger value="voice">Voice</TabsTrigger>
-          <TabsTrigger value="model">Model</TabsTrigger>
-          <TabsTrigger value="recording">Recording</TabsTrigger>
-          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          <TabsTrigger value="assistant">{t('advancedPage.tabs.assistant')}</TabsTrigger>
+          <TabsTrigger value="voice">{t('advancedPage.tabs.voice')}</TabsTrigger>
+          <TabsTrigger value="model">{t('advancedPage.tabs.model')}</TabsTrigger>
+          <TabsTrigger value="recording">{t('advancedPage.tabs.recording')}</TabsTrigger>
+          <TabsTrigger value="webhooks">{t('advancedPage.tabs.webhooks')}</TabsTrigger>
+          <TabsTrigger value="advanced">{t('advancedPage.tabs.advanced')}</TabsTrigger>
         </TabsList>
 
         {/* Assistant Tab */}
         <TabsContent value="assistant" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Assistant Behavior</CardTitle>
+              <CardTitle>{t('advancedPage.assistant.title')}</CardTitle>
               <CardDescription>
-                Configure how your AI assistant starts and ends conversations
+                {t('advancedPage.assistant.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="firstMessage">First Message</Label>
+                <Label htmlFor="firstMessage">{t('advancedPage.assistant.firstMessage')}</Label>
                 <Textarea
                   id="firstMessage"
                   placeholder="Hello! Thank you for calling. How can I help you today?"
@@ -130,7 +131,7 @@ export function AdvancedSetupContent() {
                   rows={3}
                 />
                 <p className="text-sm text-muted-foreground">
-                  The greeting message your agent says when answering a call
+                  {t('advancedPage.assistant.firstMessageHint')}
                 </p>
               </div>
 
@@ -138,9 +139,9 @@ export function AdvancedSetupContent() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>End Call Function</Label>
+                  <Label>{t('advancedPage.assistant.endCallFunction')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    Allow AI to end calls when conversation concludes
+                    {t('advancedPage.assistant.endCallFunctionDesc')}
                   </p>
                 </div>
                 <Switch
@@ -156,14 +157,14 @@ export function AdvancedSetupContent() {
         <TabsContent value="voice" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Voice Configuration</CardTitle>
+              <CardTitle>{t('advancedPage.voice.title')}</CardTitle>
               <CardDescription>
-                Fine-tune voice quality and characteristics
+                {t('advancedPage.voice.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="voiceProvider">Voice Provider</Label>
+                <Label htmlFor="voiceProvider">{t('advancedPage.voice.provider')}</Label>
                 <select
                   id="voiceProvider"
                   className="w-full border rounded-md p-2"
@@ -177,7 +178,7 @@ export function AdvancedSetupContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="voiceId">Voice ID</Label>
+                <Label htmlFor="voiceId">{t('advancedPage.voice.voiceId')}</Label>
                 <Input
                   id="voiceId"
                   placeholder="21m00Tcm4TlvDq8ikWAM"
@@ -185,7 +186,7 @@ export function AdvancedSetupContent() {
                   onChange={(e) => setVoiceId(e.target.value)}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Provider-specific voice identifier
+                  {t('advancedPage.voice.voiceIdHint')}
                 </p>
               </div>
 
@@ -193,7 +194,7 @@ export function AdvancedSetupContent() {
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="voiceStability">
-                      Stability: {voiceStability.toFixed(2)}
+                      {t('advancedPage.voice.stability')} {voiceStability.toFixed(2)}
                     </Label>
                     <input
                       type="range"
@@ -206,13 +207,13 @@ export function AdvancedSetupContent() {
                       className="w-full"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Lower = more variable, Higher = more consistent
+                      {t('advancedPage.voice.stabilityHint')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="voiceSimilarity">
-                      Similarity: {voiceSimilarity.toFixed(2)}
+                      {t('advancedPage.voice.similarity')} {voiceSimilarity.toFixed(2)}
                     </Label>
                     <input
                       type="range"
@@ -225,7 +226,7 @@ export function AdvancedSetupContent() {
                       className="w-full"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Enhances voice clarity and similarity to original
+                      {t('advancedPage.voice.similarityHint')}
                     </p>
                   </div>
                 </>
@@ -238,15 +239,15 @@ export function AdvancedSetupContent() {
         <TabsContent value="model" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Language Model</CardTitle>
+              <CardTitle>{t('advancedPage.model.title')}</CardTitle>
               <CardDescription>
-                Configure the AI model and its behavior
+                {t('advancedPage.model.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="modelProvider">Model Provider</Label>
+                  <Label htmlFor="modelProvider">{t('advancedPage.model.provider')}</Label>
                   <select
                     id="modelProvider"
                     className="w-full border rounded-md p-2"
@@ -260,7 +261,7 @@ export function AdvancedSetupContent() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="modelName">Model Name</Label>
+                  <Label htmlFor="modelName">{t('advancedPage.model.modelName')}</Label>
                   <Input
                     id="modelName"
                     placeholder="gpt-4o"
@@ -271,7 +272,7 @@ export function AdvancedSetupContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="systemPrompt">System Prompt</Label>
+                <Label htmlFor="systemPrompt">{t('advancedPage.model.systemPrompt')}</Label>
                 <Textarea
                   id="systemPrompt"
                   placeholder="You are a helpful medical receptionist..."
@@ -280,14 +281,14 @@ export function AdvancedSetupContent() {
                   rows={6}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Instructions that guide the AI's behavior throughout conversations
+                  {t('advancedPage.model.systemPromptHint')}
                 </p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="temperature">
-                    Temperature: {temperature.toFixed(2)}
+                    {t('advancedPage.model.temperature')} {temperature.toFixed(2)}
                   </Label>
                   <input
                     type="range"
@@ -300,12 +301,12 @@ export function AdvancedSetupContent() {
                     className="w-full"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Lower = more focused, Higher = more creative
+                    {t('advancedPage.model.temperatureHint')}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="maxTokens">Max Tokens</Label>
+                  <Label htmlFor="maxTokens">{t('advancedPage.model.maxTokens')}</Label>
                   <Input
                     type="number"
                     id="maxTokens"
@@ -313,7 +314,7 @@ export function AdvancedSetupContent() {
                     onChange={(e) => setMaxTokens(parseInt(e.target.value))}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Maximum response length (tokens)
+                    {t('advancedPage.model.maxTokensHint')}
                   </p>
                 </div>
               </div>
@@ -325,17 +326,17 @@ export function AdvancedSetupContent() {
         <TabsContent value="recording" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Call Recording & Analysis</CardTitle>
+              <CardTitle>{t('advancedPage.recording.title')}</CardTitle>
               <CardDescription>
-                Configure call recording and post-call analysis
+                {t('advancedPage.recording.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>Call Recording</Label>
+                  <Label>{t('advancedPage.recording.callRecording')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    Record all calls for quality assurance and training
+                    {t('advancedPage.recording.callRecordingDesc')}
                   </p>
                 </div>
                 <Switch
@@ -348,9 +349,9 @@ export function AdvancedSetupContent() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>Post-Call Analysis</Label>
+                  <Label>{t('advancedPage.recording.postCallAnalysis')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    Analyze calls using AI for insights and summaries
+                    {t('advancedPage.recording.postCallAnalysisDesc')}
                   </p>
                 </div>
                 <Switch
@@ -361,7 +362,7 @@ export function AdvancedSetupContent() {
 
               {analysisEnabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="analysisPrompt">Analysis Prompt</Label>
+                  <Label htmlFor="analysisPrompt">{t('advancedPage.recording.analysisPrompt')}</Label>
                   <Textarea
                     id="analysisPrompt"
                     placeholder="Summarize the call and identify: 1) Patient's concern, 2) Outcome, 3) Follow-up needed"
@@ -379,14 +380,14 @@ export function AdvancedSetupContent() {
         <TabsContent value="webhooks" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Webhook Configuration</CardTitle>
+              <CardTitle>{t('advancedPage.webhooks.title')}</CardTitle>
               <CardDescription>
-                Connect to external services for custom functionality
+                {t('advancedPage.webhooks.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="serverUrl">Server URL</Label>
+                <Label htmlFor="serverUrl">{t('advancedPage.webhooks.serverUrl')}</Label>
                 <Input
                   id="serverUrl"
                   type="url"
@@ -395,12 +396,12 @@ export function AdvancedSetupContent() {
                   onChange={(e) => setServerUrl(e.target.value)}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Endpoint for receiving webhook events
+                  {t('advancedPage.webhooks.serverUrlHint')}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="serverSecret">Server Secret</Label>
+                <Label htmlFor="serverSecret">{t('advancedPage.webhooks.serverSecret')}</Label>
                 <Input
                   id="serverSecret"
                   type="password"
@@ -409,7 +410,7 @@ export function AdvancedSetupContent() {
                   onChange={(e) => setServerSecret(e.target.value)}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Secret key for webhook verification
+                  {t('advancedPage.webhooks.serverSecretHint')}
                 </p>
               </div>
             </CardContent>
@@ -420,17 +421,17 @@ export function AdvancedSetupContent() {
         <TabsContent value="advanced" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Advanced Features</CardTitle>
+              <CardTitle>{t('advancedPage.advancedFeatures.title')}</CardTitle>
               <CardDescription>
-                Additional configuration options for specialized use cases
+                {t('advancedPage.advancedFeatures.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>HIPAA Compliance Mode</Label>
+                  <Label>{t('advancedPage.advancedFeatures.hipaa')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    Enable enhanced privacy and security features
+                    {t('advancedPage.advancedFeatures.hipaaDesc')}
                   </p>
                 </div>
                 <Switch
@@ -442,18 +443,18 @@ export function AdvancedSetupContent() {
               <Separator />
 
               <div className="space-y-2">
-                <Label htmlFor="backgroundSound">Background Sound</Label>
+                <Label htmlFor="backgroundSound">{t('advancedPage.advancedFeatures.backgroundSound')}</Label>
                 <select
                   id="backgroundSound"
                   className="w-full border rounded-md p-2"
                   value={backgroundSound}
                   onChange={(e) => setBackgroundSound(e.target.value as any)}
                 >
-                  <option value="off">None</option>
-                  <option value="office">Office Ambience</option>
+                  <option value="off">{t('advancedPage.advancedFeatures.none')}</option>
+                  <option value="office">{t('advancedPage.advancedFeatures.officeAmbience')}</option>
                 </select>
                 <p className="text-sm text-muted-foreground">
-                  Add subtle background sound for more natural conversations
+                  {t('advancedPage.advancedFeatures.backgroundSoundHint')}
                 </p>
               </div>
             </CardContent>
@@ -462,22 +463,22 @@ export function AdvancedSetupContent() {
           {/* Danger Zone */}
           <Card className="border-destructive">
             <CardHeader>
-              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardTitle className="text-destructive">{t('advancedPage.dangerZone.title')}</CardTitle>
               <CardDescription>
-                Irreversible actions that affect your AI agent
+                {t('advancedPage.dangerZone.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>Delete AI Agent</Label>
+                  <Label>{t('advancedPage.dangerZone.deleteAgent')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    Permanently delete your AI agent and all associated data
+                    {t('advancedPage.dangerZone.deleteAgentDesc')}
                   </p>
                 </div>
                 <Button variant="destructive" size="sm">
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  {t('advancedPage.dangerZone.delete')}
                 </Button>
               </div>
             </CardContent>

@@ -250,6 +250,22 @@ function inferOutcome(structuredData: Record<string, any>): string {
   }
 }
 
+function inferRetellOutcome(analysis: Record<string, any>): string {
+  const o = analysis?.call_outcome;
+  if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+  if (o === 'patient_created') return 'BOOKED';
+  if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
+  if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
+  if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
+  if (o === 'caller_hung_up') return 'HUNG_UP';
+  if (o === 'emergency_handled') return 'EMERGENCY';
+  if (o === 'appointment_rescheduled') return 'RESCHEDULED';
+  if (o === 'appointment_cancelled') return 'CANCELLED';
+  if (o === 'payment_plan_discussed' || o === 'payment_processed') return 'PAYMENT_PLAN';
+  if (o === 'voicemail') return 'VOICEMAIL';
+  return 'OTHER';
+}
+
 async function fetchRetellRecentCalls(accountId: string, limit: number, offset: number) {
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
@@ -295,18 +311,10 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
       duration = Math.round(call.duration_ms / 1000);
     }
 
-    const outcome = (() => {
-      const o = analysis?.call_outcome;
-      if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
-      if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
-      if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
-      if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
-      if (o === 'caller_hung_up') return 'HUNG_UP';
-      if (o === 'emergency_handled') return 'EMERGENCY';
-      if (o === 'appointment_rescheduled') return 'RESCHEDULED';
-      if (o === 'appointment_cancelled') return 'CANCELLED';
-      return 'OTHER';
-    })();
+    const outcome = inferRetellOutcome(analysis);
+
+    const sentiment = analysis.customer_sentiment
+      || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
 
     return {
       id: call.call_id,
@@ -319,14 +327,14 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
       callStartedAt: call.start_timestamp
         ? new Date(call.start_timestamp).toISOString()
         : new Date().toISOString(),
-      appointmentSet: !!analysis.appointment_booked,
+      appointmentSet: !!analysis.appointment_booked || outcome === 'BOOKED',
       insuranceVerified: !!analysis.insurance_verified,
       paymentPlanDiscussed: !!analysis.payment_discussed,
       paymentPlanAmount: null,
-      transferredToStaff: !!analysis.transferred_to_staff,
+      transferredToStaff: !!analysis.transferred_to_staff || outcome === 'TRANSFERRED',
       transferredTo: analysis.transferred_to || null,
       followUpRequired: !!analysis.follow_up_required,
-      customerSentiment: analysis.customer_sentiment || null,
+      customerSentiment: sentiment,
       callReason: analysis.call_reason || null,
       summary: analysis.call_summary || null,
       agent: null,

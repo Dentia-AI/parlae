@@ -280,7 +280,7 @@ export const RETELL_POST_CALL_ANALYSIS: Array<{
   {
     name: 'call_outcome',
     type: 'enum',
-    description: 'What was the final outcome of the call?',
+    description: 'What was the primary outcome of the call?',
     choices: [
       'appointment_booked',
       'appointment_cancelled',
@@ -298,7 +298,12 @@ export const RETELL_POST_CALL_ANALYSIS: Array<{
   {
     name: 'patient_name',
     type: 'string',
-    description: 'Full name of the patient (if identified)',
+    description: 'Full name of the patient or caller (if mentioned during the call)',
+  },
+  {
+    name: 'appointment_booked',
+    type: 'boolean',
+    description: 'Whether an appointment was successfully booked during the call',
   },
   {
     name: 'appointment_type',
@@ -306,13 +311,29 @@ export const RETELL_POST_CALL_ANALYSIS: Array<{
     description: 'Type of appointment discussed (e.g. cleaning, exam, emergency)',
   },
   {
-    name: 'caller_satisfied',
-    type: 'boolean',
-    description: 'Whether the caller seemed satisfied with the interaction',
+    name: 'customer_sentiment',
+    type: 'enum',
+    description: 'How satisfied was the caller with the interaction?',
+    choices: ['very_positive', 'positive', 'neutral', 'negative', 'very_negative'],
   },
   {
-    name: 'tools_used_count',
-    type: 'number',
-    description: 'Number of backend tools that were called during the conversation',
+    name: 'call_reason',
+    type: 'string',
+    description: 'The primary reason the caller called (e.g. new appointment, reschedule, insurance question, billing)',
+  },
+  {
+    name: 'insurance_verified',
+    type: 'boolean',
+    description: 'Whether insurance information was verified or discussed during the call',
+  },
+  {
+    name: 'transferred_to_staff',
+    type: 'boolean',
+    description: 'Whether the call was transferred to a human staff member',
+  },
+  {
+    name: 'follow_up_required',
+    type: 'boolean',
+    description: 'Whether any follow-up action is needed after the call',
   },
 ];

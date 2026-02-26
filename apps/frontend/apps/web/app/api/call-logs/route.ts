@@ -166,6 +166,9 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
     ? new Date(call.end_timestamp).toISOString()
     : null;
 
+  const sentiment = analysis.customer_sentiment
+    || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
+
   return {
     id: call.call_id,
     callId: call.call_id,
@@ -179,13 +182,13 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
     contactName: analysis.patient_name || null,
     contactEmail: analysis.patient_email || null,
     summary: analysis.call_summary || null,
-    appointmentSet: !!analysis.appointment_booked,
+    appointmentSet: !!analysis.appointment_booked || retellOutcome === 'BOOKED',
     insuranceVerified: !!analysis.insurance_verified,
     paymentPlanDiscussed: !!analysis.payment_discussed,
-    transferredToStaff: !!analysis.transferred_to_staff,
+    transferredToStaff: !!analysis.transferred_to_staff || retellOutcome === 'TRANSFERRED',
     transferredTo: analysis.transferred_to || null,
     followUpRequired: !!analysis.follow_up_required,
-    customerSentiment: analysis.customer_sentiment || null,
+    customerSentiment: sentiment,
     costCents: null,
     callStartedAt: startIso,
     callEndedAt: endIso,
@@ -195,6 +198,7 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
 function inferRetellOutcome(analysis: Record<string, any>): string {
   const o = analysis?.call_outcome;
   if (o === 'appointment_booked' || analysis?.appointment_booked) return 'BOOKED';
+  if (o === 'patient_created') return 'BOOKED';
   if (o === 'transferred_to_staff' || o === 'transferred_to_human' || analysis?.transferred_to_staff) return 'TRANSFERRED';
   if (o === 'insurance_verified' || o === 'insurance_updated') return 'INSURANCE_INQUIRY';
   if (o === 'general_inquiry' || o === 'information_provided') return 'INFORMATION';
@@ -202,8 +206,9 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
   if (o === 'emergency_handled') return 'EMERGENCY';
   if (o === 'appointment_rescheduled') return 'RESCHEDULED';
   if (o === 'appointment_cancelled') return 'CANCELLED';
-  if (o === 'payment_plan_discussed') return 'PAYMENT_PLAN';
+  if (o === 'payment_plan_discussed' || o === 'payment_processed') return 'PAYMENT_PLAN';
   if (o === 'voicemail') return 'VOICEMAIL';
+  if (o === 'no_resolution') return 'OTHER';
   return 'OTHER';
 }
 

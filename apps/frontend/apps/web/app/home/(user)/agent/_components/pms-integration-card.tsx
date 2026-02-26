@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Database, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react';
@@ -21,6 +22,7 @@ export function PmsIntegrationCard({
   initialPracticeName,
   hasIntegration,
 }: PmsIntegrationCardProps) {
+  const { t } = useTranslation();
   const [isChecking, setIsChecking] = useState(false);
   const [pmsName, setPmsName] = useState<string | null>(initialProvider);
   const [practiceName, setPracticeName] = useState<string | null>(initialPracticeName);
@@ -76,13 +78,13 @@ export function PmsIntegrationCard({
             </div>
             <div>
               <h3 className="font-semibold text-sm">
-                Practice Management System
+                {t('pmsCard.title')}
               </h3>
               {isChecking ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    Checking connection...
+                    {t('pmsCard.checkingConnection')}
                   </span>
                 </div>
               ) : connected ? (
@@ -90,7 +92,7 @@ export function PmsIntegrationCard({
                   <div className="flex items-center gap-1.5 mt-1">
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                     <span className="text-xs text-green-700 dark:text-green-400 font-medium">
-                      Connected
+                      {t('pmsCard.connected')}
                     </span>
                   </div>
                   {pmsName && (
@@ -105,15 +107,15 @@ export function PmsIntegrationCard({
                   <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
                   <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
                     {status === 'ERROR'
-                      ? 'Connection Error'
-                      : 'Setup Required'}
+                      ? t('pmsCard.connectionError')
+                      : t('pmsCard.setupRequired')}
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 mt-1">
                   <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    Not connected
+                    {t('pmsCard.notConnected')}
                   </span>
                 </div>
               )}
@@ -130,12 +132,12 @@ export function PmsIntegrationCard({
                 <Loader2
                   className={`h-3 w-3 mr-1 ${isChecking ? 'animate-spin' : ''}`}
                 />
-                Check
+                {t('pmsCard.check')}
               </Button>
             )}
             <Link href="/home/agent/setup/integrations">
               <Button variant="outline" size="sm">
-                {hasIntegration ? 'Manage' : 'Connect'}
+                {hasIntegration ? t('pmsCard.manage') : t('pmsCard.connect')}
               </Button>
             </Link>
           </div>
