@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { TrendingUp } from 'lucide-react';
 
@@ -52,9 +53,10 @@ function formatTooltip(dateStr: string, count: number, is24h: boolean): string {
 }
 
 export function ActivityChart({ data, is24h = false }: ActivityChartProps) {
+  const { t } = useTranslation('common');
   const maxCount = Math.max(...data.map(d => d.count), 1);
-  const trendLabel = is24h ? 'Hourly Trend' : 'Daily Trend';
-  const legendLabel = is24h ? 'Calls per hour' : 'Calls per day';
+  const trendLabel = is24h ? t('dashboard.hourlyTrend') : t('dashboard.dailyTrend');
+  const legendLabel = is24h ? t('dashboard.callsPerHour') : t('dashboard.callsPerDay');
 
   const showEveryN = is24h && data.length > 12 ? 2 : 1;
 
@@ -62,7 +64,7 @@ export function ActivityChart({ data, is24h = false }: ActivityChartProps) {
     <Card className="h-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Activity</CardTitle>
+          <CardTitle className="text-base">{t('dashboard.activityTrend')}</CardTitle>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <TrendingUp className="h-4 w-4" />
             <span>{trendLabel}</span>
@@ -73,7 +75,7 @@ export function ActivityChart({ data, is24h = false }: ActivityChartProps) {
         <div className="space-y-3">
           {data.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No activity data available
+              {t('dashboard.noActivityData')}
             </div>
           ) : (
             <>

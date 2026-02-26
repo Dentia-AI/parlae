@@ -24,6 +24,7 @@ import {
   FileText,
   X,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface CallLog {
   id: string;
@@ -146,6 +147,7 @@ function formatRelativeTime(dateStr: string) {
 // ── Component ──────────────────────────────────────────────────────────
 
 export function CallLogsTable() {
+  const { t } = useTranslation('common');
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -246,7 +248,7 @@ export function CallLogsTable() {
         {/* HIPAA Notice */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md mb-4">
           <Shield className="h-3.5 w-3.5 flex-shrink-0" />
-          <span>HIPAA Protected: Call records contain PHI. Access is logged for compliance.</span>
+          <span>{t('callLogs.hipaaNotice')}</span>
         </div>
 
         {/* Filters */}
@@ -254,7 +256,7 @@ export function CallLogsTable() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, phone, or email..."
+              placeholder={t('callLogs.searchPlaceholder')}
               className="pl-10"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -267,7 +269,7 @@ export function CallLogsTable() {
               <SelectValue placeholder="Outcome" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Outcomes</SelectItem>
+              <SelectItem value="all">{t('callLogs.allOutcomes')}</SelectItem>
               {Object.entries(outcomeLabels).map(([key, label]) => (
                 <SelectItem key={key} value={key}>{label}</SelectItem>
               ))}
@@ -279,16 +281,16 @@ export function CallLogsTable() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1d">Last 24 hours</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="14d">Last 14 days</SelectItem>
+              <SelectItem value="1d">{t('callLogs.last24Hours')}</SelectItem>
+              <SelectItem value="7d">{t('callLogs.last7Days')}</SelectItem>
+              <SelectItem value="14d">{t('callLogs.last14Days')}</SelectItem>
             </SelectContent>
           </Select>
 
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
               <X className="h-4 w-4" />
-              Clear
+              {t('callLogs.clear')}
             </Button>
           )}
         </div>
@@ -297,12 +299,12 @@ export function CallLogsTable() {
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Call Records
+              {t('callLogs.callRecords')}
             </h3>
             {pagination && (
               <p className="text-sm text-muted-foreground">
-                {pagination.total} total records
-                {hasActiveFilters && ' (filtered)'}
+                {t('callLogs.totalRecords', { count: pagination.total })}
+                {hasActiveFilters && ` ${t('callLogs.filtered')}`}
               </p>
             )}
           </div>
@@ -313,17 +315,17 @@ export function CallLogsTable() {
         <div className="flex items-center justify-center py-16">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
-            <p className="text-sm text-muted-foreground">Loading call records...</p>
+            <p className="text-sm text-muted-foreground">{t('callLogs.loading')}</p>
           </div>
         </div>
       ) : calls.length === 0 ? (
         <div className="text-center py-16">
           <Phone className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-          <p className="font-medium">No call records found</p>
+          <p className="font-medium">{t('callLogs.noRecords')}</p>
           <p className="text-sm text-muted-foreground mt-1">
             {hasActiveFilters
-              ? 'Try adjusting your filters or search term.'
-              : 'Call records will appear here once your AI agent starts handling calls.'}
+              ? t('callLogs.noRecordsFilterHint')
+              : t('callLogs.noRecordsHint')}
           </p>
         </div>
       ) : (
@@ -346,7 +348,7 @@ export function CallLogsTable() {
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">
-                        {call.contactName || 'Unknown Caller'}
+                        {call.contactName || t('callLogs.unknownCaller')}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {call.phoneNumber}
@@ -436,7 +438,7 @@ export function CallLogsTable() {
       {pagination && pagination.totalPages > 1 && (
         <div className="flex-shrink-0 flex items-center justify-between py-4 border-t">
           <p className="text-sm text-muted-foreground">
-            Page {pagination.page} of {pagination.totalPages}
+            {t('callLogs.pageInfo', { page: pagination.page, totalPages: pagination.totalPages })}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -446,7 +448,7 @@ export function CallLogsTable() {
               onClick={() => updatePage(pagination.page - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
-              Previous
+              {t('callLogs.previous')}
             </Button>
             <Button
               variant="outline"
@@ -454,7 +456,7 @@ export function CallLogsTable() {
               disabled={!pagination.hasMore}
               onClick={() => updatePage(pagination.page + 1)}
             >
-              Next
+              {t('callLogs.next')}
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

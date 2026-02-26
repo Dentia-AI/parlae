@@ -42,6 +42,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 
 interface AiActionLogEntry {
   id: string;
@@ -133,6 +134,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export function ActivityLogList() {
+  const { t } = useTranslation('common');
   const [logs, setLogs] = useState<AiActionLogEntry[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -209,9 +211,9 @@ export function ActivityLogList() {
         <div className="flex items-start gap-3 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
           <ShieldAlert className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-xs">
-            <span className="font-medium text-blue-800 dark:text-blue-200">HIPAA Compliant</span>
+            <span className="font-medium text-blue-800 dark:text-blue-200">{t('activityLog.hipaaTitle')}</span>
             <span className="text-blue-700 dark:text-blue-300">
-              {' '}— Patient-identifying information is never stored. Use Resource IDs to look up records in your PMS or Google Calendar.
+              {' '}— {t('activityLog.hipaaDescription')}
             </span>
           </div>
         </div>
@@ -227,24 +229,24 @@ export function ActivityLogList() {
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>AI Activity Log</CardTitle>
+                <CardTitle>{t('activityLog.pageTitle')}</CardTitle>
                 <CardDescription>
                   {loading
-                    ? 'Loading activity log...'
+                    ? t('activityLog.loadingLog')
                     : pagination
-                      ? `Showing ${logs.length} of ${pagination.total} entries`
-                      : 'Actions performed by your AI agent'}
+                      ? t('activityLog.showingEntries', { shown: logs.length, total: pagination.total })
+                      : t('activityLog.defaultDescription')}
                 </CardDescription>
               </div>
               <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                {t('activityLog.refresh')}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-3 mt-4">
               <div className="relative flex-1 max-w-xs">
                 <Input
-                  placeholder="Search by resource ID, call ID..."
+                  placeholder={t('activityLog.searchPlaceholder')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full"
@@ -252,37 +254,37 @@ export function ActivityLogList() {
               </div>
               <Select value={source} onValueChange={setSource}>
                 <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Source" />
+                  <SelectValue placeholder={t('activityLog.allSources')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="pms">PMS</SelectItem>
-                  <SelectItem value="gcal">Google Cal</SelectItem>
+                  <SelectItem value="all">{t('activityLog.allSources')}</SelectItem>
+                  <SelectItem value="pms">{t('activityLog.sourcePms')}</SelectItem>
+                  <SelectItem value="gcal">{t('activityLog.sourceGcal')}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={action} onValueChange={setAction}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Actions" />
+                  <SelectValue placeholder={t('activityLog.allActions')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Actions</SelectItem>
-                  <SelectItem value="book_appointment">Book Appointment</SelectItem>
-                  <SelectItem value="cancel_appointment">Cancel Appointment</SelectItem>
-                  <SelectItem value="reschedule_appointment">Reschedule Appointment</SelectItem>
-                  <SelectItem value="create_patient">Create Patient</SelectItem>
-                  <SelectItem value="update_patient">Update Patient</SelectItem>
-                  <SelectItem value="add_note">Add Note</SelectItem>
+                  <SelectItem value="all">{t('activityLog.allActions')}</SelectItem>
+                  <SelectItem value="book_appointment">{t('activityLog.actionBookAppt')}</SelectItem>
+                  <SelectItem value="cancel_appointment">{t('activityLog.actionCancelAppt')}</SelectItem>
+                  <SelectItem value="reschedule_appointment">{t('activityLog.actionRescheduleAppt')}</SelectItem>
+                  <SelectItem value="create_patient">{t('activityLog.actionCreatePatient')}</SelectItem>
+                  <SelectItem value="update_patient">{t('activityLog.actionUpdatePatient')}</SelectItem>
+                  <SelectItem value="add_note">{t('activityLog.actionAddNote')}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="All Statuses" />
+                  <SelectValue placeholder={t('activityLog.allStatuses')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="all">{t('activityLog.allStatuses')}</SelectItem>
+                  <SelectItem value="completed">{t('activityLog.statusCompleted')}</SelectItem>
+                  <SelectItem value="pending">{t('activityLog.statusPending')}</SelectItem>
+                  <SelectItem value="failed">{t('activityLog.statusFailed')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -303,20 +305,20 @@ export function ActivityLogList() {
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-card">
                     <TableRow>
-                      <TableHead className="w-[160px]">Date / Time</TableHead>
-                      <TableHead className="w-[80px]">Source</TableHead>
-                      <TableHead>Action &amp; Details</TableHead>
-                      <TableHead className="w-[140px]">Resource ID</TableHead>
-                      <TableHead className="w-[120px]">Call</TableHead>
-                      <TableHead className="w-[90px]">Status</TableHead>
+                      <TableHead className="w-[160px]">{t('activityLog.colDateTime')}</TableHead>
+                      <TableHead className="w-[80px]">{t('activityLog.colSource')}</TableHead>
+                      <TableHead>{t('activityLog.colActionDetails')}</TableHead>
+                      <TableHead className="w-[140px]">{t('activityLog.colResourceId')}</TableHead>
+                      <TableHead className="w-[120px]">{t('activityLog.colCall')}</TableHead>
+                      <TableHead className="w-[90px]">{t('activityLog.colStatus')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {logs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                          No activity log entries found.
-                          {(source !== 'all' || action || status || search) && ' Try adjusting your filters.'}
+                          {t('activityLog.noEntries')}
+                          {(source !== 'all' || action || status || search) && t('activityLog.adjustFilters')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -367,8 +369,8 @@ export function ActivityLogList() {
                                 href={`/home/call-logs/${log.callId}`}
                                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                               >
-                                <ExternalLink className="h-3 w-3" />
-                                View Call
+                            <ExternalLink className="h-3 w-3" />
+                            {t('activityLog.viewCall')}
                               </Link>
                             ) : (
                               <span className="text-muted-foreground text-xs">--</span>
@@ -377,20 +379,20 @@ export function ActivityLogList() {
                           <TableCell>
                             {log.status === 'completed' && log.success && (
                               <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs gap-1">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Done
+                            <CheckCircle2 className="h-3 w-3" />
+                            {t('activityLog.badgeDone')}
                               </Badge>
                             )}
                             {log.status === 'pending' && (
                               <Badge variant="outline" className="text-xs gap-1 text-amber-600 border-amber-300">
-                                <Clock className="h-3 w-3" />
-                                Pending
+                            <Clock className="h-3 w-3" />
+                            {t('activityLog.badgePending')}
                               </Badge>
                             )}
                             {(log.status === 'failed' || !log.success) && (
                               <Badge variant="destructive" className="text-xs gap-1">
-                                <XCircle className="h-3 w-3" />
-                                Failed
+                            <XCircle className="h-3 w-3" />
+                            {t('activityLog.badgeFailed')}
                               </Badge>
                             )}
                           </TableCell>
@@ -407,9 +409,9 @@ export function ActivityLogList() {
         {/* Pagination inside card */}
         {pagination && pagination.totalPages > 1 && (
           <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t">
-            <div className="text-sm text-muted-foreground">
-              Page {pagination.page} of {pagination.totalPages} ({pagination.total} entries)
-            </div>
+              <div className="text-sm text-muted-foreground">
+                {t('activityLog.pageInfo', { page: pagination.page, totalPages: pagination.totalPages, total: pagination.total })}
+              </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -417,17 +419,17 @@ export function ActivityLogList() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
+                  {t('activityLog.previous')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= pagination.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  {t('activityLog.next')}
+                  <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>

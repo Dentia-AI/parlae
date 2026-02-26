@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Button } from '@kit/ui/button';
@@ -47,6 +48,7 @@ interface AnalyticsData {
 }
 
 export function CallAnalyticsDashboard() {
+  const { t } = useTranslation('common');
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'1d' | '7d' | '14d'>('7d');
@@ -97,14 +99,14 @@ export function CallAnalyticsDashboard() {
         (dateRange === '7d' ? 7 : 14)
       ).toFixed(1);
 
-  const activityLabel = is24h ? 'Calls per hour avg' : 'Calls per day average';
+  const activityLabel = is24h ? t('dashboard.callsPerHourAvg') : t('dashboard.callsPerDayAvg');
 
   if (loading || !data) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading analytics...</p>
+          <p className="text-muted-foreground">{t('dashboard.loading')}</p>
         </div>
       </div>
     );
@@ -115,9 +117,9 @@ export function CallAnalyticsDashboard() {
       {/* Header with Date Range Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold tracking-tight">Call Analytics</h2>
+          <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.title')}</h2>
           <Badge variant="outline" className="gap-1 hidden sm:inline-flex">
-            Last {dateRange === '1d' ? '24 hours' : dateRange === '7d' ? '7 days' : '14 days'}
+            {dateRange === '1d' ? t('dashboard.last24h') : dateRange === '7d' ? t('dashboard.last7d') : t('dashboard.last14d')}
           </Badge>
         </div>
 
@@ -148,7 +150,7 @@ export function CallAnalyticsDashboard() {
           </Button>
           <Button variant="outline" size="sm" className="gap-1 px-2.5 sm:px-3">
             <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden sm:inline">{t('dashboard.export')}</span>
           </Button>
         </div>
       </div>
@@ -157,7 +159,7 @@ export function CallAnalyticsDashboard() {
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
-            <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalCalls')}</CardTitle>
             <div className="rounded-md bg-blue-500/10 p-1.5">
               <Phone className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             </div>
@@ -165,14 +167,14 @@ export function CallAnalyticsDashboard() {
           <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold">{data.metrics.totalCalls.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {data.metrics.totalCalls > 0 ? 'in selected period' : 'No calls yet'}
+              {data.metrics.totalCalls > 0 ? t('dashboard.inSelectedPeriod') : t('dashboard.noCallsYet')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
-            <CardTitle className="text-sm font-medium">Booking Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.bookingRate')}</CardTitle>
             <div className="rounded-md bg-emerald-500/10 p-1.5">
               <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
@@ -180,27 +182,27 @@ export function CallAnalyticsDashboard() {
           <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{data.metrics.bookingRate}%</div>
             <p className="text-xs text-muted-foreground">
-              {data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0} booked
+              {t('dashboard.booked', { count: data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0 })}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
-            <CardTitle className="text-sm font-medium">Avg. Call Time</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.avgCallTime')}</CardTitle>
             <div className="rounded-md bg-violet-500/10 p-1.5">
               <Clock className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
             </div>
           </CardHeader>
           <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold">{formatTime(data.metrics.avgCallTime)}</div>
-            <p className="text-xs text-muted-foreground">Average per call</p>
+            <p className="text-xs text-muted-foreground">{t('dashboard.avgPerCall')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
-            <CardTitle className="text-sm font-medium">Activity</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.activity')}</CardTitle>
             <div className="rounded-md bg-amber-500/10 p-1.5">
               <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
             </div>

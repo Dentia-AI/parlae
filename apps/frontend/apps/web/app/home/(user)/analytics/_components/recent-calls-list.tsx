@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Phone, Clock, ArrowRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface Call {
   id: string;
@@ -23,14 +24,14 @@ interface Call {
   summary: string | null;
 }
 
-const outcomeLabels: Record<string, string> = {
-  BOOKED: 'Booked',
-  TRANSFERRED: 'Transferred',
-  INSURANCE_INQUIRY: 'Insurance',
-  PAYMENT_PLAN: 'Payment',
-  INFORMATION: 'Info',
-  VOICEMAIL: 'Voicemail',
-  OTHER: 'Other',
+const outcomeKeys: Record<string, string> = {
+  BOOKED: 'BOOKED',
+  TRANSFERRED: 'TRANSFERRED',
+  INSURANCE_INQUIRY: 'INSURANCE_INQUIRY',
+  PAYMENT_PLAN: 'PAYMENT_PLAN',
+  INFORMATION: 'INFORMATION',
+  VOICEMAIL: 'VOICEMAIL',
+  OTHER: 'OTHER',
 };
 
 const outcomeColors: Record<string, string> = {
@@ -42,6 +43,7 @@ const outcomeColors: Record<string, string> = {
 };
 
 export function RecentCallsList() {
+  const { t } = useTranslation('common');
   const router = useRouter();
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,11 +89,11 @@ export function RecentCallsList() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent Calls</CardTitle>
+          <CardTitle className="text-base">{t('dashboard.recentCalls')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
-            Loading calls...
+            {t('dashboard.loadingCalls')}
           </div>
         </CardContent>
       </Card>
@@ -104,10 +106,10 @@ export function RecentCallsList() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Phone className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Recent Calls</CardTitle>
+            <CardTitle className="text-base">{t('dashboard.recentCalls')}</CardTitle>
           </div>
           <Button variant="ghost" size="sm" className="gap-1 text-xs h-7" onClick={() => router.push('/home/call-logs')}>
-            View All
+            {t('dashboard.viewAll')}
             <ArrowRight className="h-3 w-3" />
           </Button>
         </div>
@@ -116,7 +118,7 @@ export function RecentCallsList() {
         {calls.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground px-6">
             <Phone className="h-10 w-10 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No calls yet. Your AI agent is ready to answer!</p>
+            <p className="text-sm">{t('dashboard.noCallsMessage')}</p>
           </div>
         ) : (
           <div className="divide-y overflow-y-auto h-full max-h-[320px]">
@@ -135,7 +137,7 @@ export function RecentCallsList() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
                     <p className="font-medium text-sm truncate">
-                      {call.contactName || 'Unknown Caller'}
+                      {call.contactName || t('dashboard.unknownCaller')}
                     </p>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                       {formatTime(call.callStartedAt)}
@@ -147,7 +149,7 @@ export function RecentCallsList() {
                       variant="secondary"
                       className={`text-[10px] px-1.5 py-0 ${outcomeColors[call.outcome] || outcomeColors.OTHER}`}
                     >
-                      {outcomeLabels[call.outcome] || call.outcome}
+                      {t(`dashboard.outcomes.${outcomeKeys[call.outcome] || 'OTHER'}`, { defaultValue: call.outcome })}
                     </Badge>
 
                     {call.duration && (

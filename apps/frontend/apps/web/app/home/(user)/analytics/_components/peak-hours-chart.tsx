@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Clock } from 'lucide-react';
 
@@ -34,6 +35,7 @@ function bucketize(durations: number[]): DurationBucket[] {
 }
 
 export function CallDurationChart({ data, totalCalls }: CallDurationChartProps) {
+  const { t } = useTranslation('common');
   const durations = (data ?? []).map(d => d.duration);
   const buckets = bucketize(durations);
   const maxCount = Math.max(...buckets.map(b => b.count), 1);
@@ -54,17 +56,17 @@ export function CallDurationChart({ data, totalCalls }: CallDurationChartProps) 
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Call Duration</CardTitle>
+          <CardTitle className="text-base">{t('dashboard.callDuration')}</CardTitle>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span>Distribution</span>
+            <span>{t('dashboard.distribution')}</span>
           </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col flex-1 pt-0">
         {totalCalls === 0 ? (
           <div className="text-center py-8 text-muted-foreground flex-1 flex items-center justify-center">
-            No duration data available
+            {t('dashboard.noDurationData')}
           </div>
         ) : (
           <div className="flex flex-col gap-3 flex-1">
@@ -96,11 +98,11 @@ export function CallDurationChart({ data, totalCalls }: CallDurationChartProps) 
             {/* Stats */}
             <div className="space-y-1.5 pt-2 border-t mt-auto">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Average</span>
+                <span className="text-muted-foreground">{t('dashboard.average')}</span>
                 <span className="font-semibold tabular-nums">{avgMin}m {avgSec}s</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Median</span>
+                <span className="text-muted-foreground">{t('dashboard.median')}</span>
                 <span className="font-semibold tabular-nums">{medMin}m {medSec}s</span>
               </div>
             </div>

@@ -25,6 +25,7 @@ import {
 import { cn } from '@kit/ui/utils';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Parlae Billing Page
@@ -80,6 +81,7 @@ interface CardInfo {
 }
 
 export default function SettingsBillingPage() {
+  const { t } = useTranslation('common');
   const csrfToken = useCsrfToken();
   const [locations, setLocations] = useState(1);
   const [features, setFeatures] = useState(defaultFeatures);
@@ -130,10 +132,10 @@ export default function SettingsBillingPage() {
         const { url } = await resp.json();
         window.open(url, '_blank');
       } else {
-        toast.error('Failed to open billing portal');
+        toast.error(t('billing.portalError'));
       }
     } catch {
-      toast.error('Something went wrong');
+      toast.error(t('billing.genericError'));
     } finally {
       setLoading(false);
     }
@@ -236,12 +238,12 @@ export default function SettingsBillingPage() {
         body: JSON.stringify({ locations, features: selectedFeatures, estimatedCallVolume: callVolume, currency }),
       });
       if (response.ok) {
-        toast.success('Plan preferences saved successfully');
+        toast.success(t('billing.savePlanSuccess'));
       } else {
-        toast.error('Failed to save plan preferences');
+        toast.error(t('billing.savePlanError'));
       }
     } catch {
-      toast.error('An error occurred');
+      toast.error(t('billing.genericError'));
     } finally {
       setIsSaving(false);
     }
@@ -254,9 +256,9 @@ export default function SettingsBillingPage() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Payment &amp; Invoices</CardTitle>
+              <CardTitle className="text-lg">{t('billing.paymentTitle')}</CardTitle>
               <CardDescription>
-                Manage your payment method and view past invoices
+                {t('billing.paymentDescription')}
               </CardDescription>
             </div>
           </div>
@@ -267,13 +269,13 @@ export default function SettingsBillingPage() {
             <div className="rounded-xl border border-border/50 p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <CreditCard className="h-4 w-4" />
-                Payment Method
+                {t('billing.paymentMethod')}
               </div>
 
               {cardLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  Loading...
+                  {t('billing.loading')}
                 </div>
               ) : cardInfo ? (
                 <div className="space-y-1">
@@ -292,8 +294,8 @@ export default function SettingsBillingPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {hasPaymentMethod
-                    ? 'Card on file'
-                    : 'No payment method added yet'}
+                    ? t('billing.cardOnFile')
+                    : t('billing.noPaymentMethod')}
                 </p>
               )}
 
@@ -309,7 +311,7 @@ export default function SettingsBillingPage() {
                 ) : (
                   <CreditCard className="h-3.5 w-3.5 mr-2" />
                 )}
-                {hasPaymentMethod ? 'Update Card' : 'Add Payment Method'}
+                {hasPaymentMethod ? t('billing.updateCard') : t('billing.addPaymentMethod')}
               </Button>
             </div>
 
@@ -317,11 +319,11 @@ export default function SettingsBillingPage() {
             <div className="rounded-xl border border-border/50 p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <FileText className="h-4 w-4" />
-                Invoices
+                {t('billing.invoices')}
               </div>
 
               <p className="text-sm text-muted-foreground">
-                View and download your invoices, receipts, and billing history on Stripe.
+                {t('billing.invoicesDescription')}
               </p>
 
               <Button
@@ -336,7 +338,7 @@ export default function SettingsBillingPage() {
                 ) : (
                   <ExternalLink className="h-3.5 w-3.5 mr-2" />
                 )}
-                View Invoices
+                {t('billing.viewInvoices')}
               </Button>
             </div>
           </div>
@@ -348,8 +350,7 @@ export default function SettingsBillingPage() {
         <div className="rounded-xl bg-blue-50/70 dark:bg-blue-950/30 px-4 py-3 flex items-start gap-2.5">
           <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>Billing is currently inactive.</strong> Your account is on a complimentary plan during the setup period.
-            Usage-based billing will be activated by your account administrator when ready.
+            <strong>{t('billing.billingInactive')}</strong> {t('billing.billingInactiveDesc')}
           </p>
         </div>
       )}
@@ -361,9 +362,9 @@ export default function SettingsBillingPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h3 className="text-base font-semibold">Practice locations</h3>
+                <h3 className="text-base font-semibold">{t('billing.practiceLocations')}</h3>
                 <p className="text-sm text-muted-foreground">
-                  Each additional location is {Math.round(additionalLocationMultiplier * 100)}% of your base fee.
+                  {t('billing.additionalLocationCost', { percent: Math.round(additionalLocationMultiplier * 100) })}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -394,9 +395,9 @@ export default function SettingsBillingPage() {
 
           {/* Features */}
           <div>
-            <h3 className="text-base font-semibold mb-1">Features</h3>
+            <h3 className="text-base font-semibold mb-1">{t('billing.features')}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Choose what your AI receptionist handles
+              {t('billing.featuresDescription')}
             </p>
             <div className="grid grid-cols-2 gap-3">
               {features.map((feature) => {
@@ -428,7 +429,7 @@ export default function SettingsBillingPage() {
                       <span className="text-sm font-medium">{feature.name}</span>
                       {feature.comingSoon && (
                         <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">
-                          Soon
+                          {t('billing.soon')}
                         </Badge>
                       )}
                       {feature.monthlyCost > 0 && !feature.comingSoon && (
@@ -447,9 +448,9 @@ export default function SettingsBillingPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h3 className="text-base font-semibold">Monthly call volume</h3>
+                <h3 className="text-base font-semibold">{t('billing.monthlyCallVolume')}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {includedMinutes.toLocaleString()} free min included. {formatCurrency(overageRate)}/min overage.
+                  {t('billing.freeMinIncluded', { minutes: includedMinutes.toLocaleString(), rate: formatCurrency(overageRate) })}
                 </p>
               </div>
               <div className="text-right">
@@ -513,16 +514,16 @@ export default function SettingsBillingPage() {
                       {formatCurrency(Math.round(pricing.total))}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Per month, {includedMinutes.toLocaleString()} min included
+                      {t('billing.perMonth', { minutes: includedMinutes.toLocaleString() })}
                     </p>
                   </>
                 ) : (
                   <>
                     <div className="text-4xl font-extrabold tracking-tight text-green-600 dark:text-green-400">
-                      Free
+                      {t('billing.free')}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Complimentary during setup period
+                      {t('billing.complimentarySetup')}
                     </p>
                   </>
                 )}
@@ -533,24 +534,24 @@ export default function SettingsBillingPage() {
               {/* Cost Breakdown */}
               {billingEnabled && (
                 <div>
-                  <p className="text-sm font-semibold mb-2">Cost breakdown</p>
+                  <p className="text-sm font-semibold mb-2">{t('billing.costBreakdown')}</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">
-                        Services ({locations} location{locations > 1 ? 's' : ''})
+                        {locations > 1 ? t('billing.servicesPlural', { count: locations }) : t('billing.services', { count: locations })}
                       </span>
                       <span className="font-medium">{formatCurrency(Math.round(pricing.serviceCost))}</span>
                     </div>
                     {pricing.featureCost > 0 && (
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Add-on features</span>
+                        <span className="text-muted-foreground">{t('billing.addOnFeatures')}</span>
                         <span className="font-medium">+{formatCurrency(pricing.featureCost)}</span>
                       </div>
                     )}
                     {pricing.overageMinutes > 0 && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">
-                          Overage ({pricing.overageMinutes.toLocaleString()} min)
+                          {t('billing.overage', { minutes: pricing.overageMinutes.toLocaleString() })}
                         </span>
                         <span className="font-medium text-amber-600 dark:text-amber-400">
                           +{formatCurrency(Math.round(pricing.overageCost))}
@@ -564,7 +565,7 @@ export default function SettingsBillingPage() {
               {/* Included Features */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Included
+                  {t('billing.included')}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {INCLUDED_BADGES.map((label) => (
@@ -592,15 +593,13 @@ export default function SettingsBillingPage() {
               <div className="rounded-lg bg-muted/80 p-3 text-xs text-muted-foreground">
                 {billingEnabled ? (
                   <p>
-                    <strong>Setup fee:</strong> A one-time {formatCurrency(installationFee)} activation fee is charged when you deploy.
-                    Monthly billing starts after your first full month.
+                    <strong>{t('billing.setupFee')}</strong> {t('billing.setupFeeDesc', { amount: formatCurrency(installationFee) })}
                   </p>
                 ) : (
                   <p className="flex items-start gap-1.5">
                     <Lock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                     <span>
-                      Usage-based billing will be activated by your administrator.
-                      Pricing shown above is an estimate of what your plan would cost.
+                      {t('billing.billingLocked')}
                     </span>
                   </p>
                 )}
@@ -609,17 +608,17 @@ export default function SettingsBillingPage() {
               {/* Save / CTA */}
               {billingEnabled ? (
                 <Button onClick={handleSavePlan} disabled={isSaving} className="w-full" size="lg">
-                  {isSaving ? 'Saving...' : 'Save Plan Preferences'}
+                  {isSaving ? t('billing.saving') : t('billing.savePlan')}
                 </Button>
               ) : (
                 <Button disabled className="w-full" size="lg" variant="secondary">
                   <Lock className="h-4 w-4 mr-2" />
-                  Billing Not Active
+                  {t('billing.billingNotActive')}
                 </Button>
               )}
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Actual billing is based on usage. Contact your administrator for pricing details.
+                {t('billing.billingNote')}
               </p>
             </CardContent>
           </Card>

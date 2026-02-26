@@ -67,7 +67,7 @@ export class RetellToolController {
     }
 
     const call = body?.call || {};
-    const args = body?.args || {};
+    const args = this.resolveTemplateVars(body?.args || {}, call);
     const callId = call?.call_id;
 
     this.logger.log(
@@ -269,6 +269,46 @@ export class RetellToolController {
       `[resolveAccount] Could not resolve account for Retell call: agentId=${agentId}, phone=${call?.to_number}`,
     );
     return null;
+  }
+
+  // ── Template Variable Resolution ────────────────────────────────────────
+  // Retell conversation flow agents may pass {{call.from_number}} etc. as
+  // literal strings in tool args instead of resolving them. We substitute
+  // them with real values from the call object before processing.
+
+  private resolveTemplateVars(args: Record<string, any>, call: any): Record<string, any> {
+    const varMap: Record<string, string | undefined> = {
+      'call.from_number': call?.from_number,
+      'call.to_number': call?.to_number,
+      'call.call_id': call?.call_id,
+      'call.agent_id': call?.agent_id,
+    };
+
+    const resolve = (value: any): any => {
+      if (typeof value === 'string') {
+        const templateMatch = value.match(/^\{\{(.+?)\}\}$/);
+        if (templateMatch) {
+          const key = templateMatch[1].trim();
+          const resolved = varMap[key];
+          if (resolved !== undefined) {
+            this.logger.log(`[Retell Template] Resolved {{${key}}} → ${resolved}`);
+            return resolved;
+          }
+        }
+        return value.replace(/\{\{(.+?)\}\}/g, (_match, key: string) => {
+          return varMap[key.trim()] ?? _match;
+        });
+      }
+      if (Array.isArray(value)) return value.map(resolve);
+      if (value && typeof value === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(value)) out[k] = resolve(v);
+        return out;
+      }
+      return value;
+    };
+
+    return resolve(args);
   }
 
   // ── Rate Limiting ───────────────────────────────────────────────────────

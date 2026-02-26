@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 
 interface SatisfactionEntry {
@@ -22,10 +23,12 @@ function DonutSegments({
   data,
   size = 180,
   strokeWidth = 32,
+  satisfiedLabel = 'satisfied',
 }: {
   data: SatisfactionEntry[];
   size?: number;
   strokeWidth?: number;
+  satisfiedLabel?: string;
 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -51,7 +54,7 @@ function DonutSegments({
           dominantBaseline="central"
           className="fill-muted-foreground text-sm"
         >
-          No data
+          —
         </text>
       </svg>
     );
@@ -111,28 +114,29 @@ function DonutSegments({
         className="fill-muted-foreground"
         style={{ fontSize: '0.75rem' }}
       >
-        satisfied
+        {satisfiedLabel}
       </text>
     </svg>
   );
 }
 
 export function SatisfactionChart({ data }: SatisfactionChartProps) {
+  const { t } = useTranslation('common');
   const total = data.reduce((sum, d) => sum + d.count, 0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Caller Satisfaction</CardTitle>
+        <CardTitle className="text-base">{t('dashboard.callerSatisfaction')}</CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            No satisfaction data available
+            {t('dashboard.noSatisfactionData')}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-6">
-            <DonutSegments data={data} />
+            <DonutSegments data={data} satisfiedLabel={t('dashboard.satisfied')} />
             <div className="grid grid-cols-1 gap-y-2 w-full max-w-xs">
               {data.map((item, i) => {
                 const color = satisfactionColors[item.label] ?? '#94a3b8';
@@ -146,7 +150,7 @@ export function SatisfactionChart({ data }: SatisfactionChartProps) {
                         className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      <span>{item.label}</span>
+                      <span>{t(`dashboard.satisfaction.${item.label}`, { defaultValue: item.label })}</span>
                     </div>
                     <span className="tabular-nums font-medium ml-2">
                       {item.count}{' '}

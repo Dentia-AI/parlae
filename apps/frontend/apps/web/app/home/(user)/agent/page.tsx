@@ -4,6 +4,7 @@ import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Phone, Settings, FileText, Mic, CheckCircle2, Calendar, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { Trans } from '@kit/ui/trans';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { DeployedBanner } from './_components/deployed-banner';
@@ -12,6 +13,7 @@ import { PhoneSetupCard } from './_components/phone-setup-card';
 import { PmsIntegrationCard } from './_components/pms-integration-card';
 import { CallForwardingInstructions } from './_components/call-forwarding-instructions';
 import { getAccountProvider } from '@kit/shared/voice-provider';
+import { formatPhoneDisplay } from '~/lib/format-phone';
 
 export const metadata = {
   title: 'AI Agents Dashboard',
@@ -146,13 +148,8 @@ export default async function ReceptionistDashboardPage({
     ? { name: retellVoiceInfo.voiceName, gender: voiceConfig?.gender || 'female', accent: voiceConfig?.accent || 'American' }
     : voiceConfig;
 
-  const integrationMethodLabels: Record<string, string> = {
-    forwarded: 'Call Forwarding',
-    ported: 'Ported Number',
-    sip: 'SIP Trunk',
-    none: 'Not Configured',
-  };
-  const integrationLabel = integrationMethodLabels[account?.phoneIntegrationMethod || 'none'] || account?.phoneIntegrationMethod || 'Not Configured';
+  const integrationMethod = account?.phoneIntegrationMethod || 'none';
+  const displayPhone = formatPhoneDisplay(phoneNumber);
 
   return (
     <div className="container max-w-6xl py-8 space-y-6">
@@ -167,9 +164,9 @@ export default async function ReceptionistDashboardPage({
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">AI Agents</h1>
+        <h1 className="text-3xl font-bold tracking-tight"><Trans i18nKey="common:agentOverview.title" /></h1>
         <p className="text-muted-foreground mt-2">
-          Manage your AI-powered phone agents
+          <Trans i18nKey="common:agentOverview.description" />
         </p>
       </div>
 
@@ -183,16 +180,16 @@ export default async function ReceptionistDashboardPage({
               </div>
               <div>
                 <CardTitle>
-                  {isActive ? 'Active & Answering Calls' : 'Setup Incomplete'}
+                  {isActive ? <Trans i18nKey="common:agentOverview.activeStatus" /> : <Trans i18nKey="common:agentOverview.setupIncomplete" />}
                 </CardTitle>
                 <div className="flex items-center gap-2 mt-1">
                   <CardDescription className="!mb-0">
-                    <code className="font-mono">{phoneNumber}</code>
+                    <code className="font-mono">{displayPhone}</code>
                   </CardDescription>
                   {isActive && (
                     <Badge variant="default" className="bg-green-600">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Live
+                      <Trans i18nKey="common:agentOverview.live" />
                     </Badge>
                   )}
                 </div>
@@ -206,7 +203,8 @@ export default async function ReceptionistDashboardPage({
       <div className="grid md:grid-cols-3 gap-6">
         <PhoneSetupCard
           phoneNumber={phoneNumber}
-          integrationLabel={integrationLabel}
+          displayPhone={displayPhone}
+          integrationMethod={integrationMethod}
           phoneChangeCount={integrationSettings?.phoneChangeCount ?? 0}
         />
 
@@ -214,7 +212,7 @@ export default async function ReceptionistDashboardPage({
           <CardHeader>
             <div className="flex items-center gap-2">
               <Mic className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Voice</CardTitle>
+              <CardTitle><Trans i18nKey="common:agentOverview.voice" /></CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -222,11 +220,11 @@ export default async function ReceptionistDashboardPage({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div>
-                    <p className="text-sm text-muted-foreground">Voice</p>
+                    <p className="text-sm text-muted-foreground"><Trans i18nKey="common:agentOverview.voiceLabel" /></p>
                     <p className="font-semibold">{displayVoice.name}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Type</p>
+                    <p className="text-sm text-muted-foreground"><Trans i18nKey="common:agentOverview.typeLabel" /></p>
                     <p className="font-semibold capitalize">
                       {displayVoice.gender} • {displayVoice.accent}
                     </p>
@@ -234,16 +232,16 @@ export default async function ReceptionistDashboardPage({
                 </div>
                 <Link href="/home/agent/setup?manage=true">
                   <Button variant="outline" size="sm" className="w-full">
-                    Change Voice
+                    <Trans i18nKey="common:agentOverview.changeVoice" />
                   </Button>
                 </Link>
               </div>
             ) : (
               <div>
-                <p className="text-sm text-muted-foreground mb-4">No voice configured</p>
+                <p className="text-sm text-muted-foreground mb-4"><Trans i18nKey="common:agentOverview.noVoice" /></p>
                 <Link href="/home/agent/setup?manage=true">
                   <Button variant="outline" size="sm">
-                    Configure Voice
+                    <Trans i18nKey="common:agentOverview.configureVoice" />
                   </Button>
                 </Link>
               </div>
@@ -255,28 +253,28 @@ export default async function ReceptionistDashboardPage({
           <CardHeader>
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Knowledge Base</CardTitle>
+              <CardTitle><Trans i18nKey="common:agentOverview.knowledgeBase" /></CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="space-y-2">
                 <div>
-                  <p className="text-sm text-muted-foreground">Documents</p>
+                  <p className="text-sm text-muted-foreground"><Trans i18nKey="common:agentOverview.documents" /></p>
                   <p className="font-semibold">
-                    {integrationSettings?.knowledgeBaseFileIds?.length || 0} uploaded
+                    <Trans i18nKey="common:agentOverview.uploaded" values={{ count: integrationSettings?.knowledgeBaseFileIds?.length || 0 }} />
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="text-sm text-muted-foreground"><Trans i18nKey="common:agentOverview.kbStatus" /></p>
                   <p className="font-semibold">
-                    {integrationSettings?.queryToolId ? 'Active' : 'Not configured'}
+                    {integrationSettings?.queryToolId ? <Trans i18nKey="common:agentOverview.kbActive" /> : <Trans i18nKey="common:agentOverview.kbNotConfigured" />}
                   </p>
                 </div>
               </div>
               <Link href="/home/agent/knowledge">
                 <Button variant="outline" size="sm" className="w-full">
-                  Manage Files
+                  <Trans i18nKey="common:agentOverview.manageFiles" />
                 </Button>
               </Link>
             </div>
@@ -295,7 +293,7 @@ export default async function ReceptionistDashboardPage({
 
       {/* Integrations */}
       <div>
-        <h2 className="text-lg font-semibold mb-3">Integrations</h2>
+        <h2 className="text-lg font-semibold mb-3"><Trans i18nKey="common:agentOverview.integrations" /></h2>
         <div className="grid md:grid-cols-2 gap-4">
           {/* Google Calendar */}
           <Card>
@@ -306,12 +304,12 @@ export default async function ReceptionistDashboardPage({
                     <Calendar className={`h-5 w-5 ${account?.googleCalendarConnected ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm">Google Calendar</h3>
+                    <h3 className="font-semibold text-sm"><Trans i18nKey="common:agentOverview.googleCalendar" /></h3>
                     {account?.googleCalendarConnected ? (
                       <>
                         <div className="flex items-center gap-1.5 mt-1">
                           <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                          <span className="text-xs text-green-700 dark:text-green-400 font-medium">Connected</span>
+                          <span className="text-xs text-green-700 dark:text-green-400 font-medium"><Trans i18nKey="common:agentOverview.connected" /></span>
                         </div>
                         {account.googleCalendarEmail && (
                           <p className="text-xs text-muted-foreground mt-0.5">{account.googleCalendarEmail}</p>
@@ -320,14 +318,14 @@ export default async function ReceptionistDashboardPage({
                     ) : (
                       <div className="flex items-center gap-1.5 mt-1">
                         <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Not connected</span>
+                        <span className="text-xs text-muted-foreground"><Trans i18nKey="common:agentOverview.notConnected" /></span>
                       </div>
                     )}
                   </div>
                 </div>
                 <Link href="/home/agent/setup/integrations">
                   <Button variant="outline" size="sm">
-                    {account?.googleCalendarConnected ? 'Manage' : 'Connect'}
+                    {account?.googleCalendarConnected ? <Trans i18nKey="common:agentOverview.manage" /> : <Trans i18nKey="common:agentOverview.connect" />}
                   </Button>
                 </Link>
               </div>
@@ -363,9 +361,9 @@ export default async function ReceptionistDashboardPage({
                   <Settings className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Reconfigure Agent</h3>
+                  <h3 className="font-semibold"><Trans i18nKey="common:agentOverview.reconfigure" /></h3>
                   <p className="text-sm text-muted-foreground">
-                    Change voice, knowledge base, or phone setup
+                    <Trans i18nKey="common:agentOverview.reconfigureDesc" />
                   </p>
                 </div>
               </div>
@@ -377,10 +375,11 @@ export default async function ReceptionistDashboardPage({
       {/* Test Call */}
       <div className="rounded-xl bg-muted/30 px-5 py-4 flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
-          <strong className="text-foreground">Test your AI receptionist:</strong> Call {phoneNumber} to hear how it sounds
+          <strong className="text-foreground"><Trans i18nKey="common:agentOverview.testCallLabel" /></strong>{' '}
+          <Trans i18nKey="common:agentOverview.testCallDesc" values={{ number: displayPhone }} />
         </span>
         <Button size="sm" variant="outline">
-          Test Call
+          <Trans i18nKey="common:agentOverview.testCall" />
         </Button>
       </div>
     </div>

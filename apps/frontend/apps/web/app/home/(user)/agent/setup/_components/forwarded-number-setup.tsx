@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { setupForwardedNumberAction } from '../_lib/phone-actions';
+import { formatPhoneDisplay } from '~/lib/format-phone';
 
 interface ForwardedNumberSetupProps {
   accountId: string;
@@ -388,7 +389,7 @@ export function ForwardedNumberSetup({
                   {t('common:setup.phone.forwarding.clinicMainNumber')}
                 </div>
                 <div className="text-xl font-semibold font-mono tracking-tight">
-                  {clinicNumber}
+                  {formatPhoneDisplay(clinicNumber)}
                 </div>
               </div>
               <Button
@@ -417,7 +418,7 @@ export function ForwardedNumberSetup({
                   </div>
                   {staffDirectNumber && !editingHumanLine ? (
                     <div className="text-lg font-semibold font-mono tracking-tight">
-                      {staffDirectNumber}
+                      {formatPhoneDisplay(staffDirectNumber)}
                     </div>
                   ) : !editingHumanLine ? (
                     <div className="text-sm text-muted-foreground">
@@ -520,7 +521,7 @@ export function ForwardedNumberSetup({
               <li>
                 {t('common:setup.phone.forwarding.step2Pre')}{' '}
                 <strong className="font-mono text-foreground">
-                  {clinicNumber}
+                  {formatPhoneDisplay(clinicNumber)}
                 </strong>{' '}
                 {t('common:setup.phone.forwarding.step2Post')}
               </li>

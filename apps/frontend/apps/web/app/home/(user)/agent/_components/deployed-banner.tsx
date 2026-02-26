@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, X } from 'lucide-react';
 import { CallForwardingInstructions } from './call-forwarding-instructions';
+import { formatPhoneDisplay } from '~/lib/format-phone';
 
 interface DeployedBannerProps {
   phoneNumber: string;
@@ -12,9 +14,11 @@ interface DeployedBannerProps {
 }
 
 export function DeployedBanner({ phoneNumber, clinicNumber, integrationMethod }: DeployedBannerProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [visible, setVisible] = useState(true);
   const isForwarded = integrationMethod === 'forwarded';
+  const displayPhone = formatPhoneDisplay(phoneNumber);
 
   if (!visible) return null;
 
@@ -39,14 +43,13 @@ export function DeployedBanner({ phoneNumber, clinicNumber, integrationMethod }:
           </div>
           <div>
             <h3 className="font-semibold text-green-900 dark:text-green-100">
-              Your AI Receptionist is Live!
+              {t('deployedBanner.title')}
             </h3>
             <p className="text-sm text-green-700 dark:text-green-300 mt-0.5">
-              Your AI receptionist has been deployed and is ready to answer calls
-              at <code className="font-mono font-medium">{phoneNumber}</code>.
+              {t('deployedBanner.description', { number: displayPhone })}
               {isForwarded && (
                 <span className="block mt-1 font-medium">
-                  Complete the call forwarding setup below to start receiving calls.
+                  {t('deployedBanner.forwardingHint')}
                 </span>
               )}
             </p>

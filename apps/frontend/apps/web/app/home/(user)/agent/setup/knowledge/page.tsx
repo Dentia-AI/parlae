@@ -57,45 +57,45 @@ interface CategoryState {
 const KB_CATEGORIES = [
   {
     id: 'clinic-info',
-    label: 'Clinic Information',
-    description: 'Business hours, location, directions, parking, contact details',
+    labelKey: 'setup.knowledge.categories.clinicInfo',
+    descKey: 'setup.knowledge.categories.clinicInfoDesc',
+    examplesKey: 'setup.knowledge.categories.clinicInfoExamples',
     icon: Building2,
-    examples: ['Hours of operation', 'Address & directions', 'Parking info', 'Phone & email'],
   },
   {
     id: 'services',
-    label: 'Services & Procedures',
-    description: 'Dental services, treatments, pricing information',
+    labelKey: 'setup.knowledge.categories.services',
+    descKey: 'setup.knowledge.categories.servicesDesc',
+    examplesKey: 'setup.knowledge.categories.servicesExamples',
     icon: Stethoscope,
-    examples: ['Service menu & pricing', 'Treatment descriptions', 'Special offers'],
   },
   {
     id: 'insurance',
-    label: 'Insurance & Coverage',
-    description: 'Accepted plans, coverage policies, billing FAQs',
+    labelKey: 'setup.knowledge.categories.insurance',
+    descKey: 'setup.knowledge.categories.insuranceDesc',
+    examplesKey: 'setup.knowledge.categories.insuranceExamples',
     icon: ShieldCheck,
-    examples: ['Accepted insurance list', 'Coverage policies', 'Billing procedures'],
   },
   {
     id: 'providers',
-    label: 'Doctors & Providers',
-    description: 'Doctor biographies, specialties, credentials',
+    labelKey: 'setup.knowledge.categories.providers',
+    descKey: 'setup.knowledge.categories.providersDesc',
+    examplesKey: 'setup.knowledge.categories.providersExamples',
     icon: Users,
-    examples: ['Doctor bios & photos', 'Specialties & certifications', 'Availability schedules'],
   },
   {
     id: 'policies',
-    label: 'Office Policies',
-    description: 'Cancellation rules, new patient requirements, payment terms',
+    labelKey: 'setup.knowledge.categories.policies',
+    descKey: 'setup.knowledge.categories.policiesDesc',
+    examplesKey: 'setup.knowledge.categories.policiesExamples',
     icon: ScrollText,
-    examples: ['Cancellation & no-show policy', 'New patient forms', 'Payment terms'],
   },
   {
     id: 'faqs',
-    label: 'FAQs',
-    description: 'Common questions, preparation & aftercare instructions',
+    labelKey: 'setup.knowledge.categories.faqs',
+    descKey: 'setup.knowledge.categories.faqsDesc',
+    examplesKey: 'setup.knowledge.categories.faqsExamples',
     icon: HelpCircle,
-    examples: ['Common questions', 'Pre-visit preparation', 'Post-procedure care'],
   },
 ] as const;
 
@@ -366,7 +366,7 @@ export default function KnowledgeBasePage() {
 
     sessionStorage.setItem('websiteUrl', url);
     setWebsiteUrlSaved(true);
-    toast.success('Website URL saved. It will be scanned automatically after payment.');
+    toast.success(t('common:setup.knowledge.website.urlSavedToast'));
   };
 
   const handleScrapeNow = async () => {
@@ -533,7 +533,7 @@ export default function KnowledgeBasePage() {
           <Trans i18nKey="common:setup.knowledge.title" />
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload documents to train your AI receptionist. Organize by category for smarter, more targeted responses.
+          {t('common:setup.knowledge.wizardDescription')}
         </p>
       </div>
 
@@ -553,14 +553,14 @@ export default function KnowledgeBasePage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Your Website</span>
+                  <span className="text-sm font-semibold">{t('common:setup.knowledge.website.title')}</span>
                   <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
                     <Sparkles className="h-2.5 w-2.5" />
-                    Auto-Scanned
+                    {t('common:setup.knowledge.website.autoScanned')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Add your website URL — we&apos;ll automatically scan and organize your content after payment
+                  {t('common:setup.knowledge.website.description')}
                 </p>
               </div>
             </div>
@@ -590,12 +590,12 @@ export default function KnowledgeBasePage() {
                   {websiteUrlSaved ? (
                     <>
                       <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-green-600" />
-                      Saved
+                      {t('common:setup.knowledge.website.saved')}
                     </>
                   ) : (
                     <>
                       <Globe className="mr-1.5 h-3.5 w-3.5" />
-                      Save URL
+                      {t('common:setup.knowledge.website.saveUrl')}
                     </>
                   )}
                 </Button>
@@ -635,12 +635,14 @@ export default function KnowledgeBasePage() {
                 <div className="rounded-lg bg-green-500/5 ring-1 ring-green-500/20 px-3 py-2.5 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 text-green-700 dark:text-green-400 font-medium">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    Website scanned successfully
+                    {t('common:setup.knowledge.website.scanSuccess')}
                   </div>
                   <div className="text-muted-foreground pl-5">
-                    Scraped {scrapeResult.pagesScraped} pages and created{' '}
-                    {scrapeResult.documentsUploaded} documents across{' '}
-                    {Object.keys(scrapeResult.categories).length} categories
+                    {t('common:setup.knowledge.website.scanResult', {
+                      pages: scrapeResult.pagesScraped,
+                      documents: scrapeResult.documentsUploaded,
+                      categories: Object.keys(scrapeResult.categories).length,
+                    })}
                   </div>
                 </div>
               )}
@@ -649,17 +651,16 @@ export default function KnowledgeBasePage() {
                 <div className="rounded-lg bg-blue-500/5 ring-1 ring-blue-500/20 px-3 py-2.5 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-medium">
                     <Sparkles className="h-3.5 w-3.5" />
-                    Website will be scanned automatically
+                    {t('common:setup.knowledge.website.autoScanTitle')}
                   </div>
                   <div className="text-muted-foreground pl-5">
-                    After you complete payment and deploy, we&apos;ll scan your website, extract content,
-                    and use AI to organize it into your knowledge base categories.
+                    {t('common:setup.knowledge.website.autoScanDesc')}
                   </div>
                 </div>
               )}
 
               <p className="text-[10px] text-muted-foreground/60">
-                You can also upload additional files manually in the categories below.
+                {t('common:setup.knowledge.website.manualUploadHint')}
               </p>
             </div>
           </div>
@@ -698,14 +699,14 @@ export default function KnowledgeBasePage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{cat.label}</span>
+                      <span className="text-sm font-semibold">{t(`common:${cat.labelKey}`)}</span>
                       {uploadedCount > 0 && (
                         <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                           {uploadedCount} file{uploadedCount !== 1 ? 's' : ''}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
+                    <p className="text-xs text-muted-foreground truncate">{t(`common:${cat.descKey}`)}</p>
                   </div>
                   {state.expanded ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -732,15 +733,15 @@ export default function KnowledgeBasePage() {
                       <div className="flex flex-col items-center gap-2">
                         <Upload className="h-5 w-5 text-muted-foreground" />
                         <p className="text-xs text-muted-foreground">
-                          Drop files here or{' '}
+                          {t('common:setup.knowledge.dropOrBrowse')}{' '}
                           <label
                             htmlFor={`file-upload-${cat.id}`}
                             className="text-primary cursor-pointer underline underline-offset-2"
                           >
-                            browse
+                            {t('common:setup.knowledge.browse')}
                           </label>
                         </p>
-                        <p className="text-[10px] text-muted-foreground/60">PDF, DOC, DOCX, TXT up to 10MB</p>
+                        <p className="text-[10px] text-muted-foreground/60">{t('common:setup.knowledge.fileFormats')}</p>
                         <Input
                           type="file"
                           id={`file-upload-${cat.id}`}
@@ -764,8 +765,8 @@ export default function KnowledgeBasePage() {
                                 <p className="text-[10px] text-muted-foreground">
                                   {formatFileSize(file.size)}
                                   {file.status === 'uploading' && ` • ${file.progress}%`}
-                                  {file.status === 'uploaded' && ' • Uploaded'}
-                                  {file.status === 'error' && ' • Failed'}
+                                  {file.status === 'uploaded' && ` • ${t('common:setup.knowledge.uploaded')}`}
+                                  {file.status === 'error' && ` • ${t('common:setup.knowledge.uploadFailed')}`}
                                 </p>
                               </div>
                               {file.status === 'uploading' && (
@@ -821,9 +822,7 @@ export default function KnowledgeBasePage() {
 
           {/* Info box */}
           <div className="rounded-xl bg-muted/80 p-4 text-xs text-muted-foreground">
-            <strong className="text-foreground">How it works:</strong> Your AI receptionist learns from the documents you upload here.
-            Organizing by category helps keep things tidy. The more relevant information you provide, the better it can
-            answer caller questions. You can skip categories that don&apos;t apply.
+            <strong className="text-foreground">{t('common:setup.knowledge.howItWorksLabel')}</strong> {t('common:setup.knowledge.howItWorks')}
           </div>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none" />
@@ -838,7 +837,7 @@ export default function KnowledgeBasePage() {
           <Button onClick={handleContinue} disabled={isSaving}>
             {isSaving ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t('common:setup.knowledge.saving')}
               </>
             ) : (
               <Trans i18nKey="common:setup.knowledge.continueToIntegrations" />

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 
 interface CallOutcomesChartProps {
@@ -10,55 +11,20 @@ interface CallOutcomesChartProps {
   }>;
 }
 
-const outcomeColors: Record<string, { dot: string; bar: string; label: string }> = {
-  BOOKED: {
-    dot: 'bg-emerald-500',
-    bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
-    label: 'Booked',
-  },
-  TRANSFERRED: {
-    dot: 'bg-blue-500',
-    bar: 'bg-gradient-to-r from-blue-500 to-blue-400',
-    label: 'Transferred',
-  },
-  INSURANCE_INQUIRY: {
-    dot: 'bg-violet-500',
-    bar: 'bg-gradient-to-r from-violet-500 to-violet-400',
-    label: 'Insurance Inquiry',
-  },
-  INFORMATION: {
-    dot: 'bg-cyan-500',
-    bar: 'bg-gradient-to-r from-cyan-500 to-cyan-400',
-    label: 'General Inquiry',
-  },
-  HUNG_UP: {
-    dot: 'bg-rose-500',
-    bar: 'bg-gradient-to-r from-rose-500 to-rose-400',
-    label: 'Hung Up',
-  },
-  EMERGENCY: {
-    dot: 'bg-red-500',
-    bar: 'bg-gradient-to-r from-red-500 to-red-400',
-    label: 'Emergency',
-  },
-  RESCHEDULED: {
-    dot: 'bg-amber-500',
-    bar: 'bg-gradient-to-r from-amber-500 to-amber-400',
-    label: 'Rescheduled',
-  },
-  CANCELLED: {
-    dot: 'bg-orange-500',
-    bar: 'bg-gradient-to-r from-orange-500 to-orange-400',
-    label: 'Cancelled',
-  },
-  OTHER: {
-    dot: 'bg-slate-500',
-    bar: 'bg-gradient-to-r from-slate-500 to-slate-400',
-    label: 'Other',
-  },
+const outcomeColors: Record<string, { dot: string; bar: string }> = {
+  BOOKED: { dot: 'bg-emerald-500', bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400' },
+  TRANSFERRED: { dot: 'bg-blue-500', bar: 'bg-gradient-to-r from-blue-500 to-blue-400' },
+  INSURANCE_INQUIRY: { dot: 'bg-violet-500', bar: 'bg-gradient-to-r from-violet-500 to-violet-400' },
+  INFORMATION: { dot: 'bg-cyan-500', bar: 'bg-gradient-to-r from-cyan-500 to-cyan-400' },
+  HUNG_UP: { dot: 'bg-rose-500', bar: 'bg-gradient-to-r from-rose-500 to-rose-400' },
+  EMERGENCY: { dot: 'bg-red-500', bar: 'bg-gradient-to-r from-red-500 to-red-400' },
+  RESCHEDULED: { dot: 'bg-amber-500', bar: 'bg-gradient-to-r from-amber-500 to-amber-400' },
+  CANCELLED: { dot: 'bg-orange-500', bar: 'bg-gradient-to-r from-orange-500 to-orange-400' },
+  OTHER: { dot: 'bg-slate-500', bar: 'bg-gradient-to-r from-slate-500 to-slate-400' },
 };
 
 export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
+  const { t } = useTranslation('common');
   const sortedData = [...data].sort((a, b) => b.count - a.count);
   const totalCalls = sortedData.reduce((sum, item) => sum + item.count, 0);
 
@@ -66,10 +32,10 @@ export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Call Outcomes</CardTitle>
+          <CardTitle className="text-base">{t('dashboard.callOutcomes')}</CardTitle>
           {totalCalls > 0 && (
             <span className="text-sm text-muted-foreground">
-              {totalCalls} total
+              {t('dashboard.total', { count: totalCalls })}
             </span>
           )}
         </div>
@@ -78,7 +44,7 @@ export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
         <div className="space-y-5">
           {sortedData.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No call outcome data available
+              {t('dashboard.noOutcomeData')}
             </div>
           ) : (
             sortedData.map((item, index) => {
@@ -89,7 +55,7 @@ export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <div className={`w-2.5 h-2.5 rounded-full ${config.dot}`} />
-                      <span className="font-medium">{config.label}</span>
+                      <span className="font-medium">{t(`dashboard.outcomes.${item.outcome}`, { defaultValue: item.outcome })}</span>
                     </div>
                     <div className="flex items-center gap-1.5 tabular-nums">
                       <span className="font-semibold">{item.count}</span>
