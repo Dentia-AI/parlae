@@ -3,6 +3,7 @@ import { HttpException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { RetellWebhookController } from './retell-webhook.controller';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgentToolsService } from '../agent-tools/agent-tools.service';
 
 function createMockReq(body: any, rawBody?: Buffer) {
   return { rawBody, body } as any;
@@ -11,6 +12,7 @@ function createMockReq(body: any, rawBody?: Buffer) {
 describe('RetellWebhookController', () => {
   let controller: RetellWebhookController;
   let prisma: any;
+  let agentToolsService: any;
 
   const mockPrisma = {
     callReference: {
@@ -21,14 +23,22 @@ describe('RetellWebhookController', () => {
     },
   };
 
+  const mockAgentToolsService = {
+    prefetchCallerContext: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RetellWebhookController],
-      providers: [{ provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AgentToolsService, useValue: mockAgentToolsService },
+      ],
     }).compile();
 
     controller = module.get<RetellWebhookController>(RetellWebhookController);
     prisma = module.get(PrismaService);
+    agentToolsService = module.get(AgentToolsService);
   });
 
   afterEach(() => {
@@ -190,6 +200,60 @@ describe('RetellWebhookController', () => {
       };
       await controller.handleWebhook(body, '', createMockReq(body));
       expect(prisma.callReference.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should fire prefetchCallerContext when call has from_number', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'retell-call-5', agent_id: 'agent-1', from_number: '+14155551234' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(agentToolsService.prefetchCallerContext).toHaveBeenCalledWith(
+        'retell-call-5',
+        '+14155551234',
+        'acc-1',
+        'RETELL',
+      );
+    });
+
+    it('should not fire prefetchCallerContext when from_number is missing', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'retell-call-6', agent_id: 'agent-1' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(agentToolsService.prefetchCallerContext).not.toHaveBeenCalled();
+    });
+
+    it('should not fire prefetchCallerContext when account cannot be resolved', async () => {
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'retell-call-7', from_number: '+14155551234' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(agentToolsService.prefetchCallerContext).not.toHaveBeenCalled();
+    });
+
+    it('should not block webhook response if prefetch fails', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      agentToolsService.prefetchCallerContext.mockRejectedValueOnce(new Error('Prefetch boom'));
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'retell-call-8', agent_id: 'agent-1', from_number: '+14155551234' },
+      };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(result).toEqual({ received: true });
     });
   });
 

@@ -129,6 +129,41 @@ export class RetellTemplateService {
     return result;
   }
 
+  /**
+   * List recent calls for the given agent IDs.
+   * Uses Retell's POST /v2/list-calls with filter_criteria.
+   */
+  async listCalls(
+    agentIds: string[],
+    limit = 10,
+  ): Promise<any[]> {
+    if (!this.isEnabled || agentIds.length === 0) return [];
+    try {
+      const result = await this.retellRequest('POST', '/v2/list-calls', {
+        filter_criteria: { agent_id: agentIds },
+        sort_order: 'descending',
+        limit,
+      });
+      return Array.isArray(result) ? result : [];
+    } catch (err: any) {
+      this.logger.error(`Failed to list calls: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch a single call by ID (includes call_analysis).
+   */
+  async getCall(callId: string): Promise<any | null> {
+    if (!this.isEnabled || !callId) return null;
+    try {
+      return await this.retellRequest('GET', `/get-call/${callId}`);
+    } catch (err: any) {
+      this.logger.error(`Failed to get call ${callId}: ${err.message}`);
+      return null;
+    }
+  }
+
   private async retellRequest(method: string, path: string, body?: any): Promise<any> {
     const url = `${this.config.baseUrl}${path}`;
     const res = await fetch(url, {

@@ -399,8 +399,24 @@ export const RETELL_APPOINTMENT_MGMT_TOOLS: RetellCustomTool[] = [
   retellCancelAppointmentTool,
 ];
 
+const getCallerContextFn: VapiToolFunction = {
+  name: 'getCallerContext',
+  description: 'Fetch pre-loaded context about the current caller: their name (if known), next upcoming booking, last visit, and a summary of their previous call. Call this immediately at the start of the conversation to personalize the greeting. No parameters needed.',
+  parameters: {
+    type: 'object',
+    properties: {},
+  },
+};
+
+export const retellGetCallerContextTool = toRetellTool(getCallerContextFn, {
+  speakDuring: true,
+  speakDuringMessage: 'One moment while I pull up your information...',
+  timeoutMs: 5_000,
+});
+
 export const RETELL_RECEPTIONIST_TOOLS: RetellCustomTool[] = [
   retellGetProvidersTool,
+  retellGetCallerContextTool,
 ];
 
 export const RETELL_PATIENT_RECORDS_TOOLS: RetellCustomTool[] = [

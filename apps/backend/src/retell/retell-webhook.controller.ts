@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgentToolsService } from '../agent-tools/agent-tools.service';
 import { StructuredLogger } from '../common/structured-logger';
 import * as crypto from 'crypto';
 
@@ -27,7 +28,10 @@ import * as crypto from 'crypto';
 export class RetellWebhookController {
   private readonly logger = new StructuredLogger(RetellWebhookController.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly agentToolsService: AgentToolsService,
+  ) {
     this.logger.log('[Retell Webhook] Controller initialized');
   }
 
@@ -98,6 +102,14 @@ export class RetellWebhookController {
         this.logger.error(
           `[Retell] Failed to create call reference: ${err instanceof Error ? err.message : err}`,
         );
+      }
+
+      if (call.from_number) {
+        this.agentToolsService
+          .prefetchCallerContext(callId, call.from_number, accountId, 'RETELL')
+          .catch((err) =>
+            this.logger.error(`[Retell] Caller context prefetch failed: ${err instanceof Error ? err.message : err}`),
+          );
       }
     }
 

@@ -340,6 +340,7 @@ export class VapiWebhookController {
       createPaymentPlan: (p) => this.agentToolsService.createPaymentPlan(p),
       getProviders: (p) => this.agentToolsService.getProviders(p),
       transferToHuman: (p) => this.agentToolsService.transferToHuman(p),
+      getCallerContext: (p) => this.agentToolsService.handleGetCallerContext(p),
     };
 
     const handler = toolMap[toolName];
@@ -473,6 +474,18 @@ export class VapiWebhookController {
 
     if (status === 'in-progress' && callId) {
       await this.ensureCallReference(call, payload?.message);
+
+      const callerPhone = call.customer?.number;
+      if (callerPhone) {
+        const accountId = await this.resolveAccountFromCall(call, payload?.message);
+        if (accountId) {
+          this.agentToolsService
+            .prefetchCallerContext(callId, callerPhone, accountId, 'VAPI')
+            .catch((err) =>
+              this.logger.error(`[Vapi] Caller context prefetch failed: ${err instanceof Error ? err.message : err}`),
+            );
+        }
+      }
     }
 
     return { received: true };

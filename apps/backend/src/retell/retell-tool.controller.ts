@@ -130,6 +130,7 @@ export class RetellToolController {
       createPaymentPlan: (p) => this.agentToolsService.createPaymentPlan(p),
       getProviders: (p) => this.agentToolsService.getProviders(p),
       transferToHuman: (p) => this.agentToolsService.transferToHuman(p),
+      getCallerContext: (p) => this.agentToolsService.handleGetCallerContext(p),
     };
 
     const handler = toolMap[toolName];

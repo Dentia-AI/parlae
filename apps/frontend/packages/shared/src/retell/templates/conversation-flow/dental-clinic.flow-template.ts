@@ -32,6 +32,7 @@ import type {
 
 import {
   retellGetProvidersTool,
+  retellGetCallerContextTool,
   retellLookupPatientTool,
   retellCreatePatientTool,
   retellCheckAvailabilityTool,
@@ -172,6 +173,7 @@ export function buildDentalClinicFlow(
   // Build all tools (hydrated)
   const allTools: ConversationFlowTool[] = [
     retellGetProvidersTool,
+    retellGetCallerContextTool,
     retellLookupPatientTool,
     retellCreatePatientTool,
     retellCheckAvailabilityTool,
@@ -193,7 +195,7 @@ export function buildDentalClinicFlow(
     id: 'receptionist',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_RECEPTIONIST_PROMPT, cn) },
-    tool_ids: ['getProviders'],
+    tool_ids: ['getProviders', 'getCallerContext'],
     edges: [
       promptEdge(
         'Caller describes pain, bleeding, trauma, swelling, breathing difficulty, or any urgent/emergency symptoms.',

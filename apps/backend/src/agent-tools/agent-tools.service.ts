@@ -21,6 +21,23 @@ interface CachedPatientData {
   cachedAt: number;
 }
 
+interface CallerContext {
+  callerPhone: string;
+  fetchedAt: number;
+  patientName?: string;
+  patientId?: string;
+  patientType: 'returning' | 'new';
+  nextBooking?: {
+    date: string;
+    dayOfWeek: string;
+    time: string;
+    type?: string;
+  };
+  lastVisitDate?: string;
+  lastCallSummary?: string;
+  lastCallOutcome?: string;
+}
+
 function formatDateForSpeech(dateInput: string | Date, tz?: string): string {
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   return d.toLocaleDateString('en-US', {
@@ -52,6 +69,7 @@ export class AgentToolsService {
    * Keyed by callId. Entries auto-expire after 15 minutes.
    */
   private readonly patientCache = new Map<string, CachedPatientData>();
+  private readonly callerContextCache = new Map<string, CallerContext>();
   private static readonly CACHE_TTL_MS = 15 * 60 * 1000;
 
   /**
@@ -134,6 +152,344 @@ export class AgentToolsService {
       return undefined;
     }
     return entry;
+  }
+
+  getCallerContext(callId: string): CallerContext | undefined {
+    const entry = this.callerContextCache.get(callId);
+    if (!entry) return undefined;
+    if (Date.now() - entry.fetchedAt > AgentToolsService.CACHE_TTL_MS) {
+      this.callerContextCache.delete(callId);
+      return undefined;
+    }
+    return entry;
+  }
+
+  /**
+   * Tool handler: getCallerContext
+   * Called by the AI agent at the start of a conversation to get
+   * pre-loaded context about the caller (name, next booking, last call, etc.).
+   */
+  async handleGetCallerContext(payload: any) {
+    const call = payload?.call;
+    const callId = call?.id || call?.call_id;
+
+    if (!callId) {
+      return { result: { patientType: 'new', message: 'No call context available.' } };
+    }
+
+    const ctx = this.getCallerContext(callId);
+
+    if (!ctx || ctx.patientType === 'new') {
+      return {
+        result: {
+          patientType: 'new',
+          message: 'This appears to be a new caller. Proceed with the standard greeting.',
+        },
+      };
+    }
+
+    const response: Record<string, any> = {
+      patientType: ctx.patientType,
+      patientName: ctx.patientName,
+    };
+
+    if (ctx.nextBooking) {
+      response.nextBooking = ctx.nextBooking;
+    }
+    if (ctx.lastVisitDate) {
+      response.lastVisitDate = ctx.lastVisitDate;
+    }
+    if (ctx.lastCallSummary) {
+      response.lastCallSummary = ctx.lastCallSummary;
+    }
+    if (ctx.lastCallOutcome) {
+      response.lastCallOutcome = ctx.lastCallOutcome;
+    }
+
+    const parts: string[] = [`Welcome back, ${(ctx.patientName || '').split(' ')[0]}!`];
+    if (ctx.nextBooking) {
+      parts.push(`They have an upcoming ${ctx.nextBooking.type || 'appointment'} on ${ctx.nextBooking.dayOfWeek} at ${ctx.nextBooking.time}.`);
+    }
+    if (ctx.lastCallSummary) {
+      parts.push(`Last call: ${ctx.lastCallSummary}`);
+    }
+    response.message = parts.join(' ');
+
+    return { result: response };
+  }
+
+  /**
+   * Fire-and-forget caller context prefetch.
+   * Runs in the background when a call starts to prime the cache with
+   * patient name, next booking, last visit, and last call summary.
+   */
+  async prefetchCallerContext(
+    callId: string,
+    callerPhone: string,
+    accountId: string,
+    provider: 'RETELL' | 'VAPI' = 'RETELL',
+  ): Promise<void> {
+    if (!callerPhone || !accountId) return;
+
+    const normalizedPhone = this.normalizePhone(callerPhone);
+    if (!normalizedPhone) return;
+
+    this.logger.log({
+      callId,
+      callerPhone: callerPhone.slice(0, 4) + '****',
+      accountId,
+      msg: '[CallerContext] Starting prefetch',
+    });
+
+    const context: CallerContext = {
+      callerPhone: normalizedPhone,
+      fetchedAt: Date.now(),
+      patientType: 'new',
+    };
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    try {
+      const [patientResult, callHistoryResult] = await Promise.allSettled([
+        this.prefetchPatientData(normalizedPhone, accountId, context, dayNames),
+        this.prefetchCallHistory(normalizedPhone, accountId, provider, context),
+      ]);
+
+      if (patientResult.status === 'rejected') {
+        this.logger.warn({ error: patientResult.reason, msg: '[CallerContext] Patient prefetch failed' });
+      }
+      if (callHistoryResult.status === 'rejected') {
+        this.logger.warn({ error: callHistoryResult.reason, msg: '[CallerContext] Call history prefetch failed' });
+      }
+    } catch (err) {
+      this.logger.warn({ error: err, msg: '[CallerContext] Prefetch failed (non-fatal)' });
+    }
+
+    this.callerContextCache.set(callId, context);
+
+    if (this.callerContextCache.size > 200) {
+      const cutoff = Date.now() - AgentToolsService.CACHE_TTL_MS;
+      for (const [key, val] of this.callerContextCache) {
+        if (val.fetchedAt < cutoff) this.callerContextCache.delete(key);
+      }
+    }
+
+    this.logger.log({
+      callId,
+      patientType: context.patientType,
+      hasPatientName: !!context.patientName,
+      hasNextBooking: !!context.nextBooking,
+      hasLastCall: !!context.lastCallSummary,
+      msg: '[CallerContext] Prefetch complete',
+    });
+  }
+
+  private async prefetchPatientData(
+    normalizedPhone: string,
+    accountId: string,
+    context: CallerContext,
+    dayNames: string[],
+  ): Promise<void> {
+    const pmsIntegration = await this.resolvePmsForAccount(accountId);
+
+    if (pmsIntegration) {
+      await this.prefetchFromPms(normalizedPhone, accountId, pmsIntegration, context, dayNames);
+    } else {
+      await this.prefetchFromGCal(normalizedPhone, accountId, context, dayNames);
+    }
+  }
+
+  private async prefetchFromPms(
+    normalizedPhone: string,
+    accountId: string,
+    pmsIntegration: any,
+    context: CallerContext,
+    dayNames: string[],
+  ): Promise<void> {
+    const { PmsService } = await import('../pms/pms.service');
+    const pmsService = new PmsService(this.prisma, this.secretsService);
+    const sikkaService = await pmsService.getPmsService(
+      accountId,
+      pmsIntegration.provider,
+      pmsIntegration.config,
+    );
+
+    const searchResult = await sikkaService.searchPatients({
+      query: normalizedPhone,
+      limit: 5,
+    });
+
+    if (!searchResult.success || !searchResult.data?.length) return;
+
+    const patient = searchResult.data[0];
+    context.patientType = 'returning';
+    context.patientName = `${patient.firstName} ${patient.lastName}`.trim();
+    context.patientId = patient.id;
+
+    if (patient.lastVisit) {
+      const d = new Date(patient.lastVisit);
+      context.lastVisitDate = !isNaN(d.getTime()) ? d.toISOString() : undefined;
+    }
+
+    try {
+      const now = new Date();
+      const futureEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const apptResult = await sikkaService.getAppointments({
+        patientId: patient.id,
+        startDate: now,
+        endDate: futureEnd,
+        limit: 1,
+      });
+
+      if (apptResult.success && apptResult.data?.length) {
+        const appt = apptResult.data[0];
+        const apptDate = new Date(appt.startTime);
+        if (!isNaN(apptDate.getTime())) {
+          context.nextBooking = {
+            date: apptDate.toISOString(),
+            dayOfWeek: dayNames[apptDate.getDay()],
+            time: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+            type: appt.appointmentType,
+          };
+        }
+      }
+    } catch (err) {
+      this.logger.warn({ error: err, msg: '[CallerContext] PMS appointment fetch failed (non-fatal)' });
+    }
+  }
+
+  private async prefetchFromGCal(
+    normalizedPhone: string,
+    accountId: string,
+    context: CallerContext,
+    dayNames: string[],
+  ): Promise<void> {
+    const gcalAvailable = await this.isGoogleCalendarAvailable(accountId);
+    if (!gcalAvailable) return;
+
+    const now = new Date();
+    const pastStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const futureEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+    const result = await this.googleCalendar.findEventsByPatient(
+      accountId,
+      { patientPhone: normalizedPhone },
+      pastStart,
+      futureEnd,
+    );
+
+    const events = result?.events;
+    if (!events?.length) return;
+
+    const firstEvent = events[0];
+    const nameFromSummary = (firstEvent.summary || '').replace(/\s*[-–]\s*.+$/, '').trim();
+    if (nameFromSummary) {
+      context.patientType = 'returning';
+      context.patientName = nameFromSummary;
+    }
+
+    const futureEvents = events
+      .filter((evt: any) => new Date(evt.startTime) > now)
+      .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+    if (futureEvents.length > 0) {
+      const next = futureEvents[0];
+      const d = new Date(String(next.startTime));
+      if (!isNaN(d.getTime())) {
+        const type = (next.summary || '').replace(/^[^-–]*[-–]\s*/, '').trim();
+        context.nextBooking = {
+          date: d.toISOString(),
+          dayOfWeek: dayNames[d.getDay()],
+          time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+          type: type || undefined,
+        };
+      }
+    }
+
+    const pastEvents = events
+      .filter((evt: any) => new Date(evt.startTime) <= now)
+      .sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+
+    if (pastEvents.length > 0) {
+      const lastVisit = new Date(String(pastEvents[0].startTime));
+      if (!isNaN(lastVisit.getTime())) {
+        context.lastVisitDate = lastVisit.toISOString();
+      }
+    }
+  }
+
+  private async prefetchCallHistory(
+    normalizedPhone: string,
+    accountId: string,
+    provider: 'RETELL' | 'VAPI',
+    context: CallerContext,
+  ): Promise<void> {
+    if (provider === 'RETELL') {
+      await this.prefetchRetellCallHistory(normalizedPhone, accountId, context);
+    }
+    // Vapi call history would require the frontend shared service; for now
+    // Retell is the primary path. Vapi support can be added later.
+  }
+
+  private async prefetchRetellCallHistory(
+    normalizedPhone: string,
+    accountId: string,
+    context: CallerContext,
+  ): Promise<void> {
+    const retellApiKey = process.env.RETELL_API_KEY;
+    if (!retellApiKey) return;
+
+    const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
+      where: { accountId },
+      select: { retellAgentIds: true, retellAgentId: true },
+    });
+    if (!retellPhone) return;
+
+    const agentIds: string[] = [];
+    if (retellPhone.retellAgentId) agentIds.push(retellPhone.retellAgentId);
+    const agentsJson = retellPhone.retellAgentIds as Record<string, any> | null;
+    if (agentsJson) {
+      for (const val of Object.values(agentsJson)) {
+        const id = typeof val === 'string' ? val : val?.agent_id;
+        if (id && !agentIds.includes(id)) agentIds.push(id);
+      }
+    }
+    if (agentIds.length === 0) return;
+
+    try {
+      const res = await fetch('https://api.retellai.com/v2/list-calls', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${retellApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filter_criteria: { agent_id: agentIds },
+          sort_order: 'descending',
+          limit: 20,
+        }),
+      });
+
+      if (!res.ok) return;
+
+      const calls: any[] = await res.json();
+      if (!Array.isArray(calls)) return;
+
+      const matchingCall = calls.find((c) => {
+        const fromDigits = (c.from_number || '').replace(/\D/g, '');
+        const normalized = fromDigits.length === 11 && fromDigits.startsWith('1')
+          ? fromDigits.slice(1)
+          : fromDigits;
+        return normalized === normalizedPhone && c.call_analysis;
+      });
+
+      if (matchingCall?.call_analysis) {
+        context.lastCallSummary = matchingCall.call_analysis.call_summary as string || undefined;
+        context.lastCallOutcome = matchingCall.call_analysis.call_outcome as string || undefined;
+      }
+    } catch (err) {
+      this.logger.warn({ error: err, msg: '[CallerContext] Retell call history fetch failed (non-fatal)' });
+    }
   }
 
   async transferToHuman(payload: any) {
@@ -487,19 +843,33 @@ export class AgentToolsService {
 
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
+      const callerCtx = call?.id ? this.getCallerContext(call.id) : undefined;
+
       if (!phoneRecord?.pmsIntegration) {
         this.logger.log('[lookupPatient] No PMS configured — GCal-only mode');
-        return {
-          result: {
-            success: true,
-            patients: [],
-            count: 0,
-            callerVerified: false,
-            message: "[SUCCESS] No existing patient record found. [NEXT STEP] Continue with your workflow. If you are booking, call createPatient with the caller's name, email, and phone. If you are managing appointments (cancel/reschedule), call getAppointments with the caller's name or email to find their appointments on the calendar. Do NOT announce 'I didn't find your record' — just proceed with the next action.",
-            integrationType: 'google_calendar',
-            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
-          },
+
+        const gcalResult: Record<string, any> = {
+          success: true,
+          patients: [],
+          count: 0,
+          callerVerified: false,
+          integrationType: 'google_calendar',
+          _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
         };
+
+        if (callerCtx?.patientType === 'returning' && callerCtx.patientName) {
+          gcalResult.callerVerified = true;
+          gcalResult.patientName = callerCtx.patientName;
+          gcalResult.message = `Welcome back, ${callerCtx.patientName.split(' ')[0]}! How can I help you today?`;
+          if (callerCtx.nextBooking) gcalResult.nextBooking = callerCtx.nextBooking;
+          if (callerCtx.lastVisitDate) gcalResult.lastVisitDate = callerCtx.lastVisitDate;
+          if (callerCtx.lastCallSummary) gcalResult.lastCallSummary = callerCtx.lastCallSummary;
+          if (callerCtx.lastCallOutcome) gcalResult.lastCallOutcome = callerCtx.lastCallOutcome;
+        } else {
+          gcalResult.message = "[SUCCESS] No existing patient record found. [NEXT STEP] Continue with your workflow. If you are booking, call createPatient with the caller's name, email, and phone. If you are managing appointments (cancel/reschedule), call getAppointments with the caller's name or email to find their appointments on the calendar. Do NOT announce 'I didn't find your record' — just proceed with the next action.";
+        }
+
+        return { result: gcalResult };
       }
 
       const { PmsService } = await import('../pms/pms.service');
@@ -628,25 +998,32 @@ export class AgentToolsService {
           phiFields: ['name', 'email', 'dateOfBirth', 'lastVisit', 'balance'],
         });
 
-        return {
-          result: {
-            success: true,
-            callerVerified: true,
-            patient: {
-              id: patient.id,
-              name: `${patient.firstName} ${patient.lastName}`,
-              email: patient.email,
-              dateOfBirth: patient.dateOfBirth,
-              lastVisit: patient.lastVisit,
-              balance: patient.balance,
-            },
-            message: `Welcome back, ${patient.firstName}!`,
-            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
-            _balanceNote: patient.balance != null
-              ? 'Do not interpret or comment on whether the balance is high or low. Simply state the amount if the caller asks.'
-              : undefined,
+        const verifiedResult: Record<string, any> = {
+          success: true,
+          callerVerified: true,
+          patient: {
+            id: patient.id,
+            name: `${patient.firstName} ${patient.lastName}`,
+            email: patient.email,
+            dateOfBirth: patient.dateOfBirth,
+            lastVisit: patient.lastVisit,
+            balance: patient.balance,
           },
+          message: `Welcome back, ${patient.firstName}!`,
+          _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+          _balanceNote: patient.balance != null
+            ? 'Do not interpret or comment on whether the balance is high or low. Simply state the amount if the caller asks.'
+            : undefined,
         };
+
+        if (callerCtx) {
+          if (callerCtx.nextBooking) verifiedResult.nextBooking = callerCtx.nextBooking;
+          if (callerCtx.lastVisitDate) verifiedResult.lastVisitDate = callerCtx.lastVisitDate;
+          if (callerCtx.lastCallSummary) verifiedResult.lastCallSummary = callerCtx.lastCallSummary;
+          if (callerCtx.lastCallOutcome) verifiedResult.lastCallOutcome = callerCtx.lastCallOutcome;
+        }
+
+        return { result: verifiedResult };
       }
 
       // NOT verified — phone-based search that didn't match caller, or name-based search

@@ -608,6 +608,157 @@ describe('AgentToolsService', () => {
     });
   });
 
+  // ── prefetchCallerContext / getCallerContext ─────────────────────────
+
+  describe('prefetchCallerContext', () => {
+    it('should populate callerContextCache for GCal-only account', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(true);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const pastDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
+      gcalService.findEventsByPatient.mockResolvedValue({
+        success: true,
+        events: [
+          {
+            summary: 'John Smith - Cleaning',
+            startTime: futureDate.toISOString(),
+            endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
+            description: 'Phone: 4155551234',
+          },
+          {
+            summary: 'John Smith - Exam',
+            startTime: pastDate.toISOString(),
+            endTime: new Date(pastDate.getTime() + 30 * 60 * 1000).toISOString(),
+            description: 'Phone: 4155551234',
+          },
+        ],
+      });
+
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await service.prefetchCallerContext('call-prefetch-1', '+14155551234', 'acc-1', 'RETELL');
+
+      const ctx = service.getCallerContext('call-prefetch-1');
+      expect(ctx).toBeDefined();
+      expect(ctx!.patientType).toBe('returning');
+      expect(ctx!.patientName).toBe('John Smith');
+      expect(ctx!.nextBooking).toBeDefined();
+      expect(ctx!.nextBooking!.type).toBe('Cleaning');
+      expect(ctx!.lastVisitDate).toBeDefined();
+    });
+
+    it('should return patientType "new" when no events found', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(true);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.findEventsByPatient.mockResolvedValue({
+        success: true,
+        events: [],
+      });
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await service.prefetchCallerContext('call-prefetch-2', '+14155559999', 'acc-1', 'RETELL');
+
+      const ctx = service.getCallerContext('call-prefetch-2');
+      expect(ctx).toBeDefined();
+      expect(ctx!.patientType).toBe('new');
+      expect(ctx!.patientName).toBeUndefined();
+      expect(ctx!.nextBooking).toBeUndefined();
+    });
+
+    it('should handle empty callerPhone gracefully', async () => {
+      await service.prefetchCallerContext('call-prefetch-3', '', 'acc-1', 'RETELL');
+      const ctx = service.getCallerContext('call-prefetch-3');
+      expect(ctx).toBeUndefined();
+    });
+
+    it('should handle empty accountId gracefully', async () => {
+      await service.prefetchCallerContext('call-prefetch-4', '+14155551234', '', 'RETELL');
+      const ctx = service.getCallerContext('call-prefetch-4');
+      expect(ctx).toBeUndefined();
+    });
+
+    it('should not throw if GCal is unavailable', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(false);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.prefetchCallerContext('call-prefetch-5', '+14155551234', 'acc-1', 'RETELL'),
+      ).resolves.not.toThrow();
+
+      const ctx = service.getCallerContext('call-prefetch-5');
+      expect(ctx).toBeDefined();
+      expect(ctx!.patientType).toBe('new');
+    });
+
+    it('should not throw if PMS search fails', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'pms-1',
+        accountId: 'acc-1',
+        provider: 'sikka',
+        config: {},
+      });
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.prefetchCallerContext('call-prefetch-6', '+14155551234', 'acc-1', 'RETELL'),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('getCallerContext', () => {
+    it('should return undefined for unknown callId', () => {
+      const ctx = service.getCallerContext('nonexistent-call');
+      expect(ctx).toBeUndefined();
+    });
+  });
+
+  describe('lookupPatient with prefetched context (GCal path)', () => {
+    it('should enrich GCal-only response with prefetched caller context', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(true);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      gcalService.findEventsByPatient.mockResolvedValue({
+        success: true,
+        events: [
+          {
+            summary: 'Jane Doe - Cleaning',
+            startTime: futureDate.toISOString(),
+            endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
+            description: 'Phone: 4155557777',
+          },
+        ],
+      });
+
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await service.prefetchCallerContext('call-lookup-1', '+14155557777', 'acc-1', 'RETELL');
+
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true },
+      });
+
+      const result = await service.lookupPatient({
+        accountId: 'acc-1',
+        call: { id: 'call-lookup-1', phoneNumberId: 'vapi-phone-1', customer: { number: '+14155557777' } },
+        functionCall: { parameters: {} },
+      }) as any;
+
+      expect(result.result.callerVerified).toBe(true);
+      expect(result.result.patientName).toBe('Jane Doe');
+      expect(result.result.nextBooking).toBeDefined();
+      expect(result.result.message).toContain('Jane');
+    });
+  });
+
   describe('bookAppointment (Retell path)', () => {
     it('should use GCal when Retell call has no PMS', async () => {
       prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
