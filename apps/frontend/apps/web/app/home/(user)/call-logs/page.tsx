@@ -10,9 +10,9 @@ export const metadata = {
 
 export default function CallLogsPage() {
   return (
-    <PageBody className="pt-4">
-      <div className="space-y-4">
-        <div>
+    <PageBody className="pt-4 pb-0 min-h-0 overflow-hidden">
+      <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex-shrink-0 pb-4">
           <h2 className="text-2xl font-bold tracking-tight">Call Logs</h2>
           <p className="text-muted-foreground text-sm mt-1">
             Review call records, transcripts, and AI analysis from your receptionist.

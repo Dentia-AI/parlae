@@ -219,7 +219,7 @@ export default function ReviewPage() {
             open={paymentSectionOpen} 
             onOpenChange={setPaymentSectionOpen}
           >
-            <Card className={paymentCompleted ? 'border-green-200 bg-green-50/50' : ''}>
+            <Card className={paymentCompleted ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30' : ''}>
               <CardHeader className="pb-3">
                 <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-80 transition-opacity">
                   <div className="text-left">

@@ -15,6 +15,7 @@ import { CallOutcomesChart } from './call-outcomes-chart';
 import { SatisfactionChart } from './satisfaction-chart';
 import { RecentCallsList } from './recent-calls-list';
 import { ActivityChart } from './activity-chart';
+import { CallDurationChart } from './peak-hours-chart';
 
 interface SatisfactionEntry {
   label: string;
@@ -42,6 +43,7 @@ interface AnalyticsData {
     percentage: number;
   }>;
   satisfactionBreakdown?: SatisfactionEntry[];
+  callDurations?: Array<{ duration: number }>;
 }
 
 export function CallAnalyticsDashboard() {
@@ -86,6 +88,17 @@ export function CallAnalyticsDashboard() {
     return `${minutes}m ${secs}s`;
   };
 
+  const is24h = dateRange === '1d';
+
+  const activityValue = is24h
+    ? ((data?.metrics.totalCalls ?? 0) / 24).toFixed(1)
+    : (
+        (data?.metrics.totalCalls ?? 0) /
+        (dateRange === '7d' ? 7 : 14)
+      ).toFixed(1);
+
+  const activityLabel = is24h ? 'Calls per hour avg' : 'Calls per day average';
+
   if (loading || !data) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -98,123 +111,123 @@ export function CallAnalyticsDashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Header with Date Range Selector */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-bold tracking-tight">Call Analytics</h2>
-          <Badge variant="outline" className="gap-1">
+          <Badge variant="outline" className="gap-1 hidden sm:inline-flex">
             Last {dateRange === '1d' ? '24 hours' : dateRange === '7d' ? '7 days' : '14 days'}
           </Badge>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 sm:gap-2">
           <Button
             variant={dateRange === '1d' ? 'default' : 'outline'}
             size="sm"
+            className="flex-1 sm:flex-none text-xs sm:text-sm px-2.5 sm:px-3"
             onClick={() => setDateRange('1d')}
           >
-            24 Hours
+            24h
           </Button>
           <Button
             variant={dateRange === '7d' ? 'default' : 'outline'}
             size="sm"
+            className="flex-1 sm:flex-none text-xs sm:text-sm px-2.5 sm:px-3"
             onClick={() => setDateRange('7d')}
           >
-            7 Days
+            7d
           </Button>
           <Button
             variant={dateRange === '14d' ? 'default' : 'outline'}
             size="sm"
+            className="flex-1 sm:flex-none text-xs sm:text-sm px-2.5 sm:px-3"
             onClick={() => setDateRange('14d')}
           >
-            14 Days
+            14d
           </Button>
-          <Button variant="outline" size="sm" className="gap-1">
+          <Button variant="outline" size="sm" className="gap-1 px-2.5 sm:px-3">
             <Calendar className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
             <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
-            <div className="rounded-md bg-blue-500/10 p-2">
-              <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <div className="rounded-md bg-blue-500/10 p-1.5">
+              <Phone className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold">{data.metrics.totalCalls.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.metrics.totalCalls > 0
-                ? `${data.metrics.totalCalls} in selected period`
-                : 'No calls yet'}
+            <p className="text-xs text-muted-foreground">
+              {data.metrics.totalCalls > 0 ? 'in selected period' : 'No calls yet'}
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
             <CardTitle className="text-sm font-medium">Booking Rate</CardTitle>
-            <div className="rounded-md bg-emerald-500/10 p-2">
-              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <div className="rounded-md bg-emerald-500/10 p-1.5">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{data.metrics.bookingRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0} appointments booked
+            <p className="text-xs text-muted-foreground">
+              {data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0} booked
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
             <CardTitle className="text-sm font-medium">Avg. Call Time</CardTitle>
-            <div className="rounded-md bg-violet-500/10 p-2">
-              <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            <div className="rounded-md bg-violet-500/10 p-1.5">
+              <Clock className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold">{formatTime(data.metrics.avgCallTime)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Average duration per call
-            </p>
+            <p className="text-xs text-muted-foreground">Average per call</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
             <CardTitle className="text-sm font-medium">Activity</CardTitle>
-            <div className="rounded-md bg-amber-500/10 p-2">
-              <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <div className="rounded-md bg-amber-500/10 p-1.5">
+              <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {(data.metrics.totalCalls / (dateRange === '1d' ? 1 : dateRange === '7d' ? 7 : 14)).toFixed(1)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Calls per day average
-            </p>
+          <CardContent className="pb-4 px-4">
+            <div className="text-2xl font-bold">{activityValue}</div>
+            <p className="text-xs text-muted-foreground">{activityLabel}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Donut Charts */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Charts Row: Outcomes + Satisfaction + Duration */}
+      <div className="grid gap-3 md:grid-cols-3">
         <CallOutcomesChart data={data.outcomesDistribution} />
         <SatisfactionChart data={data.satisfactionBreakdown ?? []} />
+        <CallDurationChart data={data.callDurations} totalCalls={data.metrics.totalCalls} />
       </div>
 
-      {/* Activity Trend */}
-      <ActivityChart data={data.activityTrend} />
-
-      {/* Recent Calls */}
-      <RecentCallsList />
+      {/* Activity Trend + Recent Calls side by side */}
+      <div className="grid gap-3 md:grid-cols-5">
+        <div className="md:col-span-3">
+          <ActivityChart data={data.activityTrend} is24h={is24h} />
+        </div>
+        <div className="md:col-span-2">
+          <RecentCallsList />
+        </div>
+      </div>
     </div>
   );
 }

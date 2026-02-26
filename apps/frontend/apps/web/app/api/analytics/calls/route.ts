@@ -13,18 +13,40 @@ import type { VapiCall, VapiAnalyticsQuery } from '@kit/shared/vapi/vapi.service
  * Generate mock analytics data for development
  */
 function generateMockAnalytics(startDate: Date, endDate: Date) {
-  const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const diffMs = endDate.getTime() - startDate.getTime();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const is24h = days <= 1;
 
-  const activityTrend = Array.from({ length: days }, (_, i) => {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-    return {
-      date: date.toISOString().split('T')[0],
-      count: Math.floor(Math.random() * 30) + 10,
-    };
-  });
+  let activityTrend: Array<{ date: string; count: number }>;
 
-  const totalCalls = activityTrend.reduce((sum, day) => sum + day.count, 0);
+  if (is24h) {
+    activityTrend = Array.from({ length: 24 }, (_, i) => {
+      const hour = new Date(startDate);
+      hour.setHours(startDate.getHours() + i, 0, 0, 0);
+      const isBusinessHour = i >= 8 && i < 18;
+      return {
+        date: hour.toISOString(),
+        count: isBusinessHour
+          ? Math.floor(Math.random() * 8) + 3
+          : Math.floor(Math.random() * 3),
+      };
+    });
+  } else {
+    activityTrend = Array.from({ length: days }, (_, i) => {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      return {
+        date: date.toISOString().split('T')[0],
+        count: Math.floor(Math.random() * 30) + 10,
+      };
+    });
+  }
+
+  const totalCalls = activityTrend.reduce((sum, d) => sum + d.count, 0);
+
+  const callDurations = Array.from({ length: totalCalls }, () => ({
+    duration: Math.floor(Math.random() * 300) + 15,
+  }));
 
   return {
     dateRange: { start: startDate, end: endDate },
@@ -33,9 +55,6 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
       bookingRate: 78,
       avgCallTime: 102,
       totalCost: 0,
-      insuranceVerified: Math.floor(totalCalls * 0.65),
-      paymentPlans: { count: Math.floor(totalCalls * 0.16), totalAmount: 4720000 },
-      collections: { count: Math.floor(totalCalls * 0.12), totalAmount: 3280000, recovered: 3280000, collectionRate: 89.0 },
     },
     activityTrend,
     outcomesDistribution: [
@@ -44,6 +63,12 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
       { outcome: 'INSURANCE_INQUIRY', count: Math.floor(totalCalls * 0.06), percentage: 6 },
       { outcome: 'OTHER', count: Math.floor(totalCalls * 0.02), percentage: 2 },
     ],
+    satisfactionBreakdown: [
+      { label: 'Satisfied', count: Math.floor(totalCalls * 0.72), percentage: 72 },
+      { label: 'Not Satisfied', count: Math.floor(totalCalls * 0.08), percentage: 8 },
+      { label: 'Unknown', count: Math.floor(totalCalls * 0.20), percentage: 20 },
+    ],
+    callDurations,
   };
 }
 
@@ -92,9 +117,19 @@ export async function GET(request: NextRequest) {
     const activeProvider = await getAccountProvider(account.id);
 
     if (activeProvider === 'RETELL') {
-      return NextResponse.json(
-        await computeRetellAnalytics(account.id, startDate, endDate),
-      );
+      try {
+        const retellData = await computeRetellAnalytics(account.id, startDate, endDate);
+        if (retellData.metrics.totalCalls === 0 && process.env.NODE_ENV === 'development') {
+          return NextResponse.json(generateMockAnalytics(startDate, endDate));
+        }
+        return NextResponse.json(retellData);
+      } catch (retellErr) {
+        console.warn('[analytics] Retell API call failed:', retellErr);
+        if (process.env.NODE_ENV === 'development') {
+          return NextResponse.json(generateMockAnalytics(startDate, endDate));
+        }
+        throw retellErr;
+      }
     }
 
     // Get account's phone numbers from VapiPhoneNumber table
@@ -439,6 +474,7 @@ async function computeRetellAnalytics(
   const outcomeCounts = new Map<string, number>();
   const appointmentTypes = new Map<string, number>();
   const dailyCounts = new Map<string, number>();
+  const callDurations: Array<{ duration: number }> = [];
 
   for (const call of allCalls) {
     const analysis = (call.call_analysis ?? {}) as Record<string, any>;
@@ -449,7 +485,7 @@ async function computeRetellAnalytics(
     } else if (call.duration_ms) {
       dur = Math.round(call.duration_ms / 1000);
     }
-    if (dur > 0) { totalDuration += dur; durationCount++; }
+    if (dur > 0) { totalDuration += dur; durationCount++; callDurations.push({ duration: dur }); }
 
     const outcome = (() => {
       const o = analysis?.call_outcome;
@@ -508,6 +544,7 @@ async function computeRetellAnalytics(
       { label: 'Not Satisfied', count: unsatisfiedCount, percentage: totalCalls > 0 ? Math.round((unsatisfiedCount / totalCalls) * 1000) / 10 : 0 },
       { label: 'Unknown', count: satisfactionUnknown, percentage: totalCalls > 0 ? Math.round((satisfactionUnknown / totalCalls) * 1000) / 10 : 0 },
     ],
+    callDurations,
     appointmentTypes: Array.from(appointmentTypes.entries())
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count),

@@ -1,14 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Input } from '@kit/ui/input';
@@ -25,13 +18,10 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Calendar,
-  ArrowUpDown,
   AlertCircle,
   CheckCircle2,
   Shield,
   FileText,
-  Filter,
   X,
 } from 'lucide-react';
 
@@ -225,236 +215,251 @@ export function CallLogsTable() {
   };
 
   const hasActiveFilters = searchTerm || outcomeFilter || statusFilter || dateRange !== '14d';
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef(0);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const st = el.scrollTop;
+      if (st > lastScrollTop.current && st > 40) {
+        setHeaderCollapsed(true);
+      } else if (st < lastScrollTop.current) {
+        setHeaderCollapsed(false);
+      }
+      lastScrollTop.current = st;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [loading]);
 
   return (
-    <div className="space-y-4">
-      {/* HIPAA Notice */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
-        <Shield className="h-3.5 w-3.5 flex-shrink-0" />
-        <span>HIPAA Protected: Call records contain PHI. Access is logged for compliance.</span>
-      </div>
+    <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+      {/* Collapsible top section */}
+      <div
+        className={`flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+          headerCollapsed ? 'max-h-0 opacity-0 mb-0' : 'max-h-[500px] opacity-100'
+        }`}
+      >
+        {/* HIPAA Notice */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md mb-4">
+          <Shield className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>HIPAA Protected: Call records contain PHI. Access is logged for compliance.</span>
+        </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, phone, or email..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && fetchCallLogs()}
-              />
-            </div>
+        {/* Filters */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, phone, or email..."
+              className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchCallLogs()}
+            />
+          </div>
 
-            <Select value={outcomeFilter || 'all'} onValueChange={(v) => setOutcomeFilter(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Outcome" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Outcomes</SelectItem>
-                {Object.entries(outcomeLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={outcomeFilter || 'all'} onValueChange={(v) => setOutcomeFilter(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Outcome" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Outcomes</SelectItem>
+              {Object.entries(outcomeLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={dateRange} onValueChange={setDateRange}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1d">Last 24 hours</SelectItem>
-                <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="14d">Last 14 days</SelectItem>
-              </SelectContent>
-            </Select>
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1d">Last 24 hours</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="14d">Last 14 days</SelectItem>
+            </SelectContent>
+          </Select>
 
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
-                <X className="h-4 w-4" />
-                Clear
-              </Button>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div>
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Call Records
+            </h3>
+            {pagination && (
+              <p className="text-sm text-muted-foreground">
+                {pagination.total} total records
+                {hasActiveFilters && ' (filtered)'}
+              </p>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Results */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Call Records
-              </CardTitle>
-              {pagination && (
-                <CardDescription>
-                  {pagination.total} total records
-                  {hasActiveFilters && ' (filtered)'}
-                </CardDescription>
-              )}
-            </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+            <p className="text-sm text-muted-foreground">Loading call records...</p>
           </div>
-        </CardHeader>
-
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
-                <p className="text-sm text-muted-foreground">Loading call records...</p>
-              </div>
-            </div>
-          ) : calls.length === 0 ? (
-            <div className="text-center py-16">
-              <Phone className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-              <p className="font-medium">No call records found</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {hasActiveFilters
-                  ? 'Try adjusting your filters or search term.'
-                  : 'Call records will appear here once your AI agent starts handling calls.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {calls.map((call) => (
-                <div
-                  key={call.id}
-                  onClick={() => router.push(`/home/call-logs/${call.id}`)}
-                  className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer group"
-                >
-                  {/* Avatar */}
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <Phone className="h-4 w-4 text-primary" />
-                    </div>
-                  </div>
-
-                  {/* Main content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {call.contactName || 'Unknown Caller'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {call.phoneNumber}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {call.customerSentiment && sentimentIcons[call.customerSentiment] && (
-                          <span className={sentimentIcons[call.customerSentiment]!.color} title={call.customerSentiment}>
-                            {sentimentIcons[call.customerSentiment]!.icon}
-                          </span>
-                        )}
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatRelativeTime(call.callStartedAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Summary */}
-                    {call.summary && (
-                      <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                        {call.summary}
-                      </p>
-                    )}
-
-                    {/* Tags row */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge
-                        variant="secondary"
-                        className={`text-[10px] px-1.5 py-0 ${outcomeColors[call.outcome] || outcomeColors.OTHER}`}
-                      >
-                        {outcomeLabels[call.outcome] || call.outcome}
-                      </Badge>
-
-                      {call.urgencyLevel && call.urgencyLevel !== 'routine' && (
-                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${urgencyColors[call.urgencyLevel] || ''}`}>
-                          {call.urgencyLevel}
-                        </Badge>
-                      )}
-
-                      {call.duration !== null && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {formatDuration(call.duration)}
-                        </span>
-                      )}
-
-                      {call.appointmentSet && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 text-green-700 dark:text-green-400">
-                          <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
-                          Appt
-                        </Badge>
-                      )}
-
-                      {call.insuranceVerified && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-700 dark:text-purple-400">
-                          Insurance
-                        </Badge>
-                      )}
-
-                      {call.followUpRequired && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-700 dark:text-orange-400">
-                          <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
-                          Follow-up
-                        </Badge>
-                      )}
-
-                      {call.transferredToStaff && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          Transferred{call.transferredTo ? `: ${call.transferredTo}` : ''}
-                        </Badge>
-                      )}
-
-                      {call.callReason && (
-                        <span className="text-[10px] text-muted-foreground capitalize">
-                          {call.callReason.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                    </div>
+        </div>
+      ) : calls.length === 0 ? (
+        <div className="text-center py-16">
+          <Phone className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+          <p className="font-medium">No call records found</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {hasActiveFilters
+              ? 'Try adjusting your filters or search term.'
+              : 'Call records will appear here once your AI agent starts handling calls.'}
+          </p>
+        </div>
+      ) : (
+        <div className="relative flex-1 min-h-0">
+          <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
+          <div className="space-y-2 pb-2">
+            {calls.map((call) => (
+              <div
+                key={call.id}
+                onClick={() => router.push(`/home/call-logs/${call.id}`)}
+                className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer group"
+              >
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <Phone className="h-4 w-4 text-primary" />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <p className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.totalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pagination.page <= 1}
-                  onClick={() => updatePage(pagination.page - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.hasMore}
-                  onClick={() => updatePage(pagination.page + 1)}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {call.contactName || 'Unknown Caller'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {call.phoneNumber}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {call.customerSentiment && sentimentIcons[call.customerSentiment] && (
+                        <span className={sentimentIcons[call.customerSentiment]!.color} title={call.customerSentiment}>
+                          {sentimentIcons[call.customerSentiment]!.icon}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatRelativeTime(call.callStartedAt)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {call.summary && (
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                      {call.summary}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] px-1.5 py-0 ${outcomeColors[call.outcome] || outcomeColors.OTHER}`}
+                    >
+                      {outcomeLabels[call.outcome] || call.outcome}
+                    </Badge>
+
+                    {call.urgencyLevel && call.urgencyLevel !== 'routine' && (
+                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${urgencyColors[call.urgencyLevel] || ''}`}>
+                        {call.urgencyLevel}
+                      </Badge>
+                    )}
+
+                    {call.duration !== null && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {formatDuration(call.duration)}
+                      </span>
+                    )}
+
+                    {call.appointmentSet && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 text-green-700 dark:text-green-400">
+                        <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+                        Appt
+                      </Badge>
+                    )}
+
+                    {call.insuranceVerified && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-700 dark:text-purple-400">
+                        Insurance
+                      </Badge>
+                    )}
+
+                    {call.followUpRequired && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-700 dark:text-orange-400">
+                        <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
+                        Follow-up
+                      </Badge>
+                    )}
+
+                    {call.transferredToStaff && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        Transferred{call.transferredTo ? `: ${call.transferredTo}` : ''}
+                      </Badge>
+                    )}
+
+                    {call.callReason && (
+                      <span className="text-[10px] text-muted-foreground capitalize">
+                        {call.callReason.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            ))}
+          </div>
+        </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex-shrink-0 flex items-center justify-between py-4 border-t">
+          <p className="text-sm text-muted-foreground">
+            Page {pagination.page} of {pagination.totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pagination.page <= 1}
+              onClick={() => updatePage(pagination.page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pagination.hasMore}
+              onClick={() => updatePage(pagination.page + 1)}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

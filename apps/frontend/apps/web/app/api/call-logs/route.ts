@@ -208,17 +208,95 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
 }
 
 /**
+ * Generate mock call log data for development when no real calls exist.
+ */
+function generateMockCallLogs(page: number, limit: number) {
+  const names = ['Sarah Johnson', 'Michael Chen', 'Emma Wilson', 'James Davis', 'Lisa Anderson', 'Robert Martinez', 'Jennifer Taylor', 'David Brown', 'Maria Garcia', 'John Smith'];
+  const outcomes = ['BOOKED', 'TRANSFERRED', 'INFORMATION', 'BOOKED', 'BOOKED', 'VOICEMAIL', 'OTHER', 'INSURANCE_INQUIRY'];
+  const sentiments = ['very_positive', 'positive', 'neutral', 'positive', 'neutral', 'negative', null];
+  const reasons = ['new_appointment', 'reschedule', 'insurance_question', 'general_inquiry', 'billing', null];
+  const summaries = [
+    'Patient called to schedule a dental cleaning. Booked for next Tuesday at 2 PM with Dr. Chen.',
+    'Caller had questions about insurance coverage for root canal. Transferred to billing department.',
+    'New patient inquiry about teeth whitening services and pricing.',
+    'Called to reschedule their appointment from Friday to Monday. Updated in calendar.',
+    'Follow-up call about post-procedure care instructions.',
+    'Patient checking on their insurance claim status. Verified coverage details.',
+    'Called about emergency toothache. Scheduled same-day appointment.',
+    'Voicemail left - patient will call back during business hours.',
+  ];
+
+  const total = 35;
+  const offset = (page - 1) * limit;
+  const calls = [];
+
+  for (let i = offset; i < Math.min(offset + limit, total); i++) {
+    const callStartedAt = new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000);
+    const duration = Math.floor(60 + Math.random() * 300);
+    const callEndedAt = new Date(callStartedAt.getTime() + duration * 1000);
+    const outcome = outcomes[i % outcomes.length]!;
+
+    calls.push({
+      id: `mock-call-${i}`,
+      callId: `mock-call-${i}`,
+      phoneNumber: `+1555${String(Math.floor(Math.random() * 10000000)).padStart(7, '0')}`,
+      callType: 'INBOUND',
+      duration,
+      status: 'COMPLETED',
+      outcome,
+      callReason: reasons[i % reasons.length],
+      urgencyLevel: i % 5 === 0 ? 'urgent' : 'routine',
+      contactName: names[i % names.length],
+      contactEmail: null,
+      summary: summaries[i % summaries.length],
+      appointmentSet: outcome === 'BOOKED',
+      insuranceVerified: outcome === 'INSURANCE_INQUIRY',
+      paymentPlanDiscussed: false,
+      transferredToStaff: outcome === 'TRANSFERRED',
+      transferredTo: outcome === 'TRANSFERRED' ? 'Front Desk' : null,
+      followUpRequired: i % 4 === 0,
+      customerSentiment: sentiments[i % sentiments.length],
+      costCents: null,
+      callStartedAt: callStartedAt.toISOString(),
+      callEndedAt: callEndedAt.toISOString(),
+    });
+  }
+
+  calls.sort((a, b) => new Date(b.callStartedAt).getTime() - new Date(a.callStartedAt).getTime());
+
+  const outcomeCounts = new Map<string, number>();
+  for (const c of calls) {
+    outcomeCounts.set(c.outcome, (outcomeCounts.get(c.outcome) || 0) + 1);
+  }
+
+  return {
+    calls,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total,
+    },
+    filters: {
+      outcomes: Array.from(outcomeCounts.entries()).map(([value, count]) => ({ value, count })),
+      reasons: [],
+    },
+  };
+}
+
+/**
  * GET /api/call-logs
  *
  * Returns paginated call logs for the current user's account.
- * Data is fetched from Vapi API (source of truth) and scoped to the account's phone numbers.
+ * Data is fetched from the voice provider API and scoped to the account's phone numbers.
  *
  * Query params:
  * - page: page number (default: 1)
  * - limit: items per page (default: 20, max: 100)
  * - startDate: ISO date string (filter from)
  * - endDate: ISO date string (filter to)
- * - outcome: filter by outcome (client-side filtering after Vapi fetch)
+ * - outcome: filter by outcome (client-side filtering after fetch)
  * - search: search by contact name or phone number (client-side filtering)
  */
 export async function GET(request: NextRequest) {
@@ -236,6 +314,9 @@ export async function GET(request: NextRequest) {
     });
 
     if (!account) {
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json(generateMockCallLogs(1, 20));
+      }
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
@@ -253,12 +334,24 @@ export async function GET(request: NextRequest) {
 
     let mappedCalls: ReturnType<typeof mapVapiCallToListItem>[] = [];
 
-    if (activeProvider === 'RETELL') {
-      mappedCalls = await fetchRetellCalls(account.id, searchParams);
-    } else {
-      mappedCalls = await fetchVapiCalls(
-        account.id, searchParams, isAdmin, pricingRates,
-      );
+    try {
+      if (activeProvider === 'RETELL') {
+        mappedCalls = await fetchRetellCalls(account.id, searchParams);
+      } else {
+        mappedCalls = await fetchVapiCalls(
+          account.id, searchParams, isAdmin, pricingRates,
+        );
+      }
+    } catch (providerErr) {
+      console.warn('[call-logs] Provider API call failed:', providerErr);
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json(generateMockCallLogs(page, limit));
+      }
+      throw providerErr;
+    }
+
+    if (mappedCalls.length === 0 && process.env.NODE_ENV === 'development') {
+      return NextResponse.json(generateMockCallLogs(page, limit));
     }
 
     // Apply client-side filters
@@ -378,7 +471,7 @@ async function fetchRetellCalls(
 
   let retellPhones = await prisma.retellPhoneNumber.findMany({
     where: { accountId, isActive: true },
-    select: { retellPhoneNumberId: true },
+    select: { retellPhoneId: true },
   });
 
   // Fallback: check phoneIntegrationSettings for Retell agent IDs

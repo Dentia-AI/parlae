@@ -251,7 +251,7 @@ export default function VersionOverviewPage() {
   }
 
   return (
-    <div className="container max-w-7xl py-8 space-y-6">
+    <div className="p-6 space-y-6">
       <Link
         href="/admin/agent-templates"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"

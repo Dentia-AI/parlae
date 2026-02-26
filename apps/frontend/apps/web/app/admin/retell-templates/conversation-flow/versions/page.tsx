@@ -9,6 +9,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@kit/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@kit/ui/shadcn-table';
+import { Checkbox } from '@kit/ui/checkbox';
 import { Input } from '@kit/ui/input';
 import { Badge } from '@kit/ui/badge';
 import {
@@ -170,7 +179,7 @@ export default function FlowVersionOverviewPage() {
   }
 
   return (
-    <div className="container max-w-7xl py-8 space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -305,54 +314,55 @@ export default function FlowVersionOverviewPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left px-4 py-2 font-medium w-8">
-                    <input
-                      type="checkbox"
-                      checked={
-                        selectedAccounts.size === filteredAccounts.length &&
-                        filteredAccounts.length > 0
-                      }
-                      onChange={toggleAll}
-                      className="rounded"
-                    />
-                  </th>
-                  <th className="text-left px-4 py-2 font-medium">Account</th>
-                  <th className="text-left px-4 py-2 font-medium">Template</th>
-                  <th className="text-left px-4 py-2 font-medium">Version</th>
-                  <th className="text-left px-4 py-2 font-medium">Status</th>
-                  <th className="text-left px-4 py-2 font-medium">Deploy Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAccounts.map((a) => (
-                  <tr key={a.accountId} className="border-b last:border-0">
-                    <td className="px-4 py-2">
-                      <input
-                        type="checkbox"
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
+                    onCheckedChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
+                <TableHead>Account</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Deploy Type</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAccounts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    No accounts found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredAccounts.map((a) => (
+                  <TableRow key={a.accountId}>
+                    <TableCell>
+                      <Checkbox
                         checked={selectedAccounts.has(a.accountId)}
-                        onChange={() => toggleAccount(a.accountId)}
-                        className="rounded"
+                        onCheckedChange={() => toggleAccount(a.accountId)}
+                        aria-label={`Select ${a.accountName}`}
                       />
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div className="font-medium">{a.accountName || 'Unnamed'}</div>
                       <div className="text-xs text-muted-foreground">{a.accountEmail}</div>
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {a.templateDisplayName || <span className="italic">None</span>}
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell>
                       {a.templateVersion ? (
                         <Badge variant="secondary">{a.templateVersion}</Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell>
                       {a.isOnLatestDefault ? (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -366,8 +376,8 @@ export default function FlowVersionOverviewPage() {
                       ) : (
                         <Badge variant="outline">No Agent</Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell>
                       {a.hasFlowAgent ? (
                         <Badge variant="outline" className="font-mono text-xs">
                           Flow
@@ -375,12 +385,12 @@ export default function FlowVersionOverviewPage() {
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

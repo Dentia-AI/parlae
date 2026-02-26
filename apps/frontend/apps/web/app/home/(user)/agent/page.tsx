@@ -96,8 +96,8 @@ export default async function ReceptionistDashboardPage({
         hasRetellDeployment = true;
         const savedVoice = integrationSettings?.voiceConfig;
         retellVoiceInfo = savedVoice
-          ? { voiceId: savedVoice.voiceId, voiceName: `${savedVoice.name} (Retell)` }
-          : { voiceId: 'retell-Chloe', voiceName: 'Chloe (Retell)' };
+          ? { voiceId: savedVoice.voiceId, voiceName: savedVoice.name }
+          : { voiceId: 'retell-Chloe', voiceName: 'Chloe' };
       }
     } catch {
       // RetellPhoneNumber model may not be generated yet
@@ -143,7 +143,7 @@ export default async function ReceptionistDashboardPage({
   const isActive = activeProvider === 'RETELL' ? hasRetellDeployment : hasVapiReceptionist;
 
   const displayVoice = activeProvider === 'RETELL' && retellVoiceInfo
-    ? { name: retellVoiceInfo.voiceName, gender: 'female', accent: 'Retell AI' }
+    ? { name: retellVoiceInfo.voiceName, gender: voiceConfig?.gender || 'female', accent: voiceConfig?.accent || 'American' }
     : voiceConfig;
 
   const integrationMethodLabels: Record<string, string> = {
@@ -212,14 +212,9 @@ export default async function ReceptionistDashboardPage({
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mic className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Voice</CardTitle>
-              </div>
-              <Badge variant="outline" className="text-xs">
-                {activeProvider}
-              </Badge>
+            <div className="flex items-center gap-2">
+              <Mic className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>Voice</CardTitle>
             </div>
           </CardHeader>
           <CardContent>

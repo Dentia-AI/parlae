@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -9,9 +9,15 @@ import {
   TableHeader,
   TableRow,
 } from '@kit/ui/shadcn-table';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Input } from '@kit/ui/input';
 import { Skeleton } from '@kit/ui/skeleton';
 import { toast } from '@kit/ui/sonner';
@@ -135,6 +141,25 @@ export function ActivityLogList() {
   const [action, setAction] = useState('all');
   const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef(0);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const st = el.scrollTop;
+      if (st > lastScrollTop.current && st > 40) {
+        setHeaderCollapsed(true);
+      } else if (st < lastScrollTop.current) {
+        setHeaderCollapsed(false);
+      }
+      lastScrollTop.current = st;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [loading]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -174,93 +199,109 @@ export function ActivityLogList() {
   }, [logs]);
 
   return (
-    <div className="space-y-6">
-      {/* HIPAA Notice */}
-      <div className="flex items-start gap-3 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-        <ShieldAlert className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm">
-          <p className="font-medium text-blue-800 dark:text-blue-200">HIPAA Compliant Activity Log</p>
-          <p className="text-blue-700 dark:text-blue-300 mt-0.5">
-            This log shows actions performed by your AI agent. Patient-identifying information (names, contact details, medical records)
-            is never stored. Use the Resource IDs to look up records in your PMS or Google Calendar.
-          </p>
+    <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+      {/* HIPAA Notice - stays outside card */}
+      <div
+        className={`flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+          headerCollapsed ? 'max-h-0 opacity-0 mb-0' : 'max-h-[200px] opacity-100 mb-4'
+        }`}
+      >
+        <div className="flex items-start gap-3 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+          <ShieldAlert className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-medium text-blue-800 dark:text-blue-200">HIPAA Compliant</span>
+            <span className="text-blue-700 dark:text-blue-300">
+              {' '}— Patient-identifying information is never stored. Use Resource IDs to look up records in your PMS or Google Calendar.
+            </span>
+          </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>AI Activity Log</CardTitle>
-              <CardDescription>
-                Actions your AI agent performed in your practice management system or Google Calendar.
-                {pagination && ` Showing ${logs.length} of ${pagination.total} entries.`}
-              </CardDescription>
+      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* Card header with title, filters */}
+        <div
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+            headerCollapsed ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'
+          }`}
+        >
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>AI Activity Log</CardTitle>
+                <CardDescription>
+                  {loading
+                    ? 'Loading activity log...'
+                    : pagination
+                      ? `Showing ${logs.length} of ${pagination.total} entries`
+                      : 'Actions performed by your AI agent'}
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <Input
-              placeholder="Search by resource ID, call ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
-            <Select value={source} onValueChange={setSource}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="pms">PMS</SelectItem>
-                <SelectItem value="gcal">Google Cal</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={action} onValueChange={setAction}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Actions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Actions</SelectItem>
-                <SelectItem value="book_appointment">Book Appointment</SelectItem>
-                <SelectItem value="cancel_appointment">Cancel Appointment</SelectItem>
-                <SelectItem value="reschedule_appointment">Reschedule Appointment</SelectItem>
-                <SelectItem value="create_patient">Create Patient</SelectItem>
-                <SelectItem value="update_patient">Update Patient</SelectItem>
-                <SelectItem value="add_note">Add Note</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="flex flex-wrap items-center gap-3 mt-4">
+              <div className="relative flex-1 max-w-xs">
+                <Input
+                  placeholder="Search by resource ID, call ID..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <Select value={source} onValueChange={setSource}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="pms">PMS</SelectItem>
+                  <SelectItem value="gcal">Google Cal</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={action} onValueChange={setAction}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Actions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
+                  <SelectItem value="book_appointment">Book Appointment</SelectItem>
+                  <SelectItem value="cancel_appointment">Cancel Appointment</SelectItem>
+                  <SelectItem value="reschedule_appointment">Reschedule Appointment</SelectItem>
+                  <SelectItem value="create_patient">Create Patient</SelectItem>
+                  <SelectItem value="update_patient">Update Patient</SelectItem>
+                  <SelectItem value="add_note">Add Note</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+        </div>
 
-          {/* Table */}
+        {/* Table content */}
+        <CardContent className="flex-1 min-h-0 flex flex-col p-0 overflow-hidden">
           {loading ? (
-            <div className="space-y-2">
+            <div className="px-6 py-4 space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : (
-            <>
-              <div className="rounded-md border">
+            <div className="relative flex-1 min-h-0">
+              <div ref={scrollRef} className="absolute inset-0 overflow-y-auto px-6">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-card">
                     <TableRow>
                       <TableHead className="w-[160px]">Date / Time</TableHead>
                       <TableHead className="w-[80px]">Source</TableHead>
@@ -280,7 +321,7 @@ export function ActivityLogList() {
                       </TableRow>
                     ) : (
                       logs.map((log) => (
-                        <TableRow key={log.id} className={!log.success ? 'bg-destructive/5' : ''}>
+                        <TableRow key={log.id} className={!log.success ? 'bg-destructive/10' : ''}>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                             {formatDateTime(log.createdAt)}
                           </TableCell>
@@ -295,9 +336,6 @@ export function ActivityLogList() {
                                 <Calendar className="h-3 w-3" />
                                 GCal
                               </Badge>
-                            )}
-                            {log.pmsProvider && (
-                              <div className="text-[10px] text-muted-foreground mt-0.5 capitalize">{log.pmsProvider}</div>
                             )}
                           </TableCell>
                           <TableCell>
@@ -362,38 +400,38 @@ export function ActivityLogList() {
                   </TableBody>
                 </Table>
               </div>
-
-              {/* Pagination */}
-              {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Page {pagination.page} of {pagination.totalPages} ({pagination.total} entries)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => p - 1)}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= pagination.totalPages}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+            </div>
           )}
         </CardContent>
+
+        {/* Pagination inside card */}
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t">
+            <div className="text-sm text-muted-foreground">
+              Page {pagination.page} of {pagination.totalPages} ({pagination.total} entries)
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -92,9 +92,27 @@ export async function GET(request: NextRequest) {
     const activeProvider = await getAccountProvider(account.id);
 
     if (activeProvider === 'RETELL') {
-      return NextResponse.json(
-        await fetchRetellRecentCalls(account.id, limit, offset),
-      );
+      try {
+        const retellData = await fetchRetellRecentCalls(account.id, limit, offset);
+        if (retellData.calls.length === 0 && process.env.NODE_ENV === 'development') {
+          const mockCalls = generateMockRecentCalls(limit);
+          return NextResponse.json({
+            calls: mockCalls,
+            pagination: { total: mockCalls.length, limit, offset: 0, hasMore: false },
+          });
+        }
+        return NextResponse.json(retellData);
+      } catch (retellErr) {
+        console.warn('[recent-calls] Retell API call failed:', retellErr);
+        if (process.env.NODE_ENV === 'development') {
+          const mockCalls = generateMockRecentCalls(limit);
+          return NextResponse.json({
+            calls: mockCalls,
+            pagination: { total: mockCalls.length, limit, offset: 0, hasMore: false },
+          });
+        }
+        throw retellErr;
+      }
     }
 
     // Get account's phone numbers from VapiPhoneNumber table

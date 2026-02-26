@@ -47,7 +47,7 @@ export default function AdminSettingsPage() {
 
   // Preview calculation
   const [previewMinutes, setPreviewMinutes] = useState('2');
-  const [previewVapiCost, setPreviewVapiCost] = useState('0.10');
+  const [previewProviderCost, setPreviewProviderCost] = useState('0.10');
 
   useEffect(() => {
     fetchPricing();
@@ -101,13 +101,13 @@ export default function AdminSettingsPage() {
   // Live preview of blended cost
   const previewCost = (() => {
     const mins = parseFloat(previewMinutes) || 0;
-    const vapiCost = parseFloat(previewVapiCost) || 0;
+    const providerCost = parseFloat(previewProviderCost) || 0;
     const twilio = mins * (parseFloat(twilioInboundPerMin) || 0);
     const server = mins * (parseFloat(serverCostPerMin) || 0);
-    const subtotal = vapiCost + twilio + server;
+    const subtotal = providerCost + twilio + server;
     const markup = subtotal * ((parseFloat(markupPercent) || 0) / 100);
     const total = subtotal + markup;
-    return { vapiCost, twilio, server, subtotal, markup, total };
+    return { providerCost, twilio, server, subtotal, markup, total };
   })();
 
   const hasChanges = pricing && (
@@ -135,7 +135,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Settings</h1>
@@ -164,7 +164,7 @@ export default function AdminSettingsPage() {
             </CardTitle>
             <CardDescription>
               These rates are used to compute the blended cost shown in call logs
-              and analytics. The formula is: Vapi + Twilio + Server + Markup%.
+              and analytics. The formula is: Provider + Twilio + Server + Markup%.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -240,7 +240,7 @@ export default function AdminSettingsPage() {
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Percentage markup applied to the subtotal (Vapi + Twilio + Server)
+                Percentage markup applied to the subtotal (Provider + Twilio + Server)
               </p>
             </div>
 
@@ -290,17 +290,17 @@ export default function AdminSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="previewVapiCost">Vapi Cost ($)</Label>
+                <Label htmlFor="previewProviderCost">Provider Cost ($)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <Input
-                    id="previewVapiCost"
+                    id="previewProviderCost"
                     type="number"
                     step="0.01"
                     min="0"
                     className="pl-7"
-                    value={previewVapiCost}
-                    onChange={(e) => setPreviewVapiCost(e.target.value)}
+                    value={previewProviderCost}
+                    onChange={(e) => setPreviewProviderCost(e.target.value)}
                   />
                 </div>
               </div>
@@ -308,8 +308,8 @@ export default function AdminSettingsPage() {
 
             <div className="rounded-lg border bg-muted/50 p-4 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Vapi Cost</span>
-                <span className="font-mono">${previewCost.vapiCost.toFixed(4)}</span>
+                <span className="text-muted-foreground">Provider Cost</span>
+                <span className="font-mono">${previewCost.providerCost.toFixed(4)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Twilio (inbound)</span>

@@ -8,6 +8,7 @@ interface ActivityChartProps {
     date: string;
     count: number;
   }>;
+  is24h?: boolean;
 }
 
 const barColors = [
@@ -27,17 +28,44 @@ const barColors = [
   'from-teal-500 to-teal-600',
 ];
 
-export function ActivityChart({ data }: ActivityChartProps) {
+function formatBarLabel(dateStr: string, is24h: boolean): string {
+  if (is24h) {
+    const date = new Date(dateStr);
+    const h = date.getHours();
+    if (h === 0) return '12a';
+    if (h === 12) return '12p';
+    return h > 12 ? `${h - 12}p` : `${h}a`;
+  }
+  return String(new Date(dateStr).getDate());
+}
+
+function formatTooltip(dateStr: string, count: number, is24h: boolean): string {
+  if (is24h) {
+    const date = new Date(dateStr);
+    const h = date.getHours();
+    const label = h === 0 ? '12 AM' : h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`;
+    return `${count} calls at ${label}`;
+  }
+  const date = new Date(dateStr);
+  const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${count} calls on ${dayLabel}`;
+}
+
+export function ActivityChart({ data, is24h = false }: ActivityChartProps) {
   const maxCount = Math.max(...data.map(d => d.count), 1);
+  const trendLabel = is24h ? 'Hourly Trend' : 'Daily Trend';
+  const legendLabel = is24h ? 'Calls per hour' : 'Calls per day';
+
+  const showEveryN = is24h && data.length > 12 ? 2 : 1;
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Activity</CardTitle>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <TrendingUp className="h-4 w-4" />
-            <span>Daily Trend</span>
+            <span>{trendLabel}</span>
           </div>
         </div>
       </CardHeader>
@@ -49,36 +77,35 @@ export function ActivityChart({ data }: ActivityChartProps) {
             </div>
           ) : (
             <>
-              <div className="flex items-end justify-between gap-2 h-36">
+              <div className="flex items-end justify-between gap-1 sm:gap-2 h-36">
                 {data.map((item, index) => {
                   const height = (item.count / maxCount) * 100;
-                  const date = new Date(item.date);
-                  const dayLabel = date.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  });
                   const gradient = barColors[index % barColors.length]!;
+                  const label = formatBarLabel(item.date, is24h);
+                  const showLabel = index % showEveryN === 0;
 
                   return (
                     <div
                       key={index}
-                      className="flex-1 flex flex-col items-center gap-1.5 group h-full"
+                      className="flex-1 flex flex-col items-center gap-1.5 group h-full min-w-0"
                     >
                       {item.count > 0 && (
-                        <span className="text-xs font-semibold text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                           {item.count}
                         </span>
                       )}
                       <div className="relative w-full flex-1">
                         <div
-                          className={`absolute bottom-0 left-1 right-1 bg-gradient-to-t ${gradient} rounded-t-md shadow-sm hover:shadow-md hover:brightness-110 transition-all cursor-pointer`}
+                          className={`absolute bottom-0 left-0.5 right-0.5 sm:left-1 sm:right-1 bg-gradient-to-t ${gradient} rounded-t-md shadow-sm hover:shadow-md hover:brightness-110 transition-all cursor-pointer`}
                           style={{ height: `${Math.max(height, 3)}%` }}
-                          title={`${item.count} calls on ${dayLabel}`}
+                          title={formatTooltip(item.date, item.count, is24h)}
                         />
                       </div>
-                      <span className="text-xs text-muted-foreground group-hover:text-foreground font-medium transition-colors">
-                        {date.getDate()}
-                      </span>
+                      {showLabel && (
+                        <span className="text-[9px] sm:text-xs text-muted-foreground group-hover:text-foreground font-medium transition-colors truncate">
+                          {label}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -86,7 +113,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
               <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
                 <div className="flex items-center gap-1.5">
                   <div className="h-2 w-2 rounded-full bg-gradient-to-r from-violet-500 to-blue-500" />
-                  <span>Calls per day</span>
+                  <span>{legendLabel}</span>
                 </div>
               </div>
             </>

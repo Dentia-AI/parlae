@@ -260,7 +260,6 @@ export function RetellAgentsList() {
               ))}
             </div>
           ) : (
-            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -347,7 +346,6 @@ export function RetellAgentsList() {
                   )}
                 </TableBody>
               </Table>
-            </div>
           )}
         </CardContent>
       </Card>
