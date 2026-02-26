@@ -11,7 +11,8 @@ import { getLogger } from '@kit/shared/logger';
  *
  * Modes:
  *   1. From built-in: { fromBuiltIn: true } — seeds from code templates
- *   2. Direct: { name, displayName, version, globalPrompt, nodePrompts, nodeTools, edgeConfig, modelConfig }
+ *   2. From account: { fromAccount: true, sourceAccountId, name, displayName, version, ... }
+ *   3. Direct: { name, displayName, version, globalPrompt, nodePrompts, nodeTools, edgeConfig, modelConfig }
  */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
@@ -29,6 +30,48 @@ export async function POST(request: NextRequest) {
 
       logger.info({ templateId }, '[Flow Templates] Seeded from built-in');
       return NextResponse.json({ success: true, templateId });
+    }
+
+    if (body.fromAccount && body.sourceAccountId) {
+      const { fetchFlowConfigFromAccount } = await import(
+        '../fetch-from-account/route'
+      );
+      const config = await fetchFlowConfigFromAccount(body.sourceAccountId);
+
+      const name = body.name || `flow-from-account-${Date.now()}`;
+      const displayName = body.displayName || 'Flow Template (from account)';
+      const version = body.version || 'cf-v1.0';
+      const isDefault = body.isDefault ?? false;
+
+      if (isDefault) {
+        await prisma.retellConversationFlowTemplate.updateMany({
+          where: { isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+
+      const template = await prisma.retellConversationFlowTemplate.create({
+        data: {
+          name,
+          displayName,
+          description: body.description || null,
+          version,
+          isDefault,
+          globalPrompt: config.globalPrompt,
+          nodePrompts: config.nodePrompts,
+          nodeTools: config.nodeTools,
+          edgeConfig: config.edgeConfig,
+          modelConfig: config.modelConfig,
+          createdBy: session?.id ?? 'system',
+        },
+      });
+
+      logger.info(
+        { templateId: template.id, sourceAccountId: body.sourceAccountId },
+        '[Flow Templates] Created from account config',
+      );
+
+      return NextResponse.json({ success: true, template: { id: template.id, name: template.name } });
     }
 
     const { name, displayName, description, version, isDefault, globalPrompt, nodePrompts, nodeTools, edgeConfig, modelConfig } = body;

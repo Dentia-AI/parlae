@@ -19,6 +19,7 @@ import {
   Users,
   Workflow,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { cn } from '@kit/ui/utils';
@@ -107,6 +108,12 @@ export default function ConversationFlowTemplatesPage() {
             <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Refresh
           </Button>
+          <Link href="/admin/retell-templates/conversation-flow/fetch">
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Fetch from Account
+            </Button>
+          </Link>
           <Button onClick={handleSeedFromBuiltIn} disabled={seeding}>
             {seeding ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
