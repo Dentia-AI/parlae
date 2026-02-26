@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@kit/ui/select';
-import { RefreshCw, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Trash2, AlertTriangle, CheckCircle2, Database } from 'lucide-react';
 
 interface RetellAgent {
   agentId: string;
@@ -57,6 +57,7 @@ export function RetellAgentsList() {
   const [summary, setSummary] = useState<AgentsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [updatingAnalysis, setUpdatingAnalysis] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -161,6 +162,30 @@ export function RetellAgentsList() {
     }
   }
 
+  async function handleUpdateAnalysis() {
+    if (selectedIds.size === 0) return;
+    setUpdatingAnalysis(true);
+    try {
+      const res = await fetch('/api/admin/update-retell-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentIds: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(
+          `Updated analysis schema on ${data.updated} agent${data.updated !== 1 ? 's' : ''}${data.total - data.updated > 0 ? `, ${data.total - data.updated} failed` : ''}`,
+        );
+      } else {
+        toast.error(data.error || 'Failed to update analysis schema');
+      }
+    } catch {
+      toast.error('Failed to update analysis schema');
+    } finally {
+      setUpdatingAnalysis(false);
+    }
+  }
+
   function formatDate(timestamp: number) {
     if (!timestamp) return '—';
     return new Date(timestamp).toLocaleString();
@@ -242,6 +267,19 @@ export function RetellAgentsList() {
                 Select All Orphaned ({summary.orphaned})
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedIds.size === 0 || updatingAnalysis}
+              onClick={handleUpdateAnalysis}
+            >
+              {updatingAnalysis ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4 mr-2" />
+              )}
+              Update Analysis Schema
+            </Button>
             <Button
               variant="destructive"
               size="sm"

@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   Users,
   Rocket,
-  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from '@kit/ui/sonner';
@@ -58,7 +57,6 @@ export function RetellTemplateDetail({ template, allAccounts }: Props) {
   const csrfToken = useCsrfToken();
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
-  const [updatingAnalysis, setUpdatingAnalysis] = useState(false);
 
   const [form, setForm] = useState({
     displayName: template.displayName,
@@ -152,39 +150,6 @@ export function RetellTemplateDetail({ template, allAccounts }: Props) {
     } finally {
       setDeploying(false);
     }
-  };
-
-  const handleUpdateAnalysis = async () => {
-    if (selectedAccountIds.length === 0) {
-      toast.error('Select at least one account');
-      return;
-    }
-
-    setUpdatingAnalysis(true);
-    let successes = 0;
-    let failures = 0;
-
-    for (const accountId of selectedAccountIds) {
-      try {
-        const res = await fetch('/api/admin/update-retell-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-          body: JSON.stringify({ accountId }),
-        });
-        const data = await res.json();
-        if (data.success) successes += data.updated;
-        else failures++;
-      } catch {
-        failures++;
-      }
-    }
-
-    if (successes > 0) {
-      toast.success(`Updated analysis schema on ${successes} agent${successes !== 1 ? 's' : ''}${failures > 0 ? `, ${failures} failed` : ''}`);
-    } else {
-      toast.error('Failed to update analysis schema');
-    }
-    setUpdatingAnalysis(false);
   };
 
   const toggleAccount = (accountId: string) => {
@@ -389,31 +354,17 @@ export function RetellTemplateDetail({ template, allAccounts }: Props) {
             <span className="text-sm text-muted-foreground">
               {selectedAccountIds.length} selected
             </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleUpdateAnalysis}
-                disabled={updatingAnalysis || selectedAccountIds.length === 0}
-              >
-                {updatingAnalysis ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Update Analysis Schema
-              </Button>
-              <Button
-                onClick={handleBulkDeploy}
-                disabled={deploying || selectedAccountIds.length === 0}
-              >
-                {deploying ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Rocket className="h-4 w-4 mr-2" />
-                )}
-                Deploy to Selected
-              </Button>
-            </div>
+            <Button
+              onClick={handleBulkDeploy}
+              disabled={deploying || selectedAccountIds.length === 0}
+            >
+              {deploying ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Rocket className="h-4 w-4 mr-2" />
+              )}
+              Deploy to Selected
+            </Button>
           </div>
         </CardContent>
       </Card>

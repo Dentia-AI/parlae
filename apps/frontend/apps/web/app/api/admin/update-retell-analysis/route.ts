@@ -8,10 +8,9 @@ import { RETELL_POST_CALL_ANALYSIS } from '@kit/shared/retell/templates/dental-c
 /**
  * POST /api/admin/update-retell-analysis
  *
- * Sync the post-call analysis schema to all deployed Retell agents for an account.
- * This patches agents via the Retell API without full redeployment.
- *
- * Body: { accountId: string }
+ * Sync the post-call analysis schema to deployed Retell agents.
+ * Accepts either { agentIds: string[] } to patch specific agents,
+ * or { accountId: string } to patch all agents for an account.
  */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
@@ -22,37 +21,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { accountId } = await request.json();
+    const body = await request.json();
+    const { accountId, agentIds: directAgentIds } = body as {
+      accountId?: string;
+      agentIds?: string[];
+    };
 
-    if (!accountId) {
+    let uniqueAgentIds: string[];
+
+    if (Array.isArray(directAgentIds) && directAgentIds.length > 0) {
+      uniqueAgentIds = [...new Set(directAgentIds)];
+    } else if (accountId) {
+      const account = await prisma.account.findUnique({
+        where: { id: accountId },
+        select: { phoneIntegrationSettings: true },
+      });
+
+      if (!account) {
+        return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
+      }
+
+      const settings = (account.phoneIntegrationSettings as any) ?? {};
+      const ids: string[] = [];
+      if (settings.retellReceptionistAgentId) ids.push(settings.retellReceptionistAgentId);
+      if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
+        ids.push(...settings.retellAgentIds);
+      }
+      uniqueAgentIds = [...new Set(ids)];
+    } else {
       return NextResponse.json(
-        { success: false, error: 'accountId is required' },
+        { success: false, error: 'Either agentIds or accountId is required' },
         { status: 400 },
       );
     }
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { phoneIntegrationSettings: true },
-    });
-
-    if (!account) {
-      return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
-    }
-
-    const settings = (account.phoneIntegrationSettings as any) ?? {};
-
-    const agentIds: string[] = [];
-    if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
-    if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
-      agentIds.push(...settings.retellAgentIds);
-    }
-
-    const uniqueAgentIds = [...new Set(agentIds)];
-
     if (uniqueAgentIds.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'No Retell agents found for this account' },
+        { success: false, error: 'No Retell agent IDs resolved' },
         { status: 400 },
       );
     }
@@ -68,11 +73,11 @@ export async function POST(request: NextRequest) {
           post_call_analysis_data: RETELL_POST_CALL_ANALYSIS,
         } as any);
         results.push({ agentId, success: true });
-        logger.info({ accountId, agentId }, '[Retell Analysis] Updated post-call analysis schema');
+        logger.info({ agentId }, '[Retell Analysis] Updated post-call analysis schema');
       } catch (err: any) {
         results.push({ agentId, success: false, error: err?.message });
         logger.error(
-          { error: err?.message, accountId, agentId },
+          { error: err?.message, agentId },
           '[Retell Analysis] Failed to update',
         );
       }
