@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 
@@ -11,8 +12,13 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  app.useBodyParser('json', { limit: '10mb' });
-  app.useBodyParser('urlencoded', { limit: '10mb', extended: true } as any);
+  app.use(json({
+    limit: '10mb',
+    verify: (req: any, _res: any, buf: Buffer) => {
+      req.rawBody = buf;
+    },
+  }));
+  app.use(urlencoded({ limit: '10mb', extended: true }));
 
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
