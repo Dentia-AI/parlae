@@ -132,8 +132,8 @@ export function ActivityLogList() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [source, setSource] = useState('all');
-  const [action, setAction] = useState('');
-  const [status, setStatus] = useState('');
+  const [action, setAction] = useState('all');
+  const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
 
   const fetchLogs = useCallback(async () => {
@@ -141,8 +141,8 @@ export function ActivityLogList() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' });
       if (source !== 'all') params.set('source', source);
-      if (action) params.set('action', action);
-      if (status) params.set('status', status);
+      if (action && action !== 'all') params.set('action', action);
+      if (status && status !== 'all') params.set('status', status);
       if (search.trim()) params.set('search', search.trim());
 
       const res = await fetch(`/api/activity-log?${params}`);
@@ -227,7 +227,7 @@ export function ActivityLogList() {
                 <SelectValue placeholder="All Actions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Actions</SelectItem>
+                <SelectItem value="all">All Actions</SelectItem>
                 <SelectItem value="book_appointment">Book Appointment</SelectItem>
                 <SelectItem value="cancel_appointment">Cancel Appointment</SelectItem>
                 <SelectItem value="reschedule_appointment">Reschedule Appointment</SelectItem>
@@ -241,7 +241,7 @@ export function ActivityLogList() {
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
