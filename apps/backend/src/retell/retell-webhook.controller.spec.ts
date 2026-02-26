@@ -37,26 +37,37 @@ describe('RetellWebhookController', () => {
   describe('verifySignature (static)', () => {
     const API_KEY = 'test-api-key-123';
 
-    function sign(body: string): string {
-      return crypto.createHmac('sha256', API_KEY).update(body).digest('hex');
+    function sign(body: string, timestamp: number = Date.now()): string {
+      const digest = crypto.createHmac('sha256', API_KEY).update(body + timestamp).digest('hex');
+      return `v=${timestamp},d=${digest}`;
     }
 
-    it('should accept a valid signature', () => {
+    it('should accept a valid signature', async () => {
       const body = '{"event":"call_started"}';
-      expect(RetellWebhookController.verifySignature(body, sign(body), API_KEY)).toBe(true);
+      expect(await RetellWebhookController.verifySignature(body, sign(body), API_KEY)).toBe(true);
     });
 
-    it('should reject an invalid signature', () => {
+    it('should reject an invalid signature', async () => {
       const body = '{"event":"call_started"}';
-      expect(RetellWebhookController.verifySignature(body, 'bad-sig', API_KEY)).toBe(false);
+      expect(await RetellWebhookController.verifySignature(body, 'v=123,d=bad', API_KEY)).toBe(false);
     });
 
-    it('should reject when signature is missing', () => {
-      expect(RetellWebhookController.verifySignature('{}', '', API_KEY)).toBe(false);
+    it('should reject a malformed signature', async () => {
+      expect(await RetellWebhookController.verifySignature('{}', 'bad-sig', API_KEY)).toBe(false);
     });
 
-    it('should reject when apiKey is missing', () => {
-      expect(RetellWebhookController.verifySignature('{}', 'sig', '')).toBe(false);
+    it('should reject when signature is missing', async () => {
+      expect(await RetellWebhookController.verifySignature('{}', '', API_KEY)).toBe(false);
+    });
+
+    it('should reject when apiKey is missing', async () => {
+      expect(await RetellWebhookController.verifySignature('{}', 'v=1,d=abc', '')).toBe(false);
+    });
+
+    it('should reject an expired timestamp', async () => {
+      const body = '{"event":"call_started"}';
+      const staleTimestamp = Date.now() - 6 * 60 * 1000;
+      expect(await RetellWebhookController.verifySignature(body, sign(body, staleTimestamp), API_KEY)).toBe(false);
     });
   });
 
@@ -64,33 +75,29 @@ describe('RetellWebhookController', () => {
     const API_KEY = 'test-api-key-456';
     const body = { event: 'call_ended', call: { call_id: 'c-1' } };
 
-    function signBody(payload: any): string {
+    function signBody(payload: any, timestamp: number = Date.now()): string {
       const raw = JSON.stringify(payload);
-      return crypto.createHmac('sha256', API_KEY).update(raw).digest('hex');
-    }
-
-    function makeReq(rawBody?: Buffer) {
-      return { rawBody } as any;
+      const digest = crypto.createHmac('sha256', API_KEY).update(raw + timestamp).digest('hex');
+      return `v=${timestamp},d=${digest}`;
     }
 
     it('should reject request with invalid signature when API key is set', async () => {
       process.env.RETELL_API_KEY = API_KEY;
       await expect(
-        controller.handleWebhook(makeReq(Buffer.from(JSON.stringify(body))), body, 'bad-sig'),
+        controller.handleWebhook(body, 'v=123,d=bad'),
       ).rejects.toThrow(HttpException);
     });
 
     it('should accept request with valid signature', async () => {
       process.env.RETELL_API_KEY = API_KEY;
-      const rawStr = JSON.stringify(body);
       const sig = signBody(body);
-      const result = await controller.handleWebhook(makeReq(Buffer.from(rawStr)), body, sig);
+      const result = await controller.handleWebhook(body, sig);
       expect(result).toEqual({ received: true });
     });
 
     it('should skip verification when no API key is configured', async () => {
       delete process.env.RETELL_API_KEY;
-      const result = await controller.handleWebhook(makeReq(), body, '');
+      const result = await controller.handleWebhook(body, '');
       expect(result).toEqual({ received: true });
     });
   });
@@ -98,10 +105,6 @@ describe('RetellWebhookController', () => {
   // ── Call lifecycle events ───────────────────────────────────────────
 
   describe('call_started', () => {
-    function makeReq() {
-      return { rawBody: undefined } as any;
-    }
-
     it('should create CallReference with provider RETELL', async () => {
       prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
 
@@ -109,7 +112,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-1', agent_id: 'agent-1' },
       };
-      const result = await controller.handleWebhook(makeReq(), body, '');
+      const result = await controller.handleWebhook(body, '');
       expect(result).toEqual({ received: true });
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -128,7 +131,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-2', metadata: { accountId: 'acc-meta' } },
       };
-      await controller.handleWebhook(makeReq(), body, '');
+      await controller.handleWebhook(body, '');
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ accountId: 'acc-meta' }),
@@ -145,7 +148,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-3', agent_id: 'unknown', to_number: '+14165551234' },
       };
-      await controller.handleWebhook(makeReq(), body, '');
+      await controller.handleWebhook(body, '');
       expect(prisma.callReference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ accountId: 'acc-phone' }),
@@ -158,7 +161,7 @@ describe('RetellWebhookController', () => {
         event: 'call_started',
         call: { call_id: 'retell-call-4' },
       };
-      await controller.handleWebhook(makeReq(), body, '');
+      await controller.handleWebhook(body, '');
       expect(prisma.callReference.upsert).not.toHaveBeenCalled();
     });
   });
@@ -169,7 +172,7 @@ describe('RetellWebhookController', () => {
         event: 'call_ended',
         call: { call_id: 'c-1', call_status: 'ended', start_timestamp: 1000, end_timestamp: 2000 },
       };
-      const result = await controller.handleWebhook({ rawBody: undefined } as any, body, '');
+      const result = await controller.handleWebhook(body, '');
       expect(result).toEqual({ received: true });
     });
   });
@@ -180,7 +183,7 @@ describe('RetellWebhookController', () => {
         event: 'call_analyzed',
         call: { call_id: 'c-1', call_analysis: { call_outcome: 'appointment_booked' } },
       };
-      const result = await controller.handleWebhook({ rawBody: undefined } as any, body, '');
+      const result = await controller.handleWebhook(body, '');
       expect(result).toEqual({ received: true });
     });
   });
@@ -188,7 +191,7 @@ describe('RetellWebhookController', () => {
   describe('unhandled event', () => {
     it('should return received for unknown events', async () => {
       const body = { event: 'some_future_event', call: {} };
-      const result = await controller.handleWebhook({ rawBody: undefined } as any, body, '');
+      const result = await controller.handleWebhook(body, '');
       expect(result).toEqual({ received: true });
     });
   });

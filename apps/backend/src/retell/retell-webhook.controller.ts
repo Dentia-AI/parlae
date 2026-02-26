@@ -5,10 +5,7 @@ import {
   Headers,
   HttpException,
   HttpStatus,
-  Req,
-  RawBodyRequest,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLogger } from '../common/structured-logger';
 import * as crypto from 'crypto';
@@ -22,7 +19,7 @@ import * as crypto from 'crypto';
  * Retell webhook payload:
  *   { event: "call_started"|"call_ended"|"call_analyzed", call: { call_id, agent_id, ... } }
  *
- * Signature verification uses HMAC-SHA256 of the raw body with the Retell API key.
+ * Signature format: "v=<timestamp>,d=<HMAC-SHA256(apiKey, body+timestamp)>"
  */
 @Controller('retell')
 export class RetellWebhookController {
@@ -34,17 +31,14 @@ export class RetellWebhookController {
 
   @Post('webhook')
   async handleWebhook(
-    @Req() req: RawBodyRequest<Request>,
     @Body() body: any,
     @Headers('x-retell-signature') signature: string,
   ) {
     const apiKey = process.env.RETELL_API_KEY;
     if (apiKey) {
-      const raw = req.rawBody
-        ? req.rawBody.toString()
-        : JSON.stringify(body);
-      const isValid = RetellWebhookController.verifySignature(
-        raw,
+      const bodyStr = JSON.stringify(body);
+      const isValid = await RetellWebhookController.verifySignature(
+        bodyStr,
         signature,
         apiKey,
       );
@@ -162,23 +156,37 @@ export class RetellWebhookController {
     return null;
   }
 
+  private static readonly SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000;
+
   /**
    * Verify Retell webhook signature.
-   * Retell signs with HMAC-SHA256 using the API key.
+   *
+   * Retell signs as: HMAC-SHA256(apiKey, body + timestamp)
+   * Signature header format: "v=<timestamp>,d=<hex digest>"
    */
-  static verifySignature(
-    rawBody: string,
+  static async verifySignature(
+    body: string,
     signature: string,
     apiKey: string,
-  ): boolean {
+  ): Promise<boolean> {
     if (!signature || !apiKey) return false;
+
+    const match = /^v=(\d+),d=(.+)$/.exec(signature);
+    if (!match) return false;
+
+    const timestamp = Number(match[1]);
+    const digest = match[2];
+
+    if (Math.abs(Date.now() - timestamp) > RetellWebhookController.SIGNATURE_TOLERANCE_MS) {
+      return false;
+    }
+
     const expected = crypto
       .createHmac('sha256', apiKey)
-      .update(rawBody)
+      .update(body + timestamp)
       .digest('hex');
-    const sigBuf = Buffer.from(signature);
-    const expBuf = Buffer.from(expected);
-    if (sigBuf.length !== expBuf.length) return false;
-    return crypto.timingSafeEqual(sigBuf, expBuf);
+
+    if (digest.length !== expected.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(expected));
   }
 }
