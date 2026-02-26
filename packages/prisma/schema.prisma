@@ -236,6 +236,7 @@ model Account {
   vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account (Vapi)
   retellPhoneNumbers    RetellPhoneNumber[] // Phone numbers for this account (Retell)
   callReferences        CallReference[] // Thin references to voice AI calls for account scoping
+  aiActionLogs          AiActionLog[] // User-facing audit trail for AI actions in PMS/GCal
 
   @@map("accounts")
 }
@@ -1199,4 +1200,52 @@ model PlatformPricing {
   updatedBy            String?  @map("updated_by")
 
   @@map("platform_pricing")
+}
+
+// User-facing audit trail for AI actions in PMS and Google Calendar.
+// Stores rich non-PHI context (appointment time, type, provider name, duration)
+// alongside external resource IDs so clinics can trace and correct AI actions.
+// Auto-purged after 3 months. HIPAA PHI access auditing is handled separately
+// by the PmsAuditLog table (6-year retention).
+model AiActionLog {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  source   String @map("source")   // 'pms' | 'gcal'
+  action   String @map("action")   // 'book_appointment', 'cancel_appointment', 'reschedule_appointment', 'create_patient', 'update_patient', 'add_note', 'create_event', 'update_event', 'delete_event'
+  category String @map("category") // 'appointment', 'patient', 'note', 'payment', 'event'
+
+  callId String? @map("call_id") // Retell/Vapi call ID that triggered this action
+
+  // External resource IDs (HIPAA-safe: no patient-identifying info)
+  externalResourceId   String? @map("external_resource_id")   // Appointment ID, Patient ID, GCal Event ID
+  externalResourceType String? @map("external_resource_type") // 'appointment', 'patient', 'note', 'event'
+
+  // Rich non-PHI context (staff names, scheduling data — not PHI)
+  appointmentTime String? @map("appointment_time") // ISO datetime of the appointment
+  appointmentType String? @map("appointment_type") // 'Cleaning', 'Consultation', etc.
+  providerName    String? @map("provider_name")    // Dentist/hygienist name (staff names are not PHI)
+  duration        Int?    @map("duration")         // Duration in minutes
+
+  // Human-readable summary (PHI-free)
+  summary String @map("summary") // e.g. "Booked Cleaning, 30 min with Dr. Smith on Feb 25 at 2:00 PM"
+
+  // Status
+  success      Boolean @default(true) @map("success")
+  status       String  @default("completed") @map("status") // 'completed', 'pending', 'failed'
+  errorMessage String? @map("error_message") @db.Text
+
+  // Source-specific metadata
+  pmsProvider     String? @map("pms_provider")      // 'sikka', etc.
+  writebackId     String? @map("writeback_id")      // Sikka writeback ID for async tracking
+  calendarEventId String? @map("calendar_event_id") // Google Calendar event ID
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([callId])
+  @@index([source, action])
+  @@map("ai_action_logs")
 }

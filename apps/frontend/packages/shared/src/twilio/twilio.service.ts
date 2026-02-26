@@ -524,7 +524,10 @@ class TwilioService {
       return null;
     }
 
-    const terminationUri = `${domainName}.pstn.twilio.com`;
+    const fullDomainName = domainName.endsWith('.pstn.twilio.com')
+      ? domainName
+      : `${domainName}.pstn.twilio.com`;
+    const terminationUri = fullDomainName;
 
     try {
       // Check for an existing trunk first
@@ -536,23 +539,24 @@ class TwilioService {
       if (listResp.ok) {
         const listData = await listResp.json();
         const existing = (listData.trunks || []).find(
-          (t: any) => t.domain_name === domainName,
+          (t: any) =>
+            t.domain_name === fullDomainName ||
+            t.domain_name === domainName,
         );
         if (existing) {
           logger.info(
-            { trunkSid: existing.sid, domainName },
+            { trunkSid: existing.sid, domainName: fullDomainName },
             '[Twilio] Reusing existing SIP Trunk',
           );
           return { trunkSid: existing.sid, terminationUri };
         }
       }
 
-      // Create a new trunk
       const trunkBody = new URLSearchParams();
       trunkBody.append('FriendlyName', friendlyName);
-      trunkBody.append('DomainName', domainName);
+      trunkBody.append('DomainName', fullDomainName);
 
-      logger.info({ friendlyName, domainName }, '[Twilio] Creating Elastic SIP Trunk');
+      logger.info({ friendlyName, domainName: fullDomainName }, '[Twilio] Creating Elastic SIP Trunk');
 
       const trunkResp = await fetch('https://trunking.twilio.com/v1/Trunks', {
         method: 'POST',

@@ -26,6 +26,7 @@
     "home": "Home",
     "dashboard": "Dashboard",
     "callLogs": "Call Logs",
+    "activityLog": "AI Activity Log",
     "setup": "AI Agent",
     "aiAgents": "AI Agents",
     "agentOverview": "Overview",

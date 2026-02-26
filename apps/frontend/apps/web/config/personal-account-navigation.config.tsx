@@ -9,6 +9,7 @@ import {
   BookOpen,
   Phone,
   Plug2,
+  ClipboardList,
 } from 'lucide-react';
 import { z } from 'zod';
 
@@ -32,6 +33,11 @@ const routes = [
         label: 'common:routes.callLogs',
         path: '/home/call-logs',
         Icon: <FileText className={iconClasses} />,
+      },
+      {
+        label: 'common:routes.activityLog',
+        path: '/home/activity-log',
+        Icon: <ClipboardList className={iconClasses} />,
       },
       {
         label: 'common:routes.setup',

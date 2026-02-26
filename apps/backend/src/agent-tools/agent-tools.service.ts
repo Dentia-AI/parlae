@@ -54,6 +54,59 @@ export class AgentToolsService {
   private readonly patientCache = new Map<string, CachedPatientData>();
   private static readonly CACHE_TTL_MS = 15 * 60 * 1000;
 
+  /**
+   * Log an AI action to the user-facing audit trail (AiActionLog).
+   * Stores only non-PHI data: resource IDs, appointment metadata, staff names.
+   * Never stores patient names, DOB, phone, email, or medical content.
+   */
+  private async logAiAction(params: {
+    accountId: string;
+    source: 'pms' | 'gcal';
+    action: string;
+    category: string;
+    callId?: string;
+    externalResourceId?: string;
+    externalResourceType?: string;
+    appointmentTime?: string;
+    appointmentType?: string;
+    providerName?: string;
+    duration?: number;
+    summary: string;
+    success?: boolean;
+    status?: string;
+    errorMessage?: string;
+    pmsProvider?: string;
+    writebackId?: string;
+    calendarEventId?: string;
+  }): Promise<void> {
+    try {
+      await this.prisma.aiActionLog.create({
+        data: {
+          accountId: params.accountId,
+          source: params.source,
+          action: params.action,
+          category: params.category,
+          callId: params.callId,
+          externalResourceId: params.externalResourceId,
+          externalResourceType: params.externalResourceType,
+          appointmentTime: params.appointmentTime,
+          appointmentType: params.appointmentType,
+          providerName: params.providerName,
+          duration: params.duration,
+          summary: params.summary,
+          success: params.success ?? true,
+          status: params.status ?? 'completed',
+          errorMessage: params.errorMessage,
+          pmsProvider: params.pmsProvider,
+          writebackId: params.writebackId,
+          calendarEventId: params.calendarEventId,
+        },
+      });
+    } catch (err) {
+      this.logger.error({ error: err, msg: '[AiActionLog] Failed to log action (non-fatal)' });
+    }
+  }
+
   constructor(
     private prisma: PrismaService,
     private hipaaAudit: HipaaAuditService,
@@ -217,6 +270,23 @@ export class AgentToolsService {
       const appointment = result.data;
 
       this.logger.log({ appointmentId: appointment.id });
+
+      this.logAiAction({
+        accountId: phoneRecord.accountId,
+        source: 'pms',
+        action: 'book_appointment',
+        category: 'appointment',
+        callId: call?.id,
+        externalResourceId: appointment.id,
+        externalResourceType: 'appointment',
+        appointmentTime: params.startTime || params.datetime,
+        appointmentType: params.appointmentType || params.type || 'General',
+        providerName: appointment.providerName || params.providerId,
+        duration: params.duration || 30,
+        summary: `Booked ${params.appointmentType || params.type || 'General'} appointment, ${params.duration || 30} min${appointment.providerName ? ` with ${appointment.providerName}` : ''}`,
+        pmsProvider: phoneRecord.pmsIntegration?.provider,
+        writebackId: appointment.writebackId,
+      }).catch(() => {});
 
       return {
         result: {
@@ -752,6 +822,18 @@ export class AgentToolsService {
         phiFields: ['name', 'phone', 'email', 'dateOfBirth', 'address'],
       });
 
+      this.logAiAction({
+        accountId: phoneRecord.accountId,
+        source: 'pms',
+        action: 'create_patient',
+        category: 'patient',
+        callId: call?.id,
+        externalResourceId: patient.id,
+        externalResourceType: 'patient',
+        summary: 'Created new patient record',
+        pmsProvider: phoneRecord.pmsIntegration?.provider,
+      }).catch(() => {});
+
       return {
         result: {
           success: true,
@@ -837,6 +919,18 @@ export class AgentToolsService {
         phiFields: Object.keys(updateData),
       });
 
+      this.logAiAction({
+        accountId: phoneRecord.accountId,
+        source: 'pms',
+        action: 'update_patient',
+        category: 'patient',
+        callId: call?.id,
+        externalResourceId: params.patientId,
+        externalResourceType: 'patient',
+        summary: `Updated patient record (fields: ${Object.keys(updateData).join(', ')})`,
+        pmsProvider: phoneRecord.pmsIntegration?.provider,
+      }).catch(() => {});
+
       return {
         result: {
           success: true,
@@ -915,6 +1009,18 @@ export class AgentToolsService {
         phiAccessed: true,
         phiFields: ['appointmentId', 'patientId', 'dateTime'],
       });
+
+      this.logAiAction({
+        accountId: phoneRecord.accountId,
+        source: 'pms',
+        action: 'cancel_appointment',
+        category: 'appointment',
+        callId: call?.id,
+        externalResourceId: params.appointmentId,
+        externalResourceType: 'appointment',
+        summary: `Cancelled appointment${params.reason ? `: ${params.reason}` : ''}`,
+        pmsProvider: phoneRecord.pmsIntegration?.provider,
+      }).catch(() => {});
 
       return {
         result: {
@@ -1072,6 +1178,22 @@ export class AgentToolsService {
         phiFields: ['appointmentId', 'startTime', 'duration', 'providerId'],
       });
 
+      this.logAiAction({
+        accountId: sikkaService.accountId!,
+        source: 'pms',
+        action: 'reschedule_appointment',
+        category: 'appointment',
+        callId: call?.id,
+        externalResourceId: params.appointmentId,
+        externalResourceType: 'appointment',
+        appointmentTime: params.startTime,
+        appointmentType: appointment?.appointmentType,
+        providerName: appointment?.providerName || params.providerId,
+        duration: params.duration,
+        summary: `Rescheduled appointment to ${params.startTime}${appointment?.providerName ? ` with ${appointment.providerName}` : ''}`,
+        pmsProvider: 'sikka',
+      }).catch(() => {});
+
       return {
         result: {
           success: true,
@@ -1153,6 +1275,18 @@ export class AgentToolsService {
         phiAccessed: true,
         phiFields: ['patientId', 'noteContent'],
       });
+
+      this.logAiAction({
+        accountId: sikkaService.accountId!,
+        source: 'pms',
+        action: 'add_note',
+        category: 'note',
+        callId: call?.id,
+        externalResourceId: params.patientId,
+        externalResourceType: 'patient',
+        summary: `Added ${params.category || 'general'} note to patient record`,
+        pmsProvider: 'sikka',
+      }).catch(() => {});
 
       return {
         result: {
@@ -1928,6 +2062,21 @@ export class AgentToolsService {
         },
       );
 
+      this.logAiAction({
+        accountId,
+        source: 'gcal',
+        action: 'book_appointment',
+        category: 'appointment',
+        callId: call?.id,
+        externalResourceId: result.eventId,
+        externalResourceType: 'event',
+        appointmentTime: startTime.toISOString(),
+        appointmentType,
+        duration,
+        summary: `Booked ${appointmentType} appointment, ${duration} min on Google Calendar`,
+        calendarEventId: result.eventId,
+      }).catch(() => {});
+
       // Fire-and-forget: send clinic notification email about the new booking
       this.notifications.sendClinicBookingNotification({
         accountId,
@@ -2229,6 +2378,17 @@ export class AgentToolsService {
       // The appointmentId should be the Google Calendar eventId
       await this.googleCalendar.deleteEvent(accountId, params.appointmentId);
 
+      this.logAiAction({
+        accountId,
+        source: 'gcal',
+        action: 'cancel_appointment',
+        category: 'appointment',
+        externalResourceId: params.appointmentId,
+        externalResourceType: 'event',
+        summary: 'Cancelled appointment on Google Calendar',
+        calendarEventId: params.appointmentId,
+      }).catch(() => {});
+
       return {
         result: {
           success: true,
@@ -2380,6 +2540,20 @@ export class AgentToolsService {
           end: newEndTime,
         },
       );
+
+      this.logAiAction({
+        accountId: accountId!,
+        source: 'gcal',
+        action: 'reschedule_appointment',
+        category: 'appointment',
+        callId: call?.id,
+        externalResourceId: params.appointmentId,
+        externalResourceType: 'event',
+        appointmentTime: newStartTime.toISOString(),
+        duration,
+        summary: `Rescheduled appointment to ${newStartTime.toISOString()} on Google Calendar`,
+        calendarEventId: result.eventId || params.appointmentId,
+      }).catch(() => {});
 
       return {
         result: {
