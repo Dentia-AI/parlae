@@ -95,7 +95,7 @@ export class NotificationsService {
           appointment,
           clinic,
         );
-        await this.twilioService.sendSms({
+        const smsResult = await this.twilioService.sendSms({
           messagingServiceSid: account.twilioMessagingServiceSid,
           to: patient.phone,
           body: smsMessage,
@@ -104,6 +104,8 @@ export class NotificationsService {
         this.logger.log({
           accountId,
           to: patient.phone,
+          messageSid: smsResult?.sid,
+          initialStatus: smsResult?.status,
           msg: 'SMS confirmation sent to patient',
         });
       } catch (error) {
@@ -114,6 +116,12 @@ export class NotificationsService {
           msg: 'Failed to send SMS to patient',
         });
       }
+    } else if (patient.phone && !account.twilioMessagingServiceSid) {
+      this.logger.warn({
+        accountId,
+        to: patient.phone,
+        msg: 'SMS skipped — no twilioMessagingServiceSid configured for account',
+      });
     }
 
     // Send email to patient

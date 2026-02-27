@@ -197,14 +197,14 @@ export class TwilioMessagingService {
     messagingServiceSid: string;
     to: string;
     body: string;
-  }): Promise<void> {
+  }): Promise<{ sid: string; status: string } | undefined> {
     if (!this.twilioClient) {
       this.logger.warn('Twilio not configured - cannot send SMS');
-      return;
+      return undefined;
     }
 
     try {
-      await this.twilioClient.messages.create({
+      const message = await this.twilioClient.messages.create({
         messagingServiceSid: options.messagingServiceSid,
         to: options.to,
         body: options.body,
@@ -213,13 +213,19 @@ export class TwilioMessagingService {
       this.logger.log({
         messagingServiceSid: options.messagingServiceSid,
         to: options.to,
+        messageSid: message.sid,
+        initialStatus: message.status,
         msg: 'SMS sent successfully',
       });
+
+      return { sid: message.sid, status: message.status };
     } catch (error) {
       this.logger.error({
         messagingServiceSid: options.messagingServiceSid,
         to: options.to,
         error: error.message,
+        errorCode: (error as any).code,
+        moreInfo: (error as any).moreInfo,
         msg: 'Failed to send SMS',
       });
       throw error;

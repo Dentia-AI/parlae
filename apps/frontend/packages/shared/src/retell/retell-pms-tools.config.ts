@@ -327,23 +327,23 @@ const getProvidersFn: VapiToolFunction = {
 
 export const retellLookupPatientTool = toRetellTool(lookupPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me look up your record.',
+  speakDuringMessage: 'One moment.',
 });
 
 export const retellCreatePatientTool = toRetellTool(createPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment while I get that set up.',
+  speakDuringMessage: 'One moment.',
 });
 
 export const retellUpdatePatientTool = toRetellTool(updatePatientFn);
 export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me check our available times.',
+  speakDuringMessage: 'One moment please.',
 });
 
 export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Booking that for you now.',
+  speakDuringMessage: 'One moment.',
   timeoutMs: 45_000,
 });
 

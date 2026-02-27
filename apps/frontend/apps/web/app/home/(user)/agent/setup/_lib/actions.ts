@@ -1594,9 +1594,22 @@ export const updateVoiceAction = enhanceAction(
         }
 
         const voiceId = data.voice.voiceId || 'retell-Chloe';
-        await retellService.updateAgent(retellAgentId, {
-          voice_id: voiceId,
-        } as any);
+        const voicePrefix = voiceId.split('-')[0]?.toLowerCase();
+        const voiceModelMap: Record<string, string> = {
+          '11labs': 'eleven_turbo_v2_5',
+          'cartesia': 'sonic-3',
+          'minimax': 'speech-02-turbo',
+        };
+        const voiceModel = voiceModelMap[voicePrefix];
+
+        const agentUpdate: Record<string, unknown> = { voice_id: voiceId };
+        if (voiceModel) {
+          agentUpdate.voice_model = voiceModel;
+        } else {
+          agentUpdate.voice_model = null;
+        }
+
+        await retellService.updateAgent(retellAgentId, agentUpdate as any);
 
         logger.info(
           { agentId: retellAgentId, voiceId },

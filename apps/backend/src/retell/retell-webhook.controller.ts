@@ -6,6 +6,7 @@ import {
   HttpException,
   HttpStatus,
   Req,
+  RawBodyRequest,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,19 +40,30 @@ export class RetellWebhookController {
   async handleWebhook(
     @Body() body: any,
     @Headers('x-retell-signature') signature: string,
-    @Req() req: Request,
+    @Req() req: RawBodyRequest<Request>,
   ) {
     const apiKey = process.env.RETELL_API_KEY;
     if (apiKey) {
-      const rawBody = (req as any).rawBody;
+      const rawBody = req.rawBody;
       const bodyStr = rawBody ? rawBody.toString('utf8') : JSON.stringify(body);
+
       const isValid = await RetellWebhookController.verifySignature(
         bodyStr,
         signature,
         apiKey,
       );
       if (!isValid) {
-        this.logger.error('[Retell Webhook] Invalid signature — rejecting request');
+        this.logger.error({
+          hasRawBody: !!rawBody,
+          rawBodyLen: rawBody?.length,
+          bodyStrLen: bodyStr.length,
+          hasSignature: !!signature,
+          signaturePrefix: signature?.slice(0, 30),
+          apiKeyPrefix: apiKey.slice(0, 8) + '...',
+          usedFallback: !rawBody,
+          failReason: RetellWebhookController._lastFailReason || 'pre-check',
+          msg: '[Retell Webhook] Invalid signature — rejecting request',
+        });
         throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
       }
     }
@@ -193,7 +205,9 @@ export class RetellWebhookController {
     const timestamp = Number(match[1]);
     const digest = match[2];
 
-    if (Math.abs(Date.now() - timestamp) > RetellWebhookController.SIGNATURE_TOLERANCE_MS) {
+    const drift = Math.abs(Date.now() - timestamp);
+    if (drift > RetellWebhookController.SIGNATURE_TOLERANCE_MS) {
+      RetellWebhookController._lastFailReason = `timestamp_drift_${Math.round(drift / 1000)}s`;
       return false;
     }
 
@@ -202,7 +216,17 @@ export class RetellWebhookController {
       .update(body + timestamp)
       .digest('hex');
 
-    if (digest.length !== expected.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(expected));
+    if (digest.length !== expected.length) {
+      RetellWebhookController._lastFailReason = `digest_len_mismatch_${digest.length}_vs_${expected.length}`;
+      return false;
+    }
+
+    const valid = crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(expected));
+    if (!valid) {
+      RetellWebhookController._lastFailReason = 'hmac_mismatch';
+    }
+    return valid;
   }
+
+  static _lastFailReason = '';
 }

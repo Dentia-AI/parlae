@@ -12,12 +12,7 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  app.use(json({
-    limit: '10mb',
-    verify: (req: any, _res: any, buf: Buffer) => {
-      req.rawBody = buf;
-    },
-  }));
+  app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
 
   const config = app.get(ConfigService);
