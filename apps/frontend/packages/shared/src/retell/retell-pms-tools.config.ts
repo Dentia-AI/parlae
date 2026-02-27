@@ -327,12 +327,12 @@ const getProvidersFn: VapiToolFunction = {
 
 export const retellLookupPatientTool = toRetellTool(lookupPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment.',
+  speakDuringMessage: 'One moment please.',
 });
 
 export const retellCreatePatientTool = toRetellTool(createPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment.',
+  speakDuringMessage: 'One moment please.',
 });
 
 export const retellUpdatePatientTool = toRetellTool(updatePatientFn);
@@ -343,19 +343,22 @@ export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
 
 export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment.',
+  speakDuringMessage: 'One moment please.',
   timeoutMs: 45_000,
 });
 
 export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me reschedule that for you.',
+  speakDuringMessage: 'One moment please.',
 });
 
-export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn);
+export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
+  speakDuring: true,
+  speakDuringMessage: 'One moment please.',
+});
 export const retellGetAppointmentsTool = toRetellTool(getAppointmentsFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me look up your appointments.',
+  speakDuringMessage: 'One moment please.',
 });
 
 export const retellAddNoteTool = toRetellTool(addNoteFn);
@@ -410,6 +413,7 @@ const getCallerContextFn: VapiToolFunction = {
 
 export const retellGetCallerContextTool = toRetellTool(getCallerContextFn, {
   speakDuring: false,
+  speakDuringMessage: '',
   timeoutMs: 5_000,
 });
 

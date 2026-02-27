@@ -133,6 +133,18 @@ export class AgentToolsService {
     private notifications: NotificationsService,
   ) {}
 
+  private async getAccountTimezone(accountId: string): Promise<string> {
+    try {
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { brandingTimezone: true },
+      });
+      return (account as any)?.brandingTimezone || 'America/Toronto';
+    } catch {
+      return 'America/Toronto';
+    }
+  }
+
   private cachePatient(callId: string, data: CachedPatientData) {
     this.patientCache.set(callId, data);
     // Lazy cleanup of stale entries
@@ -317,11 +329,12 @@ export class AgentToolsService {
     dayNames: string[],
   ): Promise<void> {
     const pmsIntegration = await this.resolvePmsForAccount(accountId);
+    const tz = await this.getAccountTimezone(accountId);
 
     if (pmsIntegration) {
-      await this.prefetchFromPms(normalizedPhone, accountId, pmsIntegration, context, dayNames);
+      await this.prefetchFromPms(normalizedPhone, accountId, pmsIntegration, context, dayNames, tz);
     } else {
-      await this.prefetchFromGCal(normalizedPhone, accountId, context, dayNames);
+      await this.prefetchFromGCal(normalizedPhone, accountId, context, dayNames, tz);
     }
   }
 
@@ -331,6 +344,7 @@ export class AgentToolsService {
     pmsIntegration: any,
     context: CallerContext,
     dayNames: string[],
+    tz: string,
   ): Promise<void> {
     const { PmsService } = await import('../pms/pms.service');
     const pmsService = new PmsService(this.prisma, this.secretsService);
@@ -373,8 +387,8 @@ export class AgentToolsService {
         if (!isNaN(apptDate.getTime())) {
           context.nextBooking = {
             date: apptDate.toISOString(),
-            dayOfWeek: dayNames[apptDate.getDay()],
-            time: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+            dayOfWeek: apptDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }),
+            time: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz }),
             type: appt.appointmentType,
           };
         }
@@ -389,6 +403,7 @@ export class AgentToolsService {
     accountId: string,
     context: CallerContext,
     dayNames: string[],
+    tz: string,
   ): Promise<void> {
     const gcalAvailable = await this.isGoogleCalendarAvailable(accountId);
     if (!gcalAvailable) return;
@@ -408,7 +423,7 @@ export class AgentToolsService {
     if (!events?.length) return;
 
     const firstEvent = events[0];
-    const nameFromSummary = (firstEvent.summary || '').replace(/\s*[-–]\s*.+$/, '').trim();
+    const nameFromSummary = (firstEvent.summary || '').replace(/^[^-–]*[-–]\s*/, '').trim();
     if (nameFromSummary) {
       context.patientType = 'returning';
       context.patientName = nameFromSummary;
@@ -422,11 +437,11 @@ export class AgentToolsService {
       const next = futureEvents[0];
       const d = new Date(String(next.startTime));
       if (!isNaN(d.getTime())) {
-        const type = (next.summary || '').replace(/^[^-–]*[-–]\s*/, '').trim();
+        const type = (next.summary || '').replace(/\s*[-–]\s*.+$/, '').trim();
         context.nextBooking = {
           date: d.toISOString(),
-          dayOfWeek: dayNames[d.getDay()],
-          time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+          dayOfWeek: d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }),
+          time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz }),
           type: type || undefined,
         };
       }
@@ -675,7 +690,7 @@ export class AgentToolsService {
           success: true,
           appointmentId: appointment.id,
           confirmationNumber: appointment.confirmationNumber,
-          message: `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}`,
+          message: `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}. Do NOT say "with [patient name]" — the caller already knows who they are.`,
         },
       };
     } catch (error: any) {
@@ -2380,8 +2395,8 @@ export class AgentToolsService {
         success: true,
         integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
         message: gcalBackupCreated
-          ? `Your appointment has been confirmed for ${startTime.toLocaleString()}. A calendar event has been created.`
-          : `Your appointment has been noted for ${startTime.toLocaleString()}. Our team will confirm the details shortly.`,
+          ? `Your appointment has been confirmed for ${startTime.toLocaleString()}. A calendar event has been created. Do NOT say "with [patient name]" — the caller already knows who they are.`
+          : `Your appointment has been noted for ${startTime.toLocaleString()}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
       },
     };
   }
@@ -2551,7 +2566,7 @@ export class AgentToolsService {
           success: true,
           appointmentId: result.eventId,
           integrationType: 'google_calendar',
-          message: `[SUCCESS] Appointment confirmed for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}.${confirmationMsg} [NEXT STEP] Tell the caller their appointment details and ask "Is there anything else I can help you with?"`,
+          message: `[SUCCESS] Appointment confirmed for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}.${confirmationMsg} [NEXT STEP] Confirm the appointment type, date, and time. Do NOT say "with [patient name]" — the caller already knows who they are. Then ask "Is there anything else I can help you with?"`,
         },
       };
     } catch (error) {
