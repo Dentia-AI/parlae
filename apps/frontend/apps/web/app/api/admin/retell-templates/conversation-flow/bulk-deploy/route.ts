@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Update phone number record
+        // Update phone number record in DB
         try {
           if (settings.phoneNumber) {
             await prisma.retellPhoneNumber.updateMany({
@@ -135,21 +135,51 @@ export async function POST(request: NextRequest) {
               },
             });
           }
-        } catch {
-          // Best effort
+        } catch (phoneDbErr) {
+          logger.warn(
+            { accountId, error: phoneDbErr instanceof Error ? phoneDbErr.message : phoneDbErr },
+            '[Flow Templates] Failed to update phone DB record',
+          );
         }
 
-        // Re-import phone to Retell with new agent
+        // Re-link phone number in Retell to the new agent
         if (settings.phoneNumber) {
+          const e164 = settings.phoneNumber.startsWith('+') ? settings.phoneNumber : `+${settings.phoneNumber}`;
           try {
-            const e164 = settings.phoneNumber.startsWith('+') ? settings.phoneNumber : `+${settings.phoneNumber}`;
-            await retell.importPhoneNumber({
-              phoneNumber: e164,
-              inboundAgentId: flowResult.agentId,
-              nickname: `${businessName} - Conversation Flow`,
+            await retell.updatePhoneNumber(e164, {
+              inbound_agent_id: flowResult.agentId,
+              nickname: `${businessName} - Conversation Flow (${flowResult.version})`,
             });
-          } catch {
-            // Phone may already be imported
+          } catch (updateErr) {
+            logger.warn(
+              { accountId, phone: e164, error: updateErr instanceof Error ? updateErr.message : updateErr },
+              '[Flow Templates] updatePhoneNumber failed, attempting re-import',
+            );
+            try {
+              const retellPhone = await prisma.retellPhoneNumber.findFirst({
+                where: { accountId, isActive: true },
+                select: { retellPhoneId: true },
+              });
+              const terminationUri = settings.sipTerminationUri || settings.terminationUri;
+              if (terminationUri) {
+                await retell.importPhoneNumber({
+                  phoneNumber: e164,
+                  terminationUri,
+                  inboundAgentId: flowResult.agentId,
+                  nickname: `${businessName} - Conversation Flow (${flowResult.version})`,
+                });
+              } else {
+                logger.error(
+                  { accountId, phone: e164 },
+                  '[Flow Templates] No terminationUri available for re-import; phone not linked',
+                );
+              }
+            } catch (importErr) {
+              logger.error(
+                { accountId, phone: e164, error: importErr instanceof Error ? importErr.message : importErr },
+                '[Flow Templates] Phone re-import also failed; phone not linked to new agent',
+              );
+            }
           }
         }
 
