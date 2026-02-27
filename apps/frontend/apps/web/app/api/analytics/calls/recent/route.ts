@@ -268,51 +268,64 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
   return 'OTHER';
 }
 
-async function fetchRetellRecentCalls(accountId: string, limit: number, offset: number) {
-  const { createRetellService } = await import('@kit/shared/retell/retell.service');
-  const retell = createRetellService();
-
-  // Check retellPhoneNumber table first (consistent with call-logs route)
-  const retellPhones = await prisma.retellPhoneNumber.findMany({
-    where: { accountId, isActive: true },
-    select: { retellPhoneId: true },
-  });
+/**
+ * Collect ALL Retell agent IDs for an account from both
+ * phoneIntegrationSettings and RetellPhoneNumber records.
+ */
+async function collectRetellAgentIds(accountId: string): Promise<string[]> {
+  const ids = new Set<string>();
 
   const fullAccount = await prisma.account.findUnique({
     where: { id: accountId },
     select: { phoneIntegrationSettings: true },
   });
   const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
-
-  const agentIds: string[] = [];
-  if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
-  if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
-    agentIds.push(...settings.retellAgentIds);
+  if (settings.retellReceptionistAgentId) ids.add(settings.retellReceptionistAgentId);
+  if (Array.isArray(settings.retellAgentIds)) {
+    for (const id of settings.retellAgentIds) if (id) ids.add(id);
   }
 
-  if (agentIds.length === 0 && retellPhones.length === 0) {
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId, isActive: true },
+    select: { retellAgentId: true, retellAgentIds: true },
+  });
+
+  for (const phone of retellPhones) {
+    if (phone.retellAgentId) ids.add(phone.retellAgentId);
+    if (phone.retellAgentIds && typeof phone.retellAgentIds === 'object') {
+      const squadIds = phone.retellAgentIds as Record<string, string>;
+      for (const agentId of Object.values(squadIds)) {
+        if (agentId) ids.add(agentId);
+      }
+    }
+  }
+
+  return [...ids];
+}
+
+async function fetchRetellRecentCalls(accountId: string, limit: number, offset: number) {
+  const { createRetellService } = await import('@kit/shared/retell/retell.service');
+  const retell = createRetellService();
+
+  const agentIds = await collectRetellAgentIds(accountId);
+
+  if (agentIds.length === 0) {
     return { calls: [], pagination: { total: 0, limit, offset, hasMore: false } };
   }
+
+  console.log('[Retell RecentCalls] accountId:', accountId, 'agentIds:', agentIds);
 
   const fetchLimit = Math.max(limit + offset + 10, 50);
   const allCalls: RetellCallResponse[] = [];
 
-  if (retellPhones.length > 0) {
-    // Fetch all calls (same approach as call-logs for consistency)
+  for (const agentId of agentIds) {
     const calls = await retell.listCalls({
+      filter_criteria: { agent_id: [agentId] },
       sort_order: 'descending',
       limit: fetchLimit,
     });
+    console.log(`[Retell RecentCalls] agent ${agentId}: ${calls?.length ?? 0} calls`);
     allCalls.push(...(calls || []));
-  } else {
-    for (const agentId of [...new Set(agentIds)]) {
-      const calls = await retell.listCalls({
-        filter_criteria: { agent_id: [agentId] },
-        sort_order: 'descending',
-        limit: fetchLimit,
-      });
-      allCalls.push(...(calls || []));
-    }
   }
 
   allCalls.sort((a, b) => (b.start_timestamp || 0) - (a.start_timestamp || 0));

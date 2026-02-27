@@ -43,7 +43,7 @@ export async function storeCognitoTokens(userId: string, tokens: CognitoTokenSet
     logger.info({ userId }, 'Cognito tokens stored successfully');
   } catch (error) {
     logger.error({ error, userId }, 'Failed to store Cognito tokens');
-    throw new Error('Failed to store authentication tokens');
+    // Non-fatal: sign-in still succeeds; tokens will be re-stored on next refresh
   }
 }
 

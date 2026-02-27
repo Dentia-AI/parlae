@@ -303,9 +303,7 @@ export async function GET(request: NextRequest) {
           dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
         }
       }
-      activityTrend = Array.from(dailyCounts.entries())
-        .map(([date, count]) => ({ date, count }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+      activityTrend = buildFullActivityTrend(dailyCounts, startDate, endDate);
     }
 
     // Compute outcome metrics from structured data in calls
@@ -448,6 +446,65 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
   return 'OTHER';
 }
 
+/**
+ * Collect ALL Retell agent IDs for an account from both
+ * phoneIntegrationSettings and RetellPhoneNumber records.
+ */
+async function collectRetellAgentIds(accountId: string): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const fullAccount = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { phoneIntegrationSettings: true },
+  });
+  const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
+  if (settings.retellReceptionistAgentId) ids.add(settings.retellReceptionistAgentId);
+  if (Array.isArray(settings.retellAgentIds)) {
+    for (const id of settings.retellAgentIds) if (id) ids.add(id);
+  }
+
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId, isActive: true },
+    select: { retellAgentId: true, retellAgentIds: true },
+  });
+
+  for (const phone of retellPhones) {
+    if (phone.retellAgentId) ids.add(phone.retellAgentId);
+    if (phone.retellAgentIds && typeof phone.retellAgentIds === 'object') {
+      const squadIds = phone.retellAgentIds as Record<string, string>;
+      for (const agentId of Object.values(squadIds)) {
+        if (agentId) ids.add(agentId);
+      }
+    }
+  }
+
+  return [...ids];
+}
+
+/**
+ * Build a complete activity trend array filling in every day in the range,
+ * even days with 0 calls, so the bar chart renders bars for each day.
+ */
+function buildFullActivityTrend(
+  dailyCounts: Map<string, number>,
+  startDate: Date,
+  endDate: Date,
+): Array<{ date: string; count: number }> {
+  const trend: Array<{ date: string; count: number }> = [];
+  const current = new Date(startDate);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  while (current <= end) {
+    const dateKey = current.toISOString().slice(0, 10);
+    trend.push({ date: dateKey, count: dailyCounts.get(dateKey) || 0 });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return trend;
+}
+
 async function computeRetellAnalytics(
   accountId: string,
   startDate: Date,
@@ -456,20 +513,12 @@ async function computeRetellAnalytics(
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
 
-  const fullAccount = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: { phoneIntegrationSettings: true },
-  });
-  const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
+  const agentIds = await collectRetellAgentIds(accountId);
 
-  const agentIds: string[] = [];
-  if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
-  if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
-    agentIds.push(...settings.retellAgentIds);
-  }
+  console.log('[Retell Analytics] accountId:', accountId, 'agentIds:', agentIds, 'dateRange:', startDate.toISOString(), '-', endDate.toISOString());
 
   const allCalls: RetellCallResponse[] = [];
-  for (const agentId of [...new Set(agentIds)]) {
+  for (const agentId of agentIds) {
     const calls = await retell.listCalls({
       filter_criteria: {
         agent_id: [agentId],
@@ -479,10 +528,27 @@ async function computeRetellAnalytics(
       sort_order: 'descending',
       limit: 1000,
     });
+    console.log(`[Retell Analytics] agent ${agentId}: ${calls?.length ?? 0} calls returned`);
     allCalls.push(...(calls || []));
   }
 
-  const totalCalls = allCalls.length;
+  // Deduplicate in case the same call appears under multiple agents
+  const seen = new Set<string>();
+  const uniqueCalls: RetellCallResponse[] = [];
+  for (const call of allCalls) {
+    if (!seen.has(call.call_id)) {
+      seen.add(call.call_id);
+      uniqueCalls.push(call);
+    }
+  }
+
+  // Log call agent_ids for debugging
+  if (uniqueCalls.length > 0) {
+    const callAgentIds = [...new Set(uniqueCalls.map(c => c.agent_id))];
+    console.log(`[Retell Analytics] ${uniqueCalls.length} unique calls, call agent_ids:`, callAgentIds);
+  }
+
+  const totalCalls = uniqueCalls.length;
   let totalDuration = 0;
   let durationCount = 0;
   let bookedCount = 0;
@@ -494,7 +560,7 @@ async function computeRetellAnalytics(
   const dailyCounts = new Map<string, number>();
   const callDurations: Array<{ duration: number }> = [];
 
-  for (const call of allCalls) {
+  for (const call of uniqueCalls) {
     const rawAnalysis = (call.call_analysis ?? {}) as Record<string, any>;
     const custom = (rawAnalysis.custom_analysis_data ?? {}) as Record<string, any>;
     const analysis = { ...rawAnalysis, ...custom };
@@ -543,9 +609,7 @@ async function computeRetellAnalytics(
       avgCallTime,
       totalCost: 0,
     },
-    activityTrend: Array.from(dailyCounts.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date)),
+    activityTrend: buildFullActivityTrend(dailyCounts, startDate, endDate),
     outcomesDistribution: Array.from(outcomeCounts.entries()).map(([outcome, count]) => ({
       outcome,
       count,
