@@ -16,6 +16,13 @@ export const createMockGoogleCalendarService = () => ({
     eventId: 'appt_event_123',
     htmlLink: 'https://calendar.google.com/event/appt_123',
   }),
+  getEvent: jest.fn().mockResolvedValue({
+    success: true,
+    eventId: 'event_123',
+    summary: 'cleaning - Test Patient',
+    startDateTime: '2026-03-01T10:00:00Z',
+    endDateTime: '2026-03-01T10:30:00Z',
+  }),
   updateEvent: jest.fn().mockResolvedValue({
     success: true,
     eventId: 'event_123',
