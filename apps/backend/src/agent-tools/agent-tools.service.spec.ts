@@ -623,13 +623,13 @@ describe('AgentToolsService', () => {
         success: true,
         events: [
           {
-            summary: 'John Smith - Cleaning',
+            summary: 'Cleaning - John Smith',
             startTime: futureDate.toISOString(),
             endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
             description: 'Phone: 4155551234',
           },
           {
-            summary: 'John Smith - Exam',
+            summary: 'Exam - John Smith',
             startTime: pastDate.toISOString(),
             endTime: new Date(pastDate.getTime() + 30 * 60 * 1000).toISOString(),
             description: 'Phone: 4155551234',
@@ -735,7 +735,7 @@ describe('AgentToolsService', () => {
         success: true,
         events: [
           {
-            summary: 'John Smith - Cleaning',
+            summary: 'Cleaning - John Smith',
             startTime: futureDate.toISOString(),
             endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
             description: 'Phone: 4155551234',
@@ -769,7 +769,7 @@ describe('AgentToolsService', () => {
         success: true,
         events: [
           {
-            summary: 'Alice Doe - Exam',
+            summary: 'Exam - Alice Doe',
             startTime: futureDate.toISOString(),
             endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
             description: 'Phone: 4155559999',
@@ -805,7 +805,7 @@ describe('AgentToolsService', () => {
         success: true,
         events: [
           {
-            summary: 'Jane Doe - Cleaning',
+            summary: 'Cleaning - Jane Doe',
             startTime: futureDate.toISOString(),
             endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
             description: 'Phone: 4155557777',
