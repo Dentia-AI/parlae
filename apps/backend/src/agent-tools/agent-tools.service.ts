@@ -177,7 +177,33 @@ export class AgentToolsService {
       return { result: { patientType: 'new', message: 'No call context available.' } };
     }
 
-    const ctx = this.getCallerContext(callId);
+    let ctx = this.getCallerContext(callId);
+
+    // Real-time fallback: if the webhook-based prefetch didn't populate the
+    // cache (e.g. HMAC verification failed), attempt an inline lookup now.
+    if (!ctx) {
+      const callerPhone =
+        call?.from_number ||
+        call?.customer?.number ||
+        call?.metadata?.customerPhone;
+      const accountId = payload?.accountId || call?.metadata?.accountId;
+
+      if (callerPhone && accountId) {
+        this.logger.log({
+          callId,
+          msg: '[CallerContext] Cache empty — running real-time fallback lookup',
+        });
+        try {
+          await this.prefetchCallerContext(callId, callerPhone, accountId, 'RETELL');
+          ctx = this.getCallerContext(callId);
+        } catch (err) {
+          this.logger.warn({
+            error: err instanceof Error ? err.message : err,
+            msg: '[CallerContext] Real-time fallback failed',
+          });
+        }
+      }
+    }
 
     if (!ctx || ctx.patientType === 'new') {
       return {

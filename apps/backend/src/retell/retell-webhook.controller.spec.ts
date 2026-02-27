@@ -5,8 +5,13 @@ import { RetellWebhookController } from './retell-webhook.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentToolsService } from '../agent-tools/agent-tools.service';
 
-function createMockReq(body: any, rawBody?: Buffer) {
-  return { rawBody, body } as any;
+function createMockReq(body: any, rawBody?: Buffer, remoteAddress?: string) {
+  return {
+    rawBody,
+    body,
+    headers: {},
+    socket: { remoteAddress: remoteAddress || '127.0.0.1' },
+  } as any;
 }
 
 describe('RetellWebhookController', () => {
@@ -135,6 +140,40 @@ describe('RetellWebhookController', () => {
       delete process.env.RETELL_API_KEY;
       const req = createMockReq(body);
       const result = await controller.handleWebhook(body, '', req);
+      expect(result).toEqual({ received: true });
+    });
+
+    it('should fall back to JSON.stringify when rawBody HMAC fails', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const jsonStr = JSON.stringify(body);
+      const sig = signRaw(jsonStr);
+      // rawBody differs from JSON.stringify (e.g. extra whitespace)
+      const rawBody = Buffer.from('{"event": "call_ended", "call": {"call_id":"c-1"}}');
+      const req = createMockReq(body, rawBody);
+      const result = await controller.handleWebhook(body, sig, req);
+      expect(result).toEqual({ received: true });
+    });
+
+    it('should accept request from Retell IP when both HMAC methods fail', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const req = createMockReq(body, undefined, '100.20.5.228');
+      const result = await controller.handleWebhook(body, 'v=123,d=bad', req);
+      expect(result).toEqual({ received: true });
+    });
+
+    it('should reject request from unknown IP when both HMAC methods fail', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const req = createMockReq(body, undefined, '1.2.3.4');
+      await expect(
+        controller.handleWebhook(body, 'v=123,d=bad', req),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should accept via x-forwarded-for from Retell IP', async () => {
+      process.env.RETELL_API_KEY = API_KEY;
+      const req = createMockReq(body);
+      req.headers = { 'x-forwarded-for': '100.20.5.228, 10.0.0.1' };
+      const result = await controller.handleWebhook(body, 'v=123,d=bad', req);
       expect(result).toEqual({ received: true });
     });
   });

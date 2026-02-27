@@ -409,8 +409,7 @@ const getCallerContextFn: VapiToolFunction = {
 };
 
 export const retellGetCallerContextTool = toRetellTool(getCallerContextFn, {
-  speakDuring: true,
-  speakDuringMessage: 'One moment while I pull up your information...',
+  speakDuring: false,
   timeoutMs: 5_000,
 });
 

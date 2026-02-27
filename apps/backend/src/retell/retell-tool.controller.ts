@@ -144,6 +144,18 @@ export class RetellToolController {
       const result = await handler(toolPayload);
       const durationMs = Date.now() - toolStartMs;
 
+      // Ensure speak_during_execution messages have time to play before the
+      // tool result is returned (Retell stops speaking as soon as it receives
+      // the response). getCallerContext is excluded because it runs pre-greeting.
+      if (toolName !== 'getCallerContext') {
+        const MIN_SPEAK_DELAY_MS = 1500;
+        const remaining = MIN_SPEAK_DELAY_MS - durationMs;
+        if (remaining > 0) {
+          await new Promise((r) => setTimeout(r, remaining));
+        }
+      }
+
+      const actualDurationMs = Date.now() - toolStartMs;
       const hasError = result && typeof result === 'object' && 'error' in result;
 
       this.recordToolCall(callId, {
@@ -152,7 +164,7 @@ export class RetellToolController {
         result,
         success: !hasError,
         timestamp: new Date().toISOString(),
-        durationMs,
+        durationMs: actualDurationMs,
       });
 
       if (hasError) {
@@ -164,7 +176,7 @@ export class RetellToolController {
       }
 
       this.logger.log(
-        `[Retell Tool Response] ${toolName} (${durationMs}ms) | ${JSON.stringify(result).slice(0, 500)}`,
+        `[Retell Tool Response] ${toolName} (${actualDurationMs}ms, exec=${durationMs}ms) | ${JSON.stringify(result).slice(0, 500)}`,
       );
       return result;
     } catch (error) {

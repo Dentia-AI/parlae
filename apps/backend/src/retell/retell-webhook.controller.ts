@@ -44,26 +44,56 @@ export class RetellWebhookController {
     const apiKey = process.env.RETELL_API_KEY;
     if (apiKey) {
       const rawBody: Buffer | undefined = (req as any).rawBody;
-      const bodyStr = rawBody ? rawBody.toString('utf8') : JSON.stringify(body);
+      const rawBodyStr = rawBody ? rawBody.toString('utf8') : undefined;
+      const jsonStr = JSON.stringify(body);
 
-      const isValid = await RetellWebhookController.verifySignature(
-        bodyStr,
-        signature,
-        apiKey,
-      );
-      if (!isValid) {
-        this.logger.error({
-          hasRawBody: !!rawBody,
-          rawBodyLen: rawBody?.length,
-          bodyStrLen: bodyStr.length,
-          hasSignature: !!signature,
-          signaturePrefix: signature?.slice(0, 30),
-          apiKeyPrefix: apiKey.slice(0, 8) + '...',
-          usedFallback: !rawBody,
-          failReason: RetellWebhookController._lastFailReason || 'pre-check',
-          msg: '[Retell Webhook] Invalid signature — rejecting request',
-        });
-        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      // Try rawBody first, then JSON.stringify (Retell SDK recommended), then IP allowlist
+      const rawValid = rawBodyStr
+        ? await RetellWebhookController.verifySignature(rawBodyStr, signature, apiKey)
+        : false;
+
+      let jsonValid = false;
+      let verifiedVia: string | undefined;
+
+      if (rawValid) {
+        verifiedVia = 'rawBody';
+      } else {
+        jsonValid = await RetellWebhookController.verifySignature(jsonStr, signature, apiKey);
+        if (jsonValid) {
+          verifiedVia = 'json_stringify';
+        }
+      }
+
+      if (!rawValid && !jsonValid) {
+        const clientIp = RetellWebhookController.extractClientIp(req);
+        const ipAllowed = RetellWebhookController.RETELL_IPS.includes(clientIp);
+
+        if (ipAllowed) {
+          verifiedVia = 'ip_allowlist';
+          this.logger.warn({
+            clientIp,
+            msg: '[Retell Webhook] HMAC failed but IP matches Retell allowlist — accepting',
+          });
+        } else {
+          this.logger.error({
+            hasRawBody: !!rawBody,
+            rawBodyLen: rawBody?.length,
+            rawBodyStrLen: rawBodyStr?.length,
+            jsonStrLen: jsonStr.length,
+            bodyMatch: rawBodyStr === jsonStr,
+            hasSignature: !!signature,
+            signaturePrefix: signature?.slice(0, 30),
+            apiKeyPrefix: apiKey.slice(0, 8) + '...',
+            clientIp,
+            failReason: RetellWebhookController._lastFailReason || 'pre-check',
+            msg: '[Retell Webhook] Invalid signature — rejecting request',
+          });
+          throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+        }
+      }
+
+      if (verifiedVia && verifiedVia !== 'rawBody') {
+        this.logger.log({ verifiedVia, msg: '[Retell Webhook] Signature verified via fallback' });
       }
     }
 
@@ -228,4 +258,14 @@ export class RetellWebhookController {
   }
 
   static _lastFailReason = '';
+
+  /** Known Retell IP addresses (per https://docs.retellai.com/features/secure-webhook) */
+  private static readonly RETELL_IPS = ['100.20.5.228'];
+
+  private static extractClientIp(req: Request): string {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') return forwarded.split(',')[0]!.trim();
+    if (Array.isArray(forwarded) && forwarded.length) return forwarded[0]!.split(',')[0]!.trim();
+    return req.socket?.remoteAddress || '';
+  }
 }

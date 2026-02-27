@@ -717,6 +717,83 @@ describe('AgentToolsService', () => {
     });
   });
 
+  describe('handleGetCallerContext', () => {
+    it('should return new-caller when cache is empty and no phone/account in payload', async () => {
+      const result = await service.handleGetCallerContext({
+        call: { id: 'call-no-ctx' },
+      });
+      expect(result.result.patientType).toBe('new');
+    });
+
+    it('should perform real-time fallback when cache is empty but phone+account are available', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(true);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      gcalService.findEventsByPatient.mockResolvedValue({
+        success: true,
+        events: [
+          {
+            summary: 'John Smith - Cleaning',
+            startTime: futureDate.toISOString(),
+            endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
+            description: 'Phone: 4155551234',
+          },
+        ],
+      });
+
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      const result = await service.handleGetCallerContext({
+        call: {
+          id: 'call-fallback-1',
+          call_id: 'call-fallback-1',
+          from_number: '+14155551234',
+        },
+        accountId: 'acc-1',
+      });
+
+      expect(result.result.patientType).toBe('returning');
+      expect(result.result.patientName).toBe('John Smith');
+      expect(result.result.nextBooking).toBeDefined();
+    });
+
+    it('should return cached context when cache is populated (no fallback needed)', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConfigured.mockReturnValue(true);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      gcalService.findEventsByPatient.mockResolvedValue({
+        success: true,
+        events: [
+          {
+            summary: 'Alice Doe - Exam',
+            startTime: futureDate.toISOString(),
+            endTime: new Date(futureDate.getTime() + 30 * 60 * 1000).toISOString(),
+            description: 'Phone: 4155559999',
+          },
+        ],
+      });
+
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+
+      await service.prefetchCallerContext('call-cached-1', '+14155559999', 'acc-1', 'RETELL');
+
+      const prefetchSpy = jest.spyOn(service, 'prefetchCallerContext');
+      const result = await service.handleGetCallerContext({
+        call: { id: 'call-cached-1', call_id: 'call-cached-1', from_number: '+14155559999' },
+        accountId: 'acc-1',
+      });
+
+      expect(result.result.patientType).toBe('returning');
+      expect(result.result.patientName).toBe('Alice Doe');
+      expect(prefetchSpy).not.toHaveBeenCalled();
+      prefetchSpy.mockRestore();
+    });
+  });
+
   describe('lookupPatient with prefetched context (GCal path)', () => {
     it('should enrich GCal-only response with prefetched caller context', async () => {
       prisma.pmsIntegration.findFirst.mockResolvedValue(null);
