@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
@@ -52,6 +52,17 @@ export function CallAnalyticsDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'1d' | '7d' | '14d'>('7d');
+  const activityRef = useRef<HTMLDivElement>(null);
+  const [activityHeight, setActivityHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!activityRef.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setActivityHeight(entry.contentRect.height);
+    });
+    observer.observe(activityRef.current);
+    return () => observer.disconnect();
+  }, [data]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -224,10 +235,10 @@ export function CallAnalyticsDashboard() {
 
       {/* Activity Trend + Recent Calls side by side */}
       <div className="grid gap-3 md:grid-cols-5">
-        <div className="md:col-span-3">
+        <div className="md:col-span-3" ref={activityRef}>
           <ActivityChart data={data.activityTrend} is24h={is24h} />
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-2" style={activityHeight ? { maxHeight: activityHeight } : undefined}>
           <RecentCallsList />
         </div>
       </div>

@@ -109,7 +109,7 @@ export function RecentCallsList() {
   }
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export function RecentCallsList() {
             <p className="text-sm">{t('dashboard.noCallsMessage')}</p>
           </div>
         ) : (
-          <div className="divide-y overflow-y-auto h-full max-h-[320px]">
+          <div className="divide-y overflow-y-auto h-full">
             {calls.map((call) => (
               <div
                 key={call.id}
