@@ -111,7 +111,7 @@ export function CallAnalyticsDashboard() {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 [&_.bg-card]:bg-gray-100 dark:[&_.bg-card]:bg-card">
       {/* Header with Date Range Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export function CallAnalyticsDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pb-4 px-4">
-            <div className="text-2xl font-bold">{data.metrics.totalCalls.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{data.metrics.totalCalls.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               {data.metrics.totalCalls > 0 ? t('dashboard.inSelectedPeriod') : t('dashboard.noCallsYet')}
             </p>
@@ -196,7 +196,7 @@ export function CallAnalyticsDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pb-4 px-4">
-            <div className="text-2xl font-bold">{formatTime(data.metrics.avgCallTime)}</div>
+            <div className="text-2xl font-bold text-violet-600 dark:text-violet-400">{formatTime(data.metrics.avgCallTime)}</div>
             <p className="text-xs text-muted-foreground">{t('dashboard.avgPerCall')}</p>
           </CardContent>
         </Card>
@@ -209,7 +209,7 @@ export function CallAnalyticsDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pb-4 px-4">
-            <div className="text-2xl font-bold">{activityValue}</div>
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{activityValue}</div>
             <p className="text-xs text-muted-foreground">{activityLabel}</p>
           </CardContent>
         </Card>
