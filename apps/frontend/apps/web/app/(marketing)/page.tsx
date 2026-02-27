@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { ArrowRightIcon } from 'lucide-react';
 
@@ -18,6 +19,7 @@ import billingConfig from '~/config/billing.config';
 import pathsConfig from '~/config/paths.config';
 import { withI18n } from '~/lib/i18n/with-i18n';
 import { getAppUrl } from '~/lib/urls/app-host';
+import { auth } from '@kit/shared/auth';
 
 import { NeuralWaveHero } from './_components/neural-wave-hero';
 import { TrustedByCarousel } from './_components/trusted-by-carousel';
@@ -29,7 +31,12 @@ import { ComparisonSection } from './_components/comparison-section';
 import { FinalCTASection } from './_components/final-cta-section';
 import { HipaaBadge } from './_components/hipaa-badge';
 
-function Home() {
+async function Home() {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect(pathsConfig.app.home);
+  }
   return (
     <div className={'flex flex-col'}>
       {/* Hero Section with Voice Wave Animation */}

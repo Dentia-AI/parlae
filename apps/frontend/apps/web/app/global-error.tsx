@@ -1,94 +1,83 @@
 'use client';
 
-import Link from 'next/link';
-
-import { ArrowLeft, MessageCircle } from 'lucide-react';
-import { useSession } from 'next-auth/react';
-
-import { useCaptureException } from '@kit/monitoring/hooks';
-import { Button } from '@kit/ui/button';
-import { Heading } from '@kit/ui/heading';
-import { Trans } from '@kit/ui/trans';
-
-import { SiteHeader } from '~/(marketing)/_components/site-header';
-import { RootProviders } from '~/components/root-providers';
-
-const GlobalErrorPage = ({
+/**
+ * Global error boundary — catches errors in the root layout that the
+ * per-segment `error.tsx` cannot handle (e.g. provider initialization
+ * failures during OAuth redirects).
+ *
+ * Next.js requires this component to render its own <html> and <body>
+ * because the root layout is part of the error tree.
+ */
+export default function GlobalError({
   error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
-}) => {
-  useCaptureException(error);
-
+}) {
+  if (typeof window !== 'undefined') {
+    console.error(
+      '[GlobalError] Root layout error caught:',
+      error?.message,
+      error?.stack,
+    );
+  }
   return (
     <html lang="en">
       <body>
-        <RootProviders>
-          <GlobalErrorContent reset={reset} />
-        </RootProviders>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            fontFamily:
+              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            padding: '2rem',
+            textAlign: 'center',
+          }}
+        >
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            Something went wrong
+          </h2>
+          <p style={{ color: '#666', marginBottom: '1.5rem', maxWidth: '28rem' }}>
+            A temporary error occurred while loading the page. This sometimes
+            happens during sign-in — please try again.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              onClick={reset}
+              style={{
+                padding: '0.5rem 1.25rem',
+                borderRadius: '0.375rem',
+                border: '1px solid #ddd',
+                background: '#fff',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = '/home';
+              }}
+              style={{
+                padding: '0.5rem 1.25rem',
+                borderRadius: '0.375rem',
+                border: 'none',
+                background: '#111',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
       </body>
     </html>
   );
-};
-
-function GlobalErrorContent({ reset }: { reset: () => void }) {
-  const session = useSession();
-
-  return (
-    <div className={'flex h-screen flex-1 flex-col'}>
-      <SiteHeader user={session.data?.user ?? null} />
-
-      <div
-        className={
-          'container m-auto flex w-full flex-1 flex-col items-center justify-center'
-        }
-      >
-        <div className={'flex flex-col items-center space-y-8'}>
-          <div>
-            <h1 className={'font-heading text-9xl font-semibold'}>
-              <Trans i18nKey={'common:errorPageHeading'} />
-            </h1>
-          </div>
-
-          <div className={'flex flex-col items-center space-y-8'}>
-            <div
-              className={
-                'flex max-w-xl flex-col items-center gap-y-2 text-center'
-              }
-            >
-              <div>
-                <Heading level={2}>
-                  <Trans i18nKey={'common:genericError'} />
-                </Heading>
-              </div>
-
-              <p className={'text-muted-foreground text-lg'}>
-                <Trans i18nKey={'common:genericErrorSubHeading'} />
-              </p>
-            </div>
-
-            <div className={'flex space-x-4'}>
-              <Button className={'w-full'} variant={'default'} onClick={reset}>
-                <ArrowLeft className={'mr-2 h-4'} />
-
-                <Trans i18nKey={'common:goBack'} />
-              </Button>
-
-              <Button className={'w-full'} variant={'outline'} asChild>
-                <Link href={'/contact'}>
-                  <MessageCircle className={'mr-2 h-4'} />
-
-                  <Trans i18nKey={'common:contactUs'} />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
-
-export default GlobalErrorPage;
