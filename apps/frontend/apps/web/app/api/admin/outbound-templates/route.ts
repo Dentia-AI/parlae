@@ -53,6 +53,19 @@ export async function POST(request: NextRequest) {
     await requireAdmin();
 
     const body = await request.json();
+
+    if (body.fromBuiltIn) {
+      const { seedOutboundTemplates } = await import(
+        '@kit/shared/retell/templates/outbound/outbound-template-seed'
+      );
+      const ids = await seedOutboundTemplates(prisma);
+      return NextResponse.json({
+        success: true,
+        ...ids,
+        message: 'Outbound templates seeded from built-in prompts',
+      });
+    }
+
     const { agentGroup, name, flowConfig, promptTemplates, voicemailMessages, version } = body;
 
     if (!agentGroup || !name || !['PATIENT_CARE', 'FINANCIAL'].includes(agentGroup)) {

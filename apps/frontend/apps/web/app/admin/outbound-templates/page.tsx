@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { cn } from '@kit/ui/utils';
@@ -65,6 +66,7 @@ export default function OutboundTemplatesPage() {
   const [rollbackVersion, setRollbackVersion] = useState('');
   const [rollbackTemplateId, setRollbackTemplateId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [seeding, setSeeding] = useState(false);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -83,6 +85,31 @@ export default function OutboundTemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  const handleSeedFromBuiltIn = async () => {
+    setSeeding(true);
+    try {
+      const res = await fetch('/api/admin/outbound-templates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ fromBuiltIn: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Seed failed' }));
+        throw new Error(err.error);
+      }
+      toast.success('Outbound templates seeded from built-in prompts');
+      fetchTemplates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Seed failed');
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const startEdit = (template: OutboundTemplate) => {
     setEditingId(template.id);
@@ -215,6 +242,14 @@ export default function OutboundTemplatesPage() {
             <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             {t('admin.outbound.refresh')}
           </Button>
+          <Button onClick={handleSeedFromBuiltIn} disabled={seeding}>
+            {seeding ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            Seed from Built-in
+          </Button>
           <Link href="/admin/outbound-templates/fetch">
             <Button variant="outline">
               <Download className="h-4 w-4 mr-2" />
@@ -251,9 +286,17 @@ export default function OutboundTemplatesPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <PhoneOutgoing className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">
-              {t('admin.outbound.noTemplates')}
+            <p className="text-muted-foreground mb-4">
+              No outbound agent templates yet. Seed from the built-in prompts to get started.
             </p>
+            <Button onClick={handleSeedFromBuiltIn} disabled={seeding}>
+              {seeding ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              Seed from Built-in
+            </Button>
           </CardContent>
         </Card>
       ) : (

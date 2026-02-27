@@ -69,7 +69,7 @@ export default function FetchFlowFromAccountPage() {
   const [templateName, setTemplateName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
-  const [version, setVersion] = useState('cf-v1.1');
+  const [version, setVersion] = useState('cf-v1.3');
   const [isDefault, setIsDefault] = useState(false);
 
   const [saveMode, setSaveMode] = useState<SaveMode>('new');
@@ -408,7 +408,7 @@ export default function FetchFlowFromAccountPage() {
                     <Input
                       value={version}
                       onChange={(e) => setVersion(e.target.value)}
-                      placeholder="cf-v1.1"
+                      placeholder="cf-v1.3"
                     />
                   </div>
                   <div>

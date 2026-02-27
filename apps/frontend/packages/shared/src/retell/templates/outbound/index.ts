@@ -11,3 +11,7 @@ export {
 
 export * from './patient-care-prompts';
 export * from './financial-prompts';
+export {
+  seedOutboundTemplates,
+  ensureOutboundTemplates,
+} from './outbound-template-seed';

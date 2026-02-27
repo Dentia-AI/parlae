@@ -59,7 +59,6 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Outbound Templates', href: '/admin/outbound-templates', icon: PhoneOutgoing },
       { name: 'Outbound Versions', href: '/admin/outbound-templates/versions', icon: GitBranch },
-      { name: 'Fetch from Account', href: '/admin/outbound-templates/fetch', icon: Download },
     ],
   },
   {
