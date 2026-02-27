@@ -11,6 +11,7 @@ import { toast } from '@kit/ui/sonner';
 import { PmsSetupWizard } from '../_components/pms-setup-wizard';
 import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
+import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import { useSetupProgress } from '../_lib/use-setup-progress';
 
 export default function IntegrationsPage() {
@@ -28,6 +29,7 @@ export default function IntegrationsPage() {
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [googleCalendarEmail, setGoogleCalendarEmail] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const csrfToken = useCsrfToken();
 
   const { progress, saveIntegrations, isLoading } = useSetupProgress(accountId || '');
 
@@ -214,6 +216,8 @@ export default function IntegrationsPage() {
     try {
       const response = await fetch(`/api/google-calendar/${accountId}/disconnect`, {
         method: 'POST',
+        headers: { 'x-csrf-token': csrfToken },
+        credentials: 'include',
       });
 
       if (!response.ok) {
