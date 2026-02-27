@@ -157,7 +157,7 @@ export class RetellTemplateService {
   async getCall(callId: string): Promise<any | null> {
     if (!this.isEnabled || !callId) return null;
     try {
-      return await this.retellRequest('GET', `/get-call/${callId}`);
+      return await this.retellRequest('GET', `/v2/get-call/${callId}`);
     } catch (err: any) {
       this.logger.error(`Failed to get call ${callId}: ${err.message}`);
       return null;

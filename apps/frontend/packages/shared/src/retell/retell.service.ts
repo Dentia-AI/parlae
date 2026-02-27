@@ -517,7 +517,7 @@ export class RetellService {
   // ── Call Management ─────────────────────────────────────────────────────
 
   async getCall(callId: string): Promise<RetellCallResponse | null> {
-    return this.request<RetellCallResponse>('GET', `/get-call/${callId}`);
+    return this.request<RetellCallResponse>('GET', `/v2/get-call/${callId}`);
   }
 
   async listCalls(opts?: {

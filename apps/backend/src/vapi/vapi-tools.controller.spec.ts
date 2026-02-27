@@ -22,6 +22,7 @@ describe('VapiToolsController', () => {
     getPatientBalance: jest.fn().mockResolvedValue({ balance: 0 }),
     getProviders: jest.fn().mockResolvedValue({ providers: [] }),
     transferToHuman: jest.fn().mockResolvedValue({ transferred: true }),
+    takeMessage: jest.fn().mockResolvedValue({ result: { success: true } }),
     lookupPatient: jest.fn().mockResolvedValue({ patient: null }),
   };
 

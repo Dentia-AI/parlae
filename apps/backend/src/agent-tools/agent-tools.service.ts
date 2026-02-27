@@ -617,6 +617,101 @@ export class AgentToolsService {
     }
   }
 
+  async takeMessage(payload: any) {
+    try {
+      const { call, message } = payload;
+      const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
+
+      const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+      const accountId = phoneRecord?.accountId || payload.accountId;
+
+      const callerName = params.callerName || 'Unknown caller';
+      const callerPhone = params.callerPhone || call?.customer?.number || call?.from_number || 'Unknown';
+      const reason = params.reason || 'No reason provided';
+      const urgency = params.urgency || 'normal';
+      const notes = params.notes || '';
+
+      this.logger.log({
+        accountId,
+        callerName,
+        callerPhone,
+        urgency,
+        msg: '[TakeMessage] Collecting caller message',
+      });
+
+      // Send SMS notification to staff
+      const staffNumber = (phoneRecord as any)?.staffForwardNumber;
+      if (staffNumber && process.env.TWILIO_MESSAGING_SERVICE_SID) {
+        const twilioClient = twilio(
+          process.env.TWILIO_ACCOUNT_SID!,
+          process.env.TWILIO_AUTH_TOKEN!,
+        );
+
+        const urgencyLabel = urgency === 'urgent' ? 'URGENT' : 'Message';
+
+        await twilioClient.messages.create({
+          messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
+          to: staffNumber,
+          body: [
+            `${urgencyLabel}: Missed call from ${callerName}`,
+            `Phone: ${callerPhone}`,
+            `Reason: ${reason}`,
+            notes ? `Notes: ${notes}` : '',
+            `Please call back as soon as possible.`,
+          ].filter(Boolean).join('\n'),
+        }).catch((err) => {
+          this.logger.error({ error: err?.message, msg: '[TakeMessage] SMS notification failed (non-fatal)' });
+        });
+      }
+
+      // Send email notification to clinic via notifications service
+      if (accountId) {
+        this.notifications.sendPmsFailureNotification({
+          accountId,
+          patient: {
+            firstName: callerName.split(' ')[0] || callerName,
+            lastName: callerName.split(' ').slice(1).join(' ') || '',
+            phone: callerPhone,
+          },
+          appointment: {
+            appointmentType: `Missed Call – ${urgency === 'urgent' ? 'URGENT' : 'Normal'}`,
+            startTime: new Date(),
+            duration: 0,
+            notes: `Reason: ${reason}${notes ? `\nAdditional notes: ${notes}` : ''}\n\nThis message was collected by the AI assistant after a transfer attempt was unsuccessful. Please follow up with the caller.`,
+          },
+          pmsErrorMessage: 'Transfer unsuccessful — message taken from caller',
+          gcalBackupCreated: false,
+        }).catch((err) => {
+          this.logger.error({ error: err?.message, msg: '[TakeMessage] Email notification failed (non-fatal)' });
+        });
+      }
+
+      this.logAiAction({
+        accountId,
+        source: 'gcal',
+        action: 'take_message',
+        category: 'communication',
+        callId: call?.id || call?.call_id,
+        summary: `Message from ${callerName} (${callerPhone}): ${reason}`,
+      }).catch(() => {});
+
+      return {
+        result: {
+          success: true,
+          message: `Message recorded. The clinic will be notified and someone will call ${callerName} back at ${callerPhone}.`,
+        },
+      };
+    } catch (error: any) {
+      this.logger.error({ error: error?.message, msg: '[TakeMessage] Failed to process message' });
+      return {
+        result: {
+          success: true,
+          message: 'Your message has been noted. Someone from the clinic will call you back as soon as possible.',
+        },
+      };
+    }
+  }
+
   async bookAppointment(payload: any) {
     try {
       const { call, message } = payload;

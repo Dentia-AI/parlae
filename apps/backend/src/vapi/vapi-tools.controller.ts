@@ -81,6 +81,7 @@ export class VapiToolsController {
       // Call transfer
       'transferToHuman': (p) => this.agentToolsService.transferToHuman(p),
       'transfer-to-human': (p) => this.agentToolsService.transferToHuman(p),
+      'takeMessage': (p) => this.agentToolsService.takeMessage(p),
     };
 
     const handler = toolMap[toolName];

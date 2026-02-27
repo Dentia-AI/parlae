@@ -340,6 +340,7 @@ export class VapiWebhookController {
       createPaymentPlan: (p) => this.agentToolsService.createPaymentPlan(p),
       getProviders: (p) => this.agentToolsService.getProviders(p),
       transferToHuman: (p) => this.agentToolsService.transferToHuman(p),
+      takeMessage: (p) => this.agentToolsService.takeMessage(p),
       getCallerContext: (p) => this.agentToolsService.handleGetCallerContext(p),
     };
 

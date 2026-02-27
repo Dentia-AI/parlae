@@ -22,6 +22,7 @@ describe('VapiWebhookController', () => {
       rescheduleAppointment: jest.fn().mockResolvedValue({ result: { success: true } }),
       getAppointments: jest.fn().mockResolvedValue({ result: { success: true } }),
       transferToHuman: jest.fn().mockResolvedValue({ result: { success: true } }),
+      takeMessage: jest.fn().mockResolvedValue({ result: { success: true } }),
       updatePatient: jest.fn().mockResolvedValue({ result: { success: true } }),
       addPatientNote: jest.fn().mockResolvedValue({ result: { success: true } }),
       getPatientInsurance: jest.fn().mockResolvedValue({ result: { success: true } }),

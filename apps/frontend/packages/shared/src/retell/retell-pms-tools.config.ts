@@ -312,6 +312,29 @@ const createPaymentPlanFn: VapiToolFunction = {
   },
 };
 
+const takeMessageFn: VapiToolFunction = {
+  name: 'takeMessage',
+  description:
+    'Take a message from the caller when a transfer failed or no staff is available. Collects caller info and notifies the clinic via SMS and email so they can follow up.',
+  parameters: {
+    type: 'object',
+    properties: {
+      callerName: { type: 'string', description: "Caller's full name" },
+      callerPhone: {
+        type: 'string',
+        description: "Caller's phone number (use {{customer_phone}} if available)",
+      },
+      reason: { type: 'string', description: 'Why the caller is calling and what they need' },
+      urgency: {
+        type: 'string',
+        description: "Urgency level: 'urgent', 'normal', or 'low'",
+      },
+      notes: { type: 'string', description: 'Any additional details the caller provided' },
+    },
+    required: ['reason'],
+  },
+};
+
 const getProvidersFn: VapiToolFunction = {
   name: 'getProviders',
   description: 'Get list of dentists/providers at the clinic.',
@@ -382,6 +405,10 @@ export const retellProcessPaymentTool = toRetellTool(processPaymentFn, {
   timeoutMs: 45_000,
 });
 export const retellCreatePaymentPlanTool = toRetellTool(createPaymentPlanFn);
+export const retellTakeMessageTool = toRetellTool(takeMessageFn, {
+  speakDuring: true,
+  speakDuringMessage: 'One moment please.',
+});
 export const retellGetProvidersTool = toRetellTool(getProvidersFn);
 
 // ---------------------------------------------------------------------------

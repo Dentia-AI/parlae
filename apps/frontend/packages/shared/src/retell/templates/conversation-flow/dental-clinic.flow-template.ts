@@ -19,6 +19,7 @@ import {
   FLOW_INSURANCE_BILLING_PROMPT,
   FLOW_EMERGENCY_PROMPT,
   FLOW_FAQ_PROMPT,
+  FLOW_TAKE_MESSAGE_PROMPT,
 } from './flow-prompts';
 
 import type {
@@ -46,6 +47,7 @@ import {
   retellVerifyInsuranceCoverageTool,
   retellGetBalanceTool,
   retellProcessPaymentTool,
+  retellTakeMessageTool,
 } from '../../retell-pms-tools.config';
 
 // ---------------------------------------------------------------------------
@@ -187,6 +189,7 @@ export function buildDentalClinicFlow(
     retellVerifyInsuranceCoverageTool,
     retellGetBalanceTool,
     retellProcessPaymentTool,
+    retellTakeMessageTool,
   ].map(toFlowTool).map(hydrateTool);
 
   // ------- Nodes -------
@@ -438,6 +441,21 @@ export function buildDentalClinicFlow(
     faqNode,
   ];
 
+  // Take-message node: collects caller info when transfer fails or staff unavailable
+  const takeMessageNode: ConversationFlowConversationNode = {
+    id: 'take_message',
+    type: 'conversation',
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_TAKE_MESSAGE_PROMPT, cn) },
+    tool_ids: ['takeMessage'],
+    edges: [
+      promptEdge(
+        'Message has been taken and confirmed, or caller declines to leave info.',
+        'end_call',
+      ),
+    ],
+  };
+  nodes.push(takeMessageNode);
+
   // Transfer call node (only if clinic phone is configured and valid E.164)
   const normalizedClinicPhone = config.clinicPhone ? normalizeToE164(config.clinicPhone) : null;
   if (normalizedClinicPhone) {
@@ -454,7 +472,7 @@ export function buildDentalClinicFlow(
       edge: {
         id: 'edge_transfer_failed',
         transition_condition: { type: 'prompt', prompt: 'Transfer failed' },
-        destination_node_id: 'end_call',
+        destination_node_id: 'take_message',
       },
       speak_during_execution: true,
       instruction: {
