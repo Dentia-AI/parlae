@@ -149,7 +149,9 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
   callStartedAt: string;
   callEndedAt: string | null;
 } {
-  const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+  const rawAnalysis = (call.call_analysis ?? {}) as Record<string, any>;
+  const custom = (rawAnalysis.custom_analysis_data ?? {}) as Record<string, any>;
+  const analysis = { ...rawAnalysis, ...custom };
 
   let duration: number | null = null;
   if (call.start_timestamp && call.end_timestamp) {
@@ -166,7 +168,9 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
     ? new Date(call.end_timestamp).toISOString()
     : null;
 
-  const sentiment = analysis.customer_sentiment
+  const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
+  const customSentiment = (custom.customer_sentiment || '').toLowerCase();
+  const sentiment = customSentiment || presetSentiment
     || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
 
   return {
@@ -181,7 +185,7 @@ function mapRetellCallToListItem(call: RetellCallResponse): {
     urgencyLevel: analysis.urgency_level || null,
     contactName: analysis.patient_name || null,
     contactEmail: analysis.patient_email || null,
-    summary: analysis.call_summary || null,
+    summary: rawAnalysis.call_summary || null,
     appointmentSet: !!analysis.appointment_booked || retellOutcome === 'BOOKED',
     insuranceVerified: !!analysis.insurance_verified,
     paymentPlanDiscussed: !!analysis.payment_discussed,

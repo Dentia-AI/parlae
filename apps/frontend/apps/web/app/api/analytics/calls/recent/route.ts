@@ -302,7 +302,9 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
   const paged = allCalls.slice(offset, offset + limit);
 
   const mappedCalls = paged.map((call) => {
-    const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+    const rawAnalysis = (call.call_analysis ?? {}) as Record<string, any>;
+    const custom = (rawAnalysis.custom_analysis_data ?? {}) as Record<string, any>;
+    const analysis = { ...rawAnalysis, ...custom };
 
     let duration: number | null = null;
     if (call.start_timestamp && call.end_timestamp) {
@@ -313,7 +315,9 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
 
     const outcome = inferRetellOutcome(analysis);
 
-    const sentiment = analysis.customer_sentiment
+    const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
+    const customSentiment = (custom.customer_sentiment || '').toLowerCase();
+    const sentiment = customSentiment || presetSentiment
       || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
 
     return {
@@ -336,7 +340,7 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
       followUpRequired: !!analysis.follow_up_required,
       customerSentiment: sentiment,
       callReason: analysis.call_reason || null,
-      summary: analysis.call_summary || null,
+      summary: rawAnalysis.call_summary || null,
       agent: null,
     };
   });

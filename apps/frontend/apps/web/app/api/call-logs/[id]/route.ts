@@ -320,7 +320,9 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
 }
 
 function mapRetellCallToDetail(call: RetellCallResponse) {
-  const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+  const rawAnalysis = (call.call_analysis ?? {}) as Record<string, any>;
+  const custom = (rawAnalysis.custom_analysis_data ?? {}) as Record<string, any>;
+  const analysis = { ...rawAnalysis, ...custom };
 
   let duration: number | null = null;
   if (call.start_timestamp && call.end_timestamp) {
@@ -344,7 +346,9 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
 
   const outcome = inferRetellOutcome(analysis);
 
-  const sentiment = analysis.customer_sentiment
+  const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
+  const customSentiment = (custom.customer_sentiment || '').toLowerCase();
+  const sentiment = customSentiment || presetSentiment
     || (analysis.caller_satisfied === true ? 'positive' : analysis.caller_satisfied === false ? 'negative' : null);
 
   return {
@@ -361,9 +365,9 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
     contactName: analysis.patient_name || null,
     contactEmail: analysis.patient_email || null,
     transcript,
-    summary: analysis.call_summary || null,
+    summary: rawAnalysis.call_summary || null,
     recordingUrl: call.recording_url || null,
-    structuredData: Object.keys(analysis).length > 0 ? analysis : null,
+    structuredData: Object.keys(analysis).length > 1 ? analysis : null,
     appointmentSet: !!analysis.appointment_booked || outcome === 'BOOKED',
     leadCaptured: !!analysis.patient_name || !!analysis.patient_email,
     insuranceVerified: !!analysis.insurance_verified,

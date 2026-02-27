@@ -493,7 +493,9 @@ async function computeRetellAnalytics(
   const callDurations: Array<{ duration: number }> = [];
 
   for (const call of allCalls) {
-    const analysis = (call.call_analysis ?? {}) as Record<string, any>;
+    const rawAnalysis = (call.call_analysis ?? {}) as Record<string, any>;
+    const custom = (rawAnalysis.custom_analysis_data ?? {}) as Record<string, any>;
+    const analysis = { ...rawAnalysis, ...custom };
 
     let dur = 0;
     if (call.start_timestamp && call.end_timestamp) {
@@ -508,7 +510,9 @@ async function computeRetellAnalytics(
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
     if (outcome === 'BOOKED') bookedCount++;
 
-    const sentiment = analysis.customer_sentiment || null;
+    const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
+    const customSentiment = (custom.customer_sentiment || '').toLowerCase();
+    const sentiment = customSentiment || presetSentiment || null;
     if (sentiment === 'very_positive' || sentiment === 'positive' || analysis.caller_satisfied === true) satisfiedCount++;
     else if (sentiment === 'negative' || sentiment === 'very_negative' || analysis.caller_satisfied === false) unsatisfiedCount++;
     else satisfactionUnknown++;
