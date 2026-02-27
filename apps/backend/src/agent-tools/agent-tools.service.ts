@@ -1571,6 +1571,17 @@ export class AgentToolsService {
         pmsProvider: 'sikka',
       }).catch(() => {});
 
+      // Fire-and-forget: send reschedule confirmation (SMS + email)
+      this.sendRescheduleNotification({
+        accountId: sikkaService.accountId!,
+        callId: call?.id,
+        callerPhone: call?.from_number || call?.retell_llm_dynamic_variables?.from_number,
+        newStartTime: new Date(params.startTime),
+        duration: params.duration || 30,
+        appointmentType: appointment?.appointmentType,
+        integrationType: 'pms',
+      });
+
       return {
         result: {
           success: true,
@@ -2897,6 +2908,82 @@ export class AgentToolsService {
   }
 
   /**
+   * Fire-and-forget helper to send reschedule notifications (SMS + email).
+   * Extracts patient info from the caller context cache and old event data.
+   */
+  private sendRescheduleNotification(opts: {
+    accountId: string;
+    callId?: string;
+    callerPhone?: string;
+    oldEvent?: { summary?: string; startDateTime?: string };
+    newStartTime: Date;
+    duration: number;
+    appointmentType?: string;
+    integrationType: 'pms' | 'google_calendar';
+  }): void {
+    const { accountId, callId, callerPhone, oldEvent, newStartTime, duration, integrationType } = opts;
+
+    // Best-effort patient info from caller context cache
+    const callerCtx = callId ? this.getCallerContext(callId) : undefined;
+    let firstName = 'Patient';
+    let lastName = '';
+    let phone = callerPhone || callerCtx?.callerPhone;
+
+    if (callerCtx?.patientName) {
+      const parts = callerCtx.patientName.split(' ');
+      firstName = parts[0] || 'Patient';
+      lastName = parts.slice(1).join(' ');
+    } else if (oldEvent?.summary) {
+      // GCal events are titled "appointmentType - FirstName LastName"
+      const dashIdx = oldEvent.summary.indexOf(' - ');
+      if (dashIdx > -1) {
+        const namePart = oldEvent.summary.slice(dashIdx + 3).trim();
+        const parts = namePart.split(' ');
+        firstName = parts[0] || 'Patient';
+        lastName = parts.slice(1).join(' ');
+      }
+    }
+
+    // Determine appointment type from params, old event, or caller context
+    const appointmentType =
+      opts.appointmentType ||
+      (oldEvent?.summary?.includes(' - ') ? oldEvent.summary.split(' - ')[0]!.trim() : undefined) ||
+      callerCtx?.nextBooking?.type ||
+      'Appointment';
+
+    // Build old appointment info from old event or caller context
+    const oldStartTime = oldEvent?.startDateTime
+      ? new Date(oldEvent.startDateTime)
+      : callerCtx?.nextBooking
+        ? new Date(`${callerCtx.nextBooking.date}T${callerCtx.nextBooking.time}`)
+        : newStartTime; // fallback: use new time so SMS still goes out
+
+    this.notifications.sendAppointmentReschedule({
+      accountId,
+      patient: { firstName, lastName, phone },
+      oldAppointment: {
+        appointmentType,
+        startTime: oldStartTime,
+        duration,
+      },
+      newAppointment: {
+        appointmentType,
+        startTime: newStartTime,
+        duration,
+      },
+    }).then(({ emailSent, smsSent }) => {
+      this.logger.log({
+        accountId,
+        emailSent,
+        smsSent,
+        msg: `[Reschedule ${integrationType}] Patient notification sent`,
+      });
+    }).catch((err) => {
+      this.logger.error({ error: err?.message, msg: `[Reschedule ${integrationType}] Patient notification failed (non-fatal)` });
+    });
+  }
+
+  /**
    * Fallback: Reschedule appointment via Google Calendar
    * Updates the existing event with new start/end time
    */
@@ -2932,6 +3019,9 @@ export class AgentToolsService {
       const newEndTime = new Date(newStartTime);
       newEndTime.setMinutes(newEndTime.getMinutes() + duration);
 
+      // Fetch old event to capture pre-reschedule data for notifications
+      const oldEvent = await this.googleCalendar.getEvent(accountId!, params.appointmentId);
+
       const result = await this.googleCalendar.updateEvent(
         accountId!,
         params.appointmentId,
@@ -2954,6 +3044,18 @@ export class AgentToolsService {
         summary: `Rescheduled appointment to ${newStartTime.toISOString()} on Google Calendar`,
         calendarEventId: result.eventId || params.appointmentId,
       }).catch(() => {});
+
+      // Fire-and-forget: send reschedule confirmation (SMS + email)
+      this.sendRescheduleNotification({
+        accountId: accountId!,
+        callId: call?.id,
+        callerPhone: call?.from_number || call?.retell_llm_dynamic_variables?.from_number,
+        oldEvent: oldEvent?.success ? oldEvent : undefined,
+        newStartTime,
+        duration,
+        appointmentType: params.appointmentType,
+        integrationType: 'google_calendar',
+      });
 
       return {
         result: {

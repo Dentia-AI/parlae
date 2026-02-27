@@ -411,6 +411,41 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Fetch a single calendar event by ID.
+   * Returns summary, start/end times, and description for pre-update snapshots.
+   */
+  async getEvent(accountId: string, eventId: string) {
+    try {
+      const calendar = await this.getAuthenticatedClient(accountId);
+
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+        select: { googleCalendarId: true },
+      });
+
+      const calendarId = account?.googleCalendarId || 'primary';
+
+      const response = await calendar.events.get({
+        calendarId,
+        eventId,
+      });
+
+      const event = response.data;
+      return {
+        success: true,
+        eventId: event.id,
+        summary: event.summary || undefined,
+        description: event.description || undefined,
+        startDateTime: event.start?.dateTime || event.start?.date || undefined,
+        endDateTime: event.end?.dateTime || event.end?.date || undefined,
+      };
+    } catch (error) {
+      this.logger.error({ accountId, eventId, error, msg: 'Failed to fetch calendar event' });
+      return { success: false };
+    }
+  }
+
+  /**
    * Update calendar event
    */
   async updateEvent(
