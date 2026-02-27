@@ -812,7 +812,7 @@ export default function KnowledgeBasePage() {
 
                     {/* Example docs hint */}
                     <div className="text-[10px] text-muted-foreground/60">
-                      Examples: {cat.examples.join(' • ')}
+                      Examples: {t(`common:${cat.examplesKey}`)}
                     </div>
                   </div>
                 )}
