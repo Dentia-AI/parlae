@@ -471,6 +471,40 @@ async function fetchVapiCalls(
   return allCalls.map((call) => mapVapiCallToListItem(call, isAdmin, pricingRates));
 }
 
+function normalizeE164(phone: string): string {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
+}
+
+async function collectClinicPhoneNumbers(accountId: string): Promise<string[]> {
+  const numbers = new Set<string>();
+
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId },
+    select: { phoneNumber: true },
+  });
+  for (const p of retellPhones) {
+    if (p.phoneNumber) numbers.add(normalizeE164(p.phoneNumber));
+  }
+
+  const fullAccount = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { phoneIntegrationSettings: true, phoneNumberHistory: true },
+  });
+  const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
+  if (settings.phoneNumber) numbers.add(normalizeE164(settings.phoneNumber));
+
+  const history = Array.isArray(fullAccount?.phoneNumberHistory)
+    ? (fullAccount.phoneNumberHistory as Array<{ phoneNumber: string }>)
+    : [];
+  for (const entry of history) {
+    if (entry.phoneNumber) numbers.add(normalizeE164(entry.phoneNumber));
+  }
+
+  return [...numbers];
+}
+
 async function fetchRetellCalls(
   accountId: string,
   searchParams: URLSearchParams,
@@ -478,64 +512,27 @@ async function fetchRetellCalls(
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
 
-  let retellPhones = await prisma.retellPhoneNumber.findMany({
-    where: { accountId, isActive: true },
-    select: { retellPhoneId: true },
-  });
-
-  // Fallback: check phoneIntegrationSettings for Retell agent IDs
-  if (retellPhones.length === 0) {
-    const fullAccount = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { phoneIntegrationSettings: true },
-    });
-    const settings = fullAccount?.phoneIntegrationSettings as any;
-    if (settings?.retellReceptionistAgentId) {
-      // Fetch calls filtered by agent_id instead
-      const agentIds: string[] = [];
-      if (settings.retellReceptionistAgentId) agentIds.push(settings.retellReceptionistAgentId);
-      if (settings.retellAgentIds && Array.isArray(settings.retellAgentIds)) {
-        agentIds.push(...settings.retellAgentIds);
-      }
-
-      const rawStartDate = searchParams.get('startDate');
-      const endDate = searchParams.get('endDate');
-
-      const allCalls: RetellCallResponse[] = [];
-      for (const agentId of [...new Set(agentIds)]) {
-        const calls = await retell.listCalls({
-          filter_criteria: {
-            agent_id: [agentId],
-            ...(rawStartDate ? { after_start_timestamp: new Date(rawStartDate).getTime() } : {}),
-            ...(endDate ? { before_start_timestamp: new Date(endDate).getTime() } : {}),
-          },
-          sort_order: 'descending',
-          limit: 1000,
-        });
-        allCalls.push(...(calls || []));
-      }
-
-      return allCalls.map(mapRetellCallToListItem);
-    }
-
-    return [];
-  }
+  const clinicPhones = await collectClinicPhoneNumbers(accountId);
+  if (clinicPhones.length === 0) return [];
 
   const rawStartDate = searchParams.get('startDate');
   const endDate = searchParams.get('endDate');
 
-  const allCalls: RetellCallResponse[] = [];
-  for (const phone of retellPhones) {
-    const calls = await retell.listCalls({
-      filter_criteria: {
-        ...(rawStartDate ? { after_start_timestamp: new Date(rawStartDate).getTime() } : {}),
-        ...(endDate ? { before_start_timestamp: new Date(endDate).getTime() } : {}),
-      },
-      sort_order: 'descending',
-      limit: 1000,
-    });
-    allCalls.push(...(calls || []));
-  }
+  const rawCalls = await retell.listCalls({
+    filter_criteria: {
+      ...(rawStartDate ? { after_start_timestamp: new Date(rawStartDate).getTime() } : {}),
+      ...(endDate ? { before_start_timestamp: new Date(endDate).getTime() } : {}),
+    },
+    sort_order: 'descending',
+    limit: 1000,
+  });
 
-  return allCalls.map(mapRetellCallToListItem);
+  const clinicPhoneSet = new Set(clinicPhones);
+  const filteredCalls = (rawCalls || []).filter((call) => {
+    const toNum = normalizeE164(call.to_number || '');
+    const fromNum = normalizeE164(call.from_number || '');
+    return clinicPhoneSet.has(toNum) || clinicPhoneSet.has(fromNum);
+  });
+
+  return filteredCalls.map(mapRetellCallToListItem);
 }
