@@ -1001,7 +1001,7 @@
     },
     "smsConfirmations": {
       "name": "Confirmations par SMS",
-      "description": "Envoyez des confirmations et rappels de rendez-vous par SMS aux patients via Twilio."
+      "description": "Envoyez des confirmations et rappels de rendez-vous par SMS aux patients."
     },
     "emailConfirmations": {
       "name": "Confirmations par courriel",

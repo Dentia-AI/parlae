@@ -1001,7 +1001,7 @@
     },
     "smsConfirmations": {
       "name": "SMS Confirmations",
-      "description": "Send SMS appointment confirmations and reminders to patients via Twilio."
+      "description": "Send SMS appointment confirmations and reminders to patients."
     },
     "emailConfirmations": {
       "name": "Email Confirmations",

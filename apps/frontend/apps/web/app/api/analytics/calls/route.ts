@@ -296,14 +296,15 @@ export async function GET(request: NextRequest) {
 
     // If analytics API didn't return trends, compute from calls
     if (activityTrend.length === 0 && recentCalls.length > 0) {
-      const dailyCounts = new Map<string, number>();
+      const counts = new Map<string, number>();
       for (const call of recentCalls) {
-        const dateKey = (call.startedAt || call.endedAt || '').slice(0, 10);
-        if (dateKey) {
-          dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+        const ts = call.startedAt || call.endedAt;
+        if (ts) {
+          const key = activityKey(new Date(ts).getTime(), startDate, endDate);
+          counts.set(key, (counts.get(key) || 0) + 1);
         }
       }
-      activityTrend = buildFullActivityTrend(dailyCounts, startDate, endDate);
+      activityTrend = buildFullActivityTrend(counts, startDate, endDate);
     }
 
     // Compute outcome metrics from structured data in calls
@@ -501,28 +502,54 @@ function emptyRetellResult(startDate: Date, endDate: Date) {
   };
 }
 
+function isHourlyRange(startDate: Date, endDate: Date): boolean {
+  const diffMs = endDate.getTime() - startDate.getTime();
+  return diffMs <= 25 * 60 * 60 * 1000; // ≤ 25 hours
+}
+
 /**
- * Build a complete activity trend array filling in every day in the range,
- * even days with 0 calls, so the bar chart renders bars for each day.
+ * Build a complete activity trend array filling in every period in the range.
+ * Uses hourly granularity for ≤24h ranges and daily for anything longer.
  */
 function buildFullActivityTrend(
-  dailyCounts: Map<string, number>,
+  counts: Map<string, number>,
   startDate: Date,
   endDate: Date,
 ): Array<{ date: string; count: number }> {
   const trend: Array<{ date: string; count: number }> = [];
-  const current = new Date(startDate);
-  current.setHours(0, 0, 0, 0);
-  const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
+  const hourly = isHourlyRange(startDate, endDate);
 
-  while (current <= end) {
-    const dateKey = current.toISOString().slice(0, 10);
-    trend.push({ date: dateKey, count: dailyCounts.get(dateKey) || 0 });
-    current.setDate(current.getDate() + 1);
+  if (hourly) {
+    const current = new Date(startDate);
+    current.setMinutes(0, 0, 0);
+    const end = new Date(endDate);
+
+    while (current <= end) {
+      const key = current.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+      trend.push({ date: current.toISOString(), count: counts.get(key) || 0 });
+      current.setHours(current.getHours() + 1);
+    }
+  } else {
+    const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    while (current <= end) {
+      const key = current.toISOString().slice(0, 10); // YYYY-MM-DD
+      trend.push({ date: key, count: counts.get(key) || 0 });
+      current.setDate(current.getDate() + 1);
+    }
   }
 
   return trend;
+}
+
+/** Get the map key for a call timestamp based on the granularity of the range. */
+function activityKey(timestamp: number, startDate: Date, endDate: Date): string {
+  const hourly = isHourlyRange(startDate, endDate);
+  const iso = new Date(timestamp).toISOString();
+  return hourly ? iso.slice(0, 13) : iso.slice(0, 10);
 }
 
 async function computeRetellAnalytics(
@@ -602,10 +629,10 @@ async function computeRetellAnalytics(
       appointmentTypes.set(apptType, (appointmentTypes.get(apptType) || 0) + 1);
     }
 
-    const dateKey = call.start_timestamp
-      ? new Date(call.start_timestamp).toISOString().slice(0, 10)
-      : '';
-    if (dateKey) dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+    if (call.start_timestamp) {
+      const key = activityKey(call.start_timestamp, startDate, endDate);
+      dailyCounts.set(key, (dailyCounts.get(key) || 0) + 1);
+    }
   }
 
   const avgCallTime = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
