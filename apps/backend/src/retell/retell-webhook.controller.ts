@@ -6,7 +6,6 @@ import {
   HttpException,
   HttpStatus,
   Req,
-  RawBodyRequest,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,11 +39,11 @@ export class RetellWebhookController {
   async handleWebhook(
     @Body() body: any,
     @Headers('x-retell-signature') signature: string,
-    @Req() req: RawBodyRequest<Request>,
+    @Req() req: Request,
   ) {
     const apiKey = process.env.RETELL_API_KEY;
     if (apiKey) {
-      const rawBody = req.rawBody;
+      const rawBody: Buffer | undefined = (req as any).rawBody;
       const bodyStr = rawBody ? rawBody.toString('utf8') : JSON.stringify(body);
 
       const isValid = await RetellWebhookController.verifySignature(

@@ -9,10 +9,15 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
-    rawBody: true,
+    bodyParser: false,
   });
 
-  app.use(json({ limit: '10mb' }));
+  app.use(json({
+    limit: '10mb',
+    verify: (req: any, _res: any, buf: Buffer) => {
+      req.rawBody = buf;
+    },
+  }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
 
   const config = app.get(ConfigService);
