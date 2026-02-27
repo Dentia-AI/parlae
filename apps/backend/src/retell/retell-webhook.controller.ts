@@ -159,9 +159,18 @@ export class RetellWebhookController {
 
   private async handleCallEnded(body: any): Promise<{ received: true }> {
     const call = body?.call;
+    const callId = call?.call_id;
+    const durationSec =
+      call?.end_timestamp && call?.start_timestamp
+        ? Math.round((call.end_timestamp - call.start_timestamp) / 1000)
+        : null;
+
     this.logger.log(
-      `[Retell] Call ended: ${call?.call_id}, status: ${call?.call_status}, duration: ${call?.end_timestamp && call?.start_timestamp ? Math.round((call.end_timestamp - call.start_timestamp) / 1000) : '?'}s`,
+      `[Retell] Call ended: ${callId}, status: ${call?.call_status}, duration: ${durationSec ?? '?'}s`,
     );
+
+    await this.processOutboundCallEnded(call, durationSec);
+
     return { received: true };
   }
 
@@ -173,7 +182,192 @@ export class RetellWebhookController {
         `[Retell] Call analyzed: ${call?.call_id}, summary: ${JSON.stringify(analysis).slice(0, 300)}`,
       );
     }
+
+    await this.processOutboundCallAnalyzed(call, analysis);
+
     return { received: true };
+  }
+
+  /**
+   * When an outbound call ends, update the CampaignContact status and
+   * handle re-queue logic for failed attempts.
+   */
+  private async processOutboundCallEnded(call: any, durationSec: number | null): Promise<void> {
+    const contactId = call?.metadata?.contactId;
+    const campaignId = call?.metadata?.campaignId;
+    if (!contactId || !campaignId) return;
+
+    const callStatus = call?.call_status;
+    const disconnectionReason = call?.disconnection_reason;
+
+    let status: string;
+    let outcome: string | undefined;
+
+    switch (disconnectionReason) {
+      case 'agent_hangup':
+      case 'user_hangup':
+        status = 'COMPLETED';
+        outcome = 'answered';
+        break;
+      case 'voicemail_reached':
+        status = 'VOICEMAIL';
+        outcome = 'voicemail_left';
+        break;
+      case 'no_answer':
+        status = 'NO_ANSWER';
+        break;
+      case 'busy':
+        status = 'BUSY';
+        break;
+      case 'machine_detected':
+        status = 'VOICEMAIL';
+        outcome = 'machine_detected';
+        break;
+      default:
+        status = callStatus === 'error' ? 'FAILED' : 'COMPLETED';
+        break;
+    }
+
+    try {
+      const contact = await this.prisma.campaignContact.findUnique({
+        where: { id: contactId },
+      });
+      if (!contact) return;
+
+      const campaign = await this.prisma.outboundCampaign.findUnique({
+        where: { id: campaignId },
+      });
+      if (!campaign) return;
+
+      const isTerminal = ['COMPLETED', 'VOICEMAIL'].includes(status);
+      const shouldRetry =
+        !isTerminal &&
+        contact.attempts < campaign.maxAttemptsPerContact;
+
+      await this.prisma.campaignContact.update({
+        where: { id: contactId },
+        data: {
+          status: shouldRetry ? 'QUEUED' : (status as any),
+          callDurationSec: durationSec,
+          outcome: outcome || disconnectionReason || callStatus,
+          ...(isTerminal || !shouldRetry ? { completedAt: new Date() } : {}),
+        },
+      });
+
+      if (isTerminal || !shouldRetry) {
+        const isSuccessful = status === 'COMPLETED' && (durationSec || 0) > 10;
+        await this.prisma.outboundCampaign.update({
+          where: { id: campaignId },
+          data: {
+            completedCount: { increment: 1 },
+            ...(isSuccessful ? { successfulCount: { increment: 1 } } : {}),
+          },
+        });
+
+        const remaining = await this.prisma.campaignContact.count({
+          where: {
+            campaignId,
+            status: { in: ['QUEUED', 'DIALING', 'IN_PROGRESS'] },
+          },
+        });
+        if (remaining === 0) {
+          await this.prisma.outboundCampaign.update({
+            where: { id: campaignId },
+            data: { status: 'COMPLETED' },
+          });
+          this.logger.log({ campaignId, msg: '[Outbound] Campaign completed' });
+        }
+      }
+
+      if (disconnectionReason === 'user_hangup' && (durationSec || 0) < 3) {
+        this.logger.log({
+          contactId,
+          phoneNumber: contact.phoneNumber,
+          msg: '[Outbound] Very short call — potential DNC candidate (not auto-adding yet)',
+        });
+      }
+    } catch (err) {
+      this.logger.error({
+        contactId,
+        campaignId,
+        err: err instanceof Error ? err.message : err,
+        msg: '[Outbound] Error processing outbound call_ended',
+      });
+    }
+  }
+
+  /**
+   * When call analysis is ready, update the CampaignContact with
+   * sentiment, summary, and analysis data.
+   */
+  private async processOutboundCallAnalyzed(call: any, analysis: any): Promise<void> {
+    const contactId = call?.metadata?.contactId;
+    const campaignId = call?.metadata?.campaignId;
+    const accountId = call?.metadata?.accountId;
+    if (!contactId) return;
+
+    try {
+      const updateData: Record<string, unknown> = {};
+
+      if (analysis?.call_summary) {
+        updateData.summary = analysis.call_summary;
+      }
+      if (analysis?.user_sentiment) {
+        updateData.sentiment = analysis.user_sentiment;
+      }
+
+      const customData = analysis?.custom_analysis_data;
+      if (customData) {
+        updateData.analysisData = customData;
+
+        if (customData.outcome) {
+          updateData.outcome = customData.outcome;
+        }
+
+        if (customData.do_not_call === true || customData.do_not_call === 'true') {
+          const contact = await this.prisma.campaignContact.findUnique({
+            where: { id: contactId },
+            select: { phoneNumber: true },
+          });
+          if (contact && accountId) {
+            await this.prisma.doNotCallEntry.upsert({
+              where: {
+                accountId_phoneNumber: {
+                  accountId,
+                  phoneNumber: contact.phoneNumber,
+                },
+              },
+              update: { reason: 'auto_detected', source: 'call_analysis' },
+              create: {
+                accountId,
+                phoneNumber: contact.phoneNumber,
+                reason: 'auto_detected',
+                source: 'call_analysis',
+              },
+            });
+            this.logger.log({
+              accountId,
+              phoneNumber: contact.phoneNumber,
+              msg: '[Outbound] Auto-added to DNC list from call analysis',
+            });
+          }
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.campaignContact.update({
+          where: { id: contactId },
+          data: updateData,
+        });
+      }
+    } catch (err) {
+      this.logger.error({
+        contactId,
+        campaignId,
+        err: err instanceof Error ? err.message : err,
+        msg: '[Outbound] Error processing outbound call_analyzed',
+      });
+    }
   }
 
   private async resolveAccountFromCall(call: any): Promise<string | null> {

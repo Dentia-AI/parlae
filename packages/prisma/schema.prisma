@@ -191,36 +191,36 @@ model Account {
   setupLastStep    String?   @map("setup_last_step") // Last step user was on
 
   // Google Calendar integration (alternative to PMS)
-  googleCalendarConnected     Boolean   @default(false) @map("google_calendar_connected")
-  googleCalendarAccessToken   String?   @map("google_calendar_access_token") @db.Text
-  googleCalendarRefreshToken  String?   @map("google_calendar_refresh_token") @db.Text
-  googleCalendarTokenExpiry   DateTime? @map("google_calendar_token_expiry")
-  googleCalendarId            String?   @map("google_calendar_id") // Primary calendar ID to use
-  googleCalendarEmail         String?   @map("google_calendar_email") // Connected Google account email
+  googleCalendarConnected    Boolean   @default(false) @map("google_calendar_connected")
+  googleCalendarAccessToken  String?   @map("google_calendar_access_token") @db.Text
+  googleCalendarRefreshToken String?   @map("google_calendar_refresh_token") @db.Text
+  googleCalendarTokenExpiry  DateTime? @map("google_calendar_token_expiry")
+  googleCalendarId           String?   @map("google_calendar_id") // Primary calendar ID to use
+  googleCalendarEmail        String?   @map("google_calendar_email") // Connected Google account email
 
   // Stripe billing
-  stripeCustomerId            String?   @unique @map("stripe_customer_id") // Stripe customer ID for billing & saved cards
-  stripePaymentMethodId       String?   @map("stripe_payment_method_id") // Stripe payment method ID for phone number charges
-  paymentMethodVerified       Boolean   @default(false) @map("payment_method_verified") // Whether payment method is verified
-  paymentMethodVerifiedAt     DateTime? @map("payment_method_verified_at") // When payment method was verified
+  stripeCustomerId        String?   @unique @map("stripe_customer_id") // Stripe customer ID for billing & saved cards
+  stripePaymentMethodId   String?   @map("stripe_payment_method_id") // Stripe payment method ID for phone number charges
+  paymentMethodVerified   Boolean   @default(false) @map("payment_method_verified") // Whether payment method is verified
+  paymentMethodVerifiedAt DateTime? @map("payment_method_verified_at") // When payment method was verified
 
   // Branding for emails and customer-facing communications
-  brandingLogoUrl             String?   @map("branding_logo_url") // URL to clinic logo
-  brandingPrimaryColor        String?   @map("branding_primary_color") // Hex color code for branding
-  brandingBusinessName        String?   @map("branding_business_name") // Business name for emails (if different from account name)
-  brandingContactEmail        String?   @map("branding_contact_email") // Contact email for patient communications
-  brandingContactPhone        String?   @map("branding_contact_phone") // Contact phone for patient communications
-  brandingAddress             String?   @map("branding_address") // Physical address for emails
-  brandingWebsite             String?   @map("branding_website") // Website URL
-  brandingTimezone            String?   @map("branding_timezone") // IANA timezone, e.g. America/Toronto. Defaults to America/Toronto if unset.
-  twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
+  brandingLogoUrl           String? @map("branding_logo_url") // URL to clinic logo
+  brandingPrimaryColor      String? @map("branding_primary_color") // Hex color code for branding
+  brandingBusinessName      String? @map("branding_business_name") // Business name for emails (if different from account name)
+  brandingContactEmail      String? @map("branding_contact_email") // Contact email for patient communications
+  brandingContactPhone      String? @map("branding_contact_phone") // Contact phone for patient communications
+  brandingAddress           String? @map("branding_address") // Physical address for emails
+  brandingWebsite           String? @map("branding_website") // Website URL
+  brandingTimezone          String? @map("branding_timezone") // IANA timezone, e.g. America/Toronto. Defaults to America/Toronto if unset.
+  twilioMessagingServiceSid String? @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
 
-  featureSettings             Json?   @default("{}") @map("feature_settings") // Per-account feature toggles (e.g. sms-confirmations, email-confirmations)
-  phoneNumberHistory          Json?   @default("[]") @map("phone_number_history") // Array of { phoneNumber, retiredAt } for analytics continuity across number changes
+  featureSettings    Json? @default("{}") @map("feature_settings") // Per-account feature toggles (e.g. sms-confirmations, email-confirmations)
+  phoneNumberHistory Json? @default("[]") @map("phone_number_history") // Array of { phoneNumber, retiredAt } for analytics continuity across number changes
 
-  voiceProviderOverride       VoiceProvider? @map("voice_provider_override") // Per-account override: null = use global toggle
+  voiceProviderOverride VoiceProvider? @map("voice_provider_override") // Per-account override: null = use global toggle
 
-  primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
+  primaryOwner          User                            @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])
   memberships           AccountMembership[]
   billingCustomers      BillingCustomer[]
   invitations           Invitation[]
@@ -232,14 +232,17 @@ model Account {
   adminAccess           AdminAccess[]
   impersonationSessions ImpersonationSession[]
   ghlSubAccounts        GhlSubAccount[]
-  agentTemplate         AgentTemplate?         @relation(fields: [agentTemplateId], references: [id])
-  retellAgentTemplate   RetellAgentTemplate?   @relation(fields: [retellAgentTemplateId], references: [id])
+  agentTemplate         AgentTemplate?                  @relation(fields: [agentTemplateId], references: [id])
+  retellAgentTemplate   RetellAgentTemplate?            @relation(fields: [retellAgentTemplateId], references: [id])
   retellFlowTemplate    RetellConversationFlowTemplate? @relation(fields: [retellFlowTemplateId], references: [id])
   pmsIntegrations       PmsIntegration[]
   vapiPhoneNumbers      VapiPhoneNumber[] // Phone numbers for this account (Vapi)
   retellPhoneNumbers    RetellPhoneNumber[] // Phone numbers for this account (Retell)
   callReferences        CallReference[] // Thin references to voice AI calls for account scoping
   aiActionLogs          AiActionLog[] // User-facing audit trail for AI actions in PMS/GCal
+  outboundCampaigns     OutboundCampaign[] // Outbound calling campaigns
+  outboundSettings      OutboundSettings? // Outbound feature toggles and config
+  doNotCallEntries      DoNotCallEntry[] // Do-not-call list entries
 
   @@map("accounts")
 }
@@ -709,7 +712,6 @@ enum KnowledgeBaseSource {
   TEXT   @map("text") // Manually entered text
 }
 
-
 model GhlSubAccount {
   id        String  @id @default(uuid())
   userId    String  @map("user_id")
@@ -854,11 +856,11 @@ model KnowledgeBase {
 // Thin reference linking voice AI call IDs to accounts.
 // All call data (transcripts, recordings, analytics) is fetched from the provider API on demand.
 model CallReference {
-  id         String        @id @default(uuid())
-  callId     String        @unique @map("call_id")
-  accountId  String        @map("account_id")
-  provider   VoiceProvider @default(RETELL) @map("provider")
-  createdAt  DateTime      @default(now()) @map("created_at")
+  id        String        @id @default(uuid())
+  callId    String        @unique @map("call_id")
+  accountId String        @map("account_id")
+  provider  VoiceProvider @default(RETELL) @map("provider")
+  createdAt DateTime      @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -957,7 +959,7 @@ model VapiPhoneNumber {
   vapiSquadId     String? @map("vapi_squad_id") // Squad ID if using multi-agent
 
   // Twilio Integration (for SMS/messaging)
-  twilioPhoneNumberSid   String? @map("twilio_phone_number_sid") // Twilio Phone Number SID (starts with PN)
+  twilioPhoneNumberSid      String? @map("twilio_phone_number_sid") // Twilio Phone Number SID (starts with PN)
   twilioMessagingServiceSid String? @map("twilio_messaging_service_sid") // Twilio Messaging Service SID (starts with MG)
 
   // PMS Integration Link
@@ -989,10 +991,10 @@ model PmsAuditLog {
   method   String @map("method") // GET, POST, PATCH, DELETE
 
   // User/Agent Context
-  userId     String? @map("user_id")
-  callId     String? @map("call_id")
-  ipAddress  String? @map("ip_address")
-  userAgent  String? @map("user_agent")
+  userId    String? @map("user_id")
+  callId    String? @map("call_id")
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
 
   // Request/Response (PHI redacted in logs)
   requestSummary String? @map("request_summary") @db.Text
@@ -1146,13 +1148,13 @@ model RetellAgentTemplate {
   isActive    Boolean @default(true) @map("is_active")
 
   // Per-role LLM configs: { receptionist: { model, prompt, ... }, booking: { ... }, ... }
-  llmConfigs  Json @map("llm_configs")
+  llmConfigs   Json  @map("llm_configs")
   // Per-role agent configs: { receptionist: { voiceId, ... }, booking: { ... }, ... }
-  agentConfigs Json @map("agent_configs")
+  agentConfigs Json  @map("agent_configs")
   // agent_swap routing config: how agents transfer between each other
-  swapConfig  Json @map("swap_config")
+  swapConfig   Json  @map("swap_config")
   // Custom tool definitions (webhook tools) — optional, defaults come from code
-  toolsConfig Json? @map("tools_config")
+  toolsConfig  Json? @map("tools_config")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1214,21 +1216,21 @@ model AiActionLog {
   id        String @id @default(uuid())
   accountId String @map("account_id")
 
-  source   String @map("source")   // 'pms' | 'gcal'
-  action   String @map("action")   // 'book_appointment', 'cancel_appointment', 'reschedule_appointment', 'create_patient', 'update_patient', 'add_note', 'create_event', 'update_event', 'delete_event'
+  source   String @map("source") // 'pms' | 'gcal'
+  action   String @map("action") // 'book_appointment', 'cancel_appointment', 'reschedule_appointment', 'create_patient', 'update_patient', 'add_note', 'create_event', 'update_event', 'delete_event'
   category String @map("category") // 'appointment', 'patient', 'note', 'payment', 'event'
 
   callId String? @map("call_id") // Retell/Vapi call ID that triggered this action
 
   // External resource IDs (HIPAA-safe: no patient-identifying info)
-  externalResourceId   String? @map("external_resource_id")   // Appointment ID, Patient ID, GCal Event ID
+  externalResourceId   String? @map("external_resource_id") // Appointment ID, Patient ID, GCal Event ID
   externalResourceType String? @map("external_resource_type") // 'appointment', 'patient', 'note', 'event'
 
   // Rich non-PHI context (staff names, scheduling data — not PHI)
   appointmentTime String? @map("appointment_time") // ISO datetime of the appointment
   appointmentType String? @map("appointment_type") // 'Cleaning', 'Consultation', etc.
-  providerName    String? @map("provider_name")    // Dentist/hygienist name (staff names are not PHI)
-  duration        Int?    @map("duration")         // Duration in minutes
+  providerName    String? @map("provider_name") // Dentist/hygienist name (staff names are not PHI)
+  duration        Int?    @map("duration") // Duration in minutes
 
   // Human-readable summary (PHI-free)
   summary String @map("summary") // e.g. "Booked Cleaning, 30 min with Dr. Smith on Feb 25 at 2:00 PM"
@@ -1239,8 +1241,8 @@ model AiActionLog {
   errorMessage String? @map("error_message") @db.Text
 
   // Source-specific metadata
-  pmsProvider     String? @map("pms_provider")      // 'sikka', etc.
-  writebackId     String? @map("writeback_id")      // Sikka writeback ID for async tracking
+  pmsProvider     String? @map("pms_provider") // 'sikka', etc.
+  writebackId     String? @map("writeback_id") // Sikka writeback ID for async tracking
   calendarEventId String? @map("calendar_event_id") // Google Calendar event ID
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1251,4 +1253,220 @@ model AiActionLog {
   @@index([callId])
   @@index([source, action])
   @@map("ai_action_logs")
+}
+
+// ============================================================================
+// Outbound Calling System
+// ============================================================================
+
+enum OutboundChannel {
+  PHONE @map("phone")
+  SMS   @map("sms")
+  EMAIL @map("email")
+}
+
+enum OutboundAgentGroup {
+  PATIENT_CARE @map("patient_care")
+  FINANCIAL    @map("financial")
+}
+
+enum OutboundCallStatus {
+  QUEUED      @map("queued")
+  DIALING     @map("dialing")
+  IN_PROGRESS @map("in_progress")
+  COMPLETED   @map("completed")
+  FAILED      @map("failed")
+  NO_ANSWER   @map("no_answer")
+  VOICEMAIL   @map("voicemail")
+  BUSY        @map("busy")
+  CANCELLED   @map("cancelled")
+}
+
+enum OutboundCampaignStatus {
+  DRAFT     @map("draft")
+  SCHEDULED @map("scheduled")
+  ACTIVE    @map("active")
+  PAUSED    @map("paused")
+  COMPLETED @map("completed")
+  CANCELLED @map("cancelled")
+}
+
+enum OutboundCallType {
+  RECALL         @map("recall")
+  REMINDER       @map("reminder")
+  FOLLOWUP       @map("followup")
+  NOSHOW         @map("noshow")
+  TREATMENT_PLAN @map("treatment_plan")
+  POSTOP         @map("postop")
+  REACTIVATION   @map("reactivation")
+  SURVEY         @map("survey")
+  WELCOME        @map("welcome")
+  PAYMENT        @map("payment")
+  BENEFITS       @map("benefits")
+}
+
+model OutboundCampaign {
+  id              String                 @id @default(uuid())
+  accountId       String                 @map("account_id")
+  name            String
+  callType        OutboundCallType       @map("call_type")
+  channel         OutboundChannel        @default(PHONE) @map("channel")
+  status          OutboundCampaignStatus @default(DRAFT) @map("status")
+  isAutoGenerated Boolean                @default(false) @map("is_auto_generated")
+
+  // Scheduling
+  scheduledStartAt      DateTime? @map("scheduled_start_at")
+  scheduledEndAt        DateTime? @map("scheduled_end_at")
+  callingWindowStart    String?   @map("calling_window_start") // "09:00"
+  callingWindowEnd      String?   @map("calling_window_end") // "17:00"
+  timezone              String    @default("America/New_York")
+  maxConcurrent         Int       @default(1) @map("max_concurrent")
+  maxAttemptsPerContact Int       @default(3) @map("max_attempts_per_contact")
+
+  // Agent config (phone channel only)
+  retellAgentId    String? @map("retell_agent_id")
+  dynamicVariables Json?   @map("dynamic_variables")
+
+  // Stats (denormalized for quick reads)
+  totalContacts   Int @default(0) @map("total_contacts")
+  completedCount  Int @default(0) @map("completed_count")
+  successfulCount Int @default(0) @map("successful_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  account  Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contacts CampaignContact[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([callType])
+  @@index([accountId, status])
+  @@map("outbound_campaigns")
+}
+
+model CampaignContact {
+  id         String @id @default(uuid())
+  campaignId String @map("campaign_id")
+
+  // Patient info (denormalized from PMS)
+  patientId   String? @map("patient_id")
+  patientName String  @map("patient_name")
+  phoneNumber String  @map("phone_number")
+  email       String?
+
+  // Context passed to the AI agent as dynamic variables
+  callContext Json? @map("call_context")
+
+  // Status tracking
+  status        OutboundCallStatus @default(QUEUED) @map("status")
+  attempts      Int                @default(0)
+  lastAttemptAt DateTime?          @map("last_attempt_at")
+  completedAt   DateTime?          @map("completed_at")
+
+  // Result (populated after call/SMS/email)
+  retellCallId    String? @map("retell_call_id")
+  outcome         String? // "booked", "confirmed", "declined", "voicemail_left", "callback_requested", "paid", "wrong_number", "do_not_call"
+  callDurationSec Int?    @map("call_duration_sec")
+  summary         String? @db.Text
+  sentiment       String? // "positive", "neutral", "negative"
+  analysisData    Json?   @map("analysis_data") // Type-specific extracted data
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  campaign OutboundCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, phoneNumber])
+  @@index([campaignId])
+  @@index([status])
+  @@index([patientId])
+  @@index([campaignId, status])
+  @@map("campaign_contacts")
+}
+
+model OutboundAgentTemplate {
+  id         String             @id @default(uuid())
+  agentGroup OutboundAgentGroup @unique @map("agent_group")
+  name       String
+
+  retellAgentId     String? @map("retell_agent_id")
+  flowConfig        Json    @map("flow_config")
+  promptTemplates   Json    @map("prompt_templates") // { recall: "...", reminder: "...", ... }
+  voicemailMessages Json    @map("voicemail_messages") // { recall: "...", reminder: "...", ... }
+  smsTemplates      Json?   @map("sms_templates") // { recall: "...", reminder: "...", ... }
+  emailTemplates    Json?   @map("email_templates") // { recall: { subject, body }, ... }
+
+  isActive Boolean @default(true) @map("is_active")
+  version  String  @default("v1.0")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("outbound_agent_templates")
+}
+
+model OutboundSettings {
+  id        String @id @default(uuid())
+  accountId String @unique @map("account_id")
+
+  // Feature toggles (both OFF by default)
+  patientCareEnabled Boolean @default(false) @map("patient_care_enabled")
+  financialEnabled   Boolean @default(false) @map("financial_enabled")
+
+  // Global settings
+  callingWindowStart String  @default("09:00") @map("calling_window_start")
+  callingWindowEnd   String  @default("17:00") @map("calling_window_end")
+  timezone           String  @default("America/New_York")
+  maxConcurrentCalls Int     @default(1) @map("max_concurrent_calls")
+  fromPhoneNumberId  String? @map("from_phone_number_id")
+
+  // Per-account Retell agent IDs (created from OutboundAgentTemplate)
+  patientCareRetellAgentId String? @map("patient_care_retell_agent_id")
+  financialRetellAgentId   String? @map("financial_retell_agent_id")
+  outboundTemplateVersion  String? @map("outbound_template_version")
+  outboundUpgradeHistory   Json    @default("[]") @map("outbound_upgrade_history")
+
+  // Per-type channel defaults: { "recall": "phone", "reminder": "sms", ... }
+  channelDefaults Json @default("{}") @map("channel_defaults")
+
+  // Follow-up config: { "delayDays": 3, "procedureTypeFilters": [...], "allVisits": false }
+  followUpConfig Json @default("{}") @map("follow_up_config")
+
+  // Reactivation config: { "inactiveMonths": 12, "scanFrequency": "monthly" }
+  reactivationConfig Json @default("{}") @map("reactivation_config")
+
+  // Reminder config: { "hoursBeforeAppointment": 24 }
+  reminderConfig Json @default("{}") @map("reminder_config")
+
+  // Voicemail policy
+  leaveVoicemail Boolean @default(true) @map("leave_voicemail")
+
+  // Retry policy
+  maxRetries        Int @default(3) @map("max_retries")
+  retryDelayMinutes Int @default(120) @map("retry_delay_minutes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("outbound_settings")
+}
+
+model DoNotCallEntry {
+  id          String  @id @default(uuid())
+  accountId   String  @map("account_id")
+  phoneNumber String  @map("phone_number")
+  reason      String? // "patient_requested", "wrong_number", "auto_detected"
+  source      String? // "manual", "call_analysis", "import"
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, phoneNumber])
+  @@index([accountId])
+  @@map("do_not_call_list")
 }

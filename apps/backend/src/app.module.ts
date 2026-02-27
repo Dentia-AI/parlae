@@ -18,6 +18,7 @@ import { VoiceRoutingModule } from './voice-routing/voice-routing.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { OutboundModule } from './outbound/outbound.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     TwilioModule,
     GoogleCalendarModule,
     NotificationsModule,
+    OutboundModule,
   ],
   controllers: [AppController],
   providers: [

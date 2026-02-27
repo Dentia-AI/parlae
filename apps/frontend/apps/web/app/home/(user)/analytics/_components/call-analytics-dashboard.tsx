@@ -10,6 +10,10 @@ import {
   TrendingUp,
   Clock,
   Calendar,
+  PhoneOutgoing,
+  Signal,
+  CheckCircle2,
+  Megaphone,
 } from 'lucide-react';
 
 import { CallOutcomesChart } from './call-outcomes-chart';
@@ -47,9 +51,18 @@ interface AnalyticsData {
   callDurations?: Array<{ duration: number }>;
 }
 
+interface OutboundData {
+  outboundCalls: number;
+  reachRate: number;
+  successRate: number;
+  activeCampaigns: number;
+  enabled: boolean;
+}
+
 export function CallAnalyticsDashboard() {
   const { t } = useTranslation('common');
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [outboundData, setOutboundData] = useState<OutboundData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'1d' | '7d' | '14d'>('7d');
   const activityRef = useRef<HTMLDivElement>(null);
@@ -80,13 +93,21 @@ export function CallAnalyticsDashboard() {
         startDate.setDate(startDate.getDate() - 14);
       }
 
-      const response = await fetch(
-        `/api/analytics/calls?startDate=${startDate.toISOString()}&endDate=${new Date().toISOString()}`
-      );
+      const dateParams = `startDate=${startDate.toISOString()}&endDate=${new Date().toISOString()}`;
 
-      if (response.ok) {
-        const analyticsData = await response.json();
+      const [callsRes, outboundRes] = await Promise.all([
+        fetch(`/api/analytics/calls?${dateParams}`),
+        fetch(`/api/analytics/outbound?${dateParams}`).catch(() => null),
+      ]);
+
+      if (callsRes.ok) {
+        const analyticsData = await callsRes.json();
         setData(analyticsData);
+      }
+
+      if (outboundRes?.ok) {
+        const obData = await outboundRes.json();
+        setOutboundData(obData);
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -225,6 +246,68 @@ export function CallAnalyticsDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {outboundData?.enabled && (
+        <>
+          <div className="flex items-center gap-2 pt-1">
+            <h3 className="text-lg font-semibold">{t('dashboard.outboundTitle')}</h3>
+            <Badge variant="outline" className="text-xs">{t('dashboard.outboundBadge')}</Badge>
+          </div>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
+                <CardTitle className="text-sm font-medium">{t('dashboard.outboundCalls')}</CardTitle>
+                <div className="rounded-md bg-orange-500/10 p-1.5">
+                  <PhoneOutgoing className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="pb-4 px-4">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{outboundData.outboundCalls.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">{t('dashboard.inSelectedPeriod')}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
+                <CardTitle className="text-sm font-medium">{t('dashboard.reachRate')}</CardTitle>
+                <div className="rounded-md bg-cyan-500/10 p-1.5">
+                  <Signal className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="pb-4 px-4">
+                <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{outboundData.reachRate}%</div>
+                <p className="text-xs text-muted-foreground">{t('dashboard.reachRateDesc')}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
+                <CardTitle className="text-sm font-medium">{t('dashboard.outboundSuccessRate')}</CardTitle>
+                <div className="rounded-md bg-emerald-500/10 p-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="pb-4 px-4">
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{outboundData.successRate}%</div>
+                <p className="text-xs text-muted-foreground">{t('dashboard.outboundSuccessDesc')}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-4">
+                <CardTitle className="text-sm font-medium">{t('dashboard.activeCampaigns')}</CardTitle>
+                <div className="rounded-md bg-purple-500/10 p-1.5">
+                  <Megaphone className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="pb-4 px-4">
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{outboundData.activeCampaigns}</div>
+                <p className="text-xs text-muted-foreground">{t('dashboard.activeCampaignsDesc')}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
 
       {/* Charts Row: Outcomes + Satisfaction + Duration */}
       <div className="grid gap-3 md:grid-cols-3">

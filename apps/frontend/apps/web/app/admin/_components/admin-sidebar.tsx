@@ -5,10 +5,8 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Users, 
-  Phone, 
-  Layers, 
+  PhoneOutgoing,
   Settings,
-  FileStack,
   GitBranch,
   Receipt,
   Database,
@@ -17,6 +15,7 @@ import {
   Globe,
   Workflow,
   Bot,
+  Download,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
@@ -56,22 +55,11 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Retell Legacy (Squad)',
+    label: 'Outbound',
     items: [
-      { name: 'Squad Templates', href: '/admin/retell-templates', icon: FileStack },
-      { name: 'Squad Versions', href: '/admin/retell-templates/versions', icon: GitBranch },
-    ],
-  },
-  {
-    label: 'Vapi (Fallback)',
-    items: [
-      { name: 'Agent Templates', href: '/admin/agent-templates', icon: Layers },
-      { name: 'Version Overview', href: '/admin/agent-templates/versions', icon: GitBranch },
-      { name: 'Squad Management', href: '/admin/squads', icon: Phone },
-      { name: 'Vapi Simulations', href: '/admin/simulations', icon: FlaskConical },
-      ...(isDev
-        ? [{ name: 'Setup Test Agent', href: '/admin/setup-vapi', icon: Settings }]
-        : []),
+      { name: 'Outbound Templates', href: '/admin/outbound-templates', icon: PhoneOutgoing },
+      { name: 'Outbound Versions', href: '/admin/outbound-templates/versions', icon: GitBranch },
+      { name: 'Fetch from Account', href: '/admin/outbound-templates/fetch', icon: Download },
     ],
   },
   {

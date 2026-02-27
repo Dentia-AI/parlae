@@ -164,6 +164,65 @@ export class RetellTemplateService {
     }
   }
 
+  /**
+   * Create an outbound phone call via Retell AI POST /v2/create-phone-call.
+   */
+  async createOutboundCall(opts: {
+    fromNumber: string;
+    toNumber: string;
+    overrideAgentId?: string;
+    dynamicVariables?: Record<string, string>;
+    metadata?: Record<string, unknown>;
+    voicemailMessage?: string;
+    maxCallDurationMs?: number;
+  }): Promise<any | null> {
+    if (!this.isEnabled) {
+      this.logger.warn('Retell not configured — cannot create outbound call');
+      return null;
+    }
+
+    this.logger.log({
+      from: opts.fromNumber,
+      to: opts.toNumber,
+      agentId: opts.overrideAgentId,
+      msg: 'Creating outbound phone call',
+    });
+
+    const body: Record<string, unknown> = {
+      from_number: opts.fromNumber,
+      to_number: opts.toNumber,
+    };
+
+    if (opts.overrideAgentId) {
+      body.override_agent_id = opts.overrideAgentId;
+    }
+    if (opts.dynamicVariables && Object.keys(opts.dynamicVariables).length > 0) {
+      body.retell_llm_dynamic_variables = opts.dynamicVariables;
+    }
+    if (opts.metadata && Object.keys(opts.metadata).length > 0) {
+      body.metadata = opts.metadata;
+    }
+
+    const agentOverride: Record<string, unknown> = {};
+    if (opts.voicemailMessage !== undefined) {
+      agentOverride.enable_voicemail_detection = true;
+      agentOverride.voicemail_message = opts.voicemailMessage;
+    }
+    if (opts.maxCallDurationMs) {
+      agentOverride.max_call_duration_ms = opts.maxCallDurationMs;
+    }
+    if (Object.keys(agentOverride).length > 0) {
+      body.agent_override = { agent: agentOverride };
+    }
+
+    try {
+      return await this.retellRequest('POST', '/v2/create-phone-call', body);
+    } catch (err: any) {
+      this.logger.error(`Failed to create outbound call: ${err.message}`);
+      return null;
+    }
+  }
+
   private async retellRequest(method: string, path: string, body?: any): Promise<any> {
     const url = `${this.config.baseUrl}${path}`;
     const res = await fetch(url, {

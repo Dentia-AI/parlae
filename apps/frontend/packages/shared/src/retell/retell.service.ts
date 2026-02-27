@@ -529,6 +529,62 @@ export class RetellService {
     return result || [];
   }
 
+  /**
+   * Create an outbound phone call via Retell AI.
+   *
+   * Uses POST /v2/create-phone-call. The `override_agent_id` selects which
+   * conversation flow handles the call, and `retell_llm_dynamic_variables`
+   * injects patient/context data (including `call_type` for router node).
+   */
+  async createOutboundCall(opts: {
+    fromNumber: string;
+    toNumber: string;
+    overrideAgentId?: string;
+    dynamicVariables?: Record<string, string>;
+    metadata?: Record<string, unknown>;
+    voicemailMessage?: string;
+    maxCallDurationMs?: number;
+  }): Promise<RetellCallResponse | null> {
+    logger.info(
+      { from: opts.fromNumber, to: opts.toNumber, agentId: opts.overrideAgentId },
+      '[Retell] Creating outbound phone call',
+    );
+
+    const body: Record<string, unknown> = {
+      from_number: opts.fromNumber,
+      to_number: opts.toNumber,
+    };
+
+    if (opts.overrideAgentId) {
+      body.override_agent_id = opts.overrideAgentId;
+    }
+    if (opts.dynamicVariables && Object.keys(opts.dynamicVariables).length > 0) {
+      body.retell_llm_dynamic_variables = opts.dynamicVariables;
+    }
+    if (opts.metadata && Object.keys(opts.metadata).length > 0) {
+      body.metadata = opts.metadata;
+    }
+    if (opts.voicemailMessage !== undefined) {
+      body.agent_override = {
+        agent: {
+          enable_voicemail_detection: true,
+          voicemail_message: opts.voicemailMessage,
+        },
+      };
+    }
+    if (opts.maxCallDurationMs) {
+      body.agent_override = {
+        ...(body.agent_override as Record<string, unknown> || {}),
+        agent: {
+          ...((body.agent_override as Record<string, unknown>)?.agent as Record<string, unknown> || {}),
+          max_call_duration_ms: opts.maxCallDurationMs,
+        },
+      };
+    }
+
+    return this.request<RetellCallResponse>('POST', '/v2/create-phone-call', body);
+  }
+
   // ── Knowledge Base Management ─────────────────────────────────────────
 
   /**

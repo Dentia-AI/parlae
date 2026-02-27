@@ -163,6 +163,27 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.aiActionLog;
   }
 
+  // Outbound calling system
+  get outboundCampaign(): PrismaClient['outboundCampaign'] {
+    return this.client.outboundCampaign;
+  }
+
+  get campaignContact(): PrismaClient['campaignContact'] {
+    return this.client.campaignContact;
+  }
+
+  get outboundAgentTemplate(): PrismaClient['outboundAgentTemplate'] {
+    return this.client.outboundAgentTemplate;
+  }
+
+  get outboundSettings(): PrismaClient['outboundSettings'] {
+    return this.client.outboundSettings;
+  }
+
+  get doNotCallEntry(): PrismaClient['doNotCallEntry'] {
+    return this.client.doNotCallEntry;
+  }
+
   // Call data is managed by Vapi API — only thin CallReference stored locally.
 
   // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {

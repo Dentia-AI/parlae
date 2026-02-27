@@ -350,27 +350,20 @@ run_migrations() {
     print_message "Generating Prisma client..." "$YELLOW"
     npx prisma generate
     
-    # Check migration status first
-    print_message "Checking migration status..." "$YELLOW"
-    MIGRATION_STATUS=$(npx prisma migrate status 2>&1 || true)
-    
-    if echo "$MIGRATION_STATUS" | grep -q "following migrations have not yet been applied"; then
-        print_message "📦 New migrations detected, applying..." "$YELLOW"
-        
-        # Run migrations (they're automatically ordered by timestamp)
-        if npx prisma migrate deploy; then
-            print_message "✅ Migrations applied successfully!" "$GREEN"
-        else
-            print_message "⚠️  Migration failed, trying db push as fallback..." "$YELLOW"
-            npx prisma db push
-        fi
-    elif echo "$MIGRATION_STATUS" | grep -q "failed to apply"; then
-        print_message "❌ Failed migration detected!" "$RED"
-        print_message "   Please resolve manually or run:" "$YELLOW"
-        print_message "   cd packages/prisma && npx prisma migrate resolve --help" "$YELLOW"
-        exit 1
-    else
+    # Always run migrate deploy — it's a no-op when nothing is pending,
+    # and avoids fragile grep-based status detection.
+    print_message "Applying migrations..." "$YELLOW"
+    if npx prisma migrate deploy; then
         print_message "✅ Database schema is up to date!" "$GREEN"
+    else
+        print_message "⚠️  Migration failed, trying db push as fallback..." "$YELLOW"
+        if npx prisma db push; then
+            print_message "✅ Schema pushed successfully!" "$GREEN"
+        else
+            print_message "❌ Database sync failed. Please resolve manually:" "$RED"
+            print_message "   cd packages/prisma && npx prisma migrate status" "$YELLOW"
+            exit 1
+        fi
     fi
     
     cd ../..

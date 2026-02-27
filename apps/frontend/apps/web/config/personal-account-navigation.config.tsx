@@ -10,6 +10,10 @@ import {
   Phone,
   Plug2,
   ClipboardList,
+  PhoneOutgoing,
+  Heart,
+  DollarSign,
+  ShieldBan,
 } from 'lucide-react';
 import { z } from 'zod';
 
@@ -70,6 +74,35 @@ const routes = [
             label: 'common:routes.advancedSetup',
             path: '/home/agent/advanced',
             Icon: <Wrench className={iconClasses} />,
+          },
+        ],
+      },
+      {
+        label: 'common:routes.outbound',
+        path: '/home/outbound',
+        Icon: <PhoneOutgoing className={iconClasses} />,
+        collapsible: true,
+        collapsed: true,
+        children: [
+          {
+            label: 'common:routes.outboundOverview',
+            path: '/home/outbound',
+            Icon: <PhoneOutgoing className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.patientCare',
+            path: '/home/outbound/patient-care',
+            Icon: <Heart className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.financial',
+            path: '/home/outbound/financial',
+            Icon: <DollarSign className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.dncList',
+            path: '/home/outbound/dnc',
+            Icon: <ShieldBan className={iconClasses} />,
           },
         ],
       },
