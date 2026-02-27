@@ -99,7 +99,7 @@ export function ActivityChart({ data, is24h = false }: ActivityChartProps) {
                       <div className="relative w-full flex-1">
                         <div
                           className={`absolute bottom-0 left-0.5 right-0.5 sm:left-1 sm:right-1 bg-gradient-to-t ${gradient} rounded-t-md shadow-sm hover:shadow-md hover:brightness-110 transition-all cursor-pointer`}
-                          style={{ height: `${Math.max(height, 3)}%` }}
+                          style={{ height: `${Math.max(height, item.count > 0 ? 6 : 2)}%` }}
                           title={formatTooltip(item.date, item.count, is24h)}
                         />
                       </div>

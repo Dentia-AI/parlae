@@ -1029,6 +1029,8 @@
     "leadManagement": {
       "name": "Lead Management",
       "description": "Capture and manage new patient leads from calls, track conversion rates, and automate follow-ups."
-    }
+    },
+    "saved": "Feature settings saved",
+    "saveFailed": "Failed to save feature settings"
   }
 }

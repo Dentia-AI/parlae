@@ -235,6 +235,8 @@ function inferOutcome(structuredData: Record<string, any>): string {
   const outcome = structuredData?.callOutcome;
   switch (outcome) {
     case 'appointment_booked': return 'BOOKED';
+    case 'appointment_rescheduled': return 'RESCHEDULED';
+    case 'appointment_cancelled': return 'CANCELLED';
     case 'transferred_to_staff': return 'TRANSFERRED';
     case 'insurance_verified': return 'INSURANCE_INQUIRY';
     case 'payment_plan_discussed': return 'PAYMENT_PLAN';
@@ -270,6 +272,12 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
 
+  // Check retellPhoneNumber table first (consistent with call-logs route)
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId, isActive: true },
+    select: { retellPhoneId: true },
+  });
+
   const fullAccount = await prisma.account.findUnique({
     where: { id: accountId },
     select: { phoneIntegrationSettings: true },
@@ -282,18 +290,29 @@ async function fetchRetellRecentCalls(accountId: string, limit: number, offset: 
     agentIds.push(...settings.retellAgentIds);
   }
 
-  if (agentIds.length === 0) {
+  if (agentIds.length === 0 && retellPhones.length === 0) {
     return { calls: [], pagination: { total: 0, limit, offset, hasMore: false } };
   }
 
+  const fetchLimit = Math.max(limit + offset + 10, 50);
   const allCalls: RetellCallResponse[] = [];
-  for (const agentId of [...new Set(agentIds)]) {
+
+  if (retellPhones.length > 0) {
+    // Fetch all calls (same approach as call-logs for consistency)
     const calls = await retell.listCalls({
-      filter_criteria: { agent_id: [agentId] },
       sort_order: 'descending',
-      limit: limit + offset + 10,
+      limit: fetchLimit,
     });
     allCalls.push(...(calls || []));
+  } else {
+    for (const agentId of [...new Set(agentIds)]) {
+      const calls = await retell.listCalls({
+        filter_criteria: { agent_id: [agentId] },
+        sort_order: 'descending',
+        limit: fetchLimit,
+      });
+      allCalls.push(...(calls || []));
+    }
   }
 
   allCalls.sort((a, b) => (b.start_timestamp || 0) - (a.start_timestamp || 0));

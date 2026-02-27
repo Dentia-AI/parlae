@@ -92,12 +92,10 @@ export function CallAnalyticsDashboard() {
 
   const is24h = dateRange === '1d';
 
-  const activityValue = is24h
-    ? ((data?.metrics.totalCalls ?? 0) / 24).toFixed(1)
-    : (
-        (data?.metrics.totalCalls ?? 0) /
-        (dateRange === '7d' ? 7 : 14)
-      ).toFixed(1);
+  const rawActivity = is24h
+    ? (data?.metrics.totalCalls ?? 0) / 24
+    : (data?.metrics.totalCalls ?? 0) / (dateRange === '7d' ? 7 : 14);
+  const activityValue = rawActivity > 0 ? Math.ceil(rawActivity) : 0;
 
   const activityLabel = is24h ? t('dashboard.callsPerHourAvg') : t('dashboard.callsPerDayAvg');
 
@@ -182,7 +180,10 @@ export function CallAnalyticsDashboard() {
           <CardContent className="pb-4 px-4">
             <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{data.metrics.bookingRate}%</div>
             <p className="text-xs text-muted-foreground">
-              {t('dashboard.booked', { count: data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0 })}
+              {t('dashboard.booked', {
+                count: (data.outcomesDistribution.find(o => o.outcome === 'BOOKED')?.count || 0)
+                     + (data.outcomesDistribution.find(o => o.outcome === 'RESCHEDULED')?.count || 0),
+              })}
             </p>
           </CardContent>
         </Card>

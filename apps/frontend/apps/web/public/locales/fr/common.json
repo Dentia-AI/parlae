@@ -1029,6 +1029,8 @@
     "leadManagement": {
       "name": "Gestion des prospects",
       "description": "Capturez et gérez les nouveaux prospects de patients à partir des appels, suivez les taux de conversion et automatisez les suivis."
-    }
+    },
+    "saved": "Paramètres de fonctionnalités enregistrés",
+    "saveFailed": "Échec de l'enregistrement des paramètres"
   }
 }

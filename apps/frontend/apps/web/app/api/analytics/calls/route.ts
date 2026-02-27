@@ -322,7 +322,7 @@ export async function GET(request: NextRequest) {
       const outcome = inferOutcome(sd);
 
       outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
-      if (outcome === 'BOOKED') bookedCount++;
+      if (outcome === 'BOOKED' || outcome === 'RESCHEDULED') bookedCount++;
 
       if (sd.insuranceVerified) insuranceVerifiedCount++;
       if (sd.paymentDiscussed) paymentPlanCount++;
@@ -415,6 +415,8 @@ function inferOutcome(structuredData: Record<string, any>): string {
   const outcome = structuredData?.callOutcome;
   switch (outcome) {
     case 'appointment_booked': return 'BOOKED';
+    case 'appointment_rescheduled': return 'RESCHEDULED';
+    case 'appointment_cancelled': return 'CANCELLED';
     case 'transferred_to_staff': return 'TRANSFERRED';
     case 'insurance_verified': return 'INSURANCE_INQUIRY';
     case 'payment_plan_discussed': return 'PAYMENT_PLAN';
@@ -508,7 +510,7 @@ async function computeRetellAnalytics(
     const outcome = inferRetellOutcome(analysis);
 
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
-    if (outcome === 'BOOKED') bookedCount++;
+    if (outcome === 'BOOKED' || outcome === 'RESCHEDULED') bookedCount++;
 
     const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
     const customSentiment = (custom.customer_sentiment || '').toLowerCase();

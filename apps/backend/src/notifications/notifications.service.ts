@@ -68,6 +68,7 @@ export class NotificationsService {
         name: true,
         email: true,
         twilioMessagingServiceSid: true,
+        featureSettings: true,
       },
     });
 
@@ -84,11 +85,18 @@ export class NotificationsService {
     // Format appointment time
     const appointmentTime = this.formatAppointmentTime(appointment.startTime);
 
+    const smsEnabled = this.isFeatureEnabled(account.featureSettings, 'sms-confirmations');
+
     let emailSent = false;
     let smsSent = false;
 
-    // Send SMS to patient
-    if (patient.phone && account.twilioMessagingServiceSid) {
+    // Send SMS to patient (only if feature is enabled)
+    if (!smsEnabled) {
+      this.logger.log({
+        accountId,
+        msg: 'SMS skipped — sms-confirmations feature disabled',
+      });
+    } else if (patient.phone && account.twilioMessagingServiceSid) {
       try {
         const smsMessage = this.generateConfirmationSMS(
           patient,
@@ -202,6 +210,7 @@ export class NotificationsService {
         name: true,
         email: true,
         twilioMessagingServiceSid: true,
+        featureSettings: true,
       },
     });
 
@@ -215,11 +224,13 @@ export class NotificationsService {
       email: account.email,
     };
 
+    const smsEnabled = this.isFeatureEnabled(account.featureSettings, 'sms-confirmations');
+
     let emailSent = false;
     let smsSent = false;
 
-    // Send SMS to patient
-    if (patient.phone && account.twilioMessagingServiceSid) {
+    // Send SMS to patient (only if feature is enabled)
+    if (smsEnabled && patient.phone && account.twilioMessagingServiceSid) {
       try {
         const smsMessage = this.generateCancellationSMS(
           patient,
@@ -240,6 +251,8 @@ export class NotificationsService {
           msg: 'Failed to send cancellation SMS',
         });
       }
+    } else if (!smsEnabled) {
+      this.logger.log({ accountId, msg: 'Cancellation SMS skipped — sms-confirmations feature disabled' });
     }
 
     // Send email to patient
@@ -310,6 +323,7 @@ export class NotificationsService {
         name: true,
         email: true,
         twilioMessagingServiceSid: true,
+        featureSettings: true,
       },
     });
 
@@ -323,11 +337,13 @@ export class NotificationsService {
       email: account.email,
     };
 
+    const smsEnabled = this.isFeatureEnabled(account.featureSettings, 'sms-confirmations');
+
     let emailSent = false;
     let smsSent = false;
 
-    // Send SMS to patient
-    if (patient.phone && account.twilioMessagingServiceSid) {
+    // Send SMS to patient (only if feature is enabled)
+    if (smsEnabled && patient.phone && account.twilioMessagingServiceSid) {
       try {
         const smsMessage = this.generateRescheduleSMS(
           patient,
@@ -348,6 +364,8 @@ export class NotificationsService {
           msg: 'Failed to send reschedule SMS',
         });
       }
+    } else if (!smsEnabled) {
+      this.logger.log({ accountId, msg: 'Reschedule SMS skipped — sms-confirmations feature disabled' });
     }
 
     // Send email to patient
@@ -769,6 +787,19 @@ export class NotificationsService {
   // ============================================================================
   // Helper Functions
   // ============================================================================
+
+  /**
+   * Check if a feature is enabled in the account's featureSettings.
+   * Defaults to true (enabled) if the setting is not explicitly set.
+   */
+  private isFeatureEnabled(
+    featureSettings: unknown,
+    featureId: string,
+  ): boolean {
+    if (!featureSettings || typeof featureSettings !== 'object') return true;
+    const settings = featureSettings as Record<string, unknown>;
+    return settings[featureId] !== false;
+  }
 
   private formatAppointmentTime(date: Date, timezone?: string): string {
     return new Intl.DateTimeFormat('en-US', {

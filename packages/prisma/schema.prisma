@@ -215,6 +215,8 @@ model Account {
   brandingTimezone            String?   @map("branding_timezone") // IANA timezone, e.g. America/Toronto. Defaults to America/Toronto if unset.
   twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
 
+  featureSettings             Json?   @default("{}") @map("feature_settings") // Per-account feature toggles (e.g. sms-confirmations, email-confirmations)
+
   voiceProviderOverride       VoiceProvider? @map("voice_provider_override") // Per-account override: null = use global toggle
 
   primaryOwner          User                   @relation("AccountPrimaryOwner", fields: [primaryOwnerId], references: [id])

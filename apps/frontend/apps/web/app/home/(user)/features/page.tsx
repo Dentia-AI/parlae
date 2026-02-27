@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Switch } from '@kit/ui/switch';
+import { toast } from '@kit/ui/sonner';
 import {
   Phone,
   PhoneOutgoing,
@@ -166,14 +167,57 @@ const categoryKeys: Record<string, { labelKey: string; descriptionKey: string }>
 export default function FeaturesPage() {
   const { t } = useTranslation();
   const [features, setFeatures] = useState(defaultFeatures);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/features')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.featureSettings) return;
+        const settings = data.featureSettings as Record<string, boolean>;
+        setFeatures((prev) =>
+          prev.map((f) => ({
+            ...f,
+            enabled: settings[f.id] !== undefined ? settings[f.id]! : f.enabled,
+          })),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
+  const persistSettings = useCallback(
+    async (updatedFeatures: Feature[]) => {
+      setSaving(true);
+      try {
+        const featureSettings: Record<string, boolean> = {};
+        for (const f of updatedFeatures) {
+          featureSettings[f.id] = f.enabled;
+        }
+        const res = await fetch('/api/features', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ featureSettings }),
+        });
+        if (!res.ok) throw new Error('Failed to save');
+        toast.success(t('common:features.saved'));
+      } catch {
+        toast.error(t('common:features.saveFailed'));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [t],
+  );
 
   const toggleFeature = (featureId: string) => {
-    setFeatures((prev) =>
-      prev.map((f) =>
+    let updated: Feature[] = [];
+    setFeatures((prev) => {
+      updated = prev.map((f) =>
         f.id === featureId && f.available ? { ...f, enabled: !f.enabled } : f,
-      ),
-    );
-    // TODO: Save to backend
+      );
+      return updated;
+    });
+    persistSettings(updated);
   };
 
   const categories = ['core', 'communication', 'integration', 'advanced'];
