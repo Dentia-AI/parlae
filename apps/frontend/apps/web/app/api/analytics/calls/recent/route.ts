@@ -269,64 +269,68 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
 }
 
 /**
- * Collect ALL Retell agent IDs for an account from both
- * phoneIntegrationSettings and RetellPhoneNumber records.
+ * Collect the clinic's phone numbers for an account so we can scope
+ * calls by to_number instead of agent_id (which changes on redeploy).
  */
-async function collectRetellAgentIds(accountId: string): Promise<string[]> {
-  const ids = new Set<string>();
+async function collectClinicPhoneNumbers(accountId: string): Promise<string[]> {
+  const numbers = new Set<string>();
+
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId },
+    select: { phoneNumber: true },
+  });
+  for (const p of retellPhones) {
+    if (p.phoneNumber) numbers.add(normalizeE164(p.phoneNumber));
+  }
 
   const fullAccount = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { phoneIntegrationSettings: true },
+    select: { phoneIntegrationSettings: true, phoneNumberHistory: true },
   });
   const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
-  if (settings.retellReceptionistAgentId) ids.add(settings.retellReceptionistAgentId);
-  if (Array.isArray(settings.retellAgentIds)) {
-    for (const id of settings.retellAgentIds) if (id) ids.add(id);
+  if (settings.phoneNumber) numbers.add(normalizeE164(settings.phoneNumber));
+
+  // Include retired phone numbers so historical calls still appear
+  const history = Array.isArray(fullAccount?.phoneNumberHistory)
+    ? (fullAccount.phoneNumberHistory as Array<{ phoneNumber: string }>)
+    : [];
+  for (const entry of history) {
+    if (entry.phoneNumber) numbers.add(normalizeE164(entry.phoneNumber));
   }
 
-  const retellPhones = await prisma.retellPhoneNumber.findMany({
-    where: { accountId, isActive: true },
-    select: { retellAgentId: true, retellAgentIds: true },
-  });
+  return [...numbers];
+}
 
-  for (const phone of retellPhones) {
-    if (phone.retellAgentId) ids.add(phone.retellAgentId);
-    if (phone.retellAgentIds && typeof phone.retellAgentIds === 'object') {
-      const squadIds = phone.retellAgentIds as Record<string, string>;
-      for (const agentId of Object.values(squadIds)) {
-        if (agentId) ids.add(agentId);
-      }
-    }
-  }
-
-  return [...ids];
+function normalizeE164(phone: string): string {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
 }
 
 async function fetchRetellRecentCalls(accountId: string, limit: number, offset: number) {
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
 
-  const agentIds = await collectRetellAgentIds(accountId);
+  const clinicPhones = await collectClinicPhoneNumbers(accountId);
 
-  if (agentIds.length === 0) {
+  if (clinicPhones.length === 0) {
     return { calls: [], pagination: { total: 0, limit, offset, hasMore: false } };
   }
 
-  console.log('[Retell RecentCalls] accountId:', accountId, 'agentIds:', agentIds);
-
   const fetchLimit = Math.max(limit + offset + 10, 50);
-  const allCalls: RetellCallResponse[] = [];
 
-  for (const agentId of agentIds) {
-    const calls = await retell.listCalls({
-      filter_criteria: { agent_id: [agentId] },
-      sort_order: 'descending',
-      limit: fetchLimit,
-    });
-    console.log(`[Retell RecentCalls] agent ${agentId}: ${calls?.length ?? 0} calls`);
-    allCalls.push(...(calls || []));
-  }
+  // Fetch all recent calls, then scope to this clinic by phone number.
+  const rawCalls = await retell.listCalls({
+    sort_order: 'descending',
+    limit: fetchLimit,
+  });
+
+  const clinicPhoneSet = new Set(clinicPhones);
+  const allCalls = (rawCalls || []).filter((call) => {
+    const toNum = normalizeE164(call.to_number || '');
+    const fromNum = normalizeE164(call.from_number || '');
+    return clinicPhoneSet.has(toNum) || clinicPhoneSet.has(fromNum);
+  });
 
   allCalls.sort((a, b) => (b.start_timestamp || 0) - (a.start_timestamp || 0));
 

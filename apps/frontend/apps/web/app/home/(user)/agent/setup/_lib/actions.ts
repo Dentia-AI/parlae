@@ -1507,6 +1507,32 @@ export const changePhoneNumberAction = enhanceAction(
         }
       }
 
+      // Record old number in history so analytics can still query calls from previous numbers
+      if (settings.phoneNumber && settings.phoneNumber !== newPhoneNumber) {
+        try {
+          const currentAccount = await prisma.account.findUnique({
+            where: { id: account.id },
+            select: { phoneNumberHistory: true },
+          });
+          const history = Array.isArray(currentAccount?.phoneNumberHistory)
+            ? (currentAccount.phoneNumberHistory as Array<{ phoneNumber: string; retiredAt: string }>)
+            : [];
+          history.push({
+            phoneNumber: settings.phoneNumber,
+            retiredAt: new Date().toISOString(),
+          });
+          await prisma.account.update({
+            where: { id: account.id },
+            data: { phoneNumberHistory: history },
+          });
+        } catch (histErr: any) {
+          logger.warn(
+            { error: histErr?.message, accountId: account.id },
+            '[Receptionist] Non-fatal: could not record phone number history',
+          );
+        }
+      }
+
       logger.info(
         { accountId: account.id, oldPhone: settings.phoneNumber, newPhone: newPhoneNumber, provider: changeProvider },
         '[Receptionist] Phone number changed successfully',

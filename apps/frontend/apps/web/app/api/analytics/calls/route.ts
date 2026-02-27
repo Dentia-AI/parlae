@@ -447,38 +447,58 @@ function inferRetellOutcome(analysis: Record<string, any>): string {
 }
 
 /**
- * Collect ALL Retell agent IDs for an account from both
- * phoneIntegrationSettings and RetellPhoneNumber records.
+ * Collect the clinic's phone numbers for an account so we can scope
+ * Retell calls by to_number instead of agent_id (which changes on redeploy).
  */
-async function collectRetellAgentIds(accountId: string): Promise<string[]> {
-  const ids = new Set<string>();
+async function collectClinicPhoneNumbers(accountId: string): Promise<string[]> {
+  const numbers = new Set<string>();
+
+  const retellPhones = await prisma.retellPhoneNumber.findMany({
+    where: { accountId },
+    select: { phoneNumber: true },
+  });
+  for (const p of retellPhones) {
+    if (p.phoneNumber) numbers.add(normalizeE164(p.phoneNumber));
+  }
 
   const fullAccount = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { phoneIntegrationSettings: true },
+    select: { phoneIntegrationSettings: true, phoneNumberHistory: true },
   });
   const settings = (fullAccount?.phoneIntegrationSettings as any) ?? {};
-  if (settings.retellReceptionistAgentId) ids.add(settings.retellReceptionistAgentId);
-  if (Array.isArray(settings.retellAgentIds)) {
-    for (const id of settings.retellAgentIds) if (id) ids.add(id);
+  if (settings.phoneNumber) numbers.add(normalizeE164(settings.phoneNumber));
+
+  // Include retired phone numbers so historical calls still appear in analytics
+  const history = Array.isArray(fullAccount?.phoneNumberHistory)
+    ? (fullAccount.phoneNumberHistory as Array<{ phoneNumber: string }>)
+    : [];
+  for (const entry of history) {
+    if (entry.phoneNumber) numbers.add(normalizeE164(entry.phoneNumber));
   }
 
-  const retellPhones = await prisma.retellPhoneNumber.findMany({
-    where: { accountId, isActive: true },
-    select: { retellAgentId: true, retellAgentIds: true },
-  });
+  return [...numbers];
+}
 
-  for (const phone of retellPhones) {
-    if (phone.retellAgentId) ids.add(phone.retellAgentId);
-    if (phone.retellAgentIds && typeof phone.retellAgentIds === 'object') {
-      const squadIds = phone.retellAgentIds as Record<string, string>;
-      for (const agentId of Object.values(squadIds)) {
-        if (agentId) ids.add(agentId);
-      }
-    }
-  }
+function normalizeE164(phone: string): string {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
+}
 
-  return [...ids];
+function emptyRetellResult(startDate: Date, endDate: Date) {
+  return {
+    dateRange: { start: startDate, end: endDate },
+    metrics: { totalCalls: 0, bookingRate: 0, avgCallTime: 0, totalCost: 0 },
+    activityTrend: buildFullActivityTrend(new Map(), startDate, endDate),
+    outcomesDistribution: [],
+    satisfactionBreakdown: [
+      { label: 'Satisfied', count: 0, percentage: 0 },
+      { label: 'Not Satisfied', count: 0, percentage: 0 },
+      { label: 'Unknown', count: 0, percentage: 0 },
+    ],
+    callDurations: [],
+    appointmentTypes: [],
+  };
 }
 
 /**
@@ -513,40 +533,32 @@ async function computeRetellAnalytics(
   const { createRetellService } = await import('@kit/shared/retell/retell.service');
   const retell = createRetellService();
 
-  const agentIds = await collectRetellAgentIds(accountId);
+  const clinicPhones = await collectClinicPhoneNumbers(accountId);
 
-  console.log('[Retell Analytics] accountId:', accountId, 'agentIds:', agentIds, 'dateRange:', startDate.toISOString(), '-', endDate.toISOString());
-
-  const allCalls: RetellCallResponse[] = [];
-  for (const agentId of agentIds) {
-    const calls = await retell.listCalls({
-      filter_criteria: {
-        agent_id: [agentId],
-        after_start_timestamp: startDate.getTime(),
-        before_start_timestamp: endDate.getTime(),
-      },
-      sort_order: 'descending',
-      limit: 1000,
-    });
-    console.log(`[Retell Analytics] agent ${agentId}: ${calls?.length ?? 0} calls returned`);
-    allCalls.push(...(calls || []));
+  if (clinicPhones.length === 0) {
+    console.warn('[Retell Analytics] No phone numbers found for account', accountId);
+    return emptyRetellResult(startDate, endDate);
   }
 
-  // Deduplicate in case the same call appears under multiple agents
-  const seen = new Set<string>();
-  const uniqueCalls: RetellCallResponse[] = [];
-  for (const call of allCalls) {
-    if (!seen.has(call.call_id)) {
-      seen.add(call.call_id);
-      uniqueCalls.push(call);
-    }
-  }
+  // Fetch all calls in date range, then scope to this clinic by phone number.
+  // This is agent-redeploy-safe: phone numbers stay the same across redeploys.
+  const rawCalls = await retell.listCalls({
+    filter_criteria: {
+      after_start_timestamp: startDate.getTime(),
+      before_start_timestamp: endDate.getTime(),
+    },
+    sort_order: 'descending',
+    limit: 1000,
+  });
 
-  // Log call agent_ids for debugging
-  if (uniqueCalls.length > 0) {
-    const callAgentIds = [...new Set(uniqueCalls.map(c => c.agent_id))];
-    console.log(`[Retell Analytics] ${uniqueCalls.length} unique calls, call agent_ids:`, callAgentIds);
-  }
+  const clinicPhoneSet = new Set(clinicPhones);
+  const uniqueCalls = (rawCalls || []).filter((call) => {
+    const toNum = normalizeE164(call.to_number || '');
+    const fromNum = normalizeE164(call.from_number || '');
+    return clinicPhoneSet.has(toNum) || clinicPhoneSet.has(fromNum);
+  });
+
+  console.log(`[Retell Analytics] clinic phones: ${clinicPhones}, raw: ${rawCalls?.length ?? 0}, filtered: ${uniqueCalls.length}`);
 
   const totalCalls = uniqueCalls.length;
   let totalDuration = 0;

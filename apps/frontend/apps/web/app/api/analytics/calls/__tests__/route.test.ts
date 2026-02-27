@@ -11,6 +11,7 @@ const { getAccountProvider: mockGetAccountProvider } =
 jest.mock('@kit/prisma', () => ({
   prisma: {
     vapiPhoneNumber: { findMany: jest.fn().mockResolvedValue([{ vapiPhoneId: 'pn-1' }]) },
+    retellPhoneNumber: { findMany: jest.fn().mockResolvedValue([{ phoneNumber: '+14165559999' }]) },
     account: {
       findFirst: jest.fn().mockResolvedValue({ id: 'acc-1' }),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -63,7 +64,7 @@ describe('GET /api/analytics/calls', () => {
     const { prisma } = require('@kit/prisma');
     prisma.account.findUnique.mockResolvedValueOnce({
       phoneIntegrationSettings: {
-        retellReceptionistAgentId: 'agent-retell-1',
+        phoneNumber: '+14165559999',
       },
     });
 
@@ -76,6 +77,7 @@ describe('GET /api/analytics/calls', () => {
             start_timestamp: Date.now() - 120_000,
             end_timestamp: Date.now(),
             from_number: '+14165551234',
+            to_number: '+14165559999',
             direction: 'inbound',
             call_analysis: {
               call_outcome: 'appointment_booked',

@@ -735,6 +735,7 @@
     "changesRemaining": "{{remaining}} sur {{total}} changements restants",
     "changeLimitReached": "Limite de changements atteinte. Contactez le support pour changer votre numéro.",
     "changeConfirmWarning": "Cela achètera un nouveau numéro Twilio et mettra à jour votre agent. Votre numéro actuel ({{number}}) sera libéré. ({{remaining}} changements restants)",
+    "changeAnalyticsWarning": "Le changement de numéro peut affecter les données d'appels historiques dans les analyses. Les appels vers l'ancien numéro seront toujours suivis, mais toute perte de données est irrécupérable.",
     "changing": "Changement...",
     "confirm": "Confirmer",
     "voice": "Voix",

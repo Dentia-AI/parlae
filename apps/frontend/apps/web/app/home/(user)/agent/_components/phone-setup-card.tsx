@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
-import { Phone, RefreshCw, Loader2 } from 'lucide-react';
+import { Phone, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import Link from 'next/link';
 import { changePhoneNumberAction } from '../setup/_lib/actions';
@@ -100,6 +100,12 @@ export function PhoneSetupCard({ phoneNumber, displayPhone, integrationMethod, p
               <p className="text-xs text-amber-800 dark:text-amber-200">
                 {t('agentOverview.changeConfirmWarning', { number: displayPhone, remaining })}
               </p>
+              <div className="flex items-start gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  {t('agentOverview.changeAnalyticsWarning')}
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"

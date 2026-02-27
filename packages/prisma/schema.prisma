@@ -216,6 +216,7 @@ model Account {
   twilioMessagingServiceSid   String?   @map("twilio_messaging_service_sid") // Twilio messaging service for SMS
 
   featureSettings             Json?   @default("{}") @map("feature_settings") // Per-account feature toggles (e.g. sms-confirmations, email-confirmations)
+  phoneNumberHistory          Json?   @default("[]") @map("phone_number_history") // Array of { phoneNumber, retiredAt } for analytics continuity across number changes
 
   voiceProviderOverride       VoiceProvider? @map("voice_provider_override") // Per-account override: null = use global toggle
 
