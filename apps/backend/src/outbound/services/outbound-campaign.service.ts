@@ -8,6 +8,7 @@ import type {
   OutboundChannel,
   OutboundCampaignStatus,
 } from '@kit/prisma';
+import { Prisma } from '@kit/prisma';
 
 export interface CreateCampaignInput {
   accountId: string;
@@ -66,7 +67,7 @@ export class OutboundCampaignService {
         maxConcurrent: input.maxConcurrent || 1,
         maxAttemptsPerContact: input.maxAttemptsPerContact || 3,
         retellAgentId: input.retellAgentId,
-        dynamicVariables: input.dynamicVariables || undefined,
+        dynamicVariables: (input.dynamicVariables as Prisma.InputJsonValue) || undefined,
         createdBy: input.createdBy,
       },
     });
@@ -88,7 +89,7 @@ export class OutboundCampaignService {
             patientName: contact.patientName,
             phoneNumber: contact.phoneNumber,
             email: contact.email,
-            callContext: contact.callContext || undefined,
+            callContext: (contact.callContext as Prisma.InputJsonValue) || undefined,
           },
         });
         added++;
@@ -194,9 +195,13 @@ export class OutboundCampaignService {
       >
     >,
   ): Promise<CampaignContact> {
+    const updateData = { ...data } as Record<string, unknown>;
+    if (data.analysisData === null) {
+      updateData.analysisData = Prisma.JsonNull;
+    }
     return this.prisma.campaignContact.update({
       where: { id: contactId },
-      data,
+      data: updateData as Prisma.CampaignContactUncheckedUpdateInput,
     });
   }
 

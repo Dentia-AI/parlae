@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredLogger } from '../../common/structured-logger';
 import type { OutboundSettings, OutboundAgentGroup } from '@kit/prisma';
+import { Prisma } from '@kit/prisma';
 
 const DEFAULT_CHANNEL_DEFAULTS: Record<string, string> = {
   recall: 'phone',
@@ -84,8 +85,8 @@ export class OutboundSettingsService {
   ): Promise<OutboundSettings> {
     return this.prisma.outboundSettings.upsert({
       where: { accountId },
-      update: data,
-      create: { accountId, ...data },
+      update: data as Prisma.OutboundSettingsUncheckedUpdateInput,
+      create: { accountId, ...data } as Prisma.OutboundSettingsUncheckedCreateInput,
     });
   }
 
