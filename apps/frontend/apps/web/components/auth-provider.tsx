@@ -23,13 +23,19 @@ export function AuthProvider({ session, children }: AuthProviderProps) {
 
 /**
  * Catches transient errors that can occur during OAuth redirects when
- * the session state is still settling. Auto-retries once; if the error
- * persists it re-throws so global-error.tsx can handle it.
+ * the session state is still settling (e.g. React #310 hooks errors
+ * from next-auth/React 19 interactions). Retries up to 2 times with
+ * increasing delays; on persistent failure does a hard refresh to let
+ * the server produce a clean render.
  */
 class AuthErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; retryCount: number; caughtError: Error | null }
 > {
+  private static readonly MAX_RETRIES = 2;
+  private static readonly RETRY_DELAYS = [300, 800];
+  private static readonly RELOAD_KEY = 'auth-error-reload';
+
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, retryCount: 0, caughtError: null };
@@ -44,6 +50,7 @@ class AuthErrorBoundary extends Component<
       JSON.stringify({
         message: '[AuthErrorBoundary] Caught transient auth error',
         error: error.message,
+        retry: this.state.retryCount,
         stack: error.stack?.slice(0, 500),
         componentStack: info.componentStack?.slice(0, 500),
       }),
@@ -51,22 +58,34 @@ class AuthErrorBoundary extends Component<
   }
 
   componentDidUpdate(_: unknown, prevState: { retryCount: number }) {
-    if (this.state.hasError && this.state.retryCount === prevState.retryCount) {
-      if (this.state.retryCount < 1) {
-        setTimeout(() => {
-          this.setState((s) => ({
-            hasError: false,
-            retryCount: s.retryCount + 1,
-            caughtError: null,
-          }));
-        }, 250);
+    if (!this.state.hasError || this.state.retryCount !== prevState.retryCount) {
+      return;
+    }
+
+    if (this.state.retryCount < AuthErrorBoundary.MAX_RETRIES) {
+      const delay = AuthErrorBoundary.RETRY_DELAYS[this.state.retryCount] ?? 500;
+
+      setTimeout(() => {
+        this.setState((s) => ({
+          hasError: false,
+          retryCount: s.retryCount + 1,
+          caughtError: null,
+        }));
+      }, delay);
+    } else if (typeof window !== 'undefined') {
+      const lastReload = sessionStorage.getItem(AuthErrorBoundary.RELOAD_KEY);
+      const now = Date.now();
+
+      if (!lastReload || now - Number(lastReload) > 10_000) {
+        sessionStorage.setItem(AuthErrorBoundary.RELOAD_KEY, String(now));
+        window.location.reload();
       }
     }
   }
 
   render() {
-    if (this.state.hasError && this.state.retryCount >= 1) {
-      throw this.state.caughtError;
+    if (this.state.hasError && this.state.retryCount >= AuthErrorBoundary.MAX_RETRIES) {
+      return null;
     }
 
     return this.props.children;

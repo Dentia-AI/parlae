@@ -35,7 +35,7 @@ async function Home() {
   const session = await auth();
 
   if (session?.user) {
-    redirect(getAppUrl('/home'));
+    redirect('/home');
   }
   return (
     <div className={'flex flex-col'}>
