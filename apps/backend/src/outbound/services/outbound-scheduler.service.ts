@@ -225,9 +225,9 @@ export class OutboundSchedulerService {
 
         contacts.push({
           patientId,
-          patientName: name,
           phoneNumber: phone,
           callContext: {
+            patient_name: name,
             last_visit_date: (appt as any).date || (appt as any).start_time,
           },
         });
@@ -298,9 +298,9 @@ export class OutboundSchedulerService {
 
         contacts.push({
           patientId: (appt as any).patientId || (appt as any).patient_id,
-          patientName: name,
           phoneNumber: phone,
           callContext: {
+            patient_name: name,
             appointment_date: (appt as any).date,
             appointment_time: (appt as any).startTime || (appt as any).start_time,
             appointment_type: (appt as any).type || (appt as any).appointment_type || 'Dental Visit',
@@ -375,9 +375,9 @@ export class OutboundSchedulerService {
 
         contacts.push({
           patientId: (appt as any).patientId || (appt as any).patient_id,
-          patientName: name,
           phoneNumber: phone,
           callContext: {
+            patient_name: name,
             appointment_date: (appt as any).date,
             appointment_time: (appt as any).startTime || (appt as any).start_time,
             appointment_type: (appt as any).type || (appt as any).appointment_type || 'Dental Visit',
@@ -467,9 +467,9 @@ export class OutboundSchedulerService {
 
         contacts.push({
           patientId,
-          patientName: name,
           phoneNumber: phone,
           callContext: {
+            patient_name: name,
             last_visit_date: lastDate,
             months_since_visit: String(monthsSince),
           },

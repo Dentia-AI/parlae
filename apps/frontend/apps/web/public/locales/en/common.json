@@ -1146,6 +1146,30 @@
       "contactsCount": "{{count}} contacts",
       "percentComplete": "{{percent}}% complete"
     },
+    "campaignActions": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel",
+      "paused": "Campaign paused",
+      "resumed": "Campaign resumed",
+      "cancelled": "Campaign cancelled",
+      "created": "Created",
+      "remaining": "Remaining",
+      "outcomes": "Outcomes",
+      "recentContacts": "Recent Contacts",
+      "patient": "Patient",
+      "phone": "Phone",
+      "status": "Status",
+      "outcome": "Outcome",
+      "attempts": "Attempts"
+    },
+    "contactActions": {
+      "selected": "{{count}} selected",
+      "remove": "Remove",
+      "addToDnc": "Add to DNC",
+      "removed": "{{count}} contact(s) removed",
+      "addedToDnc": "{{count}} number(s) added to Do Not Call list"
+    },
     "toggle": {
       "patientCareAgent": "Patient Care Agent",
       "financialAgent": "Financial Agent",
@@ -1179,6 +1203,11 @@
       "roiTitle": "ROI Tracking",
       "roiDesc": "Track revenue impact and appointment conversions from outbound campaigns.",
       "comingSoon": "Coming Soon"
+    },
+    "pmsRequired": {
+      "title": "PMS Integration Required",
+      "description": "Outbound calling requires a connected Practice Management System to access patient data for campaigns. Connect your PMS in the agent setup to get started.",
+      "connectPms": "Connect PMS"
     },
     "dnc": {
       "title": "Do Not Call List",

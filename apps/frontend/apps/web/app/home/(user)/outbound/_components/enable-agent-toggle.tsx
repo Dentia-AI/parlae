@@ -12,12 +12,14 @@ interface EnableAgentToggleProps {
   accountId: string;
   group: 'PATIENT_CARE' | 'FINANCIAL';
   enabled: boolean;
+  pmsConnected?: boolean;
 }
 
 export function EnableAgentToggle({
   accountId,
   group,
   enabled: initialEnabled,
+  pmsConnected = true,
 }: EnableAgentToggleProps) {
   const { t } = useTranslation('common');
   const csrfToken = useCsrfToken();
@@ -75,7 +77,7 @@ export function EnableAgentToggle({
         id={`toggle-${group}`}
         checked={enabled}
         onCheckedChange={handleToggle}
-        disabled={isPending}
+        disabled={isPending || !pmsConnected}
       />
     </div>
   );

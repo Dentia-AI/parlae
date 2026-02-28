@@ -113,6 +113,16 @@ export class OutboundDispatcherService {
     );
 
     for (const contact of contacts) {
+      if (!contact.phoneNumber) {
+        await this.campaignService.updateContactStatus(contact.id, {
+          status: 'FAILED' as any,
+          outcome: 'no_phone_number',
+          completedAt: new Date(),
+        });
+        await this.campaignService.incrementCampaignStats(campaign.id, true, false);
+        continue;
+      }
+
       const isDnc = await this.isOnDncList(campaign.accountId, contact.phoneNumber);
       if (isDnc) {
         await this.campaignService.updateContactStatus(contact.id, {
@@ -198,14 +208,14 @@ export class OutboundDispatcherService {
     const dynamicVariables: Record<string, string> = {
       ...contextVars,
       call_type: campaign.callType,
-      patient_name: contact.patientName,
-      patient_id: contact.patientId || '',
-      customer_phone: contact.phoneNumber,
+      patient_name: contextVars.patient_name || '',
+      patient_id: contact.patientId,
+      customer_phone: contact.phoneNumber || '',
     };
 
     const result = await this.retellService.createOutboundCall({
       fromNumber,
-      toNumber: contact.phoneNumber,
+      toNumber: contact.phoneNumber!,
       overrideAgentId: agentId,
       dynamicVariables,
       metadata: {

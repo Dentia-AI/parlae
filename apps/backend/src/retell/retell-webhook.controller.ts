@@ -329,7 +329,7 @@ export class RetellWebhookController {
             where: { id: contactId },
             select: { phoneNumber: true },
           });
-          if (contact && accountId) {
+          if (contact?.phoneNumber && accountId) {
             await this.prisma.doNotCallEntry.upsert({
               where: {
                 accountId_phoneNumber: {

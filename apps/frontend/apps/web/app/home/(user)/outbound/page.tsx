@@ -6,12 +6,13 @@ import { Trans } from '@kit/ui/trans';
 import { PageBody } from '@kit/ui/page';
 import {
   PhoneOutgoing, Heart, DollarSign, Zap, Users, CheckCircle2, ArrowRight,
-  CalendarCheck, Clock,
+  Database,
 } from 'lucide-react';
 import Link from 'next/link';
 import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { createI18nServerInstance } from '~/lib/i18n/i18n.server';
+import { EnableAgentToggle } from './_components/enable-agent-toggle';
 
 const PATIENT_CARE_TYPES = ['RECALL', 'REMINDER', 'FOLLOWUP', 'NOSHOW', 'TREATMENT_PLAN', 'POSTOP', 'REACTIVATION', 'SURVEY', 'WELCOME'];
 
@@ -54,6 +55,18 @@ export default async function OutboundOverviewPage() {
     });
   } catch {
     // Tables may not exist yet
+  }
+
+  const allAccountIds = workspace.accounts.map((a) => a.id);
+  let pmsConnected = false;
+  try {
+    const pmsIntegration = await prisma.pmsIntegration.findFirst({
+      where: { accountId: { in: allAccountIds }, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    pmsConnected = !!pmsIntegration;
+  } catch {
+    // Table may not exist yet
   }
 
   const patientCareEnabled = settings?.patientCareEnabled || false;
@@ -99,6 +112,31 @@ export default async function OutboundOverviewPage() {
             <Trans i18nKey="common:outbound.overview.description" />
           </p>
         </div>
+
+        {!pmsConnected && (
+          <Card className="border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-2 flex-shrink-0">
+                  <Database className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                    <Trans i18nKey="common:outbound.pmsRequired.title" />
+                  </h3>
+                  <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5">
+                    <Trans i18nKey="common:outbound.pmsRequired.description" />
+                  </p>
+                </div>
+                <Link href="/home/agent/setup/integrations">
+                  <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-900/40">
+                    <Trans i18nKey="common:outbound.pmsRequired.connectPms" />
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Card>
@@ -183,12 +221,12 @@ export default async function OutboundOverviewPage() {
                     </CardDescription>
                   </div>
                 </div>
-                {patientCareEnabled && (
-                  <Badge variant="default" className="bg-green-600">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    {i18n.t('common:outbound.campaign.status.active')}
-                  </Badge>
-                )}
+                <EnableAgentToggle
+                  accountId={accountId}
+                  group="PATIENT_CARE"
+                  enabled={patientCareEnabled}
+                  pmsConnected={pmsConnected}
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -247,12 +285,12 @@ export default async function OutboundOverviewPage() {
                     </CardDescription>
                   </div>
                 </div>
-                {financialEnabled && (
-                  <Badge variant="default" className="bg-green-600">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    {i18n.t('common:outbound.campaign.status.active')}
-                  </Badge>
-                )}
+                <EnableAgentToggle
+                  accountId={accountId}
+                  group="FINANCIAL"
+                  enabled={financialEnabled}
+                  pmsConnected={pmsConnected}
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -371,85 +409,50 @@ export default async function OutboundOverviewPage() {
             <Card>
               <CardContent className="pt-6">
                 <div className="space-y-3">
-                  {campaigns.slice(0, 5).map((campaign) => (
-                    <div
-                      key={campaign.id}
-                      className="flex items-center justify-between py-2 border-b last:border-0"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <p className="font-medium text-sm">{campaign.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {callTypeLabel(campaign.callType)} &middot; {channelLabel(campaign.channel)}
-                          </p>
+                  {campaigns.slice(0, 5).map((campaign) => {
+                    const subPage = PATIENT_CARE_TYPES.includes(campaign.callType)
+                      ? '/home/outbound/patient-care'
+                      : '/home/outbound/financial';
+                    return (
+                      <Link
+                        key={campaign.id}
+                        href={subPage}
+                        className="flex items-center justify-between py-2 border-b last:border-0 hover:bg-muted/50 -mx-2 px-2 rounded-md transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="font-medium text-sm">{campaign.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {callTypeLabel(campaign.callType)} &middot; {channelLabel(campaign.channel)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right text-sm">
-                          <p>{campaign.completedCount}/{campaign.totalContacts}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right text-sm">
+                            <p>{campaign.completedCount}/{campaign.totalContacts}</p>
+                          </div>
+                          <Badge
+                            variant={
+                              campaign.status === 'ACTIVE'
+                                ? 'default'
+                                : campaign.status === 'COMPLETED'
+                                  ? 'secondary'
+                                  : 'outline'
+                            }
+                          >
+                            {i18n.t(`common:outbound.campaign.status.${campaign.status.toLowerCase()}`)}
+                          </Badge>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <Badge
-                          variant={
-                            campaign.status === 'ACTIVE'
-                              ? 'default'
-                              : campaign.status === 'COMPLETED'
-                                ? 'secondary'
-                                : 'outline'
-                          }
-                        >
-                          {i18n.t(`common:outbound.campaign.status.${campaign.status.toLowerCase()}`)}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+                      </Link>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {anyEnabled && (
-          <Card className="border-dashed">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium">
-                  <Trans i18nKey="common:outbound.analytics.roiTitle" />
-                </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  <Trans i18nKey="common:outbound.analytics.comingSoon" />
-                </Badge>
-              </div>
-              <CardDescription>
-                <Trans i18nKey="common:outbound.analytics.roiDesc" />
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-3 gap-4 opacity-50">
-                <div className="text-center p-4">
-                  <CalendarCheck className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm font-medium">
-                    {i18n.t('common:outbound.overview.appointmentsBooked')}
-                  </p>
-                  <p className="text-2xl font-bold text-muted-foreground">--</p>
-                </div>
-                <div className="text-center p-4">
-                  <DollarSign className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm font-medium">
-                    {i18n.t('common:outbound.overview.revenueAttributed')}
-                  </p>
-                  <p className="text-2xl font-bold text-muted-foreground">--</p>
-                </div>
-                <div className="text-center p-4">
-                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm font-medium">
-                    {i18n.t('common:outbound.overview.bestCallTime')}
-                  </p>
-                  <p className="text-2xl font-bold text-muted-foreground">--</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </PageBody>
   );

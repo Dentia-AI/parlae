@@ -101,7 +101,11 @@ function formatDateTime(iso: string): string {
 }
 
 function formatAppointmentTime(iso: string): string {
-  const d = new Date(iso);
+  // Backend stores appointment times as local time with a "Z" suffix
+  // (e.g. "2026-03-02T09:00:00.000Z" means 9 AM local, not 9 AM UTC).
+  // Strip the "Z" so the browser treats it as local time.
+  const local = iso.replace(/Z$/i, '');
+  const d = new Date(local);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {
     weekday: 'short',
@@ -109,6 +113,23 @@ function formatAppointmentTime(iso: string): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+  });
+}
+
+const ISO_TIMESTAMP_RE = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
+
+function humanizeSummary(summary: string): string {
+  return summary.replace(ISO_TIMESTAMP_RE, (match) => {
+    const local = match.replace(/Z$/i, '');
+    const d = new Date(local);
+    if (isNaN(d.getTime())) return match;
+    return d.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   });
 }
 
@@ -343,7 +364,7 @@ export function ActivityLogList() {
                           <TableCell>
                             <div className="space-y-0.5">
                               <div className="font-medium text-sm">{formatActionLabel(log.action)}</div>
-                              <div className="text-xs text-muted-foreground">{log.summary}</div>
+                              <div className="text-xs text-muted-foreground">{humanizeSummary(log.summary)}</div>
                               {log.appointmentTime && (
                                 <div className="text-xs text-muted-foreground">
                                   {formatAppointmentTime(log.appointmentTime)}

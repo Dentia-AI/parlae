@@ -29,10 +29,8 @@ export interface CreateCampaignInput {
 }
 
 export interface CreateContactInput {
-  patientId?: string;
-  patientName: string;
-  phoneNumber: string;
-  email?: string;
+  patientId: string;
+  phoneNumber?: string;
   callContext?: Record<string, unknown>;
 }
 
@@ -86,9 +84,7 @@ export class OutboundCampaignService {
           data: {
             campaignId,
             patientId: contact.patientId,
-            patientName: contact.patientName,
             phoneNumber: contact.phoneNumber,
-            email: contact.email,
             callContext: (contact.callContext as Prisma.InputJsonValue) || undefined,
           },
         });

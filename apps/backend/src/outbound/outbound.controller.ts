@@ -165,10 +165,8 @@ export class OutboundController {
     @Body()
     body: {
       contacts: Array<{
-        patientId?: string;
-        patientName: string;
-        phoneNumber: string;
-        email?: string;
+        patientId: string;
+        phoneNumber?: string;
         callContext?: Record<string, unknown>;
       }>;
     },

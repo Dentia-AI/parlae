@@ -1146,6 +1146,30 @@
       "contactsCount": "{{count}} contacts",
       "percentComplete": "{{percent}}% terminé"
     },
+    "campaignActions": {
+      "pause": "Pause",
+      "resume": "Reprendre",
+      "cancel": "Annuler",
+      "paused": "Campagne en pause",
+      "resumed": "Campagne reprise",
+      "cancelled": "Campagne annulée",
+      "created": "Créée",
+      "remaining": "Restant",
+      "outcomes": "Résultats",
+      "recentContacts": "Contacts récents",
+      "patient": "Patient",
+      "phone": "Téléphone",
+      "status": "Statut",
+      "outcome": "Résultat",
+      "attempts": "Tentatives"
+    },
+    "contactActions": {
+      "selected": "{{count}} sélectionné(s)",
+      "remove": "Supprimer",
+      "addToDnc": "Ajouter à la liste noire",
+      "removed": "{{count}} contact(s) supprimé(s)",
+      "addedToDnc": "{{count}} numéro(s) ajouté(s) à la liste de numéros exclus"
+    },
     "toggle": {
       "patientCareAgent": "Agent soins aux patients",
       "financialAgent": "Agent financier",
@@ -1179,6 +1203,11 @@
       "roiTitle": "Suivi du ROI",
       "roiDesc": "Suivez l'impact sur les revenus et les conversions de rendez-vous des campagnes sortantes.",
       "comingSoon": "Bientôt disponible"
+    },
+    "pmsRequired": {
+      "title": "Intégration PMS requise",
+      "description": "Les appels sortants nécessitent un système de gestion de cabinet connecté pour accéder aux données des patients. Connectez votre PMS dans la configuration de l'agent pour commencer.",
+      "connectPms": "Connecter le PMS"
     },
     "dnc": {
       "title": "Liste Ne Pas Appeler",

@@ -1350,11 +1350,12 @@ model CampaignContact {
   id         String @id @default(uuid())
   campaignId String @map("campaign_id")
 
-  // Patient info (denormalized from PMS)
-  patientId   String? @map("patient_id")
-  patientName String  @map("patient_name")
-  phoneNumber String  @map("phone_number")
-  email       String?
+  // HIPAA: Only the PMS patient ID is stored as the canonical reference.
+  // Patient name, phone, and email are resolved from PMS at display time
+  // and never persisted. phoneNumber is temporarily cached during the
+  // campaign's active calling window and should be purged after completion.
+  patientId   String  @map("patient_id")
+  phoneNumber String? @map("phone_number")
 
   // Context passed to the AI agent as dynamic variables
   callContext Json? @map("call_context")

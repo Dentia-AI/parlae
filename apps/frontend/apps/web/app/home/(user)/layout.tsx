@@ -53,7 +53,7 @@ function SidebarLayout({ children }: React.PropsWithChildren) {
             <MobileNavigation />
           </PageMobileNavigation>
 
-          <div className="flex flex-1 flex-col min-h-0">
+          <div className="flex flex-1 flex-col min-h-0 overflow-y-auto">
             {impersonation && (
               <div className="w-full px-4 pt-4 pb-2">
                 <ImpersonationBanner
@@ -88,7 +88,7 @@ function HeaderLayout({ children }: React.PropsWithChildren) {
           <MobileNavigation />
         </PageMobileNavigation>
 
-        <div className="flex flex-1 flex-col min-h-0">
+        <div className="flex flex-1 flex-col min-h-0 overflow-y-auto">
           {impersonation && (
             <div className="w-full px-4 pt-4 pb-2">
               <ImpersonationBanner

@@ -399,22 +399,17 @@ export function CallLogDetail({ callId }: { callId: string }) {
             <CardContent>
               {call.transcript ? (
                 <div>
-                  <div className={!showFullTranscript ? 'max-h-96 overflow-hidden relative' : ''}>
+                  <div className={`overflow-y-auto ${showFullTranscript ? 'max-h-[70vh]' : 'max-h-64'}`}>
                     <TranscriptViewer transcript={call.transcript} />
-                    {!showFullTranscript && call.transcript.length > 1000 && (
-                      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent" />
-                    )}
                   </div>
-                  {call.transcript.length > 1000 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 w-full"
-                      onClick={() => setShowFullTranscript(!showFullTranscript)}
-                    >
-                      {showFullTranscript ? 'Show Less' : 'Show Full Transcript'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 w-full"
+                    onClick={() => setShowFullTranscript(!showFullTranscript)}
+                  >
+                    {showFullTranscript ? 'Show Less' : 'Show Full Transcript'}
+                  </Button>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">

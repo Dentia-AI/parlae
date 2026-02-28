@@ -24,6 +24,10 @@ export async function GET(
     const { id: callId } = await params;
     const logger = await getLogger();
 
+    if (process.env.NODE_ENV === 'development' && callId.startsWith('mock-call-')) {
+      return NextResponse.json(generateMockCallDetail(callId));
+    }
+
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -393,5 +397,95 @@ function mapRetellCallToDetail(call: RetellCallResponse) {
     callStartedAt: startIso,
     callEndedAt: endIso,
     createdAt: startIso,
+  };
+}
+
+function generateMockCallDetail(callId: string) {
+  const callStartedAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const duration = 194;
+  const callEndedAt = new Date(callStartedAt.getTime() + duration * 1000);
+
+  return {
+    id: callId,
+    callId,
+    phoneNumber: '+15551234567',
+    callType: 'INBOUND',
+    direction: 'inbound',
+    duration,
+    status: 'COMPLETED',
+    outcome: 'BOOKED',
+    callReason: 'new_appointment',
+    urgencyLevel: 'routine',
+    contactName: 'Sarah Johnson',
+    contactEmail: 'sarah.johnson@email.com',
+    transcript: [
+      'AI: Thank you for calling Parlae Dental. How can I help you today?',
+      'User: Hi, I\'d like to book a dental cleaning appointment.',
+      'AI: Of course! I\'d be happy to help you schedule a cleaning. Are you an existing patient with us?',
+      'User: Yes, I am. My name is Sarah Johnson.',
+      'AI: Great, welcome back Sarah! Let me look up your record. I can see your last cleaning was about 6 months ago. Would you like to schedule another routine cleaning?',
+      'User: Yes please. Do you have anything available next week?',
+      'AI: Let me check our availability. We have openings on Tuesday at 10 AM, Wednesday at 2 PM, and Thursday at 9 AM. Which would work best for you?',
+      'User: Tuesday at 10 AM works perfectly.',
+      'AI: Wonderful! I\'ve booked your dental cleaning appointment for Tuesday at 10:00 AM with Dr. Chen. The appointment will be approximately 30 minutes. Is there anything else you\'d like to know?',
+      'User: No, that\'s all. Thank you!',
+      'AI: You\'re welcome, Sarah! We\'ll see you on Tuesday. Have a great day!',
+    ].join('\n'),
+    summary: 'Existing patient Sarah Johnson called to schedule a routine dental cleaning. Appointment booked for Tuesday at 10:00 AM with Dr. Chen. Patient was pleasant and the call was handled efficiently.',
+    recordingUrl: null,
+    structuredData: {
+      patientName: 'Sarah Johnson',
+      patientPhone: '+15551234567',
+      patientEmail: 'sarah.johnson@email.com',
+      patientId: 'PAT-2024-0142',
+      isNewPatient: false,
+      callReason: 'new_appointment',
+      callOutcome: 'appointment_booked',
+      appointmentBooked: true,
+      appointmentCancelled: false,
+      appointmentRescheduled: false,
+      appointmentType: 'Dental Cleaning',
+      appointmentDate: 'Tuesday',
+      appointmentTime: '10:00 AM',
+      providerName: 'Dr. Chen',
+      insuranceVerified: false,
+      paymentDiscussed: false,
+      customerSentiment: 'positive',
+      urgencyLevel: 'routine',
+      followUpRequired: false,
+      keyTopicsDiscussed: ['appointment scheduling', 'dental cleaning', 'availability'],
+      actionsPerformed: [
+        'Looked up patient record',
+        'Checked provider availability',
+        'Booked dental cleaning appointment for Tuesday 10:00 AM with Dr. Chen',
+      ],
+    },
+    appointmentSet: true,
+    leadCaptured: true,
+    insuranceVerified: false,
+    insuranceProvider: null,
+    paymentPlanDiscussed: false,
+    paymentPlanAmount: null,
+    transferredToStaff: false,
+    transferredTo: null,
+    followUpRequired: false,
+    followUpDate: null,
+    customerSentiment: 'positive',
+    aiConfidence: null,
+    callQuality: null,
+    costCents: null,
+    metadata: {},
+    actions: {
+      actions: [
+        'Looked up patient record',
+        'Checked provider availability',
+        'Booked dental cleaning appointment for Tuesday 10:00 AM with Dr. Chen',
+      ],
+    },
+    callNotes: null,
+    voiceAgent: null,
+    callStartedAt: callStartedAt.toISOString(),
+    callEndedAt: callEndedAt.toISOString(),
+    createdAt: callStartedAt.toISOString(),
   };
 }

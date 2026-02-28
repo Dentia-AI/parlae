@@ -1,8 +1,14 @@
 /**
  * Seed demo data for local development.
  *
- * Marks the Admin User account as fully deployed with Retell Conversation Flow
- * and inserts realistic dummy data for the dashboard, call logs, and AI activity log.
+ * Seeds data for BOTH the Admin User and the Test User accounts:
+ *   - AI Activity Log entries
+ *   - CallReference thin records
+ *   - Outbound Settings / Campaigns / Contacts
+ *
+ * HIPAA note:  CampaignContact rows store only PMS patient IDs (patientId)
+ * and an optional phone number.  No patient names, emails, or other PHI
+ * are persisted — the UI resolves display data from PMS at render time.
  *
  * Usage:
  *   DATABASE_URL=... npx tsx packages/prisma/seed-demo-data.ts
@@ -12,12 +18,14 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const ACCOUNT_ID = 'ca5ecdfd-78ac-4b20-a9ff-ddfa40cbea96';
-const BUSINESS_NAME = 'Pearl Clinic';
+const ACCOUNTS = [
+  { id: 'ca5ecdfd-78ac-4b20-a9ff-ddfa40cbea96', label: 'Admin User (Pearl Clinic)' },
+  { id: 'c7f9507d-e693-424a-9654-b630e9d0a61e', label: 'Test User' },
+];
 
+const BUSINESS_NAME = 'Pearl Clinic';
 const PROVIDERS = ['Dr. Sarah Chen', 'Dr. James Park', 'Dr. Lisa Nguyen', 'Dr. Michael Brown'];
 const APPOINTMENT_TYPES = ['Cleaning', 'Consultation', 'Root Canal', 'Crown Fitting', 'Filling', 'Whitening', 'Checkup', 'Emergency'];
-const CALL_IDS = Array.from({ length: 30 }, (_, i) => `demo-call-${String(i + 1).padStart(3, '0')}`);
 
 function randomItem<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
@@ -41,25 +49,27 @@ function futureDate(daysAhead: number): Date {
   return d;
 }
 
-async function main() {
-  console.log('=== Seeding demo data ===\n');
+async function seedForAccount(accountId: string, label: string) {
+  console.log(`\n── Seeding for ${label} (${accountId}) ──\n`);
 
-  // ── 1. Mark account as setup-complete with Retell Conversation Flow ─────
-  console.log('1. Updating account to look like Retell is deployed...');
-
-  const account = await prisma.account.findUnique({ where: { id: ACCOUNT_ID } });
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) {
-    console.error(`Account ${ACCOUNT_ID} not found. Run the app first to create it.`);
-    process.exit(1);
+    console.warn(`   ⚠ Account ${accountId} not found — skipping.`);
+    return;
   }
+
+  const CALL_IDS = Array.from({ length: 30 }, (_, i) => `demo-call-${accountId.slice(0, 8)}-${String(i + 1).padStart(3, '0')}`);
+
+  // ── 1. Mark account as setup-complete ──────────────────────────────────
+  console.log('   1. Updating account setup...');
 
   const existingSettings = (account.phoneIntegrationSettings as any) ?? {};
 
   await prisma.account.update({
-    where: { id: ACCOUNT_ID },
+    where: { id: accountId },
     data: {
       phoneIntegrationMethod: 'forwarded',
-      brandingBusinessName: BUSINESS_NAME,
+      brandingBusinessName: account.name || BUSINESS_NAME,
       phoneIntegrationSettings: {
         ...existingSettings,
         phoneNumber: '+15145551234',
@@ -81,10 +91,10 @@ async function main() {
       },
     },
   });
-  console.log('   ✅ Account marked as deployed with Retell Conversation Flow\n');
+  console.log('      ✅ Account marked as deployed');
 
-  // ── 2. Seed AI Action Log entries ───────────────────────────────────────
-  console.log('2. Inserting AI Activity Log entries...');
+  // ── 2. Seed AI Action Log entries ──────────────────────────────────────
+  console.log('   2. Inserting AI Activity Log entries...');
 
   const aiActions: Parameters<typeof prisma.aiActionLog.create>[0]['data'][] = [];
 
@@ -138,7 +148,7 @@ async function main() {
     }
 
     aiActions.push({
-      accountId: ACCOUNT_ID,
+      accountId,
       source,
       action: picked.action,
       category: picked.category,
@@ -159,36 +169,175 @@ async function main() {
     });
   }
 
-  await prisma.aiActionLog.deleteMany({ where: { accountId: ACCOUNT_ID } });
+  await prisma.aiActionLog.deleteMany({ where: { accountId } });
   for (const entry of aiActions) {
     await prisma.aiActionLog.create({ data: entry });
   }
-  console.log(`   ✅ Inserted ${aiActions.length} AI activity log entries\n`);
+  console.log(`      ✅ Inserted ${aiActions.length} AI activity log entries`);
 
-  // ── 3. Seed CallReference entries (thin records — call details come from Retell API) ──
-  console.log('3. Inserting CallReference entries...');
+  // ── 3. Seed CallReference entries ──────────────────────────────────────
+  console.log('   3. Inserting CallReference entries...');
 
-  await prisma.callReference.deleteMany({ where: { accountId: ACCOUNT_ID } });
+  await prisma.callReference.deleteMany({ where: { accountId } });
   for (let i = 0; i < 20; i++) {
     await prisma.callReference.create({
       data: {
-        accountId: ACCOUNT_ID,
+        accountId,
         callId: CALL_IDS[i] || `demo-call-extra-${i}`,
         provider: 'RETELL',
         createdAt: randomDate(14),
       },
     });
   }
-  console.log(`   ✅ Inserted 20 call references\n`);
+  console.log('      ✅ Inserted 20 call references');
 
-  // Note: The dashboard and call logs pages fetch actual call details from
-  // the Retell API using these call IDs. Since these are demo IDs, the
-  // Retell API won't return data for them, but the dashboard has a built-in
-  // mock data generator that kicks in when no real data is available
-  // (NODE_ENV=development). The AI Activity Log page reads from the DB
-  // directly, so those entries will show real data.
+  // ── 4. Seed Outbound Settings ──────────────────────────────────────────
+  console.log('   4. Upserting outbound settings...');
 
-  console.log('=== Done! You can now visit the dashboard at /home ===');
+  await prisma.outboundSettings.upsert({
+    where: { accountId },
+    update: {
+      patientCareEnabled: true,
+      financialEnabled: true,
+    },
+    create: {
+      accountId,
+      patientCareEnabled: true,
+      financialEnabled: true,
+      callingWindowStart: '09:00',
+      callingWindowEnd: '17:00',
+      timezone: 'America/New_York',
+      maxConcurrentCalls: 2,
+      leaveVoicemail: true,
+      maxRetries: 3,
+      retryDelayMinutes: 120,
+    },
+  });
+  console.log('      ✅ Outbound settings enabled');
+
+  // ── 5. Seed Outbound Campaigns + Contacts (HIPAA-safe) ─────────────────
+  console.log('   5. Inserting outbound campaigns and contacts...');
+
+  const existingCampaigns = await prisma.outboundCampaign.findMany({
+    where: { accountId },
+    select: { id: true },
+  });
+  for (const c of existingCampaigns) {
+    await prisma.campaignContact.deleteMany({ where: { campaignId: c.id } });
+  }
+  await prisma.outboundCampaign.deleteMany({ where: { accountId } });
+
+  const campaignDefs = [
+    { name: 'March Recall Campaign', callType: 'RECALL' as const, channel: 'PHONE' as const, status: 'ACTIVE' as const, totalContacts: 32, completed: 18, successful: 11, auto: true, daysAgo: 5 },
+    { name: 'Overdue Hygiene Reactivation', callType: 'REACTIVATION' as const, channel: 'PHONE' as const, status: 'ACTIVE' as const, totalContacts: 20, completed: 8, successful: 4, auto: true, daysAgo: 3 },
+    { name: 'Tomorrow Appt Reminder', callType: 'REMINDER' as const, channel: 'SMS' as const, status: 'ACTIVE' as const, totalContacts: 14, completed: 14, successful: 13, auto: true, daysAgo: 1 },
+    { name: 'Treatment Plan Follow-up', callType: 'TREATMENT_PLAN' as const, channel: 'PHONE' as const, status: 'COMPLETED' as const, totalContacts: 18, completed: 18, successful: 8, auto: true, daysAgo: 10 },
+    { name: 'Post-Op Check-in (Feb)', callType: 'POSTOP' as const, channel: 'PHONE' as const, status: 'COMPLETED' as const, totalContacts: 10, completed: 10, successful: 9, auto: true, daysAgo: 14 },
+    { name: 'No-Show Re-engagement', callType: 'NOSHOW' as const, channel: 'PHONE' as const, status: 'PAUSED' as const, totalContacts: 12, completed: 5, successful: 2, auto: true, daysAgo: 8 },
+    { name: 'New Patient Welcome Calls', callType: 'WELCOME' as const, channel: 'PHONE' as const, status: 'ACTIVE' as const, totalContacts: 8, completed: 5, successful: 5, auto: false, daysAgo: 2 },
+    { name: 'Benefits Expiring March 2026', callType: 'BENEFITS' as const, channel: 'PHONE' as const, status: 'ACTIVE' as const, totalContacts: 24, completed: 10, successful: 7, auto: true, daysAgo: 7 },
+    { name: 'Outstanding Balances Q1', callType: 'PAYMENT' as const, channel: 'PHONE' as const, status: 'PAUSED' as const, totalContacts: 15, completed: 6, successful: 3, auto: false, daysAgo: 12 },
+  ];
+
+  const positiveOutcomes = ['booked', 'confirmed', 'scheduled', 'paid', 'interested'];
+  const negativeOutcomes = ['declined', 'voicemail_left', 'callback_requested'];
+
+  let totalCampaignsInserted = 0;
+  let totalContactsInserted = 0;
+
+  for (const def of campaignDefs) {
+    const createdAt = new Date();
+    createdAt.setDate(createdAt.getDate() - def.daysAgo);
+
+    const campaign = await prisma.outboundCampaign.create({
+      data: {
+        accountId,
+        name: def.name,
+        callType: def.callType,
+        channel: def.channel,
+        status: def.status,
+        isAutoGenerated: def.auto,
+        totalContacts: def.totalContacts,
+        completedCount: def.completed,
+        successfulCount: def.successful,
+        callingWindowStart: '09:00',
+        callingWindowEnd: '17:00',
+        timezone: 'America/New_York',
+        createdAt,
+      },
+    });
+    totalCampaignsInserted++;
+
+    const failStatuses = ['FAILED', 'NO_ANSWER', 'VOICEMAIL', 'BUSY'] as const;
+
+    for (let i = 0; i < def.totalContacts; i++) {
+      const pmsPatientId = `pms-patient-${randomInt(10000, 99999)}`;
+      const isCompleted = i < def.completed;
+      const isSuccessful = i < def.successful;
+
+      let status: string = 'QUEUED';
+      let outcome: string | null = null;
+      let attempts = 0;
+
+      if (isCompleted) {
+        status = 'COMPLETED';
+        outcome = isSuccessful
+          ? randomItem(positiveOutcomes)
+          : randomItem(negativeOutcomes);
+        attempts = randomInt(1, 3);
+      } else if (i < def.completed + Math.floor((def.totalContacts - def.completed) * 0.5)) {
+        status = randomItem([...failStatuses]);
+        attempts = randomInt(1, 3);
+      }
+
+      await prisma.campaignContact.create({
+        data: {
+          campaignId: campaign.id,
+          patientId: pmsPatientId,
+          phoneNumber: `+1555${String(randomInt(1000000, 9999999))}`,
+          status: status as any,
+          outcome,
+          attempts,
+          completedAt: isCompleted ? randomDate(def.daysAgo) : null,
+        },
+      });
+      totalContactsInserted++;
+    }
+  }
+
+  console.log(`      ✅ Inserted ${totalCampaignsInserted} campaigns with ${totalContactsInserted} contacts`);
+
+  // ── 6. Seed DNC list (phone numbers only — no PHI) ─────────────────────
+  console.log('   6. Seeding Do Not Call entries...');
+
+  await prisma.doNotCallEntry.deleteMany({ where: { accountId } });
+  const dncPhones = [
+    '+15559990001', '+15559990002', '+15559990003',
+    '+15559990004', '+15559990005',
+  ];
+  const dncReasons = ['patient_requested', 'wrong_number', 'patient_requested', 'auto_detected', 'wrong_number'];
+
+  for (let i = 0; i < dncPhones.length; i++) {
+    await prisma.doNotCallEntry.create({
+      data: {
+        accountId,
+        phoneNumber: dncPhones[i]!,
+        reason: dncReasons[i],
+        source: i < 3 ? 'manual' : 'call_analysis',
+      },
+    });
+  }
+  console.log(`      ✅ Inserted ${dncPhones.length} DNC entries`);
+}
+
+async function main() {
+  console.log('=== Seeding demo data ===');
+
+  for (const acct of ACCOUNTS) {
+    await seedForAccount(acct.id, acct.label);
+  }
+
+  console.log('\n=== Done! You can now visit the dashboard at /home ===');
 }
 
 main()
