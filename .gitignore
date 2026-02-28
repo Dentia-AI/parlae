@@ -57,6 +57,8 @@ sim-results-*.json
 sim-sweep-*.json
 _test-squad-id.txt
 
+project-costs.md
+
 # Misc
 .eslintcache
 *.tsbuildinfo

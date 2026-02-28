@@ -79,7 +79,7 @@ export function ComparisonSection() {
               <Trans i18nKey="marketing:traditionalService" />
             </div>
             <div className="bg-primary/10 text-primary rounded-lg text-center text-sm font-semibold">
-              Parlae AI
+              Parlae
             </div>
           </div>
 
