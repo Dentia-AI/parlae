@@ -18,7 +18,7 @@ import { Trans } from '@kit/ui/trans';
 import billingConfig from '~/config/billing.config';
 import pathsConfig from '~/config/paths.config';
 import { withI18n } from '~/lib/i18n/with-i18n';
-import { getAppUrl } from '~/lib/urls/app-host';
+import { getAppUrl, getAppUrlFromRequest } from '~/lib/urls/app-host';
 import { auth } from '@kit/shared/auth';
 
 import { NeuralWaveHero } from './_components/neural-wave-hero';
@@ -35,7 +35,7 @@ async function Home() {
   const session = await auth();
 
   if (session?.user) {
-    redirect('/home');
+    redirect(await getAppUrlFromRequest('/home'));
   }
   return (
     <div className={'flex flex-col'}>

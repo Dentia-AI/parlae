@@ -89,7 +89,6 @@
   "pmsCount": "{{count}}+ logiciels de gestion de cabinet supportés",
   "viewAllIntegrations": "Voir toutes les intégrations",
   "allIntegrations": "Toutes les intégrations supportées",
-  "featuredIntegration": "Intégration vedette — support natif",
   "dontSeePMS": "Vous ne voyez pas votre logiciel ?",
   "customIntegrationDesc": "Nous proposons des intégrations personnalisées et disposons d'une API robuste pour tout système de gestion de cabinet.",
   "requestCustomIntegration": "Demander une intégration personnalisée",

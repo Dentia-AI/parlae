@@ -13,7 +13,7 @@ import {
 } from '@kit/ui/dialog';
 
 const FEATURED_PMS = [
-  'DentiTek',
+  'Dentitek',
   'Dentrix',
   'EagleSoft',
   'Open Dental',
@@ -33,7 +33,7 @@ const ALL_PMS: Record<string, string[]> = {
   A: ['AbelDent', 'AkituOne', 'Autopia', 'Axxium VisionR'],
   C: ['ClearDent', 'Curve Hero'],
   D: [
-    'DentiTek',
+    'Dentitek',
     'DentalVision',
     'Dentech',
     'DentiMax',
@@ -171,18 +171,6 @@ export function IntegrationsSection() {
                 </DialogTitle>
               </DialogHeader>
 
-              {/* DentiTek highlight */}
-              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <div className="flex items-center gap-3">
-                  <span className="bg-primary/10 text-primary rounded-full px-4 py-1.5 text-sm font-semibold">
-                    DentiTek
-                  </span>
-                  <span className="text-muted-foreground text-sm">
-                    <Trans i18nKey="marketing:featuredIntegration" />
-                  </span>
-                </div>
-              </div>
-
               {/* Alphabetical grid */}
               <div className="space-y-5">
                 {Object.entries(ALL_PMS).map(([letter, systems]) => (
@@ -194,12 +182,7 @@ export function IntegrationsSection() {
                       {systems.map((name) => (
                         <span
                           key={name}
-                          className={cn(
-                            'rounded-md border px-3 py-2 text-center text-sm transition-colors',
-                            name === 'DentiTek'
-                              ? 'border-primary/30 bg-primary/5 font-medium text-primary'
-                              : 'border-border/50 bg-muted/30 text-foreground/80 hover:border-primary/30 hover:bg-primary/5',
-                          )}
+                          className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-center text-sm text-foreground/80 transition-colors hover:border-primary/30 hover:bg-primary/5"
                         >
                           {name}
                         </span>
