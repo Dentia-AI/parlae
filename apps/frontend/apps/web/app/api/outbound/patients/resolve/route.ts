@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { requireSession } from '~/lib/auth/get-session';
-import { getPmsService } from '~/app/api/pms/_lib/pms-utils';
+import { getPmsService } from '~/api/pms/_lib/pms-utils';
 
 /**
  * POST /api/outbound/patients/resolve
