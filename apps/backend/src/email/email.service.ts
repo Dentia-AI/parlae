@@ -44,7 +44,7 @@ export class EmailService {
     }
 
     const fromEmail = params.from || this.configService.get<string>('EMAIL_FROM') || 'noreply@parlae.ca';
-    const fromName = this.configService.get<string>('EMAIL_FROM_NAME') || 'Parlae AI';
+    const fromName = this.configService.get<string>('EMAIL_FROM_NAME') || 'Parlae';
 
     try {
       const command = new SendEmailCommand({

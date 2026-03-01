@@ -17,6 +17,12 @@ export async function initializeI18nClient(
   settings: InitOptions,
   resolver: (lang: string, namespace: string) => Promise<object>,
 ): Promise<i18n> {
+  // Guard: i18next is a singleton. If it's already been initialised
+  // (e.g. from a previous render pass or HMR), just return it.
+  if (i18next.isInitialized) {
+    return i18next;
+  }
+
   const loadedLanguages: string[] = [];
   const loadedNamespaces: string[] = [];
 

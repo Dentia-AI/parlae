@@ -25,6 +25,11 @@ export default function GlobalError({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark;color:hsl(0,0%,98%)}`,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){

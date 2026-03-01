@@ -34,6 +34,12 @@ export default async function RootLayout({
   return (
     <html lang={language} className={`${className} ${theme === 'dark' ? 'dark' : ''}`} suppressHydrationWarning>
       <head>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark}`,
+          }}
+          nonce={nonce}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `

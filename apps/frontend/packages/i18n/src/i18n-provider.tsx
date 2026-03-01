@@ -4,7 +4,11 @@ import type { InitOptions, i18n } from 'i18next';
 
 import { initializeI18nClient } from './i18n.client';
 
-let i18nInstance: i18n;
+let i18nInstance: i18n | undefined;
+let pendingInit: Promise<void> | null = null;
+let initSettingsKey = '';
+let consecutiveFailures = 0;
+const MAX_INIT_RETRIES = 3;
 
 type Resolver = (
   lang: string,
@@ -24,24 +28,56 @@ export function I18nProvider({
   return children;
 }
 
-/**
- * @name useI18nClient
- * @description A hook that initializes the i18n client.
- * @param settings
- * @param resolver
- */
-function useI18nClient(settings: InitOptions, resolver: Resolver) {
-  if (
-    !i18nInstance ||
-    i18nInstance.language !== settings.lng ||
-    i18nInstance.options.ns?.length !== settings.ns?.length
-  ) {
-    throw loadI18nInstance(settings, resolver);
-  }
-
-  return i18nInstance;
+function settingsKey(settings: InitOptions): string {
+  return `${settings.lng ?? ''}:${Array.isArray(settings.ns) ? settings.ns.length : 0}`;
 }
 
-async function loadI18nInstance(settings: InitOptions, resolver: Resolver) {
-  i18nInstance = await initializeI18nClient(settings, resolver);
+/**
+ * Suspense-compatible hook that ensures the i18n client is initialised.
+ *
+ * React Suspense requires that the **same** Promise is thrown on every
+ * re-render until it settles.  Previous code called `loadI18nInstance`
+ * on every render (creating a new Promise each time), which could cause
+ * infinite suspense, duplicate `i18next.init()` calls, or cascading
+ * errors that bypass `global-error.tsx` and show the hard
+ * "Application error" page.
+ */
+function useI18nClient(settings: InitOptions, resolver: Resolver) {
+  const key = settingsKey(settings);
+
+  if (i18nInstance && initSettingsKey === key) {
+    return i18nInstance;
+  }
+
+  // Init failed too many times — render children without i18n rather
+  // than crashing the entire app.  Translation keys will show as-is.
+  if (consecutiveFailures >= MAX_INIT_RETRIES) {
+    return i18nInstance;
+  }
+
+  // An init for these exact settings is already in flight — re-throw
+  // the *same* Promise so React Suspense can track it.
+  if (pendingInit) {
+    throw pendingInit;
+  }
+
+  initSettingsKey = key;
+
+  pendingInit = initializeI18nClient(settings, resolver)
+    .then((instance) => {
+      i18nInstance = instance;
+      consecutiveFailures = 0;
+    })
+    .catch((err) => {
+      consecutiveFailures++;
+      console.error(
+        `[I18nProvider] i18n init failed (attempt ${consecutiveFailures}/${MAX_INIT_RETRIES}):`,
+        err,
+      );
+    })
+    .finally(() => {
+      pendingInit = null;
+    });
+
+  throw pendingInit;
 }

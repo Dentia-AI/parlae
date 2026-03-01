@@ -122,8 +122,9 @@ export default function KnowledgeBaseManagementPage() {
 
       const kbConfig: Record<string, string[]> = data.knowledgeBaseConfig || {};
       const kbFileIds: string[] = data.knowledgeBaseFileIds || [];
+      const docsMeta: Record<string, { charCount: number; sourcePages: string[] }> | undefined =
+        data.scrapedDocsMeta;
 
-      // Check if knowledgeBaseConfig has any entries
       const configHasFiles = Object.values(kbConfig).some(
         (ids) => Array.isArray(ids) && ids.length > 0,
       );
@@ -138,13 +139,16 @@ export default function KnowledgeBaseManagementPage() {
                 ...next[catId]!,
                 files: fileIds.map((fid: string) => {
                   const isScraped = fid.startsWith('retell-scraped-');
-                  const catLabel = KB_CATEGORIES.find((c) => c.id === fid.replace('retell-scraped-', ''))?.labelKey;
+                  const scrapedCatId = fid.replace('retell-scraped-', '');
+                  const catLabel = KB_CATEGORIES.find((c) => c.id === scrapedCatId)?.labelKey;
+                  const meta = docsMeta?.[scrapedCatId];
+                  const charCount = meta?.charCount ?? 0;
                   return {
                     id: fid,
                     name: isScraped
                       ? `${t(`common:setup.knowledge.categories.${catLabel || fid}`)} (${t('common:setup.knowledge.website.autoScanned', { defaultValue: 'Auto-Scanned' })})`
                       : `File ${fid.slice(0, 8)}`,
-                    size: 0,
+                    size: isScraped ? charCount : 0,
                     status: 'uploaded' as const,
                     vapiFileId: isScraped ? undefined : fid,
                   };
@@ -439,11 +443,17 @@ export default function KnowledgeBaseManagementPage() {
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '';
+    if (bytes <= 0) return '';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatCharCount = (chars: number): string => {
+    if (chars <= 0) return '';
+    if (chars < 1000) return `${chars} chars`;
+    return `${(chars / 1000).toFixed(1)}k chars`;
   };
 
   const totalUploadedFiles = Object.values(categories).reduce(
@@ -683,9 +693,11 @@ export default function KnowledgeBaseManagementPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium truncate">{file.name}</p>
                               <p className="text-[10px] text-muted-foreground">
-                                {formatFileSize(file.size)}
+                                {file.id.startsWith('retell-scraped-')
+                                  ? formatCharCount(file.size)
+                                  : formatFileSize(file.size)}
                                 {file.status === 'uploading' && ` • ${file.progress}%`}
-                                {file.status === 'uploaded' && file.size > 0 && ` • ${t('common:setup.knowledge.uploaded')}`}
+                                {file.status === 'uploaded' && file.size > 0 && !file.id.startsWith('retell-scraped-') && ` • ${t('common:setup.knowledge.uploaded')}`}
                                 {file.status === 'error' && ` • ${t('common:setup.knowledge.uploadFailed')}`}
                               </p>
                             </div>

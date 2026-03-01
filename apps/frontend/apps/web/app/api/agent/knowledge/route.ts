@@ -44,6 +44,8 @@ export async function GET() {
     const websiteUrl: string | undefined =
       settings.websiteScrapedUrl || settings.websiteUrl;
     const websiteScrapedAt: string | undefined = settings.websiteScrapedAt;
+    const scrapedDocsMeta: Record<string, { charCount: number; sourcePages: string[] }> | undefined =
+      settings.scrapedDocsMeta;
 
     return NextResponse.json({
       accountId: account.id,
@@ -53,6 +55,7 @@ export async function GET() {
       queryToolId,
       websiteUrl,
       websiteScrapedAt,
+      scrapedDocsMeta,
       paymentMethodVerified: account.paymentMethodVerified,
       totalFiles: Object.values(knowledgeBaseConfig).flat().filter(Boolean).length ||
         knowledgeBaseFileIds.length,

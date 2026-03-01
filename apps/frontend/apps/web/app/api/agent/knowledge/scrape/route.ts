@@ -159,9 +159,10 @@ export async function POST(request: NextRequest) {
     const existingConfig: Record<string, string[]> =
       settings.knowledgeBaseConfig || {};
     let allFileIds: string[] = [];
+    let scrapedDocsMeta: Record<string, { charCount: number; sourcePages: string[] }> = {};
 
     if (provider === 'RETELL') {
-      // ── PRIMARY: Upload directly to Retell KB as text snippets ──────
+      // ── PRIMARY: Upload directly to Retell KB as .txt files ──────
       const { createRetellService } = await import(
         '@kit/shared/retell/retell.service'
       );
@@ -187,14 +188,29 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const textSnippets = categorizationResult.documents.map((doc) => ({
-        title: `${businessName} - ${doc.categoryId}`,
-        text: doc.content,
-      }));
+      const docFiles = categorizationResult.documents.map((doc) => {
+        const safeName = businessName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+        const safeCat = doc.categoryLabel.replace(/[^a-zA-Z0-9& -]/g, '').replace(/\s+/g, '-').toLowerCase();
+        return {
+          name: `${safeName}-${safeCat}.txt`,
+          buffer: Buffer.from(doc.content, 'utf-8'),
+          contentType: 'text/plain' as const,
+        };
+      });
+
+      logger.info(
+        {
+          funcName,
+          accountId,
+          fileCount: docFiles.length,
+          fileSizes: docFiles.map((f) => ({ name: f.name, bytes: f.buffer.length })),
+        },
+        '[KB Scrape] Uploading categorized documents as files to Retell',
+      );
 
       const kb = await retellService.createKnowledgeBase({
         name: `kb-${accountId.slice(0, 8)}`,
-        texts: textSnippets,
+        files: docFiles,
       });
 
       if (!kb) {
@@ -209,6 +225,15 @@ export async function POST(request: NextRequest) {
         kb.knowledge_base_id,
       );
 
+      logger.info(
+        {
+          kbId: kb.knowledge_base_id,
+          status: finalKb?.status,
+          sourceCount: finalKb?.knowledge_base_sources?.length ?? 0,
+        },
+        '[KB Scrape] Retell KB processing result',
+      );
+
       if (finalKb?.status === 'error') {
         return NextResponse.json(
           { error: 'Retell knowledge base processing failed' },
@@ -221,6 +246,10 @@ export async function POST(request: NextRequest) {
       for (const doc of categorizationResult.documents) {
         const syntheticId = `retell-scraped-${doc.categoryId}`;
         uploadedCategories[doc.categoryId] = {
+          charCount: doc.charCount,
+          sourcePages: doc.sourcePages,
+        };
+        scrapedDocsMeta[doc.categoryId] = {
           charCount: doc.charCount,
           sourcePages: doc.sourcePages,
         };
@@ -304,6 +333,7 @@ export async function POST(request: NextRequest) {
           knowledgeBaseUpdatedAt: new Date().toISOString(),
           websiteScrapedUrl: parsedUrl.href,
           websiteScrapedAt: new Date().toISOString(),
+          scrapedDocsMeta,
         },
       },
     });

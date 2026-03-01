@@ -15,7 +15,7 @@ function LogoImage({
   return (
     <Image
       src="/images/parlae-logo.svg"
-      alt="Parlae AI"
+      alt="Parlae"
       width={width}
       height={height}
       className={cn('w-[120px] lg:w-[140px] h-auto', className)}
