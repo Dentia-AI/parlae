@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { createVapiService } from '@kit/shared/vapi/server';
 import { requireSession } from '~/lib/auth/get-session';
 import { getLogger } from '@kit/shared/logger';
 import { getAccountProvider } from '@kit/shared/voice-provider';
@@ -70,16 +69,10 @@ export async function GET() {
 /**
  * PUT /api/agent/knowledge
  *
- * Update the knowledge base configuration. This:
- * 1. Saves the new file-by-category config to the account's phoneIntegrationSettings
- * 2. Merges all file IDs and updates (or creates) the single Vapi query tool
+ * Saves the KB config to the account, then attaches the existing Retell KB
+ * to all deployed conversation flows (inbound + outbound) in the background.
  *
- * No squad recreation required — just a tool PATCH.
- *
- * Body:
- * {
- *   knowledgeBaseConfig: { [categoryId: string]: string[] }
- * }
+ * Body: { knowledgeBaseConfig, websiteUrl? }
  */
 export async function PUT(request: NextRequest) {
   const logger = await getLogger();
@@ -118,7 +111,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const settings = (account.phoneIntegrationSettings as any) ?? {};
-    const businessName = account.brandingBusinessName || account.name || 'Clinic';
 
     const allFileIds = Object.values(knowledgeBaseConfig).flat().filter(Boolean);
     const realFileIds = allFileIds.filter(
@@ -131,63 +123,11 @@ export async function PUT(request: NextRequest) {
       '[KB API] Updating knowledge base',
     );
 
-    let queryToolId = settings.queryToolId;
-    let queryToolName = settings.queryToolName;
-    let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
+    const queryToolId = settings.queryToolId;
+    const queryToolName = settings.queryToolName;
+    const retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
 
-    if (provider === 'RETELL') {
-      // PRIMARY: Sync to Retell KB directly (skip scraped-only entries)
-      if (realFileIds.length > 0) {
-        try {
-          const { syncVapiKBToRetell } = await import(
-            '@kit/shared/retell/retell-kb.service'
-          );
-
-          const newKbId = await syncVapiKBToRetell(
-            account.id,
-            realFileIds,
-            businessName,
-            retellKnowledgeBaseId || undefined,
-          );
-
-          if (newKbId) {
-            retellKnowledgeBaseId = newKbId;
-            logger.info(
-              { accountId: account.id, retellKnowledgeBaseId: newKbId, fileCount: allFileIds.length },
-              '[KB API] Retell knowledge base updated',
-            );
-          }
-        } catch (retellErr: any) {
-          logger.error(
-            { error: retellErr?.message, accountId: account.id },
-            '[KB API] Retell KB sync failed (non-fatal)',
-          );
-        }
-      }
-    } else {
-      // FALLBACK: Update Vapi query tool
-      const vapiService = createVapiService();
-
-      if (allFileIds.length > 0) {
-        const result = await vapiService.ensureClinicQueryTool(
-          account.id,
-          allFileIds,
-          settings.templateVersion || 'v2.0',
-          businessName,
-        );
-
-        if (result) {
-          queryToolId = result.toolId;
-          queryToolName = result.toolName;
-          logger.info(
-            { queryToolId, queryToolName, fileCount: allFileIds.length },
-            '[KB API] Vapi clinic query tool updated',
-          );
-        }
-      }
-    }
-
-    // Save to DB
+    // Save to DB immediately — heavy Retell sync runs in background
     const updatedSettings: Record<string, unknown> = {
       ...settings,
       knowledgeBaseConfig,
@@ -212,76 +152,11 @@ export async function PUT(request: NextRequest) {
 
     logger.info(
       { accountId: account.id, queryToolId, totalFiles: allFileIds.length, provider },
-      '[KB API] Knowledge base updated successfully',
+      '[KB API] Knowledge base config saved, starting background sync',
     );
 
-    // Attach KB to all deployed agents (inbound CF + outbound)
-    if (provider === 'RETELL' && retellKnowledgeBaseId) {
-      try {
-        const { createRetellService } = await import(
-          '@kit/shared/retell/retell.service'
-        );
-        const retell = createRetellService();
-        const kbIds = [retellKnowledgeBaseId as string];
-        const flowsUpdated: string[] = [];
-
-        const inboundFlowId =
-          (updatedSettings.retellConversationFlow as any)?.conversationFlowId ||
-          (updatedSettings.conversationFlowId as string | undefined);
-        if (inboundFlowId) {
-          await retell.updateConversationFlow(inboundFlowId, {
-            knowledge_base_ids: kbIds,
-          });
-          flowsUpdated.push(`inbound:${inboundFlowId}`);
-        }
-
-        const outboundSettings = await prisma.outboundSettings.findUnique({
-          where: { accountId: account.id },
-          select: {
-            patientCareRetellAgentId: true,
-            financialRetellAgentId: true,
-          },
-        });
-
-        const outboundAgentIds = [
-          outboundSettings?.patientCareRetellAgentId,
-          outboundSettings?.financialRetellAgentId,
-        ].filter(Boolean) as string[];
-
-        for (const agentId of outboundAgentIds) {
-          try {
-            const agent = await retell.getAgent(agentId);
-            const flowId =
-              (agent?.response_engine as any)?.conversation_flow_id;
-            if (flowId) {
-              await retell.updateConversationFlow(flowId, {
-                knowledge_base_ids: kbIds,
-              });
-              flowsUpdated.push(`outbound:${flowId}`);
-            }
-          } catch (agentErr: any) {
-            logger.warn(
-              { error: agentErr?.message, agentId },
-              '[KB API] Failed to update outbound agent flow (non-fatal)',
-            );
-          }
-        }
-
-        if (flowsUpdated.length > 0) {
-          logger.info(
-            { accountId: account.id, flowsUpdated, kbId: retellKnowledgeBaseId },
-            '[KB API] Attached KB to conversation flows',
-          );
-        }
-      } catch (attachErr: any) {
-        logger.error(
-          { error: attachErr?.message, accountId: account.id },
-          '[KB API] Failed to attach KB to agents (non-fatal)',
-        );
-      }
-    }
-
-    return NextResponse.json({
+    // Return immediately — heavy work happens after response
+    const response = NextResponse.json({
       success: true,
       provider,
       queryToolId,
@@ -289,6 +164,79 @@ export async function PUT(request: NextRequest) {
       retellKnowledgeBaseId,
       totalFiles: allFileIds.length,
     });
+
+    // Attach KB to conversation flows in background (after response)
+    after(async () => {
+      const bgLogger = await getLogger();
+
+      try {
+        if (provider === 'RETELL' && retellKnowledgeBaseId) {
+          const { createRetellService } = await import(
+            '@kit/shared/retell/retell.service'
+          );
+          const retell = createRetellService();
+          const kbIds = [retellKnowledgeBaseId as string];
+          const flowsUpdated: string[] = [];
+
+          const inboundFlowId =
+            (updatedSettings.retellConversationFlow as any)
+              ?.conversationFlowId ||
+            (updatedSettings.conversationFlowId as string | undefined);
+          if (inboundFlowId) {
+            await retell.updateConversationFlow(inboundFlowId, {
+              knowledge_base_ids: kbIds,
+            });
+            flowsUpdated.push(`inbound:${inboundFlowId}`);
+          }
+
+          const outboundSettings = await prisma.outboundSettings.findUnique({
+            where: { accountId: account.id },
+            select: {
+              patientCareRetellAgentId: true,
+              financialRetellAgentId: true,
+            },
+          });
+
+          const outboundAgentIds = [
+            outboundSettings?.patientCareRetellAgentId,
+            outboundSettings?.financialRetellAgentId,
+          ].filter(Boolean) as string[];
+
+          for (const agentId of outboundAgentIds) {
+            try {
+              const agent = await retell.getAgent(agentId);
+              const flowId =
+                (agent?.response_engine as any)?.conversation_flow_id;
+              if (flowId) {
+                await retell.updateConversationFlow(flowId, {
+                  knowledge_base_ids: kbIds,
+                });
+                flowsUpdated.push(`outbound:${flowId}`);
+              }
+            } catch (agentErr: any) {
+              bgLogger.warn(
+                { error: agentErr?.message, agentId },
+                '[KB API] [bg] Failed to update outbound flow (non-fatal)',
+              );
+            }
+          }
+
+          if (flowsUpdated.length > 0) {
+            bgLogger.info(
+              { accountId: account.id, flowsUpdated, kbId: retellKnowledgeBaseId },
+              '[KB API] [bg] Attached KB to conversation flows',
+            );
+          }
+        }
+      } catch (bgErr: any) {
+        bgLogger.error(
+          { error: bgErr?.message, accountId: account.id },
+          '[KB API] [bg] Background sync failed',
+        );
+      }
+    });
+
+    return response;
   } catch (error: any) {
     logger.error({ error: error?.message }, '[KB API] Failed to update knowledge base');
     return NextResponse.json(

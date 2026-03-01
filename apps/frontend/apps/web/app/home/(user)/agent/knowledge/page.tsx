@@ -372,73 +372,70 @@ export default function KnowledgeBaseManagementPage() {
       const result = await res.json();
       setQueryToolId(result.queryToolId || null);
       setHasChanges(false);
-      toast.success(
-        t('common:setup.knowledge.kbUpdated', { count: result.totalFiles }),
-      );
 
       const urlChanged =
         trimmedUrl &&
         trimmedUrl !== originalWebsiteUrlRef.current;
 
       if (paymentVerified && urlChanged) {
+        let scrapeUrl = trimmedUrl;
+        if (!/^https?:\/\//i.test(scrapeUrl)) {
+          scrapeUrl = `https://${scrapeUrl}`;
+        }
+
+        originalWebsiteUrlRef.current = trimmedUrl;
         setIsScraping(true);
         setScrapeResult(null);
 
-        try {
-          let scrapeUrl = trimmedUrl;
-          if (!/^https?:\/\//i.test(scrapeUrl)) {
-            scrapeUrl = `https://${scrapeUrl}`;
-          }
+        toast.success(
+          t('common:setup.knowledge.website.scanStarted', {
+            defaultValue:
+              'Saved! Scanning your website and training the AI — this may take a few minutes.',
+          }),
+        );
 
-          const scrapeRes = await fetch('/api/agent/knowledge/scrape', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-csrf-token': csrfToken,
-            },
-            body: JSON.stringify({ websiteUrl: scrapeUrl }),
+        // Fire-and-forget: don't block UI on scrape completion
+        fetch('/api/agent/knowledge/scrape', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken,
+          },
+          body: JSON.stringify({ websiteUrl: scrapeUrl }),
+        })
+          .then(async (scrapeRes) => {
+            if (scrapeRes.ok) {
+              const scrapeData = await scrapeRes.json();
+              setScrapeResult({
+                pagesScraped: scrapeData.pagesScraped,
+                documentsUploaded: scrapeData.documentsUploaded,
+                categories: scrapeData.categories,
+              });
+              setWebsiteScrapedAt(new Date().toISOString());
+              toast.success(t('common:setup.knowledge.website.scanSuccess'));
+              loadKnowledge();
+            }
+          })
+          .catch(() => {
+            // Scrape may still complete server-side
+          })
+          .finally(() => {
+            setIsScraping(false);
           });
-
-          if (scrapeRes.status === 504) {
-            originalWebsiteUrlRef.current = trimmedUrl;
-            toast.success(t('common:setup.knowledge.website.scanStarted', { defaultValue: 'Website scan is running in the background. Refresh in a moment to see results.' }));
-            setTimeout(() => loadKnowledge(), 5000);
-            return;
-          }
-
-          if (!scrapeRes.ok) {
-            const errorData = await scrapeRes.json().catch(() => ({ error: 'Scrape failed' }));
-            throw new Error(errorData.error || `Scrape failed (${scrapeRes.status})`);
-          }
-
-          const scrapeData = await scrapeRes.json();
-
-          setScrapeResult({
-            pagesScraped: scrapeData.pagesScraped,
-            documentsUploaded: scrapeData.documentsUploaded,
-            categories: scrapeData.categories,
-          });
-
-          setWebsiteScrapedAt(new Date().toISOString());
-          originalWebsiteUrlRef.current = trimmedUrl;
-          toast.success(t('common:setup.knowledge.website.scanSuccess'));
-
-          await loadKnowledge();
-        } catch (scrapeErr) {
-          toast.error(
-            scrapeErr instanceof Error ? scrapeErr.message : 'Website scan failed',
-          );
-        } finally {
-          setIsScraping(false);
-        }
       } else {
         originalWebsiteUrlRef.current = trimmedUrl;
+        toast.success(
+          t('common:setup.knowledge.kbUpdated', { count: result.totalFiles }),
+        );
       }
     } catch (err: any) {
       toast.error(err.message || t('common:setup.knowledge.failedToSave'));
-    } finally {
       setSaving(false);
+      return;
     }
+
+    // Brief cooldown to prevent double-saves
+    setTimeout(() => setSaving(false), 3000);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -478,17 +475,15 @@ export default function KnowledgeBaseManagementPage() {
             <Trans i18nKey="common:setup.knowledge.manageDescription" />
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving || isScraping || !hasChanges}>
-          {saving || isScraping ? (
+        <Button onClick={handleSave} disabled={saving || !hasChanges}>
+          {saving ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             <Save className="h-4 w-4 mr-2" />
           )}
-          {isScraping
-            ? <Trans i18nKey="common:setup.knowledge.website.scanning" />
-            : saving
-              ? <Trans i18nKey="common:setup.knowledge.saving" />
-              : <Trans i18nKey="common:setup.knowledge.saveAndUpdate" />
+          {saving
+            ? <Trans i18nKey="common:setup.knowledge.saving" />
+            : <Trans i18nKey="common:setup.knowledge.saveAndUpdate" />
           }
         </Button>
       </div>
