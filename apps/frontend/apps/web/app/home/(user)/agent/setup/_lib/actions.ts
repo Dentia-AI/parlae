@@ -486,6 +486,20 @@ export async function executeDeployment(
           }
         }
 
+        // Fallback: if no Vapi files were synced, check if the deploy API
+        // already created a Retell KB (e.g. website auto-scrape)
+        if (retellKbIds.length === 0) {
+          const freshSettings = (await prisma.account.findUnique({
+            where: { id: account.id },
+            select: { phoneIntegrationSettings: true },
+          }))?.phoneIntegrationSettings as Record<string, any> || {};
+          const existingRetellKbId = freshSettings.retellKnowledgeBaseId;
+          if (existingRetellKbId) {
+            retellKbIds.push(existingRetellKbId);
+            logger.info({ kbId: existingRetellKbId }, '[Receptionist] Using existing Retell KB from account settings');
+          }
+        }
+
         // Teardown any existing conversation flow agent before redeploying
         try {
           const existingSettings = account.phoneIntegrationSettings as any;

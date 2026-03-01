@@ -142,8 +142,13 @@ export class RetellToolController {
 
     const toolStartMs = Date.now();
     try {
-      const result = await handler(toolPayload);
+      const rawResult = await handler(toolPayload);
       const durationMs = Date.now() - toolStartMs;
+
+      const result = rawResult ?? {
+        error: 'Tool returned empty result',
+        message: "I'm having trouble with that right now. Let me help you another way.",
+      };
 
       // Ensure speak_during_execution messages have time to play before the
       // tool result is returned (Retell stops speaking as soon as it receives
@@ -168,16 +173,18 @@ export class RetellToolController {
         durationMs: actualDurationMs,
       });
 
+      const resultStr = JSON.stringify(result) ?? '{}';
+
       if (hasError) {
         this.logger.warn(
-          `[Retell Tool Error] ${toolName} | ${JSON.stringify(result).slice(0, 500)}`,
+          `[Retell Tool Error] ${toolName} | ${resultStr.slice(0, 500)}`,
         );
         this.trackBookingError(callId, toolName);
         return result;
       }
 
       this.logger.log(
-        `[Retell Tool Response] ${toolName} (${actualDurationMs}ms, exec=${durationMs}ms) | ${JSON.stringify(result).slice(0, 500)}`,
+        `[Retell Tool Response] ${toolName} (${actualDurationMs}ms, exec=${durationMs}ms) | ${resultStr.slice(0, 500)}`,
       );
       return result;
     } catch (error) {

@@ -1955,7 +1955,12 @@ export class AgentToolsService {
       const { call } = payload;
 
       const sikkaService = await this.getSikkaService(call, payload.accountId);
-      if (!sikkaService.service) return sikkaService.error;
+      if (!sikkaService.service) {
+        return sikkaService.error || {
+          error: 'PMS not available',
+          message: "I don't have access to our provider list right now. Let me take a message and have our team get back to you.",
+        };
+      }
 
       const result = await sikkaService.service.getProviders();
 

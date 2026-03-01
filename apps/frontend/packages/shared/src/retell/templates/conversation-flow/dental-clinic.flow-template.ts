@@ -510,6 +510,7 @@ export function buildDentalClinicFlow(
     '9. If a tool returns [ERROR], the action FAILED. Never tell the caller it succeeded.',
     '10. **AVOID LOOPS**: If you have already refused a request or given the same advice twice and the caller keeps repeating the same thing, do NOT repeat yourself endlessly. Give your final answer, then say goodbye and end the call. Never get stuck repeating the same response.',
     '11. **PRIVACY**: Only discuss patient details with the patient themselves. If a third party calls on behalf of a patient, refuse politely up to 2 times, then end the call gracefully.',
+    '12. **NEVER FABRICATE**: If information is not in the knowledge base or a tool result, say "I don\'t have that information right now, but I can have our team get back to you." Never guess — even if an answer seems plausible.',
     '',
     '## SHARED STATE',
     'Dynamic variables {{patient_id}}, {{patient_name}}, and {{customer_phone}} persist across all nodes.',

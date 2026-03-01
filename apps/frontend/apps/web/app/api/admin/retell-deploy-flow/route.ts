@@ -115,6 +115,10 @@ export async function POST(request: NextRequest) {
 
     logger.info({ funcName, accountId, clinicName }, '[Flow Deploy] Deploying conversation flow');
 
+    const knowledgeBaseIds = settings.retellKnowledgeBaseId
+      ? [settings.retellKnowledgeBaseId as string]
+      : undefined;
+
     const result = await deployRetellConversationFlow(retell, {
       clinicName,
       clinicPhone,
@@ -122,6 +126,7 @@ export async function POST(request: NextRequest) {
       webhookSecret,
       accountId,
       voiceId: voiceId || 'retell-Chloe',
+      knowledgeBaseIds,
     });
 
     // Persist the flow agent IDs in phoneIntegrationSettings

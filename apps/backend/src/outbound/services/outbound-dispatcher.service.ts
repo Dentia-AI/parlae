@@ -7,6 +7,9 @@ import { OutboundSettingsService } from './outbound-settings.service';
 import { RetellTemplateService } from '../../retell/retell-template.service';
 import type { CampaignContact, OutboundCampaign, OutboundSettings } from '@kit/prisma';
 
+// TEMPORARY: Route all outbound calls to test number. Set to null to disable.
+const TEST_OVERRIDE_NUMBER: string | null = '+14387931089';
+
 const CALL_TYPE_TO_AGENT_GROUP: Record<string, 'PATIENT_CARE' | 'FINANCIAL'> = {
   recall: 'PATIENT_CARE',
   reminder: 'PATIENT_CARE',
@@ -215,7 +218,7 @@ export class OutboundDispatcherService {
 
     const result = await this.retellService.createOutboundCall({
       fromNumber,
-      toNumber: contact.phoneNumber!,
+      toNumber: TEST_OVERRIDE_NUMBER || contact.phoneNumber!,
       overrideAgentId: agentId,
       dynamicVariables,
       metadata: {
