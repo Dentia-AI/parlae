@@ -478,7 +478,7 @@ describe('AgentToolsService', () => {
       gcalService.checkFreeBusy.mockResolvedValue({
         success: true,
         availableSlots: [
-          { startTime: '2026-02-28T09:00:00Z', endTime: '2026-02-28T12:00:00Z' },
+          { startTime: '2026-06-06T09:00:00Z', endTime: '2026-06-06T12:00:00Z' },
         ],
         timezone: 'America/New_York',
       });
@@ -486,7 +486,7 @@ describe('AgentToolsService', () => {
       const result = await service.checkAvailability({
         accountId: 'acc-1',
         call: { id: 'call-1', phoneNumberId: 'vapi-phone-1' },
-        functionCall: { parameters: { date: '2026-02-28' } },
+        functionCall: { parameters: { date: '2026-06-06' } },
       }) as any;
 
       expect(result).toBeDefined();
@@ -513,8 +513,8 @@ describe('AgentToolsService', () => {
       });
       gcalService.findNextAvailableSlots.mockResolvedValue({
         slots: [
-          { date: '2026-03-02', startTime: '2026-03-02T09:00:00Z', endTime: '2026-03-02T09:30:00Z' },
-          { date: '2026-03-04', startTime: '2026-03-04T14:00:00Z', endTime: '2026-03-04T14:30:00Z' },
+          { date: '2026-06-08', startTime: '2026-06-08T09:00:00Z', endTime: '2026-06-08T09:30:00Z' },
+          { date: '2026-06-10', startTime: '2026-06-10T14:00:00Z', endTime: '2026-06-10T14:30:00Z' },
         ],
         timezone: 'America/New_York',
       });
@@ -522,7 +522,7 @@ describe('AgentToolsService', () => {
       const result = await service.checkAvailability({
         accountId: 'acc-1',
         call: { id: 'call-2', phoneNumberId: 'vapi-phone-1' },
-        functionCall: { parameters: { date: '2026-02-28' } },
+        functionCall: { parameters: { date: '2026-06-06' } },
       }) as any;
 
       expect(result).toBeDefined();
