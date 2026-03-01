@@ -121,10 +121,13 @@ export async function PUT(request: NextRequest) {
     const businessName = account.brandingBusinessName || account.name || 'Clinic';
 
     const allFileIds = Object.values(knowledgeBaseConfig).flat().filter(Boolean);
+    const realFileIds = allFileIds.filter(
+      (id) => !id.startsWith('retell-scraped-'),
+    );
     const provider = await getAccountProvider(account.id);
 
     logger.info(
-      { accountId: account.id, totalFiles: allFileIds.length, categories: Object.keys(knowledgeBaseConfig).length, provider },
+      { accountId: account.id, totalFiles: allFileIds.length, realFiles: realFileIds.length, categories: Object.keys(knowledgeBaseConfig).length, provider },
       '[KB API] Updating knowledge base',
     );
 
@@ -133,8 +136,8 @@ export async function PUT(request: NextRequest) {
     let retellKnowledgeBaseId = settings.retellKnowledgeBaseId;
 
     if (provider === 'RETELL') {
-      // PRIMARY: Sync to Retell KB directly
-      if (allFileIds.length > 0) {
+      // PRIMARY: Sync to Retell KB directly (skip scraped-only entries)
+      if (realFileIds.length > 0) {
         try {
           const { syncVapiKBToRetell } = await import(
             '@kit/shared/retell/retell-kb.service'
@@ -142,7 +145,7 @@ export async function PUT(request: NextRequest) {
 
           const newKbId = await syncVapiKBToRetell(
             account.id,
-            allFileIds,
+            realFileIds,
             businessName,
             retellKnowledgeBaseId || undefined,
           );
@@ -222,14 +225,14 @@ export async function PUT(request: NextRequest) {
         const kbIds = [retellKnowledgeBaseId as string];
         const flowsUpdated: string[] = [];
 
-        const cfData = updatedSettings.retellConversationFlow as
-          | { conversationFlowId?: string }
-          | undefined;
-        if (cfData?.conversationFlowId) {
-          await retell.updateConversationFlow(cfData.conversationFlowId, {
+        const inboundFlowId =
+          (updatedSettings.retellConversationFlow as any)?.conversationFlowId ||
+          (updatedSettings.conversationFlowId as string | undefined);
+        if (inboundFlowId) {
+          await retell.updateConversationFlow(inboundFlowId, {
             knowledge_base_ids: kbIds,
           });
-          flowsUpdated.push(`inbound:${cfData.conversationFlowId}`);
+          flowsUpdated.push(`inbound:${inboundFlowId}`);
         }
 
         const outboundSettings = await prisma.outboundSettings.findUnique({

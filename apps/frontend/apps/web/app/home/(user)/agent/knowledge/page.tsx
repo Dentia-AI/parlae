@@ -132,18 +132,23 @@ export default function KnowledgeBaseManagementPage() {
         const next = { ...prev };
 
         if (configHasFiles) {
-          // Use categorized config
           for (const [catId, fileIds] of Object.entries(kbConfig)) {
             if (next[catId] && Array.isArray(fileIds)) {
               next[catId] = {
                 ...next[catId]!,
-                files: fileIds.map((fid: string) => ({
-                  id: fid,
-                  name: `File ${fid.slice(0, 8)}`,
-                  size: 0,
-                  status: 'uploaded' as const,
-                  vapiFileId: fid,
-                })),
+                files: fileIds.map((fid: string) => {
+                  const isScraped = fid.startsWith('retell-scraped-');
+                  const catLabel = KB_CATEGORIES.find((c) => c.id === fid.replace('retell-scraped-', ''))?.labelKey;
+                  return {
+                    id: fid,
+                    name: isScraped
+                      ? `${t(`common:setup.knowledge.categories.${catLabel || fid}`)} (${t('common:setup.knowledge.website.autoScanned', { defaultValue: 'Auto-Scanned' })})`
+                      : `File ${fid.slice(0, 8)}`,
+                    size: 0,
+                    status: 'uploaded' as const,
+                    vapiFileId: isScraped ? undefined : fid,
+                  };
+                }),
               };
             }
           }
@@ -333,8 +338,12 @@ export default function KnowledgeBaseManagementPage() {
       const knowledgeBaseConfig: Record<string, string[]> = {};
       for (const [catId, catState] of Object.entries(categories)) {
         const fileIds = catState.files
-          .filter((f) => f.status === 'uploaded' && f.vapiFileId)
-          .map((f) => f.vapiFileId!);
+          .filter(
+            (f) =>
+              f.status === 'uploaded' &&
+              (f.vapiFileId || f.id.startsWith('retell-scraped-')),
+          )
+          .map((f) => f.vapiFileId || f.id);
         if (fileIds.length > 0) {
           knowledgeBaseConfig[catId] = fileIds;
         }
@@ -701,15 +710,17 @@ export default function KnowledgeBaseManagementPage() {
                                 <Eye className="h-3 w-3" />
                               </Button>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0 flex-shrink-0"
-                              onClick={() => removeFile(cat.id, file.id, file.vapiFileId)}
-                              disabled={file.status === 'uploading'}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {!file.id.startsWith('retell-scraped-') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 flex-shrink-0"
+                                onClick={() => removeFile(cat.id, file.id, file.vapiFileId)}
+                                disabled={file.status === 'uploading'}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                           {file.status === 'uploading' && file.progress !== undefined && (
                             <div className="mt-1.5 w-full bg-muted rounded-full h-0.5">

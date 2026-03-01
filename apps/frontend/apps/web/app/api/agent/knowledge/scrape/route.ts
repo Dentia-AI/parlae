@@ -219,13 +219,12 @@ export async function POST(request: NextRequest) {
       retellKnowledgeBaseId = kb.knowledge_base_id;
 
       for (const doc of categorizationResult.documents) {
+        const syntheticId = `retell-scraped-${doc.categoryId}`;
         uploadedCategories[doc.categoryId] = {
           charCount: doc.charCount,
           sourcePages: doc.sourcePages,
         };
-        if (!existingConfig[doc.categoryId]) {
-          existingConfig[doc.categoryId] = [];
-        }
+        existingConfig[doc.categoryId] = [syntheticId];
       }
 
       logger.info(
@@ -331,14 +330,14 @@ export async function POST(request: NextRequest) {
         const kbIds = [retellKnowledgeBaseId as string];
         const flowsUpdated: string[] = [];
 
-        const cfData = settings.retellConversationFlow as
-          | { conversationFlowId?: string }
-          | undefined;
-        if (cfData?.conversationFlowId) {
-          await retellSvc.updateConversationFlow(cfData.conversationFlowId, {
+        const inboundFlowId =
+          (settings.retellConversationFlow as any)?.conversationFlowId ||
+          settings.conversationFlowId;
+        if (inboundFlowId) {
+          await retellSvc.updateConversationFlow(inboundFlowId, {
             knowledge_base_ids: kbIds,
           });
-          flowsUpdated.push(`inbound:${cfData.conversationFlowId}`);
+          flowsUpdated.push(`inbound:${inboundFlowId}`);
         }
 
         const outboundSettings = await prisma.outboundSettings.findUnique({
