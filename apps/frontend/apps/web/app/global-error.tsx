@@ -1,12 +1,16 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+
 /**
  * Global error boundary — catches errors in the root layout that the
  * per-segment `error.tsx` cannot handle (e.g. provider initialization
  * failures during OAuth redirects).
  *
- * Next.js requires this component to render its own <html> and <body>
- * because the root layout is part of the error tree.
+ * Instead of showing a scary white error page, this attempts a single
+ * automatic reload (with a 10 s cooldown) so transient session/hydration
+ * errors resolve silently. If the reload doesn't fix it, the user sees
+ * a friendly recovery UI.
  */
 export default function GlobalError({
   error,
@@ -15,19 +19,41 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  if (typeof window !== 'undefined') {
+  const attemptedReload = useRef(false);
+
+  useEffect(() => {
     console.error(
       '[GlobalError] Root layout error caught:',
       error?.message,
       error?.stack,
     );
-  }
+
+    if (attemptedReload.current) return;
+    attemptedReload.current = true;
+
+    // Auto-reload once to recover from transient session/hydration errors.
+    // Cooldown prevents infinite reload loops.
+    const RELOAD_KEY = 'global-error-reload';
+    const lastReload = sessionStorage.getItem(RELOAD_KEY);
+    const now = Date.now();
+
+    if (!lastReload || now - Number(lastReload) > 10_000) {
+      sessionStorage.setItem(RELOAD_KEY, String(now));
+      window.location.reload();
+    }
+  }, [error]);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="color-scheme" content="light dark" />
         <style
           dangerouslySetInnerHTML={{
-            __html: `html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark;color:hsl(0,0%,98%)}`,
+            __html: [
+              'html{background-color:hsl(0,0%,100%);color-scheme:light}',
+              'html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark;color:hsl(0,0%,98%)}',
+              '@media(prefers-color-scheme:dark){html:not(.light){background-color:hsl(0,0%,9%);color-scheme:dark;color:hsl(0,0%,98%)}}',
+            ].join(''),
           }}
         />
         <script
@@ -39,6 +65,9 @@ export default function GlobalError({
                 document.documentElement.classList.add('dark');
                 document.documentElement.style.backgroundColor = 'hsl(0,0%,9%)';
                 document.documentElement.style.colorScheme = 'dark';
+              } else {
+                document.documentElement.style.backgroundColor = 'hsl(0,0%,100%)';
+                document.documentElement.style.colorScheme = 'light';
               }
             })();`,
           }}

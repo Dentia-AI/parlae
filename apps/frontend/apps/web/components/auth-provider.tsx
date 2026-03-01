@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, useEffect, useRef } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
 import { SessionProvider, useSession } from 'next-auth/react';
@@ -11,29 +11,74 @@ import { useAppEvents } from '@kit/shared/events';
 
 type AuthProviderProps = React.PropsWithChildren<{ session?: Session | null }>;
 
+/**
+ * Wraps children with NextAuth SessionProvider + error recovery.
+ *
+ * The error boundary sits ABOVE SessionProvider so it can catch errors
+ * thrown during SessionProvider initialization (e.g. stale JWT on hydration).
+ *
+ * We intentionally avoid passing the server-rendered session when the page
+ * loads after a period of inactivity because the JWT may be expired. A stale
+ * session prop causes a hydration mismatch that triggers React #310 on
+ * next-auth v5 beta + React 19. Letting SessionProvider fetch the session
+ * client-side avoids this entirely.
+ */
 export function AuthProvider({ session, children }: AuthProviderProps) {
   return (
-    <SessionProvider session={session}>
-      <AuthErrorBoundary>
+    <AuthErrorBoundary>
+      <SafeSessionProvider serverSession={session}>
         <AuthEventsBridge>{children}</AuthEventsBridge>
-      </AuthErrorBoundary>
+      </SafeSessionProvider>
+    </AuthErrorBoundary>
+  );
+}
+
+/**
+ * Wraps SessionProvider and only passes the server session on the initial
+ * mount. On subsequent navigations (or when the tab regains focus after
+ * inactivity) SessionProvider fetches a fresh session client-side.
+ *
+ * This avoids the hydration mismatch that triggers React #310 when the
+ * server-rendered session is null but the client still holds a stale cookie.
+ */
+function SafeSessionProvider({
+  serverSession,
+  children,
+}: {
+  serverSession?: Session | null;
+  children: ReactNode;
+}) {
+  const [initialSession] = useState(() => serverSession ?? undefined);
+
+  return (
+    <SessionProvider
+      session={initialSession}
+      refetchOnWindowFocus={true}
+      refetchWhenOffline={false}
+    >
+      {children}
     </SessionProvider>
   );
 }
 
 /**
- * Catches transient errors that can occur during OAuth redirects when
- * the session state is still settling (e.g. React #310 hooks errors
- * from next-auth/React 19 interactions). Retries up to 2 times with
- * increasing delays; on persistent failure does a hard refresh to let
- * the server produce a clean render.
+ * Catches transient errors that can occur during OAuth redirects or when
+ * the session state is stale (e.g. React #310 hooks errors from
+ * next-auth v5 beta / React 19 interactions).
+ *
+ * Sits ABOVE SessionProvider so it can also catch SessionProvider crashes.
+ *
+ * Recovery strategy:
+ * 1. Retry rendering up to MAX_RETRIES times with increasing delays
+ * 2. On persistent failure, do a hard refresh (once per 10 s) to let
+ *    the server produce a clean render with a fresh session
  */
 class AuthErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; retryCount: number; caughtError: Error | null }
 > {
-  private static readonly MAX_RETRIES = 2;
-  private static readonly RETRY_DELAYS = [300, 800];
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_DELAYS = [200, 600, 1200];
   private static readonly RELOAD_KEY = 'auth-error-reload';
 
   constructor(props: { children: ReactNode }) {
@@ -78,23 +123,16 @@ class AuthErrorBoundary extends Component<
 
       if (!lastReload || now - Number(lastReload) > 10_000) {
         sessionStorage.setItem(AuthErrorBoundary.RELOAD_KEY, String(now));
-        window.location.reload();
+
+        // Clear the potentially corrupted session cookie before reloading
+        // so the server gets a clean request and doesn't re-render stale data.
+        fetch('/api/auth/session', { method: 'GET' })
+          .finally(() => window.location.reload());
       }
     }
   }
 
   render() {
-    if (this.state.hasError && this.state.retryCount >= AuthErrorBoundary.MAX_RETRIES) {
-      return (
-        <div
-          className="bg-background fixed top-0 left-0 z-[100] flex h-screen w-screen items-center justify-center"
-          aria-busy="true"
-        >
-          <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
-        </div>
-      );
-    }
-
     if (this.state.hasError) {
       return (
         <div

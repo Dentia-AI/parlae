@@ -29,7 +29,14 @@ export default async function RootLayout({
   const theme = await getRootTheme();
   const className = getFontsClassName(theme);
   const nonce = await getCspNonce();
-  const session = await auth();
+
+  let session = null;
+  try {
+    session = await auth();
+  } catch {
+    // Stale or corrupted session cookie — let SessionProvider handle it
+    // client-side instead of crashing the root layout.
+  }
 
   return (
     <html lang={language} className={`${className} ${theme === 'dark' ? 'dark' : ''}`} suppressHydrationWarning>
