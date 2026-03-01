@@ -221,7 +221,7 @@ export function SignUpForm({ callbackUrl }: SignUpFormProps) {
                 <Input
                   type="email"
                   autoComplete="email"
-                  placeholder={t('auth:emailPlaceholder', { defaultValue: 'you@example.com' })}
+                  placeholder={t('auth:emailPlaceholder', { defaultValue: 'your@email.com' })}
                   {...field}
                 />
               </FormControl>

@@ -109,7 +109,7 @@ export function SignInForm({ callbackUrl }: SignInFormProps) {
         ) : null}
 
         <Button type="submit" className="w-full" disabled={pending}>
-          {pending ? t('auth:signingIn', { defaultValue: 'Signing in...' }) : t('auth:signInWithEmail', { defaultValue: 'Sign in with email' })}
+          {pending ? t('auth:signingIn', { defaultValue: 'Signing in...' }) : t('auth:signInWithEmail', { defaultValue: 'Sign in with Email' })}
         </Button>
       </form>
     </Form>

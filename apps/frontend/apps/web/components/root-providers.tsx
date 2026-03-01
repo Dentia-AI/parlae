@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 
 import { ThemeProvider } from 'next-themes';
 
@@ -42,25 +42,27 @@ export function RootProviders({
       <MonitoringProvider>
         <AppEventsProvider>
           <ReactQueryProvider>
-            <I18nProvider settings={i18nSettings} resolver={i18nResolver}>
-              <AuthProvider session={session}>
-                <ThemeProvider
-                  attribute="class"
-                  enableSystem
-                  disableTransitionOnChange
-                  defaultTheme={theme}
-                  enableColorScheme={false}
-                  storageKey="theme"
-                  nonce={nonce}
-                >
-                  {children}
-                </ThemeProvider>
-              </AuthProvider>
+            <Suspense fallback={null}>
+              <I18nProvider settings={i18nSettings} resolver={i18nResolver}>
+                <AuthProvider session={session}>
+                  <ThemeProvider
+                    attribute="class"
+                    enableSystem
+                    disableTransitionOnChange
+                    defaultTheme={theme}
+                    enableColorScheme={false}
+                    storageKey="theme"
+                    nonce={nonce}
+                  >
+                    {children}
+                  </ThemeProvider>
+                </AuthProvider>
 
-              <If condition={featuresFlagConfig.enableVersionUpdater}>
-                <VersionUpdater />
-              </If>
-            </I18nProvider>
+                <If condition={featuresFlagConfig.enableVersionUpdater}>
+                  <VersionUpdater />
+                </If>
+              </I18nProvider>
+            </Suspense>
           </ReactQueryProvider>
         </AppEventsProvider>
       </MonitoringProvider>

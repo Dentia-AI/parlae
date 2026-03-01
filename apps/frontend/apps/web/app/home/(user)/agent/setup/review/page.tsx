@@ -125,8 +125,6 @@ export default function ReviewPage() {
       try {
         console.log('[Deploy] Starting deployment flow…');
 
-        // Mark deployment as started (best-effort, non-blocking).
-        // The /api/agent/deploy route also marks in_progress independently.
         try {
           await markDeploymentStartedAction();
           console.log('[Deploy] Marked deployment as started');
@@ -134,8 +132,6 @@ export default function ReviewPage() {
           console.warn('[Deploy] markDeploymentStartedAction failed (non-fatal):', e);
         }
 
-        // Fire deployment in background — don't await the response.
-        // `keepalive: true` ensures the request survives page navigation.
         const deployPayload = {
           voice: config.voice,
           files: config.files || [],
@@ -162,7 +158,6 @@ export default function ReviewPage() {
           console.error('[Deploy] /api/agent/deploy network error:', err);
         });
 
-        // Clear session storage
         sessionStorage.removeItem('selectedVoice');
         sessionStorage.removeItem('knowledgeBaseFiles');
         sessionStorage.removeItem('knowledgeBaseConfig');
@@ -172,11 +167,27 @@ export default function ReviewPage() {
 
         toast.success(t('common:setup.review.deployStarted'));
 
-        // Redirect to overview page — the deploying animation takes over
-        router.push('/home/agent?deploying=true');
+        // Navigate to overview with deploying animation.
+        // Use hard navigation as a fallback if router.push fails
+        // (e.g. due to a hydration error corrupting the React tree).
+        const destination = '/home/agent?deploying=true';
+
+        try {
+          router.push(destination);
+        } catch {
+          window.location.href = destination;
+          return;
+        }
+
+        setTimeout(() => {
+          if (window.location.pathname !== '/home/agent') {
+            window.location.href = destination;
+          }
+        }, 3000);
       } catch (error) {
         console.error('[Deploy] handleDeploy caught error:', error);
         toast.error(t('common:setup.review.deployErrorGeneric'));
+        window.location.href = '/home/agent?deploying=true';
       }
     });
   };
