@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.3';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.4';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
