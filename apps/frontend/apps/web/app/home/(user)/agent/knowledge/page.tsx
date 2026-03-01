@@ -25,6 +25,8 @@ import {
   HelpCircle,
   Save,
   CheckCircle2,
+  Globe,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
@@ -75,6 +77,16 @@ export default function KnowledgeBaseManagementPage() {
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [queryToolId, setQueryToolId] = useState<string | null>(null);
+
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteUrlSaved, setWebsiteUrlSaved] = useState(false);
+  const [websiteScrapedAt, setWebsiteScrapedAt] = useState<string | null>(null);
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<{
+    pagesScraped: number;
+    documentsUploaded: number;
+    categories: Record<string, { fileId: string; charCount: number; sourcePages: string[] }>;
+  } | null>(null);
   const [categories, setCategories] = useState<Record<string, CategoryState>>(() => {
     const initial: Record<string, CategoryState> = {};
     for (const cat of KB_CATEGORIES) {
@@ -97,6 +109,14 @@ export default function KnowledgeBaseManagementPage() {
 
       const data = await res.json();
       setQueryToolId(data.queryToolId || null);
+
+      if (data.websiteUrl) {
+        setWebsiteUrl(data.websiteUrl);
+        setWebsiteUrlSaved(true);
+      }
+      if (data.websiteScrapedAt) {
+        setWebsiteScrapedAt(data.websiteScrapedAt);
+      }
 
       const kbConfig: Record<string, string[]> = data.knowledgeBaseConfig || {};
       const kbFileIds: string[] = data.knowledgeBaseFileIds || [];
@@ -325,7 +345,10 @@ export default function KnowledgeBaseManagementPage() {
           'x-csrf-token': csrfToken,
         },
         credentials: 'include',
-        body: JSON.stringify({ knowledgeBaseConfig }),
+        body: JSON.stringify({
+          knowledgeBaseConfig,
+          websiteUrl: websiteUrl.trim() || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -343,6 +366,66 @@ export default function KnowledgeBaseManagementPage() {
       toast.error(err.message || t('common:setup.knowledge.failedToSave'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveWebsiteUrl = () => {
+    let url = websiteUrl.trim();
+    if (!url) return;
+
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+      setWebsiteUrl(url);
+    }
+
+    setWebsiteUrlSaved(true);
+    setHasChanges(true);
+    toast.success(t('common:setup.knowledge.website.urlSavedToast'));
+  };
+
+  const handleScrapeNow = async () => {
+    let url = websiteUrl.trim();
+    if (!url) return;
+
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+      setWebsiteUrl(url);
+    }
+
+    setIsScraping(true);
+    setScrapeResult(null);
+
+    try {
+      const response = await fetch('/api/agent/knowledge/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        body: JSON.stringify({ websiteUrl: url }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Scrape failed' }));
+        throw new Error(errorData.error || `Scrape failed (${response.status})`);
+      }
+
+      const result = await response.json();
+
+      setScrapeResult({
+        pagesScraped: result.pagesScraped,
+        documentsUploaded: result.documentsUploaded,
+        categories: result.categories,
+      });
+
+      setWebsiteScrapedAt(new Date().toISOString());
+      toast.success(t('common:setup.knowledge.website.scanSuccess'));
+
+      await loadKnowledge();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Scrape failed');
+    } finally {
+      setIsScraping(false);
     }
   };
 
@@ -419,6 +502,108 @@ export default function KnowledgeBaseManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Website URL Section */}
+      <Card className="overflow-hidden">
+        <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30">
+          <div className="rounded-lg bg-primary/10 p-2">
+            <Globe className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">{t('common:setup.knowledge.website.title')}</span>
+              {websiteScrapedAt && (
+                <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <CheckCircle2 className="h-2.5 w-2.5" />
+                  {t('common:setup.knowledge.website.autoScanned')}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('common:setup.knowledge.website.description')}
+            </p>
+          </div>
+        </div>
+
+        <CardContent className="pt-3 space-y-3">
+          <div className="flex gap-2">
+            <Input
+              type="url"
+              placeholder="https://www.yourclinic.com"
+              value={websiteUrl}
+              onChange={(e) => {
+                setWebsiteUrl(e.target.value);
+                setWebsiteUrlSaved(false);
+              }}
+              className="flex-1 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveWebsiteUrl();
+              }}
+            />
+            <Button
+              onClick={handleSaveWebsiteUrl}
+              disabled={!websiteUrl.trim() || websiteUrlSaved}
+              size="sm"
+              variant={websiteUrlSaved ? 'outline' : 'default'}
+              className="px-4"
+            >
+              {websiteUrlSaved ? (
+                <>
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                  {t('common:setup.knowledge.website.saved')}
+                </>
+              ) : (
+                <>
+                  <Globe className="mr-1.5 h-3.5 w-3.5" />
+                  {t('common:setup.knowledge.website.saveUrl')}
+                </>
+              )}
+            </Button>
+          </div>
+
+          {websiteUrl.trim() && (
+            <Button
+              onClick={handleScrapeNow}
+              disabled={isScraping || !websiteUrl.trim()}
+              size="sm"
+              variant="outline"
+              className="w-full"
+            >
+              {isScraping ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  {t('common:setup.knowledge.website.scanning')}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  {t('common:setup.knowledge.website.scanButton', { defaultValue: 'Scan & Categorize Website' })}
+                </>
+              )}
+            </Button>
+          )}
+
+          {scrapeResult && (
+            <div className="rounded-lg bg-green-500/5 ring-1 ring-green-500/20 px-3 py-2.5 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 text-green-700 dark:text-green-400 font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {t('common:setup.knowledge.website.scanSuccess')}
+              </div>
+              <div className="text-muted-foreground pl-5">
+                {t('common:setup.knowledge.website.scanResult', {
+                  pages: scrapeResult.pagesScraped,
+                  documents: scrapeResult.documentsUploaded,
+                  categories: Object.keys(scrapeResult.categories).length,
+                })}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-muted-foreground/60">
+            {t('common:setup.knowledge.website.manualUploadHint')}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Category sections */}
       <div className="space-y-3">

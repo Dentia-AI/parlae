@@ -243,7 +243,8 @@
         "autoScanDesc": "Après le déploiement, nous analyserons votre site web, extrairons le contenu et utiliserons l'IA pour l'organiser dans vos catégories de base de connaissances.",
         "manualUploadHint": "Vous pouvez également télécharger des fichiers manuellement dans les catégories ci-dessous.",
         "uploadSummary": "{{count}} fichier(s) téléchargé(s) dans {{categories}} catégories",
-        "urlSavedToast": "URL du site web enregistrée. Il sera analysé automatiquement après le déploiement."
+        "urlSavedToast": "URL du site web enregistrée. Il sera analysé automatiquement après le déploiement.",
+        "scanButton": "Analyser et catégoriser le site web"
       },
       "categories": {
         "clinicInfo": "Informations sur la clinique",

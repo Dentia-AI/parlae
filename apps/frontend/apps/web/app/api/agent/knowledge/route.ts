@@ -41,6 +41,9 @@ export async function GET() {
     const knowledgeBaseConfig: KnowledgeBaseConfig = settings.knowledgeBaseConfig || {};
     const knowledgeBaseFileIds: string[] = settings.knowledgeBaseFileIds || [];
     const queryToolId: string | undefined = settings.queryToolId;
+    const websiteUrl: string | undefined =
+      settings.websiteScrapedUrl || settings.websiteUrl;
+    const websiteScrapedAt: string | undefined = settings.websiteScrapedAt;
 
     return NextResponse.json({
       accountId: account.id,
@@ -48,6 +51,8 @@ export async function GET() {
       knowledgeBaseConfig,
       knowledgeBaseFileIds,
       queryToolId,
+      websiteUrl,
+      websiteScrapedAt,
       totalFiles: Object.values(knowledgeBaseConfig).flat().filter(Boolean).length ||
         knowledgeBaseFileIds.length,
     });
@@ -87,6 +92,7 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const knowledgeBaseConfig: KnowledgeBaseConfig = body.knowledgeBaseConfig;
+    const websiteUrl: string | undefined = body.websiteUrl;
 
     if (!knowledgeBaseConfig || typeof knowledgeBaseConfig !== 'object') {
       return NextResponse.json(
@@ -177,18 +183,25 @@ export async function PUT(request: NextRequest) {
     }
 
     // Save to DB
+    const updatedSettings: Record<string, unknown> = {
+      ...settings,
+      knowledgeBaseConfig,
+      knowledgeBaseFileIds: allFileIds,
+      queryToolId,
+      queryToolName,
+      retellKnowledgeBaseId,
+      knowledgeBaseUpdatedAt: new Date().toISOString(),
+    };
+
+    if (websiteUrl !== undefined) {
+      updatedSettings.websiteUrl = websiteUrl;
+      updatedSettings.websiteScrapedUrl = websiteUrl || settings.websiteScrapedUrl;
+    }
+
     await prisma.account.update({
       where: { id: account.id },
       data: {
-        phoneIntegrationSettings: {
-          ...settings,
-          knowledgeBaseConfig,
-          knowledgeBaseFileIds: allFileIds,
-          queryToolId,
-          queryToolName,
-          retellKnowledgeBaseId,
-          knowledgeBaseUpdatedAt: new Date().toISOString(),
-        },
+        phoneIntegrationSettings: updatedSettings,
       },
     });
 
