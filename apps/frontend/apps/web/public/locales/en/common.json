@@ -245,6 +245,7 @@
         "uploadSummary": "{{count}} file(s) uploaded across {{categories}} categories",
         "urlSavedToast": "Website URL saved. It will be scanned automatically after deployment.",
         "scanButton": "Scan & Categorize Website",
+        "scanStarted": "Website scan is running in the background. Refresh in a moment to see results.",
         "autoScanOnSave": "When you save, we'll scan this website and organize the content into your knowledge base categories.",
         "paymentRequired": "Add a payment method to enable automatic website scanning."
       },

@@ -245,6 +245,7 @@
         "uploadSummary": "{{count}} fichier(s) téléchargé(s) dans {{categories}} catégories",
         "urlSavedToast": "URL du site web enregistrée. Il sera analysé automatiquement après le déploiement.",
         "scanButton": "Analyser et catégoriser le site web",
+        "scanStarted": "L'analyse du site web s'exécute en arrière-plan. Rafraîchissez dans un moment pour voir les résultats.",
         "autoScanOnSave": "Lors de la sauvegarde, nous analyserons ce site web et organiserons le contenu dans vos catégories de base de connaissances.",
         "paymentRequired": "Ajoutez un moyen de paiement pour activer l'analyse automatique du site web."
       },

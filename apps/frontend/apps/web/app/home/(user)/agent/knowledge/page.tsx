@@ -79,7 +79,6 @@ export default function KnowledgeBaseManagementPage() {
   const [queryToolId, setQueryToolId] = useState<string | null>(null);
 
   const [websiteUrl, setWebsiteUrl] = useState('');
-  const [websiteUrlSaved, setWebsiteUrlSaved] = useState(false);
   const [websiteScrapedAt, setWebsiteScrapedAt] = useState<string | null>(null);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeResult, setScrapeResult] = useState<{
@@ -115,7 +114,6 @@ export default function KnowledgeBaseManagementPage() {
 
       if (data.websiteUrl) {
         setWebsiteUrl(data.websiteUrl);
-        setWebsiteUrlSaved(true);
         originalWebsiteUrlRef.current = data.websiteUrl;
       }
       if (data.websiteScrapedAt) {
@@ -365,7 +363,6 @@ export default function KnowledgeBaseManagementPage() {
       const result = await res.json();
       setQueryToolId(result.queryToolId || null);
       setHasChanges(false);
-      setWebsiteUrlSaved(true);
       toast.success(
         t('common:setup.knowledge.kbUpdated', { count: result.totalFiles }),
       );
@@ -392,6 +389,13 @@ export default function KnowledgeBaseManagementPage() {
             },
             body: JSON.stringify({ websiteUrl: scrapeUrl }),
           });
+
+          if (scrapeRes.status === 504) {
+            originalWebsiteUrlRef.current = trimmedUrl;
+            toast.success(t('common:setup.knowledge.website.scanStarted', { defaultValue: 'Website scan is running in the background. Refresh in a moment to see results.' }));
+            setTimeout(() => loadKnowledge(), 5000);
+            return;
+          }
 
           if (!scrapeRes.ok) {
             const errorData = await scrapeRes.json().catch(() => ({ error: 'Scrape failed' }));
@@ -426,20 +430,6 @@ export default function KnowledgeBaseManagementPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleSaveWebsiteUrl = () => {
-    let url = websiteUrl.trim();
-    if (!url) return;
-
-    if (!/^https?:\/\//i.test(url)) {
-      url = `https://${url}`;
-      setWebsiteUrl(url);
-    }
-
-    setWebsiteUrlSaved(true);
-    setHasChanges(true);
-    toast.success(t('common:setup.knowledge.website.urlSavedToast'));
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -541,40 +531,16 @@ export default function KnowledgeBaseManagementPage() {
         </div>
 
         <CardContent className="pt-3 space-y-3">
-          <div className="flex gap-2">
-            <Input
-              type="url"
-              placeholder="https://www.yourclinic.com"
-              value={websiteUrl}
-              onChange={(e) => {
-                setWebsiteUrl(e.target.value);
-                setWebsiteUrlSaved(false);
-              }}
-              className="flex-1 text-sm"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveWebsiteUrl();
-              }}
-            />
-            <Button
-              onClick={handleSaveWebsiteUrl}
-              disabled={!websiteUrl.trim() || websiteUrlSaved}
-              size="sm"
-              variant={websiteUrlSaved ? 'outline' : 'default'}
-              className="px-4"
-            >
-              {websiteUrlSaved ? (
-                <>
-                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-green-600" />
-                  {t('common:setup.knowledge.website.saved')}
-                </>
-              ) : (
-                <>
-                  <Globe className="mr-1.5 h-3.5 w-3.5" />
-                  {t('common:setup.knowledge.website.saveUrl')}
-                </>
-              )}
-            </Button>
-          </div>
+          <Input
+            type="url"
+            placeholder="https://www.yourclinic.com"
+            value={websiteUrl}
+            onChange={(e) => {
+              setWebsiteUrl(e.target.value);
+              setHasChanges(true);
+            }}
+            className="text-sm"
+          />
 
           {isScraping && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
