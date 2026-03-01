@@ -74,6 +74,14 @@ export class RetellToolController {
       `[Retell Tool] ${toolName} | callId=${callId} | args=${JSON.stringify(args).slice(0, 300)}`,
     );
 
+    this.logger.verbose({
+      callId,
+      toolName,
+      args,
+      callMetadata: { agent_id: call?.agent_id, from_number: call?.from_number, to_number: call?.to_number },
+      msg: '[Retell → Backend] Full inbound tool call',
+    });
+
     // Resolve account ID from: header > call metadata > RetellPhoneNumber lookup
     const accountId = await this.resolveAccountId(headerAccountId, call);
 
@@ -179,6 +187,13 @@ export class RetellToolController {
         this.logger.warn(
           `[Retell Tool Error] ${toolName} | ${resultStr.slice(0, 500)}`,
         );
+        this.logger.verbose({
+          callId,
+          toolName,
+          accountId,
+          errorPayload: resultStr.slice(0, 2000),
+          msg: '[Retell → Agent] Error response',
+        });
         this.trackBookingError(callId, toolName);
         return result;
       }
@@ -186,6 +201,16 @@ export class RetellToolController {
       this.logger.log(
         `[Retell Tool Response] ${toolName} (${actualDurationMs}ms, exec=${durationMs}ms) | ${resultStr.slice(0, 500)}`,
       );
+
+      this.logger.verbose({
+        callId,
+        toolName,
+        accountId,
+        durationMs: actualDurationMs,
+        agentPayload: resultStr.slice(0, 2000),
+        msg: '[Retell → Agent] Full response',
+      });
+
       return result;
     } catch (error) {
       const durationMs = Date.now() - toolStartMs;

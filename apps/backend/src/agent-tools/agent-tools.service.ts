@@ -734,22 +734,36 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
-      // Book appointment (using Sikka's bookAppointment method)
-      // Params aligned with Sikka API: patientId, appointmentType, startTime (ISO 8601), duration (minutes)
-      const result = await sikkaService.bookAppointment({
+      const bookingInput = {
         patientId: params.patientId,
         providerId: params.providerId,
         appointmentType: params.appointmentType || params.type || 'General',
         startTime: new Date(params.startTime || params.datetime),
         duration: params.duration || 30,
         notes: params.notes,
+      };
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'bookAppointment',
+        pmsInput: bookingInput,
+        msg: '[PMS Call] bookAppointment request',
+      });
+
+      const result = await sikkaService.bookAppointment(bookingInput);
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'bookAppointment',
+        pmsResult: { success: result.success, hasData: !!result.data, error: result.error },
+        msg: '[PMS Call] bookAppointment response',
       });
       
       if (!result.success || !result.data) {
         const errorMsg = result.error ? (typeof result.error === 'string' ? result.error : result.error.message) : 'Booking failed';
 
         // ── PMS writeback failed — fallback: GCal backup + email notification ──
-        this.logger.warn({ accountId: phoneRecord.accountId, errorMsg, msg: '[PMS] Writeback failed, attempting fallback' });
+        this.logger.warn({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] Writeback failed, attempting fallback' });
 
         return this.handlePmsBookingFailure(
           phoneRecord,
@@ -780,7 +794,7 @@ export class AgentToolsService {
         writebackId: appointment.metadata?.writebackId as string | undefined,
       }).catch(() => {});
 
-      return {
+      const agentResponse = {
         result: {
           success: true,
           appointmentId: appointment.id,
@@ -788,6 +802,15 @@ export class AgentToolsService {
           message: `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}. Do NOT say "with [patient name]" — the caller already knows who they are.`,
         },
       };
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'bookAppointment',
+        agentResponse,
+        msg: '[Agent Response] bookAppointment success → agent',
+      });
+
+      return agentResponse;
     } catch (error: any) {
       this.logger.error(error);
 
@@ -854,16 +877,32 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
-      // Params aligned with Sikka API: date (YYYY-MM-DD), appointmentType, duration (minutes), providerId
-      const result = await sikkaService.checkAvailability({
+      const availInput = {
         date: params.date,
         appointmentType: params.appointmentType || params.type,
         duration: params.duration || 30,
         providerId: params.providerId,
+      };
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'checkAvailability',
+        pmsInput: availInput,
+        msg: '[PMS Call] checkAvailability request',
+      });
+
+      const result = await sikkaService.checkAvailability(availInput);
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'checkAvailability',
+        pmsResult: { success: result.success, slotCount: result.data?.length ?? 0, error: result.error },
+        msg: '[PMS Call] checkAvailability response',
       });
       
       if (!result.success) {
         const errorMsg = result.error ? (typeof result.error === 'string' ? result.error : result.error.message) : 'Availability check failed';
+        this.logger.error({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] checkAvailability failed' });
         throw new Error(errorMsg);
       }
       
@@ -1016,15 +1055,30 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'lookupPatient',
+        pmsInput: { query, limit: 10 },
+        msg: '[PMS Call] searchPatients request',
+      });
+
       const result = await sikkaService.searchPatients({
         query,
         limit: 10,
+      });
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'lookupPatient',
+        pmsResult: { success: result.success, count: result.data?.length ?? 0, error: result.error },
+        msg: '[PMS Call] searchPatients response',
       });
 
       const responseTime = Date.now() - startTime;
 
       if (!result.success) {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
+        this.logger.error({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] searchPatients failed' });
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
@@ -1290,7 +1344,7 @@ export class AgentToolsService {
       const callerPhone = call?.customer?.number;
       const patientPhone = params.phone || callerPhone;
 
-      const result = await sikkaService.createPatient({
+      const createInput = {
         firstName: params.firstName,
         lastName: params.lastName,
         phone: patientPhone,
@@ -1298,12 +1352,29 @@ export class AgentToolsService {
         dateOfBirth: params.dateOfBirth,
         address: params.address,
         notes: params.notes,
+      };
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'createPatient',
+        pmsInput: { ...createInput, phone: createInput.phone ? '***' : undefined },
+        msg: '[PMS Call] createPatient request',
+      });
+
+      const result = await sikkaService.createPatient(createInput);
+
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'createPatient',
+        pmsResult: { success: result.success, hasData: !!result.data, error: result.error },
+        msg: '[PMS Call] createPatient response',
       });
 
       const responseTime = Date.now() - startTime;
 
       if (!result.success) {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
+        this.logger.error({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] createPatient writeback failed' });
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'createPatient',
@@ -1485,15 +1556,30 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'cancelAppointment',
+        pmsInput: { appointmentId: params.appointmentId, reason: params.reason },
+        msg: '[PMS Call] cancelAppointment request',
+      });
+
       const result = await sikkaService.cancelAppointment(
         params.appointmentId,
         { reason: params.reason || 'Patient requested cancellation' }
       );
 
+      this.logger.verbose({
+        accountId: phoneRecord.accountId,
+        tool: 'cancelAppointment',
+        pmsResult: { success: result.success, error: result.error },
+        msg: '[PMS Call] cancelAppointment response',
+      });
+
       const responseTime = Date.now() - startTime;
 
       if (!result.success) {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
+        this.logger.error({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] cancelAppointment writeback failed' });
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'cancelAppointment',
@@ -2489,8 +2575,7 @@ export class AgentToolsService {
       this.logger.error({ error: err?.message, msg: '[PMS Fallback] Email notification also failed' });
     });
 
-    // Return success to the AI — the appointment IS captured somewhere
-    return {
+    const fallbackResponse = {
       result: {
         success: true,
         integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
@@ -2499,6 +2584,19 @@ export class AgentToolsService {
           : `Your appointment has been noted for ${startTime.toLocaleString()}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
       },
     };
+
+    this.logger.verbose({
+      accountId,
+      tool: 'bookAppointment',
+      fallbackType: gcalBackupCreated ? 'gcal_backup' : 'manual_followup',
+      gcalAvailable: gcAvailable,
+      gcalBackupCreated,
+      pmsErrorMessage,
+      agentResponse: fallbackResponse,
+      msg: '[PMS Fallback] Returning response to agent',
+    });
+
+    return fallbackResponse;
   }
 
   /**

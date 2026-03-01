@@ -24,6 +24,16 @@ export class StructuredLogger extends Logger {
       super.error(stringify(message), ...optionalParams);
     }
   }
+
+  /**
+   * Verbose/debug log that only emits when PMS_VERBOSE_LOGGING=true.
+   * Use for temporary diagnostic output (PMS API calls, payloads,
+   * responses).  Disable in production to reduce CloudWatch costs.
+   */
+  verbose(message: unknown, ...optionalParams: unknown[]) {
+    if (process.env.PMS_VERBOSE_LOGGING !== 'true') return;
+    super.log(`[VERBOSE] ${stringify(message)}`, ...optionalParams);
+  }
 }
 
 function stringify(value: unknown): string {

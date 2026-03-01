@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StructuredLogger } from '../../common/structured-logger';
 import axios from 'axios';
 
 /**
@@ -33,6 +34,7 @@ interface RateLimitTracker {
 
 @Injectable()
 export class SikkaWritebackService {
+  private readonly logger = new StructuredLogger('SikkaWritebackService');
   private readonly baseUrl = 'https://api.sikkasoft.com/v4';
   private rateLimits: RateLimitTracker = {};
   
@@ -155,7 +157,7 @@ export class SikkaWritebackService {
       };
       
     } catch (error) {
-      console.error(`[Writeback] Error checking status for ${writebackId}:`, error);
+      this.logger.error({ writebackId, error: error instanceof Error ? error.message : error, msg: '[Writeback] Error checking status' });
       return null;
     }
   }
@@ -217,7 +219,7 @@ export class SikkaWritebackService {
       
       // Skip if we've hit rate limit for this practice
       if (!this.canMakeRequest(pmsIntegrationId, 'low')) {
-        console.log(`[Writeback] Rate limit reached for ${pmsIntegrationId}, skipping ${writeback.id}`);
+        this.logger.verbose({ pmsIntegrationId, writebackId: writeback.id, msg: '[Writeback] Rate limit reached, skipping' });
         continue;
       }
       
@@ -244,11 +246,11 @@ export class SikkaWritebackService {
     rateLimited: number;
   }> {
     const isLowTraffic = this.isLowTrafficTime();
-    console.log(`[Writeback] Polling (${isLowTraffic ? 'LOW' : 'HIGH'} traffic period)...`);
+    this.logger.verbose({ isLowTraffic, msg: '[Writeback] Polling' });
     
     const readyForCheck = await this.getWritebacksReadyForCheck();
     
-    console.log(`[Writeback] Found ${readyForCheck.length} writeback(s) ready for check`);
+    this.logger.verbose({ count: readyForCheck.length, msg: '[Writeback] Ready for check' });
     
     let checked = 0;
     let updated = 0;
@@ -261,7 +263,7 @@ export class SikkaWritebackService {
       const pmsIntegrationId = writeback.pmsIntegrationId;
       
       if (!appId || !appKey) {
-        console.warn(`[Writeback] Missing credentials for ${writeback.id}`);
+        this.logger.warn({ writebackId: writeback.id, msg: '[Writeback] Missing credentials' });
         continue;
       }
       
@@ -279,7 +281,7 @@ export class SikkaWritebackService {
         await this.updateWritebackStatus(writeback.id, status);
         updated++;
         
-        console.log(`[Writeback] ${writeback.id}: ${status.result} (after ${writeback.checkCount + 1} checks)`);
+        this.logger.verbose({ writebackId: writeback.id, result: status.result, checks: writeback.checkCount + 1, msg: '[Writeback] Status updated' });
       } else {
         // Update last checked time even if still pending
         await this.prisma.pmsWriteback.update({
@@ -301,7 +303,7 @@ export class SikkaWritebackService {
     });
     const skipped = totalPending - checked;
     
-    console.log(`[Writeback] Checked ${checked}, updated ${updated}, skipped ${skipped}, rate-limited ${rateLimited}`);
+    this.logger.verbose({ checked, updated, skipped, rateLimited, msg: '[Writeback] Poll complete' });
     
     return { checked, updated, skipped, rateLimited };
   }
@@ -373,7 +375,7 @@ export class SikkaWritebackService {
     });
     
     if (result.count > 0) {
-      console.log(`[Writeback] Marked ${result.count} stuck writeback(s) as failed`);
+      this.logger.warn({ count: result.count, msg: '[Writeback] Marked stuck writebacks as failed' });
     }
     
     return result.count;
@@ -387,11 +389,11 @@ export class SikkaWritebackService {
     successful: number; 
   }> {
     if (!this.isLowTrafficTime()) {
-      console.log('[Writeback] Not in low-traffic period, skipping retry');
+      this.logger.verbose({ msg: '[Writeback] Not in low-traffic period, skipping retry' });
       return { retried: 0, successful: 0 };
     }
     
-    console.log('[Writeback] Retrying failed writebacks during low-traffic period...');
+    this.logger.verbose({ msg: '[Writeback] Retrying failed writebacks during low-traffic period' });
     
     // Get failed writebacks that might be worth retrying
     const failedWritebacks = await this.prisma.pmsWriteback.findMany({
@@ -416,7 +418,7 @@ export class SikkaWritebackService {
       const appKey = process.env.SIKKA_APP_KEY;
       
       if (!appId || !appKey) {
-        console.error(`[WritebackRetry] Missing Sikka system credentials in environment`);
+        this.logger.error({ msg: '[WritebackRetry] Missing Sikka system credentials in environment' });
         continue;
       }
       
@@ -436,11 +438,11 @@ export class SikkaWritebackService {
       if (status && status.result === 'completed') {
         await this.updateWritebackStatus(writeback.id, status);
         successful++;
-        console.log(`[Writeback] Retry successful for ${writeback.id}`);
+        this.logger.verbose({ writebackId: writeback.id, msg: '[Writeback] Retry successful' });
       }
     }
     
-    console.log(`[Writeback] Retry complete: ${retried} retried, ${successful} successful`);
+    this.logger.verbose({ retried, successful, msg: '[Writeback] Retry complete' });
     
     return { retried, successful };
   }

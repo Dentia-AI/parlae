@@ -1,3 +1,5 @@
+import { StructuredLogger } from '../../common/structured-logger';
+
 import type {
   Appointment,
   AppointmentAvailabilityQuery,
@@ -242,6 +244,7 @@ export interface IPmsService {
  * Provides common functionality for all PMS service implementations.
  */
 export abstract class BasePmsService implements IPmsService {
+  protected readonly pmsLogger = new StructuredLogger('BasePmsService');
   protected accountId: string;
   protected credentials: PmsCredentials;
   protected config: PmsConfig;
@@ -343,7 +346,17 @@ export abstract class BasePmsService implements IPmsService {
    * Helper method to handle API errors consistently
    */
   protected handleError(error: any, context: string): PmsApiResponse {
-    console.error(`[PMS] Error in ${context}:`, error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const status = error?.response?.status;
+    const data = error?.response?.data;
+    this.pmsLogger.error({
+      msg: `[PMS] Error in ${context}`,
+      accountId: this.accountId,
+      context,
+      status,
+      errorMessage: errMsg,
+      responseData: data ? JSON.stringify(data).slice(0, 500) : undefined,
+    });
     
     if (error.response) {
       // HTTP error response

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StructuredLogger } from '../../common/structured-logger';
 import axios from 'axios';
 
 /**
@@ -21,6 +22,7 @@ interface TokenRefreshResult {
 
 @Injectable()
 export class SikkaTokenRefreshService {
+  private readonly logger = new StructuredLogger('SikkaTokenService');
   private readonly baseUrl = 'https://api.sikkasoft.com/v4';
   
   constructor(private prisma: PrismaService) {}
@@ -35,7 +37,7 @@ export class SikkaTokenRefreshService {
       });
       
       if (!integration || integration.provider !== 'SIKKA') {
-        console.log(`[TokenRefresh] Skipping non-Sikka integration: ${pmsIntegrationId}`);
+        this.logger.verbose({ pmsIntegrationId, msg: '[TokenRefresh] Skipping non-Sikka integration' });
         return false;
       }
       
@@ -45,7 +47,7 @@ export class SikkaTokenRefreshService {
       const refreshKey = integration.refreshKey;
       
       if (!appId || !appKey) {
-        console.error(`[TokenRefresh] Missing Sikka system credentials in environment for ${pmsIntegrationId}`);
+        this.logger.error({ pmsIntegrationId, msg: '[TokenRefresh] Missing Sikka system credentials in environment' });
         return false;
       }
       
@@ -54,10 +56,10 @@ export class SikkaTokenRefreshService {
         try {
           const result = await this.refreshToken(appId, appKey, refreshKey);
           await this.saveTokens(pmsIntegrationId, result);
-          console.log(`[TokenRefresh] ✅ Token refreshed for ${pmsIntegrationId}`);
+          this.logger.verbose({ pmsIntegrationId, msg: '[TokenRefresh] Token refreshed' });
           return true;
         } catch (error) {
-          console.warn(`[TokenRefresh] Refresh failed, trying initial token...`);
+          this.logger.warn({ pmsIntegrationId, msg: '[TokenRefresh] Refresh failed, trying initial token' });
         }
       }
       
@@ -66,17 +68,17 @@ export class SikkaTokenRefreshService {
       const secretKey = integration.secretKey;
       
       if (!officeId || !secretKey) {
-        console.error(`[TokenRefresh] Missing officeId/secretKey for ${pmsIntegrationId}`);
+        this.logger.error({ pmsIntegrationId, msg: '[TokenRefresh] Missing officeId/secretKey' });
         return false;
       }
       
       const result = await this.getInitialToken(appId, appKey, officeId, secretKey);
       await this.saveTokens(pmsIntegrationId, result);
-      console.log(`[TokenRefresh] ✅ Initial token obtained for ${pmsIntegrationId}`);
+      this.logger.verbose({ pmsIntegrationId, msg: '[TokenRefresh] Initial token obtained' });
       return true;
       
     } catch (error) {
-      console.error(`[TokenRefresh] ❌ Failed to refresh token for ${pmsIntegrationId}:`, error);
+      this.logger.error({ pmsIntegrationId, error: error instanceof Error ? error.message : error, msg: '[TokenRefresh] Failed to refresh token' });
       
       // Update integration status
       await this.prisma.pmsIntegration.update({
@@ -95,7 +97,7 @@ export class SikkaTokenRefreshService {
    * Refresh tokens for all active Sikka integrations
    */
   async refreshAllTokens(): Promise<{ success: number; failed: number }> {
-    console.log('[TokenRefresh] Starting token refresh for all Sikka integrations...');
+    this.logger.verbose({ msg: '[TokenRefresh] Starting token refresh for all Sikka integrations' });
     
     const integrations = await this.prisma.pmsIntegration.findMany({
       where: {
@@ -104,7 +106,7 @@ export class SikkaTokenRefreshService {
       },
     });
     
-    console.log(`[TokenRefresh] Found ${integrations.length} Sikka integration(s)`);
+    this.logger.verbose({ count: integrations.length, msg: '[TokenRefresh] Found Sikka integrations' });
     
     let success = 0;
     let failed = 0;
@@ -118,7 +120,7 @@ export class SikkaTokenRefreshService {
       }
     }
     
-    console.log(`[TokenRefresh] Complete: ${success} success, ${failed} failed`);
+    this.logger.verbose({ success, failed, msg: '[TokenRefresh] Complete' });
     
     return { success, failed };
   }
@@ -139,7 +141,7 @@ export class SikkaTokenRefreshService {
       },
     });
     
-    console.log(`[TokenRefresh] Found ${integrations.length} expiring token(s)`);
+    this.logger.verbose({ count: integrations.length, msg: '[TokenRefresh] Found expiring tokens' });
     
     let success = 0;
     let failed = 0;

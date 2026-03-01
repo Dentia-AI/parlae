@@ -876,4 +876,215 @@ describe('AgentToolsService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // PMS writeback failure → GCal fallback
+  // Simulates an account connected to PMS but without writeback access.
+  // Writeback operations should fall back to Google Calendar when connected.
+  // ─────────────────────────────────────────────────────────────────────
+
+  describe('PMS writeback failure → GCal fallback', () => {
+    const pmsPhoneRecord = {
+      accountId: 'acc-pms',
+      pmsIntegration: {
+        id: 'pms-int-1',
+        provider: 'SIKKA',
+        config: {},
+      },
+      account: {
+        id: 'acc-pms',
+        googleCalendarConnected: true,
+        brandingTimezone: 'America/Toronto',
+        name: 'PMS Test Clinic',
+      },
+    };
+
+    const mockPmsService = {
+      bookAppointment: jest.fn(),
+      checkAvailability: jest.fn(),
+      cancelAppointment: jest.fn(),
+      searchPatients: jest.fn(),
+      createPatient: jest.fn(),
+    };
+
+    beforeEach(() => {
+      jest.doMock('../pms/pms.service', () => ({
+        PmsService: jest.fn().mockImplementation(() => ({
+          getPmsService: jest.fn().mockResolvedValue(mockPmsService),
+        })),
+      }));
+
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(pmsPhoneRecord);
+    });
+
+    afterEach(() => {
+      jest.resetModules();
+    });
+
+    it('should fall back to GCal when PMS bookAppointment writeback fails', async () => {
+      mockPmsService.bookAppointment.mockResolvedValue({
+        success: false,
+        error: { code: 'WRITEBACK_FAILED', message: 'No writeback access for this practice' },
+      });
+
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true,
+        eventId: 'gcal-backup-1',
+        htmlLink: 'https://cal/gcal-backup-1',
+      });
+      notificationsService.sendPmsFailureNotification.mockResolvedValue(undefined);
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-pms-fail-1', phoneNumberId: 'vapi-phone-1', customer: { number: '+14155551234' } },
+        message: {
+          functionCall: {
+            parameters: {
+              patientId: 'patient-1',
+              startTime: '2026-04-01T10:00:00Z',
+              appointmentType: 'Cleaning',
+              duration: 30,
+              firstName: 'John',
+              lastName: 'Doe',
+              phone: '+14155551234',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.integrationType).toBe('google_calendar_backup');
+      expect(gcalService.createAppointmentEvent).toHaveBeenCalledWith(
+        'acc-pms',
+        expect.objectContaining({
+          patient: expect.objectContaining({ firstName: 'John', lastName: 'Doe' }),
+          appointmentType: 'Cleaning',
+          notes: expect.stringContaining('[PMS BACKUP]'),
+        }),
+      );
+      expect(notificationsService.sendPmsFailureNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 'acc-pms',
+          pmsErrorMessage: 'No writeback access for this practice',
+          gcalBackupCreated: true,
+        }),
+      );
+    });
+
+    it('should return manual_followup when PMS fails and GCal is not connected', async () => {
+      mockPmsService.bookAppointment.mockResolvedValue({
+        success: false,
+        error: { code: 'WRITEBACK_FAILED', message: 'Access denied' },
+      });
+
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+      notificationsService.sendPmsFailureNotification.mockResolvedValue(undefined);
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-pms-fail-2', phoneNumberId: 'vapi-phone-1', customer: { number: '+14155559999' } },
+        message: {
+          functionCall: {
+            parameters: {
+              patientId: 'patient-2',
+              startTime: '2026-04-02T14:00:00Z',
+              appointmentType: 'Exam',
+              firstName: 'Jane',
+              lastName: 'Smith',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.integrationType).toBe('manual_followup');
+      expect(result.result.message).toContain('noted');
+      expect(gcalService.createAppointmentEvent).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to GCal even on unexpected PMS exceptions', async () => {
+      mockPmsService.bookAppointment.mockRejectedValue(
+        new Error('Connection refused: PMS server unreachable'),
+      );
+
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true,
+        eventId: 'gcal-exception-backup',
+        htmlLink: 'https://cal/gcal-exception-backup',
+      });
+      notificationsService.sendPmsFailureNotification.mockResolvedValue(undefined);
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-pms-crash', phoneNumberId: 'vapi-phone-1', customer: { number: '+14155550000' } },
+        message: {
+          functionCall: {
+            parameters: {
+              patientId: 'patient-3',
+              startTime: '2026-04-03T09:00:00Z',
+              appointmentType: 'Root Canal',
+              firstName: 'Bob',
+              lastName: 'Brown',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.integrationType).toBe('google_calendar_backup');
+    });
+
+    it('should return error when PMS checkAvailability fails', async () => {
+      mockPmsService.checkAvailability.mockResolvedValue({
+        success: false,
+        error: { code: 'PERMISSION_DENIED', message: 'Read-only access: cannot query schedule' },
+      });
+
+      const result = await service.checkAvailability({
+        accountId: 'acc-pms',
+        call: { id: 'call-avail-fail', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: '2026-04-01' } },
+      }) as any;
+
+      expect(result.error).toBeDefined();
+      expect(result.message).toBeDefined();
+    });
+
+    it('should still succeed on PMS bookAppointment success (happy path)', async () => {
+      mockPmsService.bookAppointment.mockResolvedValue({
+        success: true,
+        data: {
+          id: 'appt-sikka-1',
+          patientId: 'patient-1',
+          confirmationNumber: 'CONF-123',
+          providerName: 'Dr. Smith',
+          metadata: { writebackId: 'wb-1' },
+        },
+      });
+
+      prisma.aiActionLog = { create: jest.fn().mockResolvedValue({}) };
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-pms-ok', phoneNumberId: 'vapi-phone-1' },
+        message: {
+          functionCall: {
+            parameters: {
+              patientId: 'patient-1',
+              startTime: '2026-04-01T10:00:00Z',
+              appointmentType: 'Cleaning',
+              duration: 30,
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.appointmentId).toBe('appt-sikka-1');
+      expect(result.result.confirmationNumber).toBe('CONF-123');
+      expect(gcalService.createAppointmentEvent).not.toHaveBeenCalled();
+    });
+  });
 });

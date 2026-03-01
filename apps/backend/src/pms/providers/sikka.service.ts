@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
+import { StructuredLogger } from '../../common/structured-logger';
 import { BasePmsService } from '../interfaces/pms-service.interface';
 import type {
   Appointment,
@@ -42,6 +43,7 @@ import type {
  */
 @Injectable()
 export class SikkaPmsService extends BasePmsService {
+  private readonly logger = new StructuredLogger('SikkaPmsService');
   private client: AxiosInstance;
   private readonly baseUrl = 'https://api.sikkasoft.com/v4';
   
@@ -97,6 +99,45 @@ export class SikkaPmsService extends BasePmsService {
       }
       return config;
     });
+
+    // Add response interceptor for verbose logging of every API call
+    this.client.interceptors.response.use(
+      (response: AxiosResponse) => {
+        this.logger.verbose({
+          accountId,
+          method: response.config.method?.toUpperCase(),
+          url: response.config.url,
+          params: response.config.params,
+          requestBody: this.safeSlice(response.config.data),
+          status: response.status,
+          responseBody: this.safeSlice(JSON.stringify(response.data), 1000),
+          msg: '[Sikka API] Response',
+        });
+        return response;
+      },
+      (error) => {
+        const status = error.response?.status;
+        const data = error.response?.data;
+        this.logger.error({
+          accountId,
+          method: error.config?.method?.toUpperCase(),
+          url: error.config?.url,
+          params: error.config?.params,
+          requestBody: this.safeSlice(error.config?.data),
+          status,
+          responseBody: this.safeSlice(JSON.stringify(data), 1000),
+          errorMessage: error.message,
+          msg: '[Sikka API] Error',
+        });
+        return Promise.reject(error);
+      },
+    );
+  }
+
+  private safeSlice(value: unknown, maxLen = 500): string {
+    if (!value) return '';
+    const str = typeof value === 'string' ? value : JSON.stringify(value);
+    return str.length > maxLen ? str.slice(0, maxLen) + '…' : str;
   }
   
   // ============================================================================
@@ -132,7 +173,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async fetchAuthorizedPractices(): Promise<void> {
     try {
-      console.log('[Sikka] Fetching authorized practices...');
+      this.logger.verbose({ msg: '[Sikka] Fetching authorized practices' });
       
       const response = await axios.get(`${this.baseUrl}/authorized_practices`, {
         headers: {
@@ -152,12 +193,12 @@ export class SikkaPmsService extends BasePmsService {
       this.officeId = practice.office_id;
       this.secretKey = practice.secret_key;
       
-      console.log(`[Sikka] Found office_id: ${this.officeId}`);
+      this.logger.verbose({ officeId: this.officeId, msg: '[Sikka] Found office_id' });
       
       // TODO: Save to database
       
     } catch (error) {
-      console.error('[Sikka] Failed to fetch authorized practices:', error);
+      this.logger.error({ error: error instanceof Error ? error.message : error, msg: '[Sikka] Failed to fetch authorized practices' });
       throw new Error('Failed to fetch Sikka authorized practices. Please check your App-Id and App-Key.');
     }
   }
@@ -167,7 +208,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async getInitialToken(): Promise<void> {
     try {
-      console.log('[Sikka] Getting initial token with request_key grant...');
+      this.logger.verbose({ msg: '[Sikka] Getting initial token with request_key grant' });
       
       const response = await axios.post(
         `${this.baseUrl}/request_key`,
@@ -199,12 +240,12 @@ export class SikkaPmsService extends BasePmsService {
       const expiresInSeconds = parseInt(data.expires_in) || 86400; // Default 24 hours
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
       
-      console.log(`[Sikka] Token obtained successfully, expires in ${expiresInSeconds}s`);
+      this.logger.verbose({ expiresInSeconds, msg: '[Sikka] Token obtained successfully' });
       
       // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
       
     } catch (error) {
-      console.error('[Sikka] Token request failed:', error);
+      this.logger.error({ error: error instanceof Error ? error.message : error, msg: '[Sikka] Token request failed' });
       
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
@@ -221,7 +262,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async refreshToken(): Promise<void> {
     try {
-      console.log('[Sikka] Refreshing token with refresh_key grant...');
+      this.logger.verbose({ msg: '[Sikka] Refreshing token with refresh_key grant' });
       
       const response = await axios.post(
         `${this.baseUrl}/request_key`,
@@ -252,16 +293,16 @@ export class SikkaPmsService extends BasePmsService {
       const expiresInSeconds = parseInt(data.expires_in) || 86400;
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
       
-      console.log(`[Sikka] Token refreshed successfully, expires in ${expiresInSeconds}s`);
+      this.logger.verbose({ expiresInSeconds, msg: '[Sikka] Token refreshed successfully' });
       
       // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
       
     } catch (error) {
-      console.error('[Sikka] Token refresh failed:', error);
+      this.logger.error({ error: error instanceof Error ? error.message : error, msg: '[Sikka] Token refresh failed' });
       
       // If refresh fails, try to get a new token
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.warn('[Sikka] Refresh key expired, getting new token...');
+        this.logger.warn({ msg: '[Sikka] Refresh key expired, getting new token' });
         await this.getInitialToken();
       } else {
         throw error;
@@ -302,7 +343,7 @@ export class SikkaPmsService extends BasePmsService {
         const writeback = writebacks[0];
         const result = writeback.result;
         
-        console.log(`[Sikka] Writeback ${writebackId} status: ${result} (attempt ${attempt}/${maxAttempts})`);
+        this.logger.verbose({ writebackId, result, attempt, maxAttempts, msg: '[Sikka] Writeback poll' });
         
         // TODO: Update database with status
         
@@ -317,7 +358,7 @@ export class SikkaPmsService extends BasePmsService {
         await new Promise(resolve => setTimeout(resolve, 2000));
         
       } catch (error) {
-        console.error(`[Sikka] Error polling writeback status (attempt ${attempt}):`, error);
+        this.logger.error({ writebackId, attempt, maxAttempts, error: error instanceof Error ? error.message : error, msg: '[Sikka] Error polling writeback status' });
         
         if (attempt === maxAttempts) {
           throw new Error('Writeback status check timeout');
@@ -474,7 +515,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Appointment booking submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment booking submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -541,7 +582,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Appointment update submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment update submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -580,7 +621,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Appointment cancellation submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment cancellation submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -662,7 +703,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Patient creation submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Patient creation submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -706,7 +747,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Patient update submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Patient update submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -756,7 +797,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Note creation submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Note creation submitted' });
       
       // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
@@ -858,7 +899,7 @@ export class SikkaPmsService extends BasePmsService {
       
       const writebackId = response.data.id;
       
-      console.log(`[Sikka] Payment submitted, writeback ID: ${writebackId}`);
+      this.logger.verbose({ writebackId, msg: '[Sikka] Payment submitted' });
       
       // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
