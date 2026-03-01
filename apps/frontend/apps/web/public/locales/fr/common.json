@@ -247,7 +247,8 @@
         "scanButton": "Analyser et catégoriser le site web",
         "scanStarted": "Enregistré ! Analyse de votre site web et entraînement de l'IA en cours — cela peut prendre quelques minutes.",
         "autoScanOnSave": "Lors de la sauvegarde, nous analyserons ce site web et organiserons le contenu dans vos catégories de base de connaissances.",
-        "paymentRequired": "Ajoutez un moyen de paiement pour activer l'analyse automatique du site web."
+        "paymentRequired": "Ajoutez un moyen de paiement pour activer l'analyse automatique du site web.",
+        "brandingAutoFilled": "Info de marque auto-remplie : {{fields}}. Vérifiez dans Paramètres → Marque."
       },
       "categories": {
         "clinicInfo": "Informations sur la clinique",

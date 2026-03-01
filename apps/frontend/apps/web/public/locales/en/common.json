@@ -247,7 +247,8 @@
         "scanButton": "Scan & Categorize Website",
         "scanStarted": "Saved! Scanning your website and training the AI — this may take a few minutes.",
         "autoScanOnSave": "When you save, we'll scan this website and organize the content into your knowledge base categories.",
-        "paymentRequired": "Add a payment method to enable automatic website scanning."
+        "paymentRequired": "Add a payment method to enable automatic website scanning.",
+        "brandingAutoFilled": "Auto-filled branding: {{fields}}. Review in Settings → Branding."
       },
       "categories": {
         "clinicInfo": "Clinic Information",

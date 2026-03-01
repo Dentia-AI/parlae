@@ -417,6 +417,20 @@ export default function KnowledgeBaseManagementPage() {
               });
               setWebsiteScrapedAt(new Date().toISOString());
               toast.success(t('common:setup.knowledge.website.scanSuccess'));
+
+              if (scrapeData.brandingAutoFilled) {
+                const fields = Object.keys(scrapeData.brandingAutoFilled);
+                const readable = fields.map((f) =>
+                  f.replace('branding', '').replace(/([A-Z])/g, ' $1').trim(),
+                ).join(', ');
+                toast.info(
+                  t('common:setup.knowledge.website.brandingAutoFilled', {
+                    defaultValue: `Auto-filled branding: ${readable}. Review in Settings → Branding.`,
+                    fields: readable,
+                  }),
+                );
+              }
+
               loadKnowledge();
             }
           })

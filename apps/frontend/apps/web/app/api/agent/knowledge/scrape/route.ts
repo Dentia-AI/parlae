@@ -9,6 +9,7 @@ import {
   categorizeContent,
   KB_CATEGORIES,
 } from '@kit/shared/scraper/categorize-content';
+import { extractClinicInfo } from '@kit/shared/scraper/extract-clinic-info';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -92,6 +93,11 @@ export async function POST(request: NextRequest) {
         id: true,
         name: true,
         brandingBusinessName: true,
+        brandingContactEmail: true,
+        brandingContactPhone: true,
+        brandingAddress: true,
+        brandingWebsite: true,
+        brandingTimezone: true,
         phoneIntegrationSettings: true,
       },
     });
@@ -319,7 +325,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save to DB
+    // Extract structured clinic info and auto-fill empty branding fields
+    let extractedInfo: Record<string, string> = {};
+    try {
+      const clinicInfo = await extractClinicInfo(
+        scrapeResult.pages,
+        parsedUrl.href,
+      );
+
+      const brandingUpdate: Record<string, string> = {};
+
+      if (clinicInfo.businessName && !account.brandingBusinessName) {
+        brandingUpdate.brandingBusinessName = clinicInfo.businessName;
+      }
+      if (clinicInfo.contactEmail && !account.brandingContactEmail) {
+        brandingUpdate.brandingContactEmail = clinicInfo.contactEmail;
+      }
+      if (clinicInfo.contactPhone && !account.brandingContactPhone) {
+        brandingUpdate.brandingContactPhone = clinicInfo.contactPhone;
+      }
+      if (clinicInfo.address && !account.brandingAddress) {
+        brandingUpdate.brandingAddress = clinicInfo.address;
+      }
+      if (!account.brandingWebsite) {
+        brandingUpdate.brandingWebsite = parsedUrl.origin;
+      }
+      if (clinicInfo.timezone && !account.brandingTimezone) {
+        brandingUpdate.brandingTimezone = clinicInfo.timezone;
+      }
+
+      extractedInfo = brandingUpdate;
+
+      if (Object.keys(brandingUpdate).length > 0) {
+        await prisma.account.update({
+          where: { id: account.id },
+          data: brandingUpdate,
+        });
+
+        logger.info(
+          { accountId, fields: Object.keys(brandingUpdate) },
+          '[KB Scrape] Auto-filled branding from scraped content',
+        );
+      }
+    } catch (extractErr: any) {
+      logger.warn(
+        { error: extractErr?.message, accountId },
+        '[KB Scrape] Branding extraction failed (non-fatal)',
+      );
+    }
+
+    // Save KB config to DB
     await prisma.account.update({
       where: { id: account.id },
       data: {
@@ -428,6 +483,7 @@ export async function POST(request: NextRequest) {
       retellKnowledgeBaseId: provider === 'RETELL' ? retellKnowledgeBaseId : undefined,
       totalFiles: allFileIds.length || uploadedCount,
       queryToolId,
+      brandingAutoFilled: Object.keys(extractedInfo).length > 0 ? extractedInfo : undefined,
     });
   } catch (error: any) {
     logger.error(
