@@ -34,9 +34,14 @@ export default async function RootLayout({
   return (
     <html lang={language} className={`${className} ${theme === 'dark' ? 'dark' : ''}`} suppressHydrationWarning>
       <head>
+        <meta name="color-scheme" content="light dark" />
         <style
           dangerouslySetInnerHTML={{
-            __html: `html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark}`,
+            __html: [
+              'html{background-color:hsl(0,0%,100%);color-scheme:light}',
+              'html.dark,html.dark body{background-color:hsl(0,0%,9%)!important;color-scheme:dark}',
+              '@media(prefers-color-scheme:dark){html:not(.light){background-color:hsl(0,0%,9%);color-scheme:dark}}',
+            ].join(''),
           }}
           nonce={nonce}
         />
@@ -52,6 +57,8 @@ export default async function RootLayout({
                   document.documentElement.style.colorScheme = 'dark';
                 } else {
                   document.documentElement.classList.remove('dark');
+                  document.documentElement.style.backgroundColor = 'hsl(0,0%,100%)';
+                  document.documentElement.style.colorScheme = 'light';
                 }
 
                 window.NEXTAUTH_URL = window.location.origin;
