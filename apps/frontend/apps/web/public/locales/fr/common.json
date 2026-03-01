@@ -825,7 +825,7 @@
     "inSelectedPeriod": "dans la période sélectionnée",
     "noCallsYet": "Aucun appel pour le moment",
     "bookingRate": "Taux de réservation",
-    "booked": "{{count}} réservé(s)",
+    "booked": "{{count}} réservé(s) des demandes de réservation",
     "avgCallTime": "Durée moy. d'appel",
     "avgPerCall": "Moyenne par appel",
     "activity": "Activité",

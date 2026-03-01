@@ -825,7 +825,7 @@
     "inSelectedPeriod": "in selected period",
     "noCallsYet": "No calls yet",
     "bookingRate": "Booking Rate",
-    "booked": "{{count}} booked",
+    "booked": "{{count}} booked of booking inquiries",
     "avgCallTime": "Avg. Call Time",
     "avgPerCall": "Average per call",
     "activity": "Activity",

@@ -48,20 +48,35 @@ function generateMockAnalytics(startDate: Date, endDate: Date) {
     duration: Math.floor(Math.random() * 300) + 15,
   }));
 
+  const bookedMock = Math.floor(totalCalls * 0.55);
+  const rescheduledMock = Math.floor(totalCalls * 0.08);
+  const cancelledMock = Math.floor(totalCalls * 0.05);
+  const transferredMock = Math.floor(totalCalls * 0.10);
+  const infoMock = Math.floor(totalCalls * 0.12);
+  const insuranceMock = Math.floor(totalCalls * 0.06);
+  const otherMock = totalCalls - bookedMock - rescheduledMock - cancelledMock - transferredMock - infoMock - insuranceMock;
+  const bookingEligibleMock = bookedMock + rescheduledMock + cancelledMock + transferredMock + otherMock;
+  const mockBookingRate = bookingEligibleMock > 0
+    ? Math.round(((bookedMock + rescheduledMock) / bookingEligibleMock) * 1000) / 10
+    : 0;
+
   return {
     dateRange: { start: startDate, end: endDate },
     metrics: {
       totalCalls,
-      bookingRate: 78,
+      bookingRate: mockBookingRate,
       avgCallTime: 102,
       totalCost: 0,
     },
     activityTrend,
     outcomesDistribution: [
-      { outcome: 'BOOKED', count: Math.floor(totalCalls * 0.78), percentage: 78 },
-      { outcome: 'TRANSFERRED', count: Math.floor(totalCalls * 0.14), percentage: 14 },
-      { outcome: 'INSURANCE_INQUIRY', count: Math.floor(totalCalls * 0.06), percentage: 6 },
-      { outcome: 'OTHER', count: Math.floor(totalCalls * 0.02), percentage: 2 },
+      { outcome: 'BOOKED', count: bookedMock, percentage: Math.round((bookedMock / totalCalls) * 1000) / 10 },
+      { outcome: 'RESCHEDULED', count: rescheduledMock, percentage: Math.round((rescheduledMock / totalCalls) * 1000) / 10 },
+      { outcome: 'CANCELLED', count: cancelledMock, percentage: Math.round((cancelledMock / totalCalls) * 1000) / 10 },
+      { outcome: 'TRANSFERRED', count: transferredMock, percentage: Math.round((transferredMock / totalCalls) * 1000) / 10 },
+      { outcome: 'INFORMATION', count: infoMock, percentage: Math.round((infoMock / totalCalls) * 1000) / 10 },
+      { outcome: 'INSURANCE_INQUIRY', count: insuranceMock, percentage: Math.round((insuranceMock / totalCalls) * 1000) / 10 },
+      { outcome: 'OTHER', count: otherMock, percentage: Math.round((otherMock / totalCalls) * 1000) / 10 },
     ],
     satisfactionBreakdown: [
       { label: 'Satisfied', count: Math.floor(totalCalls * 0.72), percentage: 72 },
@@ -310,6 +325,7 @@ export async function GET(request: NextRequest) {
     // Compute outcome metrics from structured data in calls
     const outcomeCounts = new Map<string, number>();
     let bookedCount = 0;
+    let bookingEligibleCount = 0;
     let insuranceVerifiedCount = 0;
     let paymentPlanCount = 0;
     let collectionCount = 0;
@@ -322,6 +338,7 @@ export async function GET(request: NextRequest) {
 
       outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
       if (outcome === 'BOOKED' || outcome === 'RESCHEDULED') bookedCount++;
+      if (!NON_BOOKING_OUTCOMES.has(outcome)) bookingEligibleCount++;
 
       if (sd.insuranceVerified) insuranceVerifiedCount++;
       if (sd.paymentDiscussed) paymentPlanCount++;
@@ -341,8 +358,8 @@ export async function GET(request: NextRequest) {
       : (fallbackDurationCount > 0 ? Math.round(fallbackDuration / fallbackDurationCount) : 0);
 
     const sampleSize = recentCalls.length;
-    const bookingRate = sampleSize > 0
-      ? Math.round((bookedCount / sampleSize) * 1000) / 10
+    const bookingRate = bookingEligibleCount > 0
+      ? Math.round((bookedCount / bookingEligibleCount) * 1000) / 10
       : 0;
 
     const outcomesDistribution = Array.from(outcomeCounts.entries()).map(([outcome, count]) => ({
@@ -409,6 +426,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
   }
 }
+
+const NON_BOOKING_OUTCOMES = new Set([
+  'INFORMATION',
+  'INSURANCE_INQUIRY',
+  'EMERGENCY',
+  'VOICEMAIL',
+  'PAYMENT_PLAN',
+  'HUNG_UP',
+]);
 
 function inferOutcome(structuredData: Record<string, any>): string {
   const outcome = structuredData?.callOutcome;
@@ -591,6 +617,7 @@ async function computeRetellAnalytics(
   let totalDuration = 0;
   let durationCount = 0;
   let bookedCount = 0;
+  let bookingEligibleCount = 0;
   let satisfiedCount = 0;
   let unsatisfiedCount = 0;
   let satisfactionUnknown = 0;
@@ -616,6 +643,7 @@ async function computeRetellAnalytics(
 
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
     if (outcome === 'BOOKED' || outcome === 'RESCHEDULED') bookedCount++;
+    if (!NON_BOOKING_OUTCOMES.has(outcome)) bookingEligibleCount++;
 
     const presetSentiment = (rawAnalysis.user_sentiment || '').toLowerCase();
     const customSentiment = (custom.customer_sentiment || '').toLowerCase();
@@ -636,8 +664,8 @@ async function computeRetellAnalytics(
   }
 
   const avgCallTime = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
-  const bookingRate = totalCalls > 0
-    ? Math.round((bookedCount / totalCalls) * 1000) / 10
+  const bookingRate = bookingEligibleCount > 0
+    ? Math.round((bookedCount / bookingEligibleCount) * 1000) / 10
     : 0;
 
   return {

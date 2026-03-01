@@ -239,8 +239,9 @@ describe('GET /api/analytics/calls', () => {
 
     const data = await response.json();
     expect(data.metrics.totalCalls).toBe(3);
-    // booking rate = (booked + rescheduled) / total = 2/3 ≈ 66.67
-    expect(data.metrics.bookingRate).toBeCloseTo(66.67, 0);
+    // general_inquiry maps to INFORMATION which is excluded from booking rate denominator
+    // booking rate = (booked + rescheduled) / booking-eligible calls = 2/2 = 100
+    expect(data.metrics.bookingRate).toBe(100);
   });
 
   it('should include inactive retell phone numbers for filtering', async () => {
