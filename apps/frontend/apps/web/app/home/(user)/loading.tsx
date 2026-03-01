@@ -1,3 +1,5 @@
 import { GlobalLoader } from '@kit/ui/global-loader';
 
-export default GlobalLoader;
+export default function Loading() {
+  return <GlobalLoader fullPage />;
+}
