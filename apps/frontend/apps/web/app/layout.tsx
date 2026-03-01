@@ -38,14 +38,16 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = document.cookie.match(/theme=([^;]+)/)?.[1] || '${theme}';
-                if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                var theme = document.cookie.match(/theme=([^;]+)/)?.[1] || '${theme}';
+                var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (isDark) {
                   document.documentElement.classList.add('dark');
+                  document.documentElement.style.backgroundColor = 'hsl(0,0%,9%)';
+                  document.documentElement.style.colorScheme = 'dark';
                 } else {
                   document.documentElement.classList.remove('dark');
                 }
 
-                // Set NextAuth base URL for client
                 window.NEXTAUTH_URL = window.location.origin;
               })();
             `,

@@ -23,59 +23,77 @@ export default function GlobalError({
     );
   }
   return (
-    <html lang="en">
-      <body>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '100vh',
-            fontFamily:
-              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            padding: '2rem',
-            textAlign: 'center',
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+              var theme = document.cookie.match(/theme=([^;]+)/)?.[1] || 'system';
+              var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              if (isDark) {
+                document.documentElement.classList.add('dark');
+                document.documentElement.style.backgroundColor = 'hsl(0,0%,9%)';
+                document.documentElement.style.colorScheme = 'dark';
+              }
+            })();`,
           }}
-        >
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            Something went wrong
-          </h2>
-          <p style={{ color: '#666', marginBottom: '1.5rem', maxWidth: '28rem' }}>
-            A temporary error occurred while loading the page. This sometimes
-            happens during sign-in — please try again.
-          </p>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button
-              onClick={reset}
-              style={{
-                padding: '0.5rem 1.25rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #ddd',
-                background: '#fff',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              Try again
-            </button>
-            <button
-              onClick={() => {
-                window.location.href = '/home';
-              }}
-              style={{
-                padding: '0.5rem 1.25rem',
-                borderRadius: '0.375rem',
-                border: 'none',
-                background: '#111',
-                color: '#fff',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              Go to Dashboard
-            </button>
-          </div>
+        />
+      </head>
+      <body
+        style={{
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          fontFamily:
+            '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          padding: '2rem',
+          textAlign: 'center',
+        }}
+        className="bg-background text-foreground"
+      >
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+          Something went wrong
+        </h2>
+        <p style={{ opacity: 0.6, marginBottom: '1.5rem', maxWidth: '28rem' }}>
+          A temporary error occurred while loading the page. This sometimes
+          happens during sign-in — please try again.
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button
+            onClick={reset}
+            style={{
+              padding: '0.5rem 1.25rem',
+              borderRadius: '0.375rem',
+              border: '1px solid currentColor',
+              opacity: 0.3,
+              background: 'transparent',
+              color: 'inherit',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            Try again
+          </button>
+          <button
+            onClick={() => {
+              window.location.href = '/home';
+            }}
+            style={{
+              padding: '0.5rem 1.25rem',
+              borderRadius: '0.375rem',
+              border: 'none',
+              background: 'currentColor',
+              color: 'inherit',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              filter: 'invert(1)',
+            }}
+          >
+            Go to Dashboard
+          </button>
         </div>
       </body>
     </html>
