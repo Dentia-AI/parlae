@@ -8,12 +8,6 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import resourcesToBackend from 'i18next-resources-to-backend';
 import { initReactI18next } from 'react-i18next';
 
-// Keep track of the number of iterations
-let iteration = 0;
-
-// Maximum number of iterations
-const MAX_ITERATIONS = 20;
-
 /**
  * Initialize the i18n instance on the client.
  * @param settings - the i18n settings
@@ -54,42 +48,22 @@ export async function initializeI18nClient(
     )
     .use(LanguageDetector)
     .use(initReactI18next)
-    .init(
-      {
-        ...settings,
-        detection: {
-          order: ['htmlTag', 'cookie', 'navigator'],
-          caches: ['cookie'],
-          lookupCookie: 'lang',
-        },
-        interpolation: {
-          escapeValue: false,
-        },
+    .init({
+      ...settings,
+      detection: {
+        order: ['htmlTag', 'cookie', 'navigator'],
+        caches: ['cookie'],
+        lookupCookie: 'lang',
       },
-      (err) => {
-        if (err) {
-          console.error('Error initializing i18n client', err);
-        }
+      interpolation: {
+        escapeValue: false,
       },
-    );
+    });
 
-  // to avoid infinite loops, we return the i18next instance after a certain number of iterations
-  // even if the languages and namespaces are not loaded
-  if (iteration >= MAX_ITERATIONS) {
-    console.debug(`Max iterations reached: ${MAX_ITERATIONS}`);
-
-    return i18next;
-  }
-
-  // keep component from rendering if no languages or namespaces are loaded
   if (loadedLanguages.length === 0 || loadedNamespaces.length === 0) {
-    iteration++;
-
     console.debug(
-      `Keeping component from rendering if no languages or namespaces are loaded. Iteration: ${iteration}. Will stop after ${MAX_ITERATIONS} iterations.`,
+      '[i18n] Resources not yet in tracking arrays after init — this is normal on first load.',
     );
-
-    throw new Error('No languages or namespaces loaded');
   }
 
   return i18next;

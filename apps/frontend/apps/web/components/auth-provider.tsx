@@ -85,7 +85,25 @@ class AuthErrorBoundary extends Component<
 
   render() {
     if (this.state.hasError && this.state.retryCount >= AuthErrorBoundary.MAX_RETRIES) {
-      return null;
+      return (
+        <div
+          className="bg-background fixed top-0 left-0 z-[100] flex h-screen w-screen items-center justify-center"
+          aria-busy="true"
+        >
+          <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
+        </div>
+      );
+    }
+
+    if (this.state.hasError) {
+      return (
+        <div
+          className="bg-background fixed top-0 left-0 z-[100] flex h-screen w-screen items-center justify-center"
+          aria-busy="true"
+        >
+          <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
+        </div>
+      );
     }
 
     return this.props.children;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 
 import { ThemeProvider } from 'next-themes';
 
@@ -47,19 +47,21 @@ export function RootProviders({
         <AppEventsProvider>
           <ReactQueryProvider>
             <I18nProvider settings={i18nSettings} resolver={i18nResolver}>
-              <AuthProvider session={session}>
-                <ThemeProvider
-                  attribute="class"
-                  enableSystem
-                  disableTransitionOnChange
-                  defaultTheme={theme}
-                  enableColorScheme={false}
-                  storageKey="theme"
-                  nonce={nonce}
-                >
-                  {children}
-                </ThemeProvider>
-              </AuthProvider>
+              <Suspense fallback={<I18nFallback />}>
+                <AuthProvider session={session}>
+                  <ThemeProvider
+                    attribute="class"
+                    enableSystem
+                    disableTransitionOnChange
+                    defaultTheme={theme}
+                    enableColorScheme={false}
+                    storageKey="theme"
+                    nonce={nonce}
+                  >
+                    {children}
+                  </ThemeProvider>
+                </AuthProvider>
+              </Suspense>
 
               <If condition={featuresFlagConfig.enableVersionUpdater}>
                 <VersionUpdater />
@@ -69,5 +71,13 @@ export function RootProviders({
         </AppEventsProvider>
       </MonitoringProvider>
     </CspNonceProvider>
+  );
+}
+
+function I18nFallback() {
+  return (
+    <div className="bg-background fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
+    </div>
   );
 }
