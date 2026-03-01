@@ -8,6 +8,88 @@ const FETCH_TIMEOUT_MS = 10_000;
 const USER_AGENT =
   'Mozilla/5.0 (compatible; ParlaeBot/1.0; +https://parlae.com)';
 
+// ── URL Intelligence ──────────────────────────────────────────────────
+
+/**
+ * Path segments that indicate non-clinic content (blog posts, news,
+ * events, etc.).  Matched case-insensitively against each segment of
+ * the URL pathname.
+ */
+const EXCLUDED_PATH_SEGMENTS = new Set([
+  'blog', 'blogs', 'news', 'article', 'articles', 'post', 'posts',
+  'press', 'press-release', 'press-releases', 'media',
+  'events', 'event', 'webinar', 'webinars', 'podcast', 'podcasts',
+  'tag', 'tags', 'category', 'categories', 'author', 'authors',
+  'archive', 'archives', 'feed', 'rss',
+  'careers', 'jobs', 'job', 'hiring',
+  'shop', 'store', 'cart', 'checkout', 'product', 'products',
+  'login', 'signup', 'register', 'account', 'dashboard', 'admin',
+  'sitemap', 'wp-json', 'wp-admin', 'wp-content', 'wp-includes',
+]);
+
+/**
+ * Full path patterns (regex) that should be excluded.
+ * Catches dated blog URLs like /2024/01/my-post.
+ */
+const EXCLUDED_PATH_PATTERNS = [
+  /\/\d{4}\/\d{2}(\/|$)/,         // /2024/01/...
+  /\/page\/\d+/,                    // /page/2, /page/3 (pagination)
+  /\/(share|print|embed)\b/i,      // share/print links
+];
+
+/**
+ * Path segments that strongly suggest clinic-relevant content.
+ * Used to prioritize these pages when we have more URLs than MAX_PAGES.
+ */
+const PRIORITY_PATH_SEGMENTS = new Set([
+  'about', 'about-us', 'our-team', 'team', 'staff', 'doctors', 'dentists',
+  'providers', 'meet-the-team', 'meet-our-team',
+  'services', 'treatments', 'procedures', 'dental-services',
+  'contact', 'contact-us', 'location', 'locations', 'directions',
+  'hours', 'office-hours', 'schedule',
+  'insurance', 'payment', 'payments', 'financing', 'financial',
+  'new-patients', 'new-patient', 'patient-info', 'patient-information',
+  'forms', 'patient-forms',
+  'faq', 'faqs', 'frequently-asked-questions',
+  'emergency', 'emergency-dental', 'urgent-care',
+  'technology', 'office-tour', 'virtual-tour',
+  'reviews', 'testimonials',
+  'specials', 'offers', 'promotions',
+  'policies', 'privacy', 'accessibility',
+]);
+
+function isExcludedUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    const segments = pathname.toLowerCase().split('/').filter(Boolean);
+
+    if (segments.some((s) => EXCLUDED_PATH_SEGMENTS.has(s))) return true;
+    if (EXCLUDED_PATH_PATTERNS.some((re) => re.test(pathname))) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function urlPriority(url: string): number {
+  try {
+    const { pathname } = new URL(url);
+
+    // Homepage is highest priority
+    if (pathname === '/' || pathname === '') return 0;
+
+    const segments = pathname.toLowerCase().split('/').filter(Boolean);
+
+    if (segments.some((s) => PRIORITY_PATH_SEGMENTS.has(s))) return 1;
+
+    // Shorter paths are generally more important (top-level pages)
+    return 2 + segments.length;
+  } catch {
+    return 100;
+  }
+}
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface PageSection {
@@ -153,6 +235,8 @@ async function discoverViaLinks(baseUrl: string): Promise<string[]> {
 }
 
 export async function discoverPages(websiteUrl: string): Promise<string[]> {
+  const logger = await getLogger();
+
   let urls = await discoverViaSitemap(websiteUrl);
 
   if (urls.length === 0) {
@@ -163,7 +247,24 @@ export async function discoverPages(websiteUrl: string): Promise<string[]> {
     urls = [websiteUrl];
   }
 
-  return [...new Set(urls)].slice(0, MAX_PAGES);
+  const unique = [...new Set(urls)];
+  const beforeFilter = unique.length;
+
+  const filtered = unique.filter((u) => !isExcludedUrl(u));
+  const excluded = beforeFilter - filtered.length;
+
+  // Sort by priority: homepage first, then clinic pages, then the rest
+  // (shorter paths before deeper ones within the same priority tier).
+  filtered.sort((a, b) => urlPriority(a) - urlPriority(b));
+
+  if (excluded > 0) {
+    logger.info(
+      { before: beforeFilter, excluded, after: filtered.length },
+      '[Scraper] Filtered out non-clinic URLs (blog, news, etc.)',
+    );
+  }
+
+  return filtered.slice(0, MAX_PAGES);
 }
 
 // ── Content Extraction ─────────────────────────────────────────────────
@@ -191,6 +292,16 @@ const NOISE_SELECTORS = [
 
 function extractPageContent(html: string, url: string): ScrapedPage {
   const $ = cheerio.load(html);
+
+  // Check meta/structured-data BEFORE stripping tags (STRIP_SELECTORS removes <meta>).
+  const ogType = $('meta[property="og:type"]').attr('content')?.toLowerCase();
+  if (ogType === 'article' || ogType === 'blog') {
+    return { url, title: '', sections: [] };
+  }
+  const schemaType = $('[itemtype*="BlogPosting"], [itemtype*="NewsArticle"], [itemtype*="Article"]');
+  if (schemaType.length > 0) {
+    return { url, title: '', sections: [] };
+  }
 
   $(STRIP_SELECTORS).remove();
   $(NOISE_SELECTORS).remove();
