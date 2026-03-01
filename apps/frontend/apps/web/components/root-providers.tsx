@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { ThemeProvider } from 'next-themes';
 
@@ -22,13 +22,9 @@ import { getI18nSettings } from '~/lib/i18n/i18n.settings';
 import { ReactQueryProvider } from './react-query-provider';
 
 type RootProvidersProps = React.PropsWithChildren<{
-  // The language to use for the app (optional)
   lang?: string;
-  // The theme (light or dark or system) (optional)
   theme?: string;
-  // The CSP nonce to pass to scripts (optional)
   nonce?: string;
-  // The NextAuth session to hydrate on the client (optional)
   session?: Session | null;
 }>;
 
@@ -47,21 +43,19 @@ export function RootProviders({
         <AppEventsProvider>
           <ReactQueryProvider>
             <I18nProvider settings={i18nSettings} resolver={i18nResolver}>
-              <Suspense fallback={<I18nFallback />}>
-                <AuthProvider session={session}>
-                  <ThemeProvider
-                    attribute="class"
-                    enableSystem
-                    disableTransitionOnChange
-                    defaultTheme={theme}
-                    enableColorScheme={false}
-                    storageKey="theme"
-                    nonce={nonce}
-                  >
-                    {children}
-                  </ThemeProvider>
-                </AuthProvider>
-              </Suspense>
+              <AuthProvider session={session}>
+                <ThemeProvider
+                  attribute="class"
+                  enableSystem
+                  disableTransitionOnChange
+                  defaultTheme={theme}
+                  enableColorScheme={false}
+                  storageKey="theme"
+                  nonce={nonce}
+                >
+                  {children}
+                </ThemeProvider>
+              </AuthProvider>
 
               <If condition={featuresFlagConfig.enableVersionUpdater}>
                 <VersionUpdater />
@@ -71,13 +65,5 @@ export function RootProviders({
         </AppEventsProvider>
       </MonitoringProvider>
     </CspNonceProvider>
-  );
-}
-
-function I18nFallback() {
-  return (
-    <div className="bg-background fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
-    </div>
   );
 }
