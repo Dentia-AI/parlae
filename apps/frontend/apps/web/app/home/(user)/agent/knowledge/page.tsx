@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@kit/ui/button';
 import {
   Card,
@@ -87,6 +87,8 @@ export default function KnowledgeBaseManagementPage() {
     documentsUploaded: number;
     categories: Record<string, { fileId: string; charCount: number; sourcePages: string[] }>;
   } | null>(null);
+  const [paymentVerified, setPaymentVerified] = useState(false);
+  const originalWebsiteUrlRef = useRef('');
   const [categories, setCategories] = useState<Record<string, CategoryState>>(() => {
     const initial: Record<string, CategoryState> = {};
     for (const cat of KB_CATEGORIES) {
@@ -109,10 +111,12 @@ export default function KnowledgeBaseManagementPage() {
 
       const data = await res.json();
       setQueryToolId(data.queryToolId || null);
+      setPaymentVerified(Boolean(data.paymentMethodVerified));
 
       if (data.websiteUrl) {
         setWebsiteUrl(data.websiteUrl);
         setWebsiteUrlSaved(true);
+        originalWebsiteUrlRef.current = data.websiteUrl;
       }
       if (data.websiteScrapedAt) {
         setWebsiteScrapedAt(data.websiteScrapedAt);
@@ -338,6 +342,8 @@ export default function KnowledgeBaseManagementPage() {
         }
       }
 
+      const trimmedUrl = websiteUrl.trim();
+
       const res = await fetch('/api/agent/knowledge', {
         method: 'PUT',
         headers: {
@@ -347,7 +353,7 @@ export default function KnowledgeBaseManagementPage() {
         credentials: 'include',
         body: JSON.stringify({
           knowledgeBaseConfig,
-          websiteUrl: websiteUrl.trim() || undefined,
+          websiteUrl: trimmedUrl || undefined,
         }),
       });
 
@@ -359,9 +365,62 @@ export default function KnowledgeBaseManagementPage() {
       const result = await res.json();
       setQueryToolId(result.queryToolId || null);
       setHasChanges(false);
+      setWebsiteUrlSaved(true);
       toast.success(
         t('common:setup.knowledge.kbUpdated', { count: result.totalFiles }),
       );
+
+      const urlChanged =
+        trimmedUrl &&
+        trimmedUrl !== originalWebsiteUrlRef.current;
+
+      if (paymentVerified && urlChanged) {
+        setIsScraping(true);
+        setScrapeResult(null);
+
+        try {
+          let scrapeUrl = trimmedUrl;
+          if (!/^https?:\/\//i.test(scrapeUrl)) {
+            scrapeUrl = `https://${scrapeUrl}`;
+          }
+
+          const scrapeRes = await fetch('/api/agent/knowledge/scrape', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-csrf-token': csrfToken,
+            },
+            body: JSON.stringify({ websiteUrl: scrapeUrl }),
+          });
+
+          if (!scrapeRes.ok) {
+            const errorData = await scrapeRes.json().catch(() => ({ error: 'Scrape failed' }));
+            throw new Error(errorData.error || `Scrape failed (${scrapeRes.status})`);
+          }
+
+          const scrapeData = await scrapeRes.json();
+
+          setScrapeResult({
+            pagesScraped: scrapeData.pagesScraped,
+            documentsUploaded: scrapeData.documentsUploaded,
+            categories: scrapeData.categories,
+          });
+
+          setWebsiteScrapedAt(new Date().toISOString());
+          originalWebsiteUrlRef.current = trimmedUrl;
+          toast.success(t('common:setup.knowledge.website.scanSuccess'));
+
+          await loadKnowledge();
+        } catch (scrapeErr) {
+          toast.error(
+            scrapeErr instanceof Error ? scrapeErr.message : 'Website scan failed',
+          );
+        } finally {
+          setIsScraping(false);
+        }
+      } else {
+        originalWebsiteUrlRef.current = trimmedUrl;
+      }
     } catch (err: any) {
       toast.error(err.message || t('common:setup.knowledge.failedToSave'));
     } finally {
@@ -381,52 +440,6 @@ export default function KnowledgeBaseManagementPage() {
     setWebsiteUrlSaved(true);
     setHasChanges(true);
     toast.success(t('common:setup.knowledge.website.urlSavedToast'));
-  };
-
-  const handleScrapeNow = async () => {
-    let url = websiteUrl.trim();
-    if (!url) return;
-
-    if (!/^https?:\/\//i.test(url)) {
-      url = `https://${url}`;
-      setWebsiteUrl(url);
-    }
-
-    setIsScraping(true);
-    setScrapeResult(null);
-
-    try {
-      const response = await fetch('/api/agent/knowledge/scrape', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
-        },
-        body: JSON.stringify({ websiteUrl: url }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Scrape failed' }));
-        throw new Error(errorData.error || `Scrape failed (${response.status})`);
-      }
-
-      const result = await response.json();
-
-      setScrapeResult({
-        pagesScraped: result.pagesScraped,
-        documentsUploaded: result.documentsUploaded,
-        categories: result.categories,
-      });
-
-      setWebsiteScrapedAt(new Date().toISOString());
-      toast.success(t('common:setup.knowledge.website.scanSuccess'));
-
-      await loadKnowledge();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Scrape failed');
-    } finally {
-      setIsScraping(false);
-    }
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -466,15 +479,17 @@ export default function KnowledgeBaseManagementPage() {
             <Trans i18nKey="common:setup.knowledge.manageDescription" />
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving || !hasChanges}>
-          {saving ? (
+        <Button onClick={handleSave} disabled={saving || isScraping || !hasChanges}>
+          {saving || isScraping ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             <Save className="h-4 w-4 mr-2" />
           )}
-          {saving
-            ? <Trans i18nKey="common:setup.knowledge.saving" />
-            : <Trans i18nKey="common:setup.knowledge.saveAndUpdate" />
+          {isScraping
+            ? <Trans i18nKey="common:setup.knowledge.website.scanning" />
+            : saving
+              ? <Trans i18nKey="common:setup.knowledge.saving" />
+              : <Trans i18nKey="common:setup.knowledge.saveAndUpdate" />
           }
         </Button>
       </div>
@@ -561,26 +576,11 @@ export default function KnowledgeBaseManagementPage() {
             </Button>
           </div>
 
-          {websiteUrl.trim() && (
-            <Button
-              onClick={handleScrapeNow}
-              disabled={isScraping || !websiteUrl.trim()}
-              size="sm"
-              variant="outline"
-              className="w-full"
-            >
-              {isScraping ? (
-                <>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {t('common:setup.knowledge.website.scanning')}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                  {t('common:setup.knowledge.website.scanButton', { defaultValue: 'Scan & Categorize Website' })}
-                </>
-              )}
-            </Button>
+          {isScraping && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {t('common:setup.knowledge.website.scanning')}
+            </div>
           )}
 
           {scrapeResult && (
@@ -595,6 +595,26 @@ export default function KnowledgeBaseManagementPage() {
                   documents: scrapeResult.documentsUploaded,
                   categories: Object.keys(scrapeResult.categories).length,
                 })}
+              </div>
+            </div>
+          )}
+
+          {websiteUrl.trim() && websiteUrl.trim() !== originalWebsiteUrlRef.current && paymentVerified && !scrapeResult && (
+            <div className="rounded-lg bg-blue-500/5 ring-1 ring-blue-500/20 px-3 py-2.5 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-medium">
+                <Sparkles className="h-3.5 w-3.5" />
+                {t('common:setup.knowledge.website.autoScanTitle', { defaultValue: 'Website will be scanned automatically' })}
+              </div>
+              <div className="text-muted-foreground pl-5">
+                {t('common:setup.knowledge.website.autoScanOnSave', { defaultValue: 'When you save, we\'ll scan this website and organize the content into your knowledge base categories.' })}
+              </div>
+            </div>
+          )}
+
+          {!paymentVerified && websiteUrl.trim() && (
+            <div className="rounded-lg bg-amber-500/5 ring-1 ring-amber-500/20 px-3 py-2.5 text-xs">
+              <div className="text-amber-700 dark:text-amber-400">
+                {t('common:setup.knowledge.website.paymentRequired', { defaultValue: 'Add a payment method to enable automatic website scanning.' })}
               </div>
             </div>
           )}

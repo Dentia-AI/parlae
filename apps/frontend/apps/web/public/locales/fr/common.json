@@ -244,7 +244,9 @@
         "manualUploadHint": "Vous pouvez également télécharger des fichiers manuellement dans les catégories ci-dessous.",
         "uploadSummary": "{{count}} fichier(s) téléchargé(s) dans {{categories}} catégories",
         "urlSavedToast": "URL du site web enregistrée. Il sera analysé automatiquement après le déploiement.",
-        "scanButton": "Analyser et catégoriser le site web"
+        "scanButton": "Analyser et catégoriser le site web",
+        "autoScanOnSave": "Lors de la sauvegarde, nous analyserons ce site web et organiserons le contenu dans vos catégories de base de connaissances.",
+        "paymentRequired": "Ajoutez un moyen de paiement pour activer l'analyse automatique du site web."
       },
       "categories": {
         "clinicInfo": "Informations sur la clinique",

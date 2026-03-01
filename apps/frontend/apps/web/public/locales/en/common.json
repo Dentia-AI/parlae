@@ -244,7 +244,9 @@
         "manualUploadHint": "You can also upload additional files manually in the categories below.",
         "uploadSummary": "{{count}} file(s) uploaded across {{categories}} categories",
         "urlSavedToast": "Website URL saved. It will be scanned automatically after deployment.",
-        "scanButton": "Scan & Categorize Website"
+        "scanButton": "Scan & Categorize Website",
+        "autoScanOnSave": "When you save, we'll scan this website and organize the content into your knowledge base categories.",
+        "paymentRequired": "Add a payment method to enable automatic website scanning."
       },
       "categories": {
         "clinicInfo": "Clinic Information",

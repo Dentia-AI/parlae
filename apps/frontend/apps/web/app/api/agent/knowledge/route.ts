@@ -30,6 +30,7 @@ export async function GET() {
         phoneIntegrationSettings: true,
         brandingBusinessName: true,
         name: true,
+        paymentMethodVerified: true,
       },
     });
 
@@ -53,6 +54,7 @@ export async function GET() {
       queryToolId,
       websiteUrl,
       websiteScrapedAt,
+      paymentMethodVerified: account.paymentMethodVerified,
       totalFiles: Object.values(knowledgeBaseConfig).flat().filter(Boolean).length ||
         knowledgeBaseFileIds.length,
     });
