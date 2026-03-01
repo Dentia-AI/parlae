@@ -1747,6 +1747,7 @@ export class AgentToolsService {
 
       if (!result.success) {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
+        this.logger.error({ accountId: sikkaService.accountId, errorMsg, pmsError: result.error, msg: '[PMS] rescheduleAppointment writeback failed' });
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: sikkaService.pmsIntegrationId,
           action: 'rescheduleAppointment',
@@ -1759,7 +1760,15 @@ export class AgentToolsService {
           phiAccessed: false,
           errorMessage: errorMsg,
         });
-        throw new Error(errorMsg || 'Reschedule failed');
+
+        const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+        if (phoneRecord) {
+          return this.handlePmsRescheduleFailure(phoneRecord, params, call, errorMsg || 'Reschedule failed');
+        }
+        return {
+          error: 'Reschedule failed',
+          message: "I'm having trouble rescheduling. Our team will follow up with you shortly to confirm.",
+        };
       }
 
       const appointment = result.data;
@@ -1816,11 +1825,25 @@ export class AgentToolsService {
           message: `Your appointment has been rescheduled to ${new Date(params.startTime).toLocaleString()}.`,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(error);
+
+      // Even on unexpected errors, try the fallback if we have a phone record
+      try {
+        const { call, message } = payload;
+        const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
+        const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+        if (phoneRecord) {
+          this.logger.log({ msg: '[PMS] Attempting reschedule fallback after unexpected error' });
+          return this.handlePmsRescheduleFailure(phoneRecord, params, call, error?.message || 'Unexpected error');
+        }
+      } catch {
+        // Fallback itself failed — return the original error
+      }
+
       return {
         error: 'Reschedule failed',
-        message: "I'm having trouble rescheduling. Let me check availability for another time.",
+        message: "I'm having trouble rescheduling. Our team will follow up with you shortly to confirm.",
       };
     }
   }
@@ -2594,6 +2617,98 @@ export class AgentToolsService {
       pmsErrorMessage,
       agentResponse: fallbackResponse,
       msg: '[PMS Fallback] Returning response to agent',
+    });
+
+    return fallbackResponse;
+  }
+
+  /**
+   * Handle PMS reschedule failure: try to create a backup GCal event at the new time,
+   * then send an email to the clinic with the reschedule details.
+   * Returns success to the AI so the caller is told "rescheduled".
+   */
+  private async handlePmsRescheduleFailure(
+    phoneRecord: any,
+    params: any,
+    call: any,
+    pmsErrorMessage: string,
+  ) {
+    const accountId = phoneRecord?.accountId;
+    const callerPhone = call?.customer?.number;
+    const newStartTime = new Date(params.startTime || params.newStartTime || params.newDate);
+    const duration = params.duration || 30;
+
+    let gcalBackupCreated = false;
+    let gcalEventLink: string | undefined;
+
+    const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
+    if (gcAvailable) {
+      try {
+        const gcalResult = await this.googleCalendar.createAppointmentEvent(
+          accountId,
+          {
+            patient: {
+              firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
+              lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
+              phone: params.phone || callerPhone,
+              email: params.email,
+            },
+            appointmentType: params.appointmentType || params.type || 'General',
+            startTime: newStartTime,
+            duration,
+            notes: `[PMS RESCHEDULE BACKUP] Original PMS reschedule failed. Old appointment ID: ${params.appointmentId || 'unknown'}. ${params.reason || ''}`.trim(),
+            providerId: params.providerId,
+          },
+        );
+        gcalBackupCreated = true;
+        gcalEventLink = gcalResult.htmlLink || undefined;
+        this.logger.log({ accountId, eventId: gcalResult.eventId, msg: '[PMS Reschedule Fallback] Backup GCal event created' });
+      } catch (gcalError: any) {
+        this.logger.error({ accountId, error: gcalError?.message, msg: '[PMS Reschedule Fallback] Failed to create backup GCal event' });
+      }
+    }
+
+    this.notifications.sendPmsFailureNotification({
+      accountId,
+      patient: {
+        firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
+        lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
+        phone: params.phone || callerPhone,
+        email: params.email,
+      },
+      appointment: {
+        appointmentType: params.appointmentType || params.type || 'Reschedule',
+        startTime: newStartTime,
+        duration,
+        notes: `Reschedule requested. Old appointment ID: ${params.appointmentId || 'unknown'}. ${params.reason || ''}`.trim(),
+      },
+      pmsErrorMessage,
+      gcalBackupCreated,
+      gcalEventLink,
+    }).catch((err) => {
+      this.logger.error({ error: err?.message, msg: '[PMS Reschedule Fallback] Email notification also failed' });
+    });
+
+    const fallbackResponse = {
+      result: {
+        success: true,
+        integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
+        message: gcalBackupCreated
+          ? `Your appointment has been rescheduled to ${newStartTime.toLocaleString()}. A calendar event has been created. Do NOT say "with [patient name]" — the caller already knows who they are.`
+          : `Your reschedule request has been noted for ${newStartTime.toLocaleString()}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
+      },
+    };
+
+    this.logger.verbose({
+      accountId,
+      tool: 'rescheduleAppointment',
+      fallbackType: gcalBackupCreated ? 'gcal_backup' : 'manual_followup',
+      gcalAvailable: gcAvailable,
+      gcalBackupCreated,
+      pmsErrorMessage,
+      oldAppointmentId: params.appointmentId,
+      agentResponse: fallbackResponse,
+      msg: '[PMS Reschedule Fallback] Returning response to agent',
     });
 
     return fallbackResponse;
