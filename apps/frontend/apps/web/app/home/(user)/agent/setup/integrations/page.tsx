@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@kit/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Stepper } from '@kit/ui/stepper';
@@ -29,6 +29,7 @@ export default function IntegrationsPage() {
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [googleCalendarEmail, setGoogleCalendarEmail] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const calendarErrorRef = useRef(false);
   const csrfToken = useCsrfToken();
 
   const { progress, saveIntegrations, isLoading } = useSetupProgress(accountId || '');
@@ -57,30 +58,36 @@ export default function IntegrationsPage() {
     
     if (status === 'success') {
       if (provider === 'google-calendar') {
-        // Google Calendar connection successful
         setGoogleCalendarConnected(true);
         setGoogleCalendarEmail(email);
         toast.success('Google Calendar connected successfully!');
       } else if (provider === 'sikka') {
-        // Sikka PMS connection successful
         setShowPmsSetup(true);
         setPmsConnectionStatus('connected');
         toast.success('Sikka PMS connected successfully!');
       } else {
-        // Generic PMS connection (fallback)
         setShowPmsSetup(true);
         toast.success(t('common:setup.integrations.authSuccess'));
       }
     } else if (status === 'error' || error) {
       if (provider === 'google-calendar') {
+        calendarErrorRef.current = true;
+        setGoogleCalendarConnected(false);
+        setGoogleCalendarEmail(null);
         toast.error(error || 'Failed to connect Google Calendar');
       } else if (provider === 'sikka') {
         setShowPmsSetup(true);
         toast.error(error || 'Failed to connect Sikka PMS');
-      } else {
+      } else if (provider) {
         setShowPmsSetup(true);
         toast.error(error || t('common:setup.integrations.authError'));
+      } else {
+        toast.error(error || t('common:setup.integrations.authError'));
       }
+    }
+
+    if (status || error) {
+      window.history.replaceState({}, '', '/home/agent/setup/integrations');
     }
   }, [router, searchParams, t]);
 
@@ -148,8 +155,7 @@ export default function IntegrationsPage() {
             }
           }
 
-          // If Google Calendar is connected in the DB, update the UI
-          if (data.googleCalendar) {
+          if (data.googleCalendar && !calendarErrorRef.current) {
             setGoogleCalendarConnected(true);
             setGoogleCalendarEmail(data.googleCalendarEmail || null);
           }

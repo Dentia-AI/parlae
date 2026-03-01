@@ -142,13 +142,13 @@ export default function IntegrationsManagementPage() {
               </div>
             </div>
             {pmsStatus.connected ? (
-              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 whitespace-nowrap">
+                <CheckCircle2 className="h-3 w-3 mr-1 shrink-0" />
                 {t('integrationsPage.connected')}
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-muted-foreground">
-                <XCircle className="h-3 w-3 mr-1" />
+              <Badge variant="outline" className="text-muted-foreground whitespace-nowrap">
+                <XCircle className="h-3 w-3 mr-1 shrink-0" />
                 {t('integrationsPage.notConnected')}
               </Badge>
             )}
@@ -205,13 +205,13 @@ export default function IntegrationsManagementPage() {
               </div>
             </div>
             {calendarStatus.connected ? (
-              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 whitespace-nowrap">
+                <CheckCircle2 className="h-3 w-3 mr-1 shrink-0" />
                 {t('integrationsPage.connected')}
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-muted-foreground">
-                <XCircle className="h-3 w-3 mr-1" />
+              <Badge variant="outline" className="text-muted-foreground whitespace-nowrap">
+                <XCircle className="h-3 w-3 mr-1 shrink-0" />
                 {t('integrationsPage.notConnected')}
               </Badge>
             )}

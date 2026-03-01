@@ -15,12 +15,15 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state'); // accountId
   const error = searchParams.get('error');
 
-  // Handle OAuth errors
+  // Handle OAuth errors (e.g. user clicked "Deny" on consent screen)
   if (error) {
     const publicUrl = process.env.NEXT_PUBLIC_APP_BASE_URL || process.env.NEXTAUTH_URL || 'https://app.parlae.ca';
+    const message = error === 'access_denied'
+      ? 'Google Calendar access was denied. You can try again or skip this step.'
+      : error;
     return NextResponse.redirect(
       new URL(
-        `/home/agent/setup/integrations?status=error&error=${encodeURIComponent(error)}`,
+        `/home/agent/setup/integrations?status=error&provider=google-calendar&error=${encodeURIComponent(message)}`,
         publicUrl
       )
     );
