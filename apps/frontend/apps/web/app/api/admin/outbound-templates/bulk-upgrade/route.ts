@@ -51,14 +51,29 @@ export async function POST(request: NextRequest) {
         [enabledField]: true,
         [agentIdField]: { not: null },
       },
-      include: { account: { select: { id: true, name: true } } },
+      include: {
+        account: {
+          select: { id: true, name: true, phoneIntegrationSettings: true },
+        },
+      },
     });
 
     const results: Array<{ accountId: string; status: string; agentId?: string; error?: string }> = [];
 
     for (const s of settings) {
       try {
-        const flowConfig = template.flowConfig as Record<string, unknown>;
+        const integrationSettings =
+          (s.account?.phoneIntegrationSettings as any) ?? {};
+        const retellKbId = integrationSettings.retellKnowledgeBaseId as
+          | string
+          | undefined;
+
+        const flowConfig = {
+          ...(template.flowConfig as Record<string, unknown>),
+        };
+        if (retellKbId) {
+          flowConfig.knowledge_base_ids = [retellKbId];
+        }
         const flow = await retell.createConversationFlow(flowConfig as any);
         if (!flow) {
           results.push({ accountId: s.accountId, status: 'failed', error: 'Flow creation failed' });

@@ -62,7 +62,7 @@ async function createOutboundRetellAgent(
 
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { name: true },
+    select: { name: true, phoneIntegrationSettings: true },
   });
   const clinicName = account?.name || 'Dental Clinic';
 
@@ -75,7 +75,15 @@ async function createOutboundRetellAgent(
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
 
-  const flowConfig = template.flowConfig as Record<string, unknown>;
+  const integrationSettings = (account?.phoneIntegrationSettings as any) ?? {};
+  const retellKbId = integrationSettings.retellKnowledgeBaseId as
+    | string
+    | undefined;
+
+  const flowConfig = { ...(template.flowConfig as Record<string, unknown>) };
+  if (retellKbId) {
+    flowConfig.knowledge_base_ids = [retellKbId];
+  }
   const flow = await retell.createConversationFlow(flowConfig as any);
   if (!flow) {
     throw new Error(`Failed to create conversation flow for outbound ${group}`);

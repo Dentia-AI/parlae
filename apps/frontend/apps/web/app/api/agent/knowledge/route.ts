@@ -212,6 +212,72 @@ export async function PUT(request: NextRequest) {
       '[KB API] Knowledge base updated successfully',
     );
 
+    // Attach KB to all deployed agents (inbound CF + outbound)
+    if (provider === 'RETELL' && retellKnowledgeBaseId) {
+      try {
+        const { createRetellService } = await import(
+          '@kit/shared/retell/retell.service'
+        );
+        const retell = createRetellService();
+        const kbIds = [retellKnowledgeBaseId as string];
+        const flowsUpdated: string[] = [];
+
+        const cfData = updatedSettings.retellConversationFlow as
+          | { conversationFlowId?: string }
+          | undefined;
+        if (cfData?.conversationFlowId) {
+          await retell.updateConversationFlow(cfData.conversationFlowId, {
+            knowledge_base_ids: kbIds,
+          });
+          flowsUpdated.push(`inbound:${cfData.conversationFlowId}`);
+        }
+
+        const outboundSettings = await prisma.outboundSettings.findUnique({
+          where: { accountId: account.id },
+          select: {
+            patientCareRetellAgentId: true,
+            financialRetellAgentId: true,
+          },
+        });
+
+        const outboundAgentIds = [
+          outboundSettings?.patientCareRetellAgentId,
+          outboundSettings?.financialRetellAgentId,
+        ].filter(Boolean) as string[];
+
+        for (const agentId of outboundAgentIds) {
+          try {
+            const agent = await retell.getAgent(agentId);
+            const flowId =
+              (agent?.response_engine as any)?.conversation_flow_id;
+            if (flowId) {
+              await retell.updateConversationFlow(flowId, {
+                knowledge_base_ids: kbIds,
+              });
+              flowsUpdated.push(`outbound:${flowId}`);
+            }
+          } catch (agentErr: any) {
+            logger.warn(
+              { error: agentErr?.message, agentId },
+              '[KB API] Failed to update outbound agent flow (non-fatal)',
+            );
+          }
+        }
+
+        if (flowsUpdated.length > 0) {
+          logger.info(
+            { accountId: account.id, flowsUpdated, kbId: retellKnowledgeBaseId },
+            '[KB API] Attached KB to conversation flows',
+          );
+        }
+      } catch (attachErr: any) {
+        logger.error(
+          { error: attachErr?.message, accountId: account.id },
+          '[KB API] Failed to attach KB to agents (non-fatal)',
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       provider,
