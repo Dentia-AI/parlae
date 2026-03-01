@@ -12,11 +12,12 @@ const customJestConfig: Config = {
   // Use node environment for API route tests, jsdom for component tests
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
-  roots: ['<rootDir>', '<rootDir>/../../packages/shared'],
+  roots: ['<rootDir>', '<rootDir>/../../packages/shared', '<rootDir>/../../packages/i18n'],
   testMatch: [
     '<rootDir>/**/__tests__/**/*.test.[jt]s?(x)',
     '<rootDir>/**/?(*.)+(spec|test).[jt]s?(x)',
     '<rootDir>/../../packages/shared/**/?(*.)+(spec|test).[jt]s?(x)',
+    '<rootDir>/../../packages/i18n/**/?(*.)+(spec|test).[jt]s?(x)',
   ],
   moduleNameMapper: {
     '^~/(.*)$': '<rootDir>/$1',

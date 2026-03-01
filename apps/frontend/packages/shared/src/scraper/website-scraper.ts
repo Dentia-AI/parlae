@@ -58,7 +58,7 @@ const PRIORITY_PATH_SEGMENTS = new Set([
   'policies', 'privacy', 'accessibility',
 ]);
 
-function isExcludedUrl(url: string): boolean {
+export function isExcludedUrl(url: string): boolean {
   try {
     const { pathname } = new URL(url);
     const segments = pathname.toLowerCase().split('/').filter(Boolean);
@@ -72,7 +72,7 @@ function isExcludedUrl(url: string): boolean {
   }
 }
 
-function urlPriority(url: string): number {
+export function urlPriority(url: string): number {
   try {
     const { pathname } = new URL(url);
 
@@ -147,7 +147,7 @@ async function safeFetch(url: string): Promise<string | null> {
   }
 }
 
-function normalizeUrl(href: string, baseUrl: string): string | null {
+export function normalizeUrl(href: string, baseUrl: string): string | null {
   try {
     const resolved = new URL(href, baseUrl);
     resolved.hash = '';
@@ -290,7 +290,7 @@ const NOISE_SELECTORS = [
   '#cookie-consent',
 ].join(', ');
 
-function extractPageContent(html: string, url: string): ScrapedPage {
+export function extractPageContent(html: string, url: string): ScrapedPage {
   const $ = cheerio.load(html);
 
   // Check meta/structured-data BEFORE stripping tags (STRIP_SELECTORS removes <meta>).

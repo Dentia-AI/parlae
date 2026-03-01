@@ -71,7 +71,7 @@ const CATEGORY_LIST_FOR_PROMPT = KB_CATEGORIES.map(
 
 // ── LLM Categorization ────────────────────────────────────────────────
 
-interface SectionWithMeta {
+export interface SectionWithMeta {
   pageUrl: string;
   heading: string;
   content: string;
@@ -180,7 +180,7 @@ If a section doesn't clearly fit, use "clinic-info" as default.`;
 /**
  * Keyword-based fallback when OpenAI is unavailable.
  */
-function fallbackClassify(
+export function fallbackClassify(
   sections: SectionWithMeta[],
 ): Record<string, SectionWithMeta[]> {
   const result: Record<string, SectionWithMeta[]> = {};
@@ -228,7 +228,7 @@ function fallbackClassify(
 
 // ── Document Generation ────────────────────────────────────────────────
 
-function generateDocument(
+export function generateDocument(
   categoryId: string,
   categoryLabel: string,
   sections: SectionWithMeta[],
