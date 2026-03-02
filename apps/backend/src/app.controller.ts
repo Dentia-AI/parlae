@@ -21,7 +21,7 @@ export class AppController {
     }
 
     return {
-      message: 'Dentia backend ready',
+      message: 'Parlae backend ready',
       database,
       timestamp: new Date().toISOString(),
     };

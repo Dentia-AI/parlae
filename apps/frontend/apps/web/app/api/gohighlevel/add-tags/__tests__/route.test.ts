@@ -221,7 +221,7 @@ describe('/api/gohighlevel/add-tags', () => {
       expect(mockGHLService.addContactTags).toHaveBeenCalledWith({
         email: 'test@example.com',
         tags: ['new-tag-1', 'new-tag-2'],
-        source: 'DentiaHub Activity',
+        source: 'ParlaeHub Activity',
       });
     });
 
@@ -275,7 +275,7 @@ describe('/api/gohighlevel/add-tags', () => {
       expect(mockGHLService.addContactTags).toHaveBeenCalledWith({
         email: 'multi@example.com',
         tags: multipleTags,
-        source: 'DentiaHub Activity',
+        source: 'ParlaeHub Activity',
       });
     });
 
@@ -302,7 +302,7 @@ describe('/api/gohighlevel/add-tags', () => {
       });
     });
 
-    it('should default to "DentiaHub Activity" source if not provided', async () => {
+    it('should default to "ParlaeHub Activity" source if not provided', async () => {
       mockGHLService.addContactTags.mockResolvedValue('contact-123');
 
       const request = new Request('http://localhost:3000/api/gohighlevel/add-tags', {
@@ -320,7 +320,7 @@ describe('/api/gohighlevel/add-tags', () => {
       expect(mockGHLService.addContactTags).toHaveBeenCalledWith({
         email: 'test@example.com',
         tags: ['tag1'],
-        source: 'DentiaHub Activity',
+        source: 'ParlaeHub Activity',
       });
     });
   });

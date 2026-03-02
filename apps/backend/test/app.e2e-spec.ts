@@ -73,7 +73,7 @@ describe('AppController (e2e)', () => {
         .get('/')
         .expect(200)
         .expect((res) => {
-          expect(res.body).toHaveProperty('message', 'Dentia backend ready');
+          expect(res.body).toHaveProperty('message', 'Parlae backend ready');
           expect(res.body).toHaveProperty('database');
           expect(res.body).toHaveProperty('timestamp');
           expect(typeof res.body.timestamp).toBe('string');

@@ -1,6 +1,6 @@
 /**
  * Validates if a redirect URL is safe for use in authentication flows
- * Only allows redirects to Dentia domains over HTTPS
+ * Only allows redirects to Parlae domains over HTTPS
  * 
  * This prevents open redirect vulnerabilities while supporting
  * unified auth flow between app.parlae.ca and hub.parlae.ca

@@ -16,7 +16,7 @@ describe('/api/test/backend-status', () => {
 
   it('should return backend status when successful', async () => {
     const mockStatus = {
-      message: 'Dentia backend ready',
+      message: 'Parlae backend ready',
       database: 'reachable',
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -29,7 +29,7 @@ describe('/api/test/backend-status', () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({
       success: true,
-      message: 'Dentia backend ready',
+      message: 'Parlae backend ready',
       database: 'reachable',
       timestamp: '2024-01-01T00:00:00.000Z',
     });

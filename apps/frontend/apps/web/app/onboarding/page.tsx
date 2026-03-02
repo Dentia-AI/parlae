@@ -26,7 +26,7 @@ async function OnboardingPage() {
             <Heading level={2}>
               <Trans
                 i18nKey={'common:onboardingHeading'}
-                defaults={'Welcome to Dentia!'}
+                defaults={'Welcome to Parlae!'}
               />
             </Heading>
             <p className="text-muted-foreground">

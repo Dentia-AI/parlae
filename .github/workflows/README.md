@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains GitHub Actions workflows for automated testing and deployment of the Dentia application.
+This directory contains GitHub Actions workflows for automated testing and deployment of the Parlae application.
 
 ## Test Workflows
 

@@ -1,6 +1,6 @@
 {
   "onboardingTitle": "Complétez votre configuration",
-  "onboardingHeading": "Bienvenue chez Dentia !",
+  "onboardingHeading": "Bienvenue chez Parlae !",
   "onboardingSubheading": "Configurons vos informations de paiement pour commencer",
   "onboardingComplete": "Configuration terminée",
   "onboardingCompleteHeading": "Paiement réussi !",
@@ -20,7 +20,7 @@
   "contactUs": "Nous contacter",
   "bookACall": "Réserver un appel",
   "bookACallDescription": "Planifiez un moment pour discuter avec notre équipe. Choisissez une date et une heure qui vous conviennent.",
-  "bookingPage": "Réserver un appel - Dentia",
+  "bookingPage": "Réserver un appel - Parlae",
   "routes": {
     "application": "Application",
     "home": "Accueil",

@@ -56,7 +56,7 @@ describe('AppController', () => {
 
       const result = await controller.status();
 
-      expect(result).toHaveProperty('message', 'Dentia backend ready');
+      expect(result).toHaveProperty('message', 'Parlae backend ready');
       expect(result).toHaveProperty('database', 'reachable');
       expect(result).toHaveProperty('timestamp');
       expect(typeof result.timestamp).toBe('string');
@@ -69,7 +69,7 @@ describe('AppController', () => {
 
       const result = await controller.status();
 
-      expect(result).toHaveProperty('message', 'Dentia backend ready');
+      expect(result).toHaveProperty('message', 'Parlae backend ready');
       expect(result.database).toContain('unreachable');
       expect(result.database).toContain('Connection failed');
       expect(result).toHaveProperty('timestamp');
@@ -80,7 +80,7 @@ describe('AppController', () => {
 
       const result = await controller.status();
 
-      expect(result).toHaveProperty('message', 'Dentia backend ready');
+      expect(result).toHaveProperty('message', 'Parlae backend ready');
       expect(result.database).toContain('unreachable');
       expect(result.database).toContain('string error');
     });

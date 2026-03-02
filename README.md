@@ -30,7 +30,7 @@ This is a starter template for building AI-powered voice agent applications usin
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Dentia-AI/parlae-starter.git
+git clone https://github.com/Parlae-AI/parlae-starter.git
 cd parlae-starter
 ```
 
@@ -239,8 +239,8 @@ npx prisma studio
 For questions, issues, or feature requests:
 
 - 📖 Check the [documentation](docs/)
-- 🐛 Open an [issue](https://github.com/Dentia-AI/parlae-starter/issues)
-- 💬 Start a [discussion](https://github.com/Dentia-AI/parlae-starter/discussions)
+- 🐛 Open an [issue](https://github.com/Parlae-AI/parlae-starter/issues)
+- 💬 Start a [discussion](https://github.com/Parlae-AI/parlae-starter/discussions)
 
 ## License
 

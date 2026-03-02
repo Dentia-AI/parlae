@@ -11,7 +11,7 @@ export function SiteFooter() {
       description={<Trans i18nKey="marketing:footerDescription" />}
       copyright={
         <>
-          © {new Date().getFullYear()} Dentia Lab Inc. All rights reserved.
+          © {new Date().getFullYear()} Tossle Labs Inc. All rights reserved.
         </>
       }
       sections={[

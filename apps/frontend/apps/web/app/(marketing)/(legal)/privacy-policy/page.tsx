@@ -29,7 +29,7 @@ async function PrivacyPolicyPage() {
           <section className={'mt-8'}>
             <h2 className={'text-2xl font-semibold mb-4'}>1. Introduction</h2>
             <p>
-              Welcome to Dentia, operated by <strong>Dentia Lab Inc.</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). 
+              Welcome to Parlae, operated by <strong>Tossle Labs Inc.</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). 
               We respect your privacy and are committed to protecting your personal data. 
               This privacy policy will inform you about how we look after your personal data when you visit 
               our website or use our services, and tell you about your privacy rights and how the law protects you.
@@ -113,7 +113,7 @@ async function PrivacyPolicyPage() {
             </p>
             <ul className={'list-disc pl-6 mt-2 space-y-2'}>
               <li>Log into your account and navigate to Settings &gt; Account &gt; Delete Account</li>
-              <li>Contact us directly at privacy@dentia.com</li>
+              <li>Contact us directly at privacy@parlae.ca</li>
               <li>If you connected through Meta/Facebook, you can also request deletion through your Facebook settings</li>
             </ul>
             <p className={'mt-4'}>
@@ -172,9 +172,9 @@ async function PrivacyPolicyPage() {
               If you have any questions about this privacy policy or our privacy practices, please contact us:
             </p>
             <ul className={'list-none mt-2 space-y-2'}>
-              <li><strong>Company:</strong> Dentia Lab Inc.</li>
-              <li><strong>Email:</strong> privacy@dentia.com</li>
-              <li><strong>Website:</strong> https://dentia.com/contact</li>
+              <li><strong>Company:</strong> Tossle Labs Inc.</li>
+              <li><strong>Email:</strong> privacy@parlae.ca</li>
+              <li><strong>Website:</strong> https://parlae.ca/contact</li>
             </ul>
           </section>
 
@@ -185,7 +185,7 @@ async function PrivacyPolicyPage() {
             </p>
             <ol className={'list-decimal pl-6 mt-2 space-y-2'}>
               <li>Go to your Facebook Settings &gt; Apps and Websites</li>
-              <li>Find Dentia in the list</li>
+              <li>Find Parlae in the list</li>
               <li>Click &quot;Remove&quot; or request data deletion</li>
               <li>Your deletion request will be processed automatically through our system</li>
             </ol>

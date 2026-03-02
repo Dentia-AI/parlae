@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     const contactId = await ghlService.addContactTags({
       email,
       tags,
-      source: source || 'DentiaHub Activity',
+      source: source || 'ParlaeHub Activity',
     });
 
     if (contactId) {

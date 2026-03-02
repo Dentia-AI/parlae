@@ -29,7 +29,7 @@ async function TermsOfServicePage() {
           <section className={'mt-8'}>
             <h2 className={'text-2xl font-semibold mb-4'}>1. Acceptance of Terms</h2>
             <p>
-              By accessing and using Dentia (&quot;the Service&quot;) operated by <strong>Dentia Lab Inc.</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), 
+              By accessing and using Parlae (&quot;the Service&quot;) operated by <strong>Tossle Labs Inc.</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), 
               you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to 
               abide by the above, please do not use this service.
             </p>
@@ -38,7 +38,7 @@ async function TermsOfServicePage() {
           <section className={'mt-8'}>
             <h2 className={'text-2xl font-semibold mb-4'}>2. Description of Service</h2>
             <p>
-              Dentia provides an online platform for [describe your service]. We reserve the right to modify, 
+              Parlae provides an online platform for [describe your service]. We reserve the right to modify, 
               suspend, or discontinue the Service (or any part thereof) at any time, with or without notice. 
               We will not be liable to you or to any third party for any modification, suspension, or 
               discontinuance of the Service.
@@ -93,7 +93,7 @@ async function TermsOfServicePage() {
             <h2 className={'text-2xl font-semibold mb-4'}>5. Intellectual Property Rights</h2>
             <h3 className={'text-xl font-semibold mt-4 mb-2'}>5.1 Our Content</h3>
             <p>
-              The Service and its original content, features, and functionality are owned by Dentia Lab Inc. and are 
+              The Service and its original content, features, and functionality are owned by Tossle Labs Inc. and are 
               protected by international copyright, trademark, patent, trade secret, and other intellectual 
               property or proprietary rights laws.
             </p>
@@ -134,7 +134,7 @@ async function TermsOfServicePage() {
             <h2 className={'text-2xl font-semibold mb-4'}>7. Third-Party Services</h2>
             <p>
               The Service may contain links to third-party websites or services that are not owned or 
-              controlled by Dentia. This includes integrations with services such as Meta/Facebook, 
+              controlled by Parlae. This includes integrations with services such as Meta/Facebook, 
               payment processors, and other third-party platforms.
             </p>
             <p className={'mt-4'}>
@@ -169,7 +169,7 @@ async function TermsOfServicePage() {
 
             <h3 className={'text-xl font-semibold mt-4 mb-2'}>9.2 Limitation of Liability</h3>
             <p>
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL DENTIA LAB INC. BE LIABLE FOR ANY INDIRECT, 
+              TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL TOSSLE LABS INC. BE LIABLE FOR ANY INDIRECT, 
               INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, 
               WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER 
               INTANGIBLE LOSSES.
@@ -179,7 +179,7 @@ async function TermsOfServicePage() {
           <section className={'mt-8'}>
             <h2 className={'text-2xl font-semibold mb-4'}>10. Indemnification</h2>
             <p>
-              You agree to defend, indemnify, and hold harmless Dentia Lab Inc. and its officers, directors, employees, 
+              You agree to defend, indemnify, and hold harmless Tossle Labs Inc. and its officers, directors, employees, 
               and agents from and against any claims, liabilities, damages, losses, and expenses, including 
               reasonable attorneys&apos; fees and costs, arising out of or in any way connected with:
             </p>
@@ -245,9 +245,9 @@ async function TermsOfServicePage() {
               If you have any questions about these Terms, please contact us:
             </p>
             <ul className={'list-none mt-2 space-y-2'}>
-              <li><strong>Company:</strong> Dentia Lab Inc.</li>
-              <li><strong>Email:</strong> legal@dentia.com</li>
-              <li><strong>Website:</strong> https://dentia.com/contact</li>
+              <li><strong>Company:</strong> Tossle Labs Inc.</li>
+              <li><strong>Email:</strong> legal@parlae.ca</li>
+              <li><strong>Website:</strong> https://parlae.ca/contact</li>
             </ul>
           </section>
 

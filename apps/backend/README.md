@@ -1,6 +1,6 @@
-# Dentia Backend (NestJS)
+# Parlae Backend (NestJS)
 
-This service provides the API for Dentia. It is based on the [notiz-dev/nestjs-prisma-starter](https://github.com/notiz-dev/nestjs-prisma-starter) conventions and uses the shared Prisma schema located in `packages/prisma`.
+This service provides the API for Parlae. It is based on the [notiz-dev/nestjs-prisma-starter](https://github.com/notiz-dev/nestjs-prisma-starter) conventions and uses the shared Prisma schema located in `packages/prisma`.
 
 ## Available Scripts
 
