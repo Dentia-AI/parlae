@@ -37,35 +37,57 @@ export function RootProviders({
 }: RootProvidersProps) {
   const i18nSettings = useMemo(() => getI18nSettings(lang), [lang]);
 
+  // AuthProvider and ThemeProvider are intentionally OUTSIDE the Suspense
+  // boundary. SessionProvider (inside AuthProvider) fetches the session
+  // client-side on mount, which triggers a state update. If that update
+  // arrives while the Suspense boundary is still hydrating (waiting for
+  // i18n), React throws error #310 ("Suspense boundary received an update
+  // before it finished hydrating") and falls back to client rendering,
+  // replacing the server-rendered HTML with the fallback — causing a white
+  // flash. Keeping stateful providers outside prevents this.
   return (
     <CspNonceProvider nonce={nonce}>
       <MonitoringProvider>
         <AppEventsProvider>
           <ReactQueryProvider>
-            <Suspense fallback={null}>
-              <I18nProvider settings={i18nSettings} resolver={i18nResolver}>
-                <AuthProvider session={session}>
-                  <ThemeProvider
-                    attribute="class"
-                    enableSystem
-                    disableTransitionOnChange
-                    defaultTheme={theme}
-                    enableColorScheme={false}
-                    storageKey="theme"
-                    nonce={nonce}
+            <AuthProvider session={session}>
+              <ThemeProvider
+                attribute="class"
+                enableSystem
+                disableTransitionOnChange
+                defaultTheme={theme}
+                enableColorScheme={false}
+                storageKey="theme"
+                nonce={nonce}
+              >
+                <Suspense fallback={<I18nHydrationFallback />}>
+                  <I18nProvider
+                    settings={i18nSettings}
+                    resolver={i18nResolver}
                   >
                     {children}
-                  </ThemeProvider>
-                </AuthProvider>
 
-                <If condition={featuresFlagConfig.enableVersionUpdater}>
-                  <VersionUpdater />
-                </If>
-              </I18nProvider>
-            </Suspense>
+                    <If condition={featuresFlagConfig.enableVersionUpdater}>
+                      <VersionUpdater />
+                    </If>
+                  </I18nProvider>
+                </Suspense>
+              </ThemeProvider>
+            </AuthProvider>
           </ReactQueryProvider>
         </AppEventsProvider>
       </MonitoringProvider>
     </CspNonceProvider>
+  );
+}
+
+function I18nHydrationFallback() {
+  return (
+    <div
+      className="bg-background fixed inset-0 z-50 flex items-center justify-center"
+      aria-busy="true"
+    >
+      <div className="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
+    </div>
   );
 }
