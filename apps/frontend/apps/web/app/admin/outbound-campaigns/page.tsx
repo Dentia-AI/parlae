@@ -194,11 +194,8 @@ function AdminOutboundCampaignsPage() {
                   </p>
                 ) : (
                   <div className="max-h-64 overflow-y-auto space-y-2">
-                    {accounts.map((acct) => (
-                      <div
-                        key={acct.id}
-                        className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50"
-                      >
+                    {accounts.map((acct, idx) => (
+                      <div key={acct.id ?? `acct-${idx}`} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50">
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedAccountIds.has(acct.id)}
