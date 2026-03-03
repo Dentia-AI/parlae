@@ -56,7 +56,10 @@ function AdminOutboundCampaignsPage() {
               financialEnabled: a.financialEnabled,
               outboundTemplateVersion: a.outboundTemplateVersion,
             }));
-          setAccounts(mapped);
+          const unique = Array.from(
+            new Map(mapped.map((a: AccountInfo) => [a.id, a])).values(),
+          );
+          setAccounts(unique);
         }
       })
       .catch(() => {})
