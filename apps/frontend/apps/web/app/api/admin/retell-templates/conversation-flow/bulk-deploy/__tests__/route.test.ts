@@ -16,6 +16,9 @@ jest.mock('@kit/prisma', () => ({
       findUnique: jest.fn().mockResolvedValue({ id: 'tpl-1', name: 'test-flow' }),
     },
     account: {
+      findMany: jest.fn().mockResolvedValue([
+        { id: 'acc-1', paymentMethodVerified: true },
+      ]),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findUnique: jest.fn().mockResolvedValue({
         brandingBusinessName: 'Test Clinic',
@@ -177,6 +180,22 @@ describe('POST /api/admin/retell-templates/conversation-flow/bulk-deploy', () =>
     const body = await res.json();
 
     expect(body.deployResults[0].success).toBe(true);
+  });
+
+  it('skips accounts without verified payment method', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findMany.mockResolvedValueOnce([
+      { id: 'acc-1', paymentMethodVerified: false },
+    ]);
+
+    const res = await POST(makeRequest({ templateId: 'tpl-1', accountIds: ['acc-1'] }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.skippedNoPayment).toBe(1);
+    expect(body.deployResults).toHaveLength(1);
+    expect(body.deployResults[0].skipped).toBe(true);
+    expect(mockDeployRetellConversationFlow).not.toHaveBeenCalled();
   });
 
   it('preserves user voice and knowledge base config during deploy', async () => {
