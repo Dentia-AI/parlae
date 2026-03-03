@@ -56,7 +56,11 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                var theme = document.cookie.match(/theme=([^;]+)/)?.[1] || '${theme}';
+                try {
+                  var theme = localStorage.getItem('theme') || '${theme}';
+                } catch(e) {
+                  var theme = '${theme}';
+                }
                 var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                 if (isDark) {
                   document.documentElement.classList.add('dark');
@@ -67,6 +71,9 @@ export default async function RootLayout({
                   document.documentElement.style.backgroundColor = 'hsl(0,0%,100%)';
                   document.documentElement.style.colorScheme = 'light';
                 }
+                try {
+                  document.cookie = 'theme=' + theme + ';path=/;max-age=31536000;SameSite=Lax';
+                } catch(e) {}
 
                 window.NEXTAUTH_URL = window.location.origin;
               })();

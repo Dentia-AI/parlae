@@ -5,21 +5,18 @@ import { cn } from '@kit/ui/utils';
 
 function LogoImage({
   className,
-  width = 666,
-  height = 160,
 }: {
   className?: string;
-  width?: number;
-  height?: number;
 }) {
   return (
     <Image
       src="/images/parlae-logo.png"
       alt="Parlae"
-      width={width}
-      height={height}
+      width={666}
+      height={160}
       className={cn('w-[120px] lg:w-[140px] h-auto', className)}
       priority
+      unoptimized
     />
   );
 }
