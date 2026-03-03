@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const groupLabel =
       template.agentGroup === 'PATIENT_CARE' ? 'Patient Care' : 'Financial';
 
-    const results: Array<{ accountId: string; success: boolean; agentId?: string; error?: string }> = [];
+    const results: Array<{ accountId: string; success: boolean; skipped?: boolean; agentId?: string; error?: string }> = [];
 
     for (const accountId of accountIds) {
       try {
@@ -71,11 +71,26 @@ export async function POST(request: NextRequest) {
             brandingBusinessName: true,
             brandingTimezone: true,
             phoneIntegrationSettings: true,
+            paymentMethodVerified: true,
           },
         });
 
         if (!account) {
           results.push({ accountId, success: false, error: 'Account not found' });
+          continue;
+        }
+
+        if (!account.paymentMethodVerified) {
+          logger.info(
+            { accountId },
+            '[Outbound] Skipped account without verified payment method',
+          );
+          results.push({
+            accountId,
+            success: false,
+            skipped: true,
+            error: 'Payment method not verified — skipped',
+          });
           continue;
         }
 
@@ -194,11 +209,17 @@ export async function POST(request: NextRequest) {
     }
 
     const succeeded = results.filter((r) => r.success).length;
-    const failed = results.filter((r) => !r.success).length;
+    const skipped = results.filter((r) => r.skipped).length;
+    const failed = results.filter((r) => !r.success && !r.skipped).length;
+
+    const parts = [`Deployed to ${succeeded} account(s)`];
+    if (skipped > 0) parts.push(`${skipped} skipped (no payment)`);
+    if (failed > 0) parts.push(`${failed} failed`);
 
     return NextResponse.json({
       success: true,
-      message: `Deployed to ${succeeded} account(s)${failed > 0 ? `, ${failed} failed` : ''}`,
+      message: parts.join(', '),
+      skippedNoPayment: skipped,
       results,
     });
   } catch (error) {

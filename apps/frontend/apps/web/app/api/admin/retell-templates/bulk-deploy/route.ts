@@ -35,9 +35,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 });
     }
 
-    // Assign template to accounts
-    const result = await prisma.account.updateMany({
+    // Pre-filter accounts by payment status — only deploy to accounts with verified payment
+    const allAccounts = await prisma.account.findMany({
       where: { id: { in: accountIds } },
+      select: { id: true, paymentMethodVerified: true },
+    });
+
+    const paymentVerifiedIds = allAccounts
+      .filter((a) => a.paymentMethodVerified)
+      .map((a) => a.id);
+
+    const skippedNoPayment = allAccounts
+      .filter((a) => !a.paymentMethodVerified)
+      .map((a) => a.id);
+
+    if (skippedNoPayment.length > 0) {
+      logger.info(
+        { templateId, skippedCount: skippedNoPayment.length, skippedAccountIds: skippedNoPayment },
+        '[Retell Templates] Skipped accounts without verified payment method',
+      );
+    }
+
+    // Assign template only to accounts with verified payment
+    const result = await prisma.account.updateMany({
+      where: { id: { in: paymentVerifiedIds } },
       data: { retellAgentTemplateId: templateId },
     });
 
@@ -46,10 +67,19 @@ export async function POST(request: NextRequest) {
       '[Retell Templates] Bulk assigned template to accounts',
     );
 
-    // Trigger redeploy for each account (non-blocking)
-    const deployResults: Array<{ accountId: string; success: boolean; error?: string }> = [];
+    // Trigger redeploy for each account with verified payment
+    const deployResults: Array<{ accountId: string; success: boolean; skipped?: boolean; error?: string }> = [];
 
-    for (const accountId of accountIds) {
+    for (const skippedId of skippedNoPayment) {
+      deployResults.push({
+        accountId: skippedId,
+        success: false,
+        skipped: true,
+        error: 'Payment method not verified — skipped',
+      });
+    }
+
+    for (const accountId of paymentVerifiedIds) {
       try {
         const { createRetellService } = await import('@kit/shared/retell/retell.service');
         const retell = createRetellService();
@@ -116,9 +146,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const skippedCount = deployResults.filter((r) => r.skipped).length;
+
     return NextResponse.json({
       success: true,
       assigned: result.count,
+      skippedNoPayment: skippedCount,
       deployResults,
     });
   } catch (error) {

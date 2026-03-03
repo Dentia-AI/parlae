@@ -5,8 +5,8 @@ import { cn } from '@kit/ui/utils';
 
 function LogoImage({
   className,
-  width = 140,
-  height = 40,
+  width = 666,
+  height = 160,
 }: {
   className?: string;
   width?: number;
@@ -14,7 +14,7 @@ function LogoImage({
 }) {
   return (
     <Image
-      src="/images/parlae-logo.svg"
+      src="/images/parlae-logo.png"
       alt="Parlae"
       width={width}
       height={height}
