@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
-import { AdminGuard } from '@kit/admin/components/admin-guard';
 import { PageBody } from '@kit/ui/page';
 import { AppBreadcrumbs } from '@kit/ui/app-breadcrumbs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
@@ -288,4 +287,4 @@ function AdminOutboundCampaignsPage() {
   );
 }
 
-export default AdminGuard(AdminOutboundCampaignsPage);
+export default AdminOutboundCampaignsPage;
