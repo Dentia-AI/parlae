@@ -13,6 +13,8 @@ import { loadUserWorkspace } from '../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { createI18nServerInstance } from '~/lib/i18n/i18n.server';
 import { EnableAgentToggle } from './_components/enable-agent-toggle';
+import { AutoApproveToggle } from './_components/auto-approve-toggle';
+import { PendingCampaignsBanner } from './_components/pending-campaigns-banner';
 
 const PATIENT_CARE_TYPES = ['RECALL', 'REMINDER', 'FOLLOWUP', 'NOSHOW', 'TREATMENT_PLAN', 'POSTOP', 'REACTIVATION', 'SURVEY', 'WELCOME'];
 
@@ -71,7 +73,9 @@ export default async function OutboundOverviewPage() {
 
   const patientCareEnabled = settings?.patientCareEnabled || false;
   const financialEnabled = settings?.financialEnabled || false;
+  const autoApproveCampaigns = settings?.autoApproveCampaigns || false;
   const anyEnabled = patientCareEnabled || financialEnabled;
+  const pendingCampaigns = campaigns.filter((c) => c.status === 'DRAFT').length;
   const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
   const totalContacts = campaigns.reduce((sum, c) => sum + c.totalContacts, 0);
   const totalSuccessful = campaigns.reduce((sum, c) => sum + c.successfulCount, 0);
@@ -104,14 +108,21 @@ export default async function OutboundOverviewPage() {
   return (
     <PageBody className="pt-4 pb-0 min-h-0 overflow-hidden">
       <div className="flex flex-col h-full min-h-0 overflow-auto space-y-4">
-        <div className="flex-shrink-0">
-          <h2 className="text-2xl font-bold tracking-tight">
-            <Trans i18nKey="common:outbound.overview.title" />
-          </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            <Trans i18nKey="common:outbound.overview.description" />
-          </p>
+        <div className="flex-shrink-0 flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">
+              <Trans i18nKey="common:outbound.overview.title" />
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              <Trans i18nKey="common:outbound.overview.description" />
+            </p>
+          </div>
+          {anyEnabled && (
+            <AutoApproveToggle enabled={autoApproveCampaigns} />
+          )}
         </div>
+
+        <PendingCampaignsBanner pendingCount={pendingCampaigns} />
 
         {!pmsConnected && (
           <Card className="border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20">

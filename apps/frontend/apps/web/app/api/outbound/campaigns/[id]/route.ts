@@ -98,6 +98,7 @@ export async function PATCH(
       pause: ['ACTIVE'],
       resume: ['PAUSED'],
       cancel: ['ACTIVE', 'PAUSED', 'SCHEDULED', 'DRAFT'],
+      approve: ['DRAFT'],
     };
 
     if (!action || !validTransitions[action]) {
@@ -115,11 +116,20 @@ export async function PATCH(
       pause: 'PAUSED',
       resume: 'ACTIVE',
       cancel: 'CANCELLED',
+      approve: 'ACTIVE',
     };
+
+    const updateData: Record<string, unknown> = {
+      status: statusMap[action] as any,
+    };
+
+    if (action === 'approve') {
+      updateData.scheduledStartAt = new Date();
+    }
 
     const updated = await prisma.outboundCampaign.update({
       where: { id },
-      data: { status: statusMap[action] as any },
+      data: updateData,
     });
 
     return NextResponse.json(updated);

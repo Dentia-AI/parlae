@@ -90,6 +90,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     ? Math.round((campaign.completedCount / campaign.totalContacts) * 100)
     : 0;
 
+  const canApprove = campaign.status === 'DRAFT';
   const canPause = campaign.status === 'ACTIVE';
   const canResume = campaign.status === 'PAUSED';
   const canCancel = ['ACTIVE', 'PAUSED', 'SCHEDULED', 'DRAFT'].includes(campaign.status);
@@ -128,7 +129,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     if (!next) setSelectedIds(new Set());
   }
 
-  function handleAction(action: 'pause' | 'resume' | 'cancel') {
+  function handleAction(action: 'pause' | 'resume' | 'cancel' | 'approve') {
     startTransition(async () => {
       try {
         const res = await fetch(`/api/outbound/campaigns/${campaign.id}`, {
@@ -150,6 +151,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
           pause: t('outbound.campaignActions.paused'),
           resume: t('outbound.campaignActions.resumed'),
           cancel: t('outbound.campaignActions.cancelled'),
+          approve: t('outbound.campaignActions.approved', 'Campaign approved'),
         };
         toast.success(labels[action] ?? 'Done');
         setDetail(null);
@@ -282,6 +284,17 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
           <div className="mt-4 border-t pt-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                {canApprove && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleAction('approve')}
+                    disabled={isPending}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    {t('outbound.campaignActions.approve', 'Approve & Start')}
+                  </Button>
+                )}
                 {canPause && (
                   <Button
                     size="sm"

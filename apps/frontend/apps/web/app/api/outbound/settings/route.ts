@@ -136,7 +136,17 @@ export async function POST(request: NextRequest) {
     const accountId = await getAccountId(userId);
     if (!accountId) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
-    const { action, group } = await request.json();
+    const body = await request.json();
+    const { action, group } = body;
+
+    if (action === 'setAutoApprove') {
+      const settings = await prisma.outboundSettings.update({
+        where: { accountId },
+        data: { autoApproveCampaigns: body.value === true },
+      });
+      return NextResponse.json(settings);
+    }
+
     if (!action || !group || !['enable', 'disable'].includes(action) || !['PATIENT_CARE', 'FINANCIAL'].includes(group)) {
       return NextResponse.json({ error: 'Invalid action or group' }, { status: 400 });
     }

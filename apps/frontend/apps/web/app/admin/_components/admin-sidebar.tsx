@@ -16,6 +16,7 @@ import {
   Workflow,
   Bot,
   Download,
+  Play,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@kit/ui/utils';
@@ -59,6 +60,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Outbound Templates', href: '/admin/outbound-templates', icon: PhoneOutgoing },
       { name: 'Outbound Versions', href: '/admin/outbound-templates/versions', icon: GitBranch },
+      { name: 'Outbound Campaigns', href: '/admin/outbound-campaigns', icon: Play },
     ],
   },
   {

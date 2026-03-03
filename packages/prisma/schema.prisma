@@ -1441,6 +1441,9 @@ model OutboundSettings {
   // Reminder config: { "hoursBeforeAppointment": 24 }
   reminderConfig Json @default("{}") @map("reminder_config")
 
+  // Campaign approval
+  autoApproveCampaigns Boolean @default(false) @map("auto_approve_campaigns")
+
   // Voicemail policy
   leaveVoicemail Boolean @default(true) @map("leave_voicemail")
 

@@ -149,6 +149,47 @@ export class OutboundCampaignService {
     });
   }
 
+  async approveCampaign(campaignId: string): Promise<OutboundCampaign> {
+    const campaign = await this.prisma.outboundCampaign.findUnique({
+      where: { id: campaignId },
+    });
+
+    if (!campaign) {
+      throw new Error('Campaign not found');
+    }
+    if (campaign.status !== 'DRAFT') {
+      throw new Error(`Cannot approve campaign with status ${campaign.status}`);
+    }
+
+    this.logger.log({ campaignId, msg: 'Approving campaign (DRAFT → ACTIVE)' });
+    return this.prisma.outboundCampaign.update({
+      where: { id: campaignId },
+      data: {
+        status: 'ACTIVE',
+        scheduledStartAt: new Date(),
+      },
+    });
+  }
+
+  async approveAllDraftCampaigns(
+    accountId: string,
+  ): Promise<{ approved: number }> {
+    const result = await this.prisma.outboundCampaign.updateMany({
+      where: { accountId, status: 'DRAFT' },
+      data: {
+        status: 'ACTIVE',
+        scheduledStartAt: new Date(),
+      },
+    });
+
+    this.logger.log({
+      accountId,
+      approved: result.count,
+      msg: 'Bulk approved all DRAFT campaigns',
+    });
+    return { approved: result.count };
+  }
+
   async getContacts(
     campaignId: string,
     filters?: { status?: string },

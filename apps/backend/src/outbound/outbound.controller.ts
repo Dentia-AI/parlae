@@ -191,6 +191,100 @@ export class OutboundController {
     return this.campaignService.getContacts(campaignId, { status });
   }
 
+  // ── Campaign Approval ──────────────────────────────────────────────────
+
+  @Patch('campaigns/:accountId/:campaignId/approve')
+  async approveCampaign(
+    @Param('accountId') accountId: string,
+    @Param('campaignId') campaignId: string,
+  ) {
+    const campaign = await this.campaignService.getCampaign(campaignId);
+    if (!campaign || campaign.accountId !== accountId) {
+      throw new HttpException('Campaign not found', HttpStatus.NOT_FOUND);
+    }
+    return this.campaignService.approveCampaign(campaignId);
+  }
+
+  @Post('campaigns/:accountId/approve-all')
+  async approveAllDraftCampaigns(
+    @Param('accountId') accountId: string,
+  ) {
+    return this.campaignService.approveAllDraftCampaigns(accountId);
+  }
+
+  // ── Admin: Manual Scan Trigger ────────────────────────────────────────
+
+  @Post('admin/trigger-scan')
+  async triggerScan(
+    @Body()
+    body: {
+      scanTypes: Array<'recall' | 'reminder' | 'noshow' | 'reactivation' | 'all'>;
+      accountIds?: string[];
+    },
+  ) {
+    const { scanTypes, accountIds } = body;
+
+    if (!scanTypes?.length) {
+      throw new HttpException(
+        'scanTypes is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let accounts: Array<{ id: string; settings: any }>;
+
+    if (accountIds?.length) {
+      const settingsList = await this.prisma.outboundSettings.findMany({
+        where: { accountId: { in: accountIds } },
+      });
+      accounts = settingsList.map((s) => ({ id: s.accountId, settings: s }));
+    } else {
+      const settingsList = await this.prisma.outboundSettings.findMany({
+        where: {
+          OR: [
+            { patientCareEnabled: true },
+            { financialEnabled: true },
+          ],
+        },
+      });
+      accounts = settingsList.map((s) => ({ id: s.accountId, settings: s }));
+    }
+
+    const results: Array<{
+      accountId: string;
+      scansRun: string[];
+      error?: string;
+    }> = [];
+
+    for (const acct of accounts) {
+      try {
+        const scansRun = await this.schedulerService.triggerScansForAccount(
+          acct.id,
+          acct.settings,
+          scanTypes,
+        );
+        results.push({ accountId: acct.id, scansRun });
+      } catch (err) {
+        this.logger.error({
+          accountId: acct.id,
+          err: err instanceof Error ? err.message : err,
+          msg: '[Admin] Manual scan trigger failed',
+        });
+        results.push({
+          accountId: acct.id,
+          scansRun: [],
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      success: true,
+      totalAccounts: accounts.length,
+      results,
+    };
+  }
+
   // ── Do Not Call ─────────────────────────────────────────────────────────
 
   @Get('dnc/:accountId')
