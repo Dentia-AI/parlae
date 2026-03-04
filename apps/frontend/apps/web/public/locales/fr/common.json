@@ -589,7 +589,7 @@
     "description": "Gérez votre système de gestion de cabinet et vos connexions d'agenda",
     "refresh": "Actualiser",
     "pmsTitle": "Système de gestion de cabinet",
-    "pmsDescription": "Connectez Sikka ou un autre logiciel pour la gestion automatisée des patients et des rendez-vous",
+    "pmsDescription": "Connectez votre système de gestion de cabinet pour la gestion automatisée des patients et des rendez-vous",
     "connected": "Connecté",
     "notConnected": "Non connecté",
     "provider": "Fournisseur :",

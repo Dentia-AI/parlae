@@ -589,7 +589,7 @@
     "description": "Manage your practice management system and calendar connections",
     "refresh": "Refresh",
     "pmsTitle": "Practice Management System",
-    "pmsDescription": "Connect Sikka or another PMS for automated patient and appointment management",
+    "pmsDescription": "Connect your practice management system for automated patient and appointment management",
     "connected": "Connected",
     "notConnected": "Not Connected",
     "provider": "Provider:",

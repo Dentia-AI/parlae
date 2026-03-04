@@ -39,9 +39,14 @@ export async function GET() {
 
     const config = integration.config as Record<string, any> | null;
 
+    const displayProvider =
+      (config?.actualPmsType && config.actualPmsType !== 'Unknown')
+        ? config.actualPmsType
+        : config?.practiceName || integration.provider;
+
     return NextResponse.json({
       connected: true,
-      providerName: integration.provider,
+      providerName: displayProvider,
       practiceName: config?.practiceName || undefined,
     });
   } catch {

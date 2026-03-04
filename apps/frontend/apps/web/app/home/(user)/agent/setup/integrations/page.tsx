@@ -64,7 +64,7 @@ export default function IntegrationsPage() {
       } else if (provider === 'sikka') {
         setShowPmsSetup(true);
         setPmsConnectionStatus('connected');
-        toast.success('Sikka PMS connected successfully!');
+        toast.success('PMS connected successfully!');
       } else {
         setShowPmsSetup(true);
         toast.success(t('common:setup.integrations.authSuccess'));
@@ -77,7 +77,7 @@ export default function IntegrationsPage() {
         toast.error(error || 'Failed to connect Google Calendar');
       } else if (provider === 'sikka') {
         setShowPmsSetup(true);
-        toast.error(error || 'Failed to connect Sikka PMS');
+        toast.error(error || 'Failed to connect PMS');
       } else if (provider) {
         setShowPmsSetup(true);
         toast.error(error || t('common:setup.integrations.authError'));

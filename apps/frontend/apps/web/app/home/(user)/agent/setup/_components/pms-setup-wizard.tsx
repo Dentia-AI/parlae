@@ -141,14 +141,14 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
               1
             </div>
             <div className="flex-1 space-y-3">
-              <h3 className="font-semibold">Install Sikka SPU</h3>
+              <h3 className="font-semibold">Install PMS Connector</h3>
               <p className="text-sm text-muted-foreground">
-                Download and install the Sikka Practice Utility (SPU) on your practice server. You should have received installation instructions via email.
+                Download and install the Practice Utility connector on your practice server. You should have received installation instructions via email.
               </p>
               <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <AlertDescription className="text-xs text-blue-800 dark:text-blue-300">
-                  <strong>Important:</strong> The SPU connects your existing PMS (Dentrix, Eaglesoft, Open Dental, etc.) to Sikka's cloud platform. Make sure it's running and connected to your PMS before proceeding.
+                  <strong>Important:</strong> The connector links your existing PMS (Dentrix, Eaglesoft, Open Dental, etc.) to our cloud platform. Make sure it's running and connected to your PMS before proceeding.
                 </AlertDescription>
               </Alert>
               <Button 
@@ -168,17 +168,17 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
               2
             </div>
             <div className="flex-1 space-y-3">
-              <h3 className="font-semibold">Authorize Parlae via Sikka</h3>
+              <h3 className="font-semibold">Authorize Parlae</h3>
               <p className="text-sm text-muted-foreground">
-                Click the button below to authorize Parlae to access your practice data through Sikka's secure OAuth portal.
+                Click the button below to authorize Parlae to access your practice data through a secure authorization portal.
               </p>
               <Button onClick={handleConnectSikka} disabled={connectionStatus === 'connected'}>
-                Authorize via Sikka
+                Authorize Connection
               </Button>
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  You'll be redirected to Sikka's authorization page where you'll see your practice name and PMS type. Click "Allow" to grant access.
+                  You'll be redirected to an authorization page where you'll see your practice name and PMS type. Click "Allow" to grant access.
                 </AlertDescription>
               </Alert>
             </div>
