@@ -11,6 +11,11 @@ const POLL_INTERVAL_MS = 500;
 const CHANNEL_NAME = 'parlae-auth';
 const MESSAGE_TYPE = 'parlae-auth-complete';
 
+// Chrome transiently reports popup.closed=true during cross-origin
+// redirects (e.g. App → NextAuth → Cognito → Google). Require this
+// many consecutive closed=true readings before treating it as real.
+const CLOSED_THRESHOLD = 6; // 3 seconds at 500ms intervals
+
 function isMobile(): boolean {
   if (typeof window === 'undefined') return false;
   return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
@@ -39,8 +44,6 @@ interface PopupAuthOptions {
   callbackUrl?: string;
 }
 
-let mountCount = 0;
-
 export function usePopupAuth() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const popupRef = useRef<Window | null>(null);
@@ -51,17 +54,9 @@ export function usePopupAuth() {
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
-  const instanceRef = useRef(++mountCount);
-
-  const tag = `[PopupAuth#${instanceRef.current}]`;
 
   useEffect(() => {
-    console.log(`${tag} useEffect MOUNT — setting up listeners`);
-
     function handleAuthComplete() {
-      console.log(
-        `${tag} handleAuthComplete — completed=${completedRef.current} authenticating=${authenticatingRef.current}`,
-      );
       if (completedRef.current) return;
       if (!authenticatingRef.current) return;
       completedRef.current = true;
@@ -80,7 +75,6 @@ export function usePopupAuth() {
       }
       popupRef.current = null;
       authenticatingRef.current = false;
-      console.log(`${tag} handleAuthComplete — setting isAuthenticating=false, navigating`);
       setIsAuthenticating(false);
       routerRef.current.push(callbackUrlRef.current);
     }
@@ -90,7 +84,6 @@ export function usePopupAuth() {
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
       channel.onmessage = (event) => {
-        console.log(`${tag} BroadcastChannel message received`, event.data);
         if (event.data?.type === MESSAGE_TYPE) handleAuthComplete();
       };
     } catch {
@@ -100,13 +93,11 @@ export function usePopupAuth() {
     function handleWindowMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== MESSAGE_TYPE) return;
-      console.log(`${tag} window.postMessage received`, event.data);
       handleAuthComplete();
     }
     window.addEventListener('message', handleWindowMessage);
 
     return () => {
-      console.log(`${tag} useEffect CLEANUP — tearing down listeners`);
       channel?.close();
       window.removeEventListener('message', handleWindowMessage);
     };
@@ -116,7 +107,6 @@ export function usePopupAuth() {
     const { identityProvider, screenHint, callbackUrl } = options;
     callbackUrlRef.current = callbackUrl || '/home';
     completedRef.current = false;
-    console.log(`${tag} startPopupAuth called — identityProvider=${identityProvider}`);
 
     if (isMobile()) {
       const authParams: Record<string, string> = {};
@@ -134,7 +124,6 @@ export function usePopupAuth() {
     const popup = openCenteredPopup(popupUrl);
 
     if (!popup || popup.closed) {
-      console.log(`${tag} popup blocked, falling back to redirect`);
       const authParams: Record<string, string> = {};
       if (identityProvider) authParams.identity_provider = identityProvider;
       if (screenHint) authParams.screen_hint = screenHint;
@@ -145,24 +134,24 @@ export function usePopupAuth() {
     popupRef.current = popup;
     authenticatingRef.current = true;
     setIsAuthenticating(true);
-    console.log(`${tag} popup opened — starting poll`);
 
     if (pollRef.current) clearInterval(pollRef.current);
 
+    let closedCount = 0;
+
     pollRef.current = setInterval(() => {
-      const hasRef = !!popupRef.current;
       let closed: boolean | undefined;
       try {
         closed = popupRef.current?.closed;
       } catch {
-        // cross-origin access to .closed can sometimes fail
+        closedCount = 0;
         return;
       }
 
-      if (!hasRef || closed) {
-        console.log(
-          `${tag} poll: popup gone — hasRef=${hasRef} closed=${closed} — clearing overlay`,
-        );
+      if (!popupRef.current || closed) {
+        closedCount++;
+        if (closedCount < CLOSED_THRESHOLD) return;
+
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -171,6 +160,8 @@ export function usePopupAuth() {
         authenticatingRef.current = false;
         setIsAuthenticating(false);
         completedRef.current = false;
+      } else {
+        closedCount = 0;
       }
     }, POLL_INTERVAL_MS);
   };
