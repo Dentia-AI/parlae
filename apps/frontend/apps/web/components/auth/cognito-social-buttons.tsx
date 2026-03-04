@@ -53,7 +53,7 @@ function formatProviderLabel(provider: string) {
   return providerLabels[provider] ?? provider.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function AuthOverlay() {
+function AuthOverlay({ onCancel }: { onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-border/60 bg-card p-10 shadow-2xl">
@@ -62,6 +62,13 @@ function AuthOverlay() {
           <p className="text-base font-medium">Signing you in...</p>
           <p className="text-sm text-muted-foreground">Complete sign-in in the popup window</p>
         </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-2 text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -76,7 +83,7 @@ export function CognitoSocialSignInButtons({
   callbackUrl?: string;
   mode?: 'signin' | 'signup';
 }) {
-  const { startPopupAuth, isAuthenticating } = usePopupAuth();
+  const { startPopupAuth, cancelAuth, isAuthenticating } = usePopupAuth();
 
   const providerDetails = useMemo(
     () =>
@@ -97,7 +104,7 @@ export function CognitoSocialSignInButtons({
 
   return (
     <>
-      {isAuthenticating && <AuthOverlay />}
+      {isAuthenticating && <AuthOverlay onCancel={cancelAuth} />}
 
       <div className="space-y-4">
         <div className="space-y-2">

@@ -7,14 +7,8 @@ import { useRouter } from 'next/navigation';
 
 const POPUP_WIDTH = 600;
 const POPUP_HEIGHT = 700;
-const POLL_INTERVAL_MS = 500;
 const CHANNEL_NAME = 'parlae-auth';
 const MESSAGE_TYPE = 'parlae-auth-complete';
-
-// Chrome transiently reports popup.closed=true during cross-origin
-// redirects (e.g. App → NextAuth → Cognito → Google). Require this
-// many consecutive closed=true readings before treating it as real.
-const CLOSED_THRESHOLD = 6; // 3 seconds at 500ms intervals
 
 function isMobile(): boolean {
   if (typeof window === 'undefined') return false;
@@ -44,10 +38,17 @@ interface PopupAuthOptions {
   callbackUrl?: string;
 }
 
+// popup.closed is unreliable for cross-origin popups. Google sets
+// Cross-Origin-Opener-Policy: same-origin which severs the opener
+// reference and causes popup.closed to permanently return true once
+// the popup leaves our origin. Polling popup.closed is therefore not
+// used. Auth completion is detected exclusively via BroadcastChannel
+// (sent by PopupAuthCloser or the popup-complete page). The overlay
+// provides a Cancel button for the user-closed-popup case.
+
 export function usePopupAuth() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const popupRef = useRef<Window | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callbackUrlRef = useRef<string>('/home');
   const completedRef = useRef(false);
   const authenticatingRef = useRef(false);
@@ -60,11 +61,6 @@ export function usePopupAuth() {
       if (completedRef.current) return;
       if (!authenticatingRef.current) return;
       completedRef.current = true;
-
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
 
       try {
         if (popupRef.current && !popupRef.current.closed) {
@@ -134,37 +130,21 @@ export function usePopupAuth() {
     popupRef.current = popup;
     authenticatingRef.current = true;
     setIsAuthenticating(true);
-
-    if (pollRef.current) clearInterval(pollRef.current);
-
-    let closedCount = 0;
-
-    pollRef.current = setInterval(() => {
-      let closed: boolean | undefined;
-      try {
-        closed = popupRef.current?.closed;
-      } catch {
-        closedCount = 0;
-        return;
-      }
-
-      if (!popupRef.current || closed) {
-        closedCount++;
-        if (closedCount < CLOSED_THRESHOLD) return;
-
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-        popupRef.current = null;
-        authenticatingRef.current = false;
-        setIsAuthenticating(false);
-        completedRef.current = false;
-      } else {
-        closedCount = 0;
-      }
-    }, POLL_INTERVAL_MS);
   };
 
-  return { startPopupAuth, isAuthenticating };
+  const cancelAuth = () => {
+    try {
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+    } catch {
+      // cross-origin close blocked
+    }
+    popupRef.current = null;
+    authenticatingRef.current = false;
+    completedRef.current = false;
+    setIsAuthenticating(false);
+  };
+
+  return { startPopupAuth, cancelAuth, isAuthenticating };
 }
