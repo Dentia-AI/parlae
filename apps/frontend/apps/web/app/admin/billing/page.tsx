@@ -494,67 +494,69 @@ export default function AdminBillingPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Clinic</TableHead>
-                  <TableHead>Billing Status</TableHead>
-                  <TableHead className="text-right">Base Price</TableHead>
-                  <TableHead className="text-right">Installation</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClinics.map((clinic) => (
-                  <TableRow key={clinic.accountId}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-sm">{clinic.accountName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {clinic.accountEmail || 'No email'}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          clinic.billingEnabled ? 'default' : 'secondary'
-                        }
-                      >
-                        {clinic.billingEnabled ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {clinic.billingConfig
-                        ? `$${clinic.billingConfig.basePricePerLocation}`
-                        : '–'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {clinic.billingConfig
-                        ? `$${clinic.billingConfig.installationFee}`
-                        : '–'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => selectClinic(clinic)}
-                      >
-                        <Settings className="h-4 w-4 mr-1" />
-                        Configure
-                      </Button>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Clinic</TableHead>
+                    <TableHead>Billing Status</TableHead>
+                    <TableHead className="text-right">Base Price</TableHead>
+                    <TableHead className="text-right">Installation</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <AdminTablePagination
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              total={pagination.total}
-              limit={pagination.limit}
-              onPageChange={setPage}
-            />
+                </TableHeader>
+                <TableBody>
+                  {filteredClinics.map((clinic) => (
+                    <TableRow key={clinic.accountId}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium text-sm">{clinic.accountName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {clinic.accountEmail || 'No email'}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            clinic.billingEnabled ? 'default' : 'secondary'
+                          }
+                        >
+                          {clinic.billingEnabled ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {clinic.billingConfig
+                          ? `$${clinic.billingConfig.basePricePerLocation}`
+                          : '–'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {clinic.billingConfig
+                          ? `$${clinic.billingConfig.installationFee}`
+                          : '–'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => selectClinic(clinic)}
+                        >
+                          <Settings className="h-4 w-4 mr-1" />
+                          Configure
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <AdminTablePagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </CardContent>
       </Card>
