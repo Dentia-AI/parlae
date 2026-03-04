@@ -199,7 +199,7 @@ const categoryKeys: Record<string, { labelKey: string; descriptionKey: string }>
 
 export default function FeaturesPage() {
   const { t } = useTranslation();
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const [features, setFeatures] = useState(defaultFeatures);
   const [saving, setSaving] = useState(false);
   const [masterEnabled, setMasterEnabled] = useState(true);
@@ -253,7 +253,7 @@ export default function FeaturesPage() {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           body: JSON.stringify({ featureSettings }),
         });
@@ -265,7 +265,7 @@ export default function FeaturesPage() {
         setSaving(false);
       }
     },
-    [t, csrfToken],
+    [t, getCsrfToken],
   );
 
   const toggleMaster = (enable: boolean) => {

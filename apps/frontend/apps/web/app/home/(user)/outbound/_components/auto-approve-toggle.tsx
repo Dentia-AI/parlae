@@ -14,7 +14,7 @@ interface AutoApproveToggleProps {
 
 export function AutoApproveToggle({ enabled: initialEnabled }: AutoApproveToggleProps) {
   const { t } = useTranslation('common');
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const [enabled, setEnabled] = useState(initialEnabled);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -28,7 +28,7 @@ export function AutoApproveToggle({ enabled: initialEnabled }: AutoApproveToggle
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           credentials: 'include',
           body: JSON.stringify({

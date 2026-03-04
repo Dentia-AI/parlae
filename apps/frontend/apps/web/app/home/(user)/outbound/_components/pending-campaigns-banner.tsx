@@ -26,7 +26,7 @@ interface PendingCampaignsBannerProps {
 
 export function PendingCampaignsBanner({ pendingCount }: PendingCampaignsBannerProps) {
   const { t } = useTranslation('common');
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -40,7 +40,7 @@ export function PendingCampaignsBanner({ pendingCount }: PendingCampaignsBannerP
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           credentials: 'include',
         });

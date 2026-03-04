@@ -764,6 +764,11 @@ export function SidebarNavigation({
 }>) {
   const currentPath = usePathname() ?? '';
   const { open } = useSidebar();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <>
@@ -781,8 +786,10 @@ export function SidebarNavigation({
               : false,
           );
 
+          const useCollapsible = item.collapsible && mounted;
+
           const Container = (props: React.PropsWithChildren) => {
-            if (item.collapsible) {
+            if (useCollapsible) {
               return (
                 <Collapsible
                   defaultOpen={!item.collapsed || anyChildActive}
@@ -797,7 +804,7 @@ export function SidebarNavigation({
           };
 
           const ContentContainer = (props: React.PropsWithChildren) => {
-            if (item.collapsible) {
+            if (useCollapsible) {
               return <CollapsibleContent>{props.children}</CollapsibleContent>;
             }
 
@@ -808,7 +815,7 @@ export function SidebarNavigation({
             <Container key={`collapsible-${index}`}>
               <SidebarGroup key={item.label}>
                 <If
-                  condition={item.collapsible}
+                  condition={useCollapsible}
                   fallback={
                     <SidebarGroupLabel className={cn({ hidden: !open })}>
                       <Trans i18nKey={item.label} defaults={item.label} />
@@ -842,8 +849,10 @@ export function SidebarNavigation({
                               : false,
                           );
 
+                        const childUseCollapsible = 'collapsible' in child && child.collapsible && mounted;
+
                         const Container = (props: React.PropsWithChildren) => {
-                          if ('collapsible' in child && child.collapsible) {
+                          if (childUseCollapsible) {
                             return (
                               <Collapsible
                                 defaultOpen={!child.collapsed || childHasActiveDescendant}
@@ -860,7 +869,7 @@ export function SidebarNavigation({
                         const ContentContainer = (
                           props: React.PropsWithChildren,
                         ) => {
-                          if ('collapsible' in child && child.collapsible) {
+                          if (childUseCollapsible) {
                             return (
                               <CollapsibleContent>
                                 {props.children}
@@ -872,7 +881,7 @@ export function SidebarNavigation({
                         };
 
                         const TriggerItem = () => {
-                          if ('collapsible' in child && child.collapsible) {
+                          if (childUseCollapsible) {
                             return (
                               <CollapsibleTrigger asChild>
                                 <SidebarMenuButton tooltip={child.label}>

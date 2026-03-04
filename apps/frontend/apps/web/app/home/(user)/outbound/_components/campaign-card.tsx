@@ -10,12 +10,13 @@ import { Checkbox } from '@kit/ui/checkbox';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import {
-  PhoneOutgoing, MessageSquare, Mail, ChevronDown, ChevronUp,
+  PhoneOutgoing, MessageSquare, Mail, Ban, ChevronDown, ChevronUp,
   Pause, Play, XCircle, Users, CheckCircle2, Clock, Phone,
   AlertCircle, Loader2, Trash2, ShieldBan, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 const CHANNEL_ICONS: Record<string, typeof PhoneOutgoing> = {
+  NONE: Ban,
   PHONE: PhoneOutgoing,
   SMS: MessageSquare,
   EMAIL: Mail,
@@ -85,7 +86,7 @@ const CONTACTS_PER_PAGE = 20;
 
 export function CampaignCard({ campaign, callTypeLabel, channelLabel }: CampaignCardProps) {
   const { t } = useTranslation('common');
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
@@ -96,15 +97,43 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const [patientNames, setPatientNames] = useState<Record<string, string>>({});
   const [contactPage, setContactPage] = useState(1);
 
-  const ChannelIcon = CHANNEL_ICONS[campaign.channel] || PhoneOutgoing;
+  const [currentChannel, setCurrentChannel] = useState(campaign.channel);
+  const [currentStatus, setCurrentStatus] = useState(campaign.status);
+  const ChannelIcon = CHANNEL_ICONS[currentChannel] || PhoneOutgoing;
   const progress = campaign.totalContacts > 0
     ? Math.round((campaign.completedCount / campaign.totalContacts) * 100)
     : 0;
 
-  const canApprove = campaign.status === 'DRAFT';
-  const canPause = campaign.status === 'ACTIVE';
-  const canResume = campaign.status === 'PAUSED';
-  const canCancel = ['ACTIVE', 'PAUSED', 'SCHEDULED', 'DRAFT'].includes(campaign.status);
+  const canApprove = currentStatus === 'DRAFT';
+  const canPause = currentStatus === 'ACTIVE';
+  const canResume = currentStatus === 'PAUSED';
+  const canCancel = ['ACTIVE', 'PAUSED', 'SCHEDULED', 'DRAFT'].includes(currentStatus);
+  const CHANNEL_ORDER = ['NONE', 'PHONE', 'SMS', 'EMAIL'] as const;
+  const CHANNEL_LABELS: Record<string, string> = {
+    NONE: t('outbound.channelPrefs.channels.none', 'Off'),
+    PHONE: t('outbound.channelPrefs.channels.phone', 'Phone'),
+    SMS: t('outbound.channelPrefs.channels.sms', 'SMS'),
+    EMAIL: t('outbound.channelPrefs.channels.email', 'Email'),
+  };
+
+  const canChangeChannel = !['COMPLETED', 'CANCELLED'].includes(currentStatus);
+
+  const setChannel = async (channel: string) => {
+    if (channel === currentChannel) return;
+    const prev = currentChannel;
+    setCurrentChannel(channel);
+    try {
+      const res = await fetch(`/api/outbound/campaigns/${campaign.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: JSON.stringify({ action: 'setChannel', channel }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setCurrentChannel(prev);
+      toast.error(t('outbound.campaign.channelUpdateFailed', 'Failed to update channel'));
+    }
+  };
 
   const fetchDetail = useCallback(async (page = 1) => {
     setLoadingDetail(true);
@@ -122,7 +151,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
       if (ids.length > 0) {
         fetch('/api/outbound/patients/resolve', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
           body: JSON.stringify({ patientIds: ids }),
         })
           .then((r) => (r.ok ? r.json() : null))
@@ -152,6 +181,13 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     fetchDetail(newPage);
   }
 
+  const STATUS_MAP: Record<string, string> = {
+    pause: 'PAUSED',
+    resume: 'ACTIVE',
+    cancel: 'CANCELLED',
+    approve: 'ACTIVE',
+  };
+
   function handleAction(action: 'pause' | 'resume' | 'cancel' | 'approve') {
     startTransition(async () => {
       try {
@@ -159,7 +195,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           credentials: 'include',
           body: JSON.stringify({ action }),
@@ -169,6 +205,9 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `Failed to ${action}`);
         }
+
+        const newStatus = STATUS_MAP[action] ?? currentStatus;
+        setCurrentStatus(newStatus);
 
         const labels: Record<string, string> = {
           pause: t('outbound.campaignActions.paused'),
@@ -211,7 +250,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
+          'x-csrf-token': getCsrfToken(),
         },
         credentials: 'include',
         body: JSON.stringify({ action, contactIds: targetIds }),
@@ -239,7 +278,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     }
   }
 
-  const statusColor = STATUS_COLORS[campaign.status] || 'bg-gray-500';
+  const statusColor = STATUS_COLORS[currentStatus] || 'bg-gray-500';
   const allSelected = detail ? selectedIds.size === detail.contacts.length && detail.contacts.length > 0 : false;
   const someSelected = selectedIds.size > 0;
   const cPag = detail?.contactsPagination;
@@ -266,7 +305,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {callTypeLabel} &middot; {channelLabel}
+                {callTypeLabel} &middot; {CHANNEL_LABELS[currentChannel] || channelLabel}
               </p>
             </div>
           </div>
@@ -287,13 +326,13 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
             </div>
             <Badge
               variant={
-                campaign.status === 'ACTIVE' ? 'default'
-                  : campaign.status === 'COMPLETED' ? 'secondary'
+                currentStatus === 'ACTIVE' ? 'default'
+                  : currentStatus === 'COMPLETED' ? 'secondary'
                   : 'outline'
               }
-              className={campaign.status === 'ACTIVE' ? 'bg-green-600' : campaign.status === 'PAUSED' ? 'bg-amber-500 text-white border-amber-500' : ''}
+              className={currentStatus === 'ACTIVE' ? 'bg-green-600' : currentStatus === 'PAUSED' ? 'bg-amber-500 text-white border-amber-500' : currentStatus === 'CANCELLED' ? 'bg-red-500 text-white border-red-500' : ''}
             >
-              {t(`outbound.campaign.status.${campaign.status.toLowerCase()}`)}
+              {t(`outbound.campaign.status.${currentStatus.toLowerCase()}`)}
             </Badge>
             {expanded ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -306,6 +345,9 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
         {expanded && (
           <div className="mt-4 border-t pt-4 space-y-4">
             <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {t('outbound.campaignActions.created')}: {new Date(campaign.createdAt).toLocaleDateString()}
+              </p>
               <div className="flex items-center gap-2">
                 {canApprove && (
                   <Button
@@ -355,9 +397,36 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t('outbound.campaignActions.created')}: {new Date(campaign.createdAt).toLocaleDateString()}
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <p className="text-sm font-medium">
+                {t('outbound.campaign.channelLabel', 'Channel')}
               </p>
+              <div className="flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
+                {CHANNEL_ORDER.map((ch) => {
+                  const active = currentChannel === ch;
+                  const Icon = CHANNEL_ICONS[ch] || PhoneOutgoing;
+                  return (
+                    <button
+                      key={ch}
+                      type="button"
+                      disabled={!canChangeChannel || isPending}
+                      onClick={() => setChannel(ch)}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                        active
+                          ? ch === 'NONE'
+                            ? 'bg-destructive/15 text-destructive shadow-sm ring-1 ring-destructive/30'
+                            : 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                      } ${!canChangeChannel || isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <Icon className="h-3 w-3" />
+                      {CHANNEL_LABELS[ch]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {loadingDetail ? (

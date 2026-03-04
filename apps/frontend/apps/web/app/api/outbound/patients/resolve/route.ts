@@ -3,6 +3,14 @@ import { prisma } from '@kit/prisma';
 import { requireSession } from '~/lib/auth/get-session';
 import { getPmsService } from '~/api/pms/_lib/pms-utils';
 
+async function getAccountId(userId: string) {
+  const account = await prisma.account.findFirst({
+    where: { primaryOwnerId: userId, isPersonalAccount: true },
+    select: { id: true },
+  });
+  return account?.id ?? null;
+}
+
 /**
  * POST /api/outbound/patients/resolve
  *
@@ -28,18 +36,22 @@ export async function POST(request: NextRequest) {
     const cap = 100;
     const ids = patientIds.slice(0, cap);
 
-    const accounts = await prisma.account.findMany({
-      where: {
-        members: { some: { userId } },
-      },
-      select: { id: true },
-    });
-    const accountIds = accounts.map((a) => a.id);
+    const accountId = await getAccountId(userId);
+    if (!accountId) {
+      const fallback: Record<string, string> = {};
+      for (const id of ids) fallback[id] = id;
+      return NextResponse.json({ names: fallback, source: 'fallback' });
+    }
 
-    const integration = await prisma.pmsIntegration.findFirst({
-      where: { accountId: { in: accountIds }, status: 'ACTIVE' },
-      select: { accountId: true },
-    });
+    let integration: { accountId: string } | null = null;
+    try {
+      integration = await prisma.pmsIntegration.findFirst({
+        where: { accountId, status: 'ACTIVE' },
+        select: { accountId: true },
+      });
+    } catch {
+      // pmsIntegration table may not exist yet
+    }
 
     if (!integration) {
       const fallback: Record<string, string> = {};

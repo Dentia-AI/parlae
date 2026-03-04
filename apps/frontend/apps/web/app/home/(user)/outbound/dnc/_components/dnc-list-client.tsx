@@ -37,7 +37,7 @@ const SOURCE_KEYS: Record<string, string> = {
 
 export function DncListClient({ accountId }: DncListClientProps) {
   const { t } = useTranslation('common');
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const [entries, setEntries] = useState<DncEntry[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
@@ -93,7 +93,7 @@ export function DncListClient({ accountId }: DncListClientProps) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           credentials: 'include',
           body: JSON.stringify({
@@ -123,7 +123,7 @@ export function DncListClient({ accountId }: DncListClientProps) {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken,
+            'x-csrf-token': getCsrfToken(),
           },
           credentials: 'include',
           body: JSON.stringify({ id }),

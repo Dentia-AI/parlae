@@ -106,6 +106,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
+    if (action === 'setChannel') {
+      if (['COMPLETED', 'CANCELLED'].includes(campaign.status)) {
+        return NextResponse.json({ error: 'Channel cannot be changed on completed or cancelled campaigns' }, { status: 400 });
+      }
+      const VALID_CHANNELS = ['NONE', 'PHONE', 'SMS', 'EMAIL'];
+      const channel = body.channel;
+      if (!channel || !VALID_CHANNELS.includes(channel)) {
+        return NextResponse.json({ error: 'Invalid channel' }, { status: 400 });
+      }
+      const updated = await prisma.outboundCampaign.update({
+        where: { id },
+        data: { channel: channel as any },
+      });
+      return NextResponse.json(updated);
+    }
+
     const validTransitions: Record<string, string[]> = {
       pause: ['ACTIVE'],
       resume: ['PAUSED'],

@@ -83,7 +83,7 @@ function formatPhone(raw: string | null): string {
 export function ActionItemsList() {
   const { t } = useTranslation('common');
   const router = useRouter();
-  const csrfToken = useCsrfToken();
+  const getCsrfToken = useCsrfToken;
   const queryClient = useQueryClient();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +130,7 @@ export function ActionItemsList() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
+          'x-csrf-token': getCsrfToken(),
         },
         credentials: 'include',
         body: JSON.stringify(body),
@@ -141,6 +141,7 @@ export function ActionItemsList() {
           prev.map((item) => (item.id === id ? { ...item, ...updated } : item)),
         );
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['action-items-count'] });
       }
     } catch (err) {
       console.error('Failed to update action item:', err);

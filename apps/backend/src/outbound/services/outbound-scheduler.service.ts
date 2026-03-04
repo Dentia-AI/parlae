@@ -258,6 +258,7 @@ export class OutboundSchedulerService {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const channel = this.settingsService.getChannelForCallType(settings, 'recall');
+    if (channel === 'none') return;
 
     const existingActive = await this.prisma.outboundCampaign.findFirst({
       where: {
@@ -353,6 +354,7 @@ export class OutboundSchedulerService {
     const reminderConfig = (settings.reminderConfig as any) || {};
     const hoursBeforeAppt = reminderConfig.hoursBeforeAppointment || 24;
     const channel = this.settingsService.getChannelForCallType(settings, 'reminder');
+    if (channel === 'none') return;
 
     const now = new Date();
     const windowStart = new Date(now.getTime() + hoursBeforeAppt * 60 * 60 * 1000);
@@ -438,6 +440,7 @@ export class OutboundSchedulerService {
     if (!pmsService) return;
 
     const channel = this.settingsService.getChannelForCallType(settings, 'noshow');
+    if (channel === 'none') return;
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -526,6 +529,7 @@ export class OutboundSchedulerService {
     const reactivationConfig = (settings.reactivationConfig as any) || {};
     const inactiveMonths = reactivationConfig.inactiveMonths || 12;
     const channel = this.settingsService.getChannelForCallType(settings, 'reactivation');
+    if (channel === 'none') return;
 
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - inactiveMonths);

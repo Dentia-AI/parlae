@@ -62,6 +62,35 @@ async function getAccountId(userId: string) {
   return account?.id ?? null;
 }
 
+const REVERSE_KEY_MAP: Record<string, string> = {
+  patientCareEnabled: 'outbound-patient-care',
+  financialEnabled: 'outbound-financial',
+  autoApproveCampaigns: 'outbound-auto-approve',
+};
+
+async function syncToFeatureSettings(accountId: string, changes: Record<string, boolean>) {
+  try {
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { featureSettings: true },
+    });
+    const current = (account?.featureSettings as Record<string, boolean>) ?? {};
+    for (const [dbField, value] of Object.entries(changes)) {
+      const featureKey = REVERSE_KEY_MAP[dbField];
+      if (featureKey) current[featureKey] = value;
+    }
+    const patientCare = current['outbound-patient-care'] ?? false;
+    const financial = current['outbound-financial'] ?? false;
+    current['outbound-calls'] = patientCare || financial;
+    await prisma.account.update({
+      where: { id: accountId },
+      data: { featureSettings: current },
+    });
+  } catch {
+    // best-effort sync
+  }
+}
+
 async function createOutboundRetellAgent(
   accountId: string,
   group: 'PATIENT_CARE' | 'FINANCIAL',
@@ -164,6 +193,34 @@ export async function POST(request: NextRequest) {
         where: { accountId },
         data: { autoApproveCampaigns: body.value === true },
       });
+      await syncToFeatureSettings(accountId, { autoApproveCampaigns: body.value === true });
+      return NextResponse.json(settings);
+    }
+
+    if (action === 'setChannelDefaults') {
+      const VALID_CHANNELS = ['none', 'phone', 'sms', 'email'];
+      const incoming = body.channelDefaults;
+      if (!incoming || typeof incoming !== 'object') {
+        return NextResponse.json({ error: 'Invalid channelDefaults' }, { status: 400 });
+      }
+      const sanitized: Record<string, string> = {};
+      for (const [key, val] of Object.entries(incoming)) {
+        if (typeof val === 'string' && VALID_CHANNELS.includes(val)) {
+          sanitized[key] = val;
+        }
+      }
+      const existing = await prisma.outboundSettings.findUnique({
+        where: { accountId },
+        select: { channelDefaults: true },
+      });
+      const merged = {
+        ...((existing?.channelDefaults as Record<string, string>) || {}),
+        ...sanitized,
+      };
+      const settings = await prisma.outboundSettings.update({
+        where: { accountId },
+        data: { channelDefaults: merged },
+      });
       return NextResponse.json(settings);
     }
 
@@ -179,6 +236,7 @@ export async function POST(request: NextRequest) {
         where: { accountId },
         data: { [field]: false },
       });
+      await syncToFeatureSettings(accountId, { [field]: false });
       return NextResponse.json(settings);
     }
 
@@ -255,6 +313,8 @@ export async function POST(request: NextRequest) {
         ...updateData,
       },
     });
+
+    await syncToFeatureSettings(accountId, { [field]: true });
 
     return NextResponse.json(settings);
   } catch (error) {

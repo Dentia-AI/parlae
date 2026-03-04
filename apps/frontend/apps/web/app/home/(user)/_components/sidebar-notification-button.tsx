@@ -1,10 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Bell } from 'lucide-react';
+import { AlertCircle, Bell } from 'lucide-react';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
-import { Card } from '@kit/ui/card';
 import { cn } from '@kit/ui/utils';
 import {
   Popover,
@@ -15,7 +13,7 @@ import { useNotifications } from '~/components/notifications/use-notifications';
 import { formatDistanceToNow } from 'date-fns';
 
 export function SidebarNotificationButton() {
-  const { notifications, unreadCount, dismiss, dismissAll } =
+  const { notifications, unreadCount, actionItemCount, dismiss, dismissAll } =
     useNotifications();
 
   const topNotifications = notifications
@@ -51,7 +49,7 @@ export function SidebarNotificationButton() {
       >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
-          {unreadCount > 0 && (
+          {topNotifications.length > 0 && (
             <button
               onClick={() => dismissAll()}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -98,6 +96,23 @@ export function SidebarNotificationButton() {
                 </div>
               ))}
             </div>
+          ) : actionItemCount > 0 ? (
+            <a
+              href="/home/action-items"
+              className="flex items-start gap-3 px-4 py-4 hover:bg-muted/50 transition-colors"
+            >
+              <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-1.5 flex-shrink-0 mt-0.5">
+                <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">
+                  {actionItemCount} open action item{actionItemCount !== 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Click to review items that need your attention
+                </p>
+              </div>
+            </a>
           ) : (
             <div className="px-4 py-8 text-center">
               <Bell className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
@@ -108,13 +123,13 @@ export function SidebarNotificationButton() {
           )}
         </div>
 
-        {notifications.length > 5 && (
+        {(topNotifications.length > 5 || actionItemCount > 0) && topNotifications.length > 0 && (
           <div className="border-t px-4 py-2">
             <a
               href="/home/action-items"
               className="text-xs text-primary hover:underline"
             >
-              View all notifications
+              View all action items
             </a>
           </div>
         )}

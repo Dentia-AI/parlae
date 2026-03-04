@@ -140,4 +140,68 @@ describe('POST /api/outbound/settings', () => {
     const res = await POST(makeRequest({ action: 'disable', group: 'PATIENT_CARE' }));
     expect(res.status).toBe(401);
   });
+
+  describe('setChannelDefaults', () => {
+    it('merges new channel defaults with existing ones', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.outboundSettings.findUnique.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        channelDefaults: { recall: 'phone', reminder: 'sms' },
+      });
+
+      const res = await POST(makeRequest({
+        action: 'setChannelDefaults',
+        channelDefaults: { recall: 'email' },
+      }));
+
+      expect(res.status).toBe(200);
+      expect(prisma.outboundSettings.update).toHaveBeenCalledWith({
+        where: { accountId: 'acc-1' },
+        data: { channelDefaults: { recall: 'email', reminder: 'sms' } },
+      });
+    });
+
+    it('accepts none as a valid channel', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.outboundSettings.findUnique.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        channelDefaults: { recall: 'phone' },
+      });
+
+      const res = await POST(makeRequest({
+        action: 'setChannelDefaults',
+        channelDefaults: { recall: 'none' },
+      }));
+
+      expect(res.status).toBe(200);
+      expect(prisma.outboundSettings.update).toHaveBeenCalledWith({
+        where: { accountId: 'acc-1' },
+        data: { channelDefaults: { recall: 'none' } },
+      });
+    });
+
+    it('rejects invalid channel values', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.outboundSettings.findUnique.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        channelDefaults: { recall: 'phone' },
+      });
+
+      const res = await POST(makeRequest({
+        action: 'setChannelDefaults',
+        channelDefaults: { recall: 'carrier_pigeon' },
+      }));
+
+      expect(res.status).toBe(200);
+      expect(prisma.outboundSettings.update).toHaveBeenCalledWith({
+        where: { accountId: 'acc-1' },
+        data: { channelDefaults: { recall: 'phone' } },
+      });
+    });
+
+    it('returns 400 when channelDefaults is missing', async () => {
+      const res = await POST(makeRequest({ action: 'setChannelDefaults' }));
+      expect(res.status).toBe(400);
+    });
+  });
 });

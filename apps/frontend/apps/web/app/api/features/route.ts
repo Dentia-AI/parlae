@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { requireSession } from '~/lib/auth/get-session';
 
+const OUTBOUND_KEY_MAP: Record<string, string> = {
+  'outbound-patient-care': 'patientCareEnabled',
+  'outbound-financial': 'financialEnabled',
+  'outbound-auto-approve': 'autoApproveCampaigns',
+};
+
 /**
  * GET /api/features
- * Returns the feature settings for the current user's account.
+ * Returns the unified feature settings: featureSettings from accounts +
+ * outbound toggle state from the outboundSettings table.
  */
 export async function GET() {
   try {
@@ -22,9 +29,27 @@ export async function GET() {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      featureSettings: (account.featureSettings as Record<string, boolean>) ?? {},
-    });
+    const featureSettings = (account.featureSettings as Record<string, boolean>) ?? {};
+
+    let outboundSettings: { patientCareEnabled: boolean; financialEnabled: boolean; autoApproveCampaigns: boolean } | null = null;
+    try {
+      outboundSettings = await prisma.outboundSettings.findUnique({
+        where: { accountId: account.id },
+        select: { patientCareEnabled: true, financialEnabled: true, autoApproveCampaigns: true },
+      });
+    } catch {
+      // Table may not exist yet
+    }
+
+    if (outboundSettings) {
+      featureSettings['outbound-patient-care'] = outboundSettings.patientCareEnabled;
+      featureSettings['outbound-financial'] = outboundSettings.financialEnabled;
+      featureSettings['outbound-auto-approve'] = outboundSettings.autoApproveCampaigns;
+      featureSettings['outbound-calls'] =
+        outboundSettings.patientCareEnabled || outboundSettings.financialEnabled;
+    }
+
+    return NextResponse.json({ featureSettings });
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,8 +61,8 @@ export async function GET() {
 
 /**
  * PUT /api/features
- * Updates the feature settings for the current user's account.
- * Body: { featureSettings: Record<string, boolean> }
+ * Updates feature settings on the accounts table AND syncs outbound-related
+ * toggles to the outboundSettings table (the backend's operational source).
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -69,6 +94,25 @@ export async function PUT(request: NextRequest) {
       where: { id: account.id },
       data: { featureSettings },
     });
+
+    const outboundUpdates: Record<string, boolean> = {};
+    for (const [featureKey, dbField] of Object.entries(OUTBOUND_KEY_MAP)) {
+      if (featureSettings[featureKey] !== undefined) {
+        outboundUpdates[dbField] = featureSettings[featureKey];
+      }
+    }
+
+    if (Object.keys(outboundUpdates).length > 0) {
+      try {
+        await prisma.outboundSettings.upsert({
+          where: { accountId: account.id },
+          update: outboundUpdates,
+          create: { accountId: account.id, ...outboundUpdates },
+        });
+      } catch {
+        // outboundSettings table may not exist yet in some environments
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

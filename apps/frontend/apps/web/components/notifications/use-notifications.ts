@@ -11,20 +11,30 @@ import { toast } from '@kit/ui/sonner';
 export function useNotifications() {
   const queryClient = useQueryClient();
 
-  // Fetch notifications
   const { data, isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
       const result = await getNotificationsAction();
       return result.data || [];
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: 30000,
+  });
+
+  const { data: actionItemCount = 0 } = useQuery({
+    queryKey: ['action-items-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/action-items/count');
+      if (!res.ok) return 0;
+      const json = await res.json();
+      return json.count ?? 0;
+    },
+    refetchInterval: 30000,
   });
 
   const notifications = data || [];
-  const unreadCount = notifications.length;
+  const unreadNotifications = notifications.filter((n: any) => !n.dismissed).length;
+  const unreadCount = Math.max(unreadNotifications, actionItemCount);
 
-  // Dismiss single notification
   const dismissMutation = useMutation({
     mutationFn: (notificationId: number) =>
       dismissNotificationAction({ notificationId }),
@@ -33,7 +43,6 @@ export function useNotifications() {
     },
   });
 
-  // Dismiss all notifications
   const dismissAllMutation = useMutation({
     mutationFn: () => dismissAllNotificationsAction(),
     onSuccess: () => {
@@ -45,6 +54,7 @@ export function useNotifications() {
   return {
     notifications,
     unreadCount,
+    actionItemCount,
     isLoading,
     dismiss: (id: number) => dismissMutation.mutate(id),
     dismissAll: () => dismissAllMutation.mutate(),

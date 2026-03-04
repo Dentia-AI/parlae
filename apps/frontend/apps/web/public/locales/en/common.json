@@ -56,7 +56,7 @@
     "manage": "Manage",
     "settings": "Settings",
     "accountSettings": "Account Settings",
-    "features": "Features",
+    "features": "Feature Controls",
     "profile": "Profile",
     "branding": "Branding",
     "billing": "Billing",
@@ -1190,7 +1190,10 @@
       "activeCount": "{{count}} active",
       "campaignsCount": "{{count}} campaigns",
       "contactsCount": "{{count}} contacts",
-      "percentComplete": "{{percent}}% complete"
+      "percentComplete": "{{percent}}% complete",
+      "clickToChangeChannel": "Click to change channel",
+      "channelUpdateFailed": "Failed to update channel",
+      "channelLabel": "Channel"
     },
     "campaignActions": {
       "pause": "Pause",
@@ -1221,7 +1224,10 @@
       "financialAgent": "Financial Agent",
       "enabled": "{{agent}} enabled",
       "disabled": "{{agent}} disabled",
-      "error": "Failed to update agent settings"
+      "error": "Failed to update agent settings",
+      "disableTitle": "Disable {{agent}}?",
+      "disableDescription": "This will stop all {{agent}} campaigns from being generated. Existing active campaigns will continue until they complete.",
+      "confirmDisable": "Disable"
     },
     "settings": {
       "title": "Outbound Settings",
@@ -1254,6 +1260,32 @@
       "title": "PMS Integration Required",
       "description": "Outbound calling requires a connected Practice Management System to access patient data for campaigns. Connect your PMS in the agent setup to get started.",
       "connectPms": "Connect PMS"
+    },
+    "channelPrefs": {
+      "title": "Channel Preferences",
+      "description": "Choose how each campaign type reaches your patients — by phone call, SMS, or email.",
+      "patientCareGroup": "Patient Care",
+      "financialGroup": "Financial",
+      "comingSoonNote": "Phone calls are fully operational. SMS and email channels are rolling out soon.",
+      "channels": {
+        "none": "Off",
+        "phone": "Phone",
+        "sms": "SMS",
+        "email": "Email"
+      },
+      "types": {
+        "recall": "Recall / Recare",
+        "reminder": "Appointment Reminders",
+        "followup": "Follow-ups",
+        "noshow": "No-shows",
+        "postop": "Post-op Check-ins",
+        "reactivation": "Reactivation",
+        "welcome": "Welcome Calls",
+        "survey": "Patient Surveys",
+        "treatment_plan": "Treatment Plans",
+        "payment": "Payment Reminders",
+        "benefits": "Insurance & Benefits"
+      }
     },
     "dnc": {
       "title": "Do Not Call List",

@@ -194,5 +194,10 @@ describe('OutboundSettingsService', () => {
       const settings = { channelDefaults: null } as any;
       expect(service.getChannelForCallType(settings, 'recall')).toBe('phone');
     });
+
+    it('returns none when campaign type is disabled', () => {
+      const settings = { channelDefaults: { recall: 'none' } } as any;
+      expect(service.getChannelForCallType(settings, 'recall')).toBe('none');
+    });
   });
 });

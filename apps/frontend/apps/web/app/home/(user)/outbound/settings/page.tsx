@@ -1,13 +1,14 @@
 import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
 import { Trans } from '@kit/ui/trans';
-import { PhoneOutgoing, ShieldBan, Database } from 'lucide-react';
+import { PhoneOutgoing, ShieldBan, Database, Settings2 } from 'lucide-react';
 import { Button } from '@kit/ui/button';
 import Link from 'next/link';
 import { loadUserWorkspace } from '../../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { EnableAgentToggle } from '../_components/enable-agent-toggle';
 import { AutoApproveToggle } from '../_components/auto-approve-toggle';
+import { ChannelPreferences } from '../_components/channel-preferences';
 
 export const metadata = {
   title: 'Outbound Calling Settings',
@@ -43,6 +44,7 @@ export default async function OutboundSettingsPage() {
   const patientCareEnabled = settings?.patientCareEnabled || false;
   const financialEnabled = settings?.financialEnabled || false;
   const autoApproveCampaigns = settings?.autoApproveCampaigns || false;
+  const channelDefaults = (settings?.channelDefaults as Record<string, string>) || {};
 
   return (
     <div className="container max-w-2xl py-8 space-y-6 mx-auto">
@@ -151,6 +153,29 @@ export default async function OutboundSettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {(patientCareEnabled || financialEnabled) && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-lg">
+                  <Trans i18nKey="common:outbound.channelPrefs.title" defaults="Channel Preferences" />
+                </CardTitle>
+              </div>
+              <CardDescription>
+                <Trans i18nKey="common:outbound.channelPrefs.description" defaults="Choose how each campaign type reaches your patients — by phone call, SMS, or email." />
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChannelPreferences
+                channelDefaults={channelDefaults}
+                patientCareEnabled={patientCareEnabled}
+                financialEnabled={financialEnabled}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

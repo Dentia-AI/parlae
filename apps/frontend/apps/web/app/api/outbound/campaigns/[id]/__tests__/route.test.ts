@@ -119,3 +119,100 @@ describe('PATCH /api/outbound/campaigns/[id] — approve action', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('PATCH /api/outbound/campaigns/[id] — setChannel action', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('sets channel on a DRAFT campaign', async () => {
+    const { prisma } = require('@kit/prisma');
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'SMS' });
+    const res = await PATCH(req, ctx);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.channel).toBe('SMS');
+    expect(prisma.outboundCampaign.update).toHaveBeenCalledWith({
+      where: { id: 'camp-1' },
+      data: { channel: 'SMS' },
+    });
+  });
+
+  it('sets channel to NONE on a DRAFT campaign', async () => {
+    const { prisma } = require('@kit/prisma');
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'NONE' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+    expect(prisma.outboundCampaign.update).toHaveBeenCalledWith({
+      where: { id: 'camp-1' },
+      data: { channel: 'NONE' },
+    });
+  });
+
+  it('allows channel change on ACTIVE campaigns', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.outboundCampaign.findFirst.mockResolvedValueOnce({
+      id: 'camp-1',
+      accountId: 'acc-1',
+      status: 'ACTIVE',
+    });
+
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'EMAIL' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('allows channel change on PAUSED campaigns', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.outboundCampaign.findFirst.mockResolvedValueOnce({
+      id: 'camp-1',
+      accountId: 'acc-1',
+      status: 'PAUSED',
+    });
+
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'PHONE' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects channel change on COMPLETED campaigns', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.outboundCampaign.findFirst.mockResolvedValueOnce({
+      id: 'camp-1',
+      accountId: 'acc-1',
+      status: 'COMPLETED',
+    });
+
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'SMS' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('cannot be changed');
+  });
+
+  it('rejects channel change on CANCELLED campaigns', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.outboundCampaign.findFirst.mockResolvedValueOnce({
+      id: 'camp-1',
+      accountId: 'acc-1',
+      status: 'CANCELLED',
+    });
+
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'SMS' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects invalid channel value', async () => {
+    const [req, ctx] = makePatchRequest('camp-1', { action: 'setChannel', channel: 'PIGEON' });
+    const res = await PATCH(req, ctx);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Invalid channel');
+  });
+});

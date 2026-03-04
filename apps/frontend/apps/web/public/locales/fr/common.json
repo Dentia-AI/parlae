@@ -56,7 +56,7 @@
     "manage": "Gérer",
     "settings": "Paramètres",
     "accountSettings": "Paramètres du compte",
-    "features": "Fonctionnalités",
+    "features": "Contrôle des fonctions",
     "profile": "Profil",
     "branding": "Image de marque",
     "billing": "Facturation",
@@ -1190,7 +1190,10 @@
       "activeCount": "{{count}} actif",
       "campaignsCount": "{{count}} campagnes",
       "contactsCount": "{{count}} contacts",
-      "percentComplete": "{{percent}}% terminé"
+      "percentComplete": "{{percent}}% terminé",
+      "clickToChangeChannel": "Cliquer pour changer le canal",
+      "channelUpdateFailed": "Échec de la mise à jour du canal",
+      "channelLabel": "Canal"
     },
     "campaignActions": {
       "pause": "Pause",
@@ -1221,7 +1224,10 @@
       "financialAgent": "Agent financier",
       "enabled": "{{agent}} activé",
       "disabled": "{{agent}} désactivé",
-      "error": "Échec de la mise à jour des paramètres de l'agent"
+      "error": "Échec de la mise à jour des paramètres de l'agent",
+      "disableTitle": "Désactiver {{agent}} ?",
+      "disableDescription": "Cela arrêtera la génération de toutes les campagnes {{agent}}. Les campagnes actives existantes continueront jusqu'à leur achèvement.",
+      "confirmDisable": "Désactiver"
     },
     "settings": {
       "title": "Paramètres sortants",
@@ -1254,6 +1260,32 @@
       "title": "Intégration PMS requise",
       "description": "Les appels sortants nécessitent un système de gestion de cabinet connecté pour accéder aux données des patients. Connectez votre PMS dans la configuration de l'agent pour commencer.",
       "connectPms": "Connecter le PMS"
+    },
+    "channelPrefs": {
+      "title": "Préférences de canal",
+      "description": "Choisissez comment chaque type de campagne contacte vos patients — par appel téléphonique, SMS ou courriel.",
+      "patientCareGroup": "Soins aux patients",
+      "financialGroup": "Financier",
+      "comingSoonNote": "Les appels téléphoniques sont pleinement opérationnels. Les canaux SMS et courriel seront bientôt disponibles.",
+      "channels": {
+        "none": "Désactivé",
+        "phone": "Téléphone",
+        "sms": "SMS",
+        "email": "Courriel"
+      },
+      "types": {
+        "recall": "Rappel / Soins périodiques",
+        "reminder": "Rappels de rendez-vous",
+        "followup": "Suivis",
+        "noshow": "Absences",
+        "postop": "Suivis post-opératoires",
+        "reactivation": "Réactivation",
+        "welcome": "Appels de bienvenue",
+        "survey": "Sondages patients",
+        "treatment_plan": "Plans de traitement",
+        "payment": "Rappels de paiement",
+        "benefits": "Assurance et avantages"
+      }
     },
     "dnc": {
       "title": "Liste Ne Pas Appeler",

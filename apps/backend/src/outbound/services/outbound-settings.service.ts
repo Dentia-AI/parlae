@@ -167,8 +167,10 @@ export class OutboundSettingsService {
   getChannelForCallType(
     settings: OutboundSettings,
     callType: string,
-  ): 'phone' | 'sms' | 'email' {
+  ): 'none' | 'phone' | 'sms' | 'email' {
     const defaults = (settings.channelDefaults as Record<string, string>) || {};
-    return (defaults[callType] as 'phone' | 'sms' | 'email') || 'phone';
+    const val = defaults[callType];
+    if (val === 'none') return 'none';
+    return (val as 'phone' | 'sms' | 'email') || 'phone';
   }
 }
