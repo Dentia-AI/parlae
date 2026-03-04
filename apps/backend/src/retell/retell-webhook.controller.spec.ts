@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { RetellWebhookController } from './retell-webhook.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentToolsService } from '../agent-tools/agent-tools.service';
+import { ActionItemService } from '../common/services/action-item.service';
 
 function createMockReq(body: any, rawBody?: Buffer, remoteAddress?: string) {
   return {
@@ -32,12 +33,17 @@ describe('RetellWebhookController', () => {
     prefetchCallerContext: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockActionItemService = {
+    createActionItemIfNeeded: jest.fn().mockResolvedValue(null),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RetellWebhookController],
       providers: [
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AgentToolsService, useValue: mockAgentToolsService },
+        { provide: ActionItemService, useValue: mockActionItemService },
       ],
     }).compile();
 
