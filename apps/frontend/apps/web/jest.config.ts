@@ -12,12 +12,13 @@ const customJestConfig: Config = {
   // Use node environment for API route tests, jsdom for component tests
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
-  roots: ['<rootDir>', '<rootDir>/../../packages/shared', '<rootDir>/../../packages/i18n'],
+  roots: ['<rootDir>', '<rootDir>/../../packages/shared', '<rootDir>/../../packages/i18n', '<rootDir>/../../packages/billing'],
   testMatch: [
     '<rootDir>/**/__tests__/**/*.test.[jt]s?(x)',
     '<rootDir>/**/?(*.)+(spec|test).[jt]s?(x)',
     '<rootDir>/../../packages/shared/**/?(*.)+(spec|test).[jt]s?(x)',
     '<rootDir>/../../packages/i18n/**/?(*.)+(spec|test).[jt]s?(x)',
+    '<rootDir>/../../packages/billing/**/?(*.)+(spec|test).[jt]s?(x)',
   ],
   moduleNameMapper: {
     '^~/(.*)$': '<rootDir>/$1',
@@ -28,6 +29,10 @@ const customJestConfig: Config = {
     '^@kit/prisma$': '<rootDir>/__mocks__/@kit/prisma.ts',
     '^@kit/prisma/(.*)$': '<rootDir>/__mocks__/@kit/prisma.ts',
     '^.*packages/prisma/src.*$': '<rootDir>/__mocks__/@kit/prisma.ts',
+    '^@kit/billing/schema$': '<rootDir>/../../packages/billing/core/src/schema',
+    '^@kit/billing/types$': '<rootDir>/../../packages/billing/core/src/types',
+    '^@kit/billing$': '<rootDir>/../../packages/billing/core/src',
+    '^@kit/stripe$': '<rootDir>/../../packages/billing/stripe/src',
     '^@kit/(?!prisma$|next/routes$)(.*)$': '<rootDir>/../../packages/$1/src',
   },
   collectCoverageFrom: [

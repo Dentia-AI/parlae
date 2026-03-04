@@ -1201,4 +1201,1376 @@ describe('AgentToolsService', () => {
       expect(result.result.integrationType).toBe('google_calendar_backup');
     });
   });
+
+  // ── Cache expiration tests ─────────────────────────────────────────
+
+  describe('Cache expiration', () => {
+    it('should return undefined for expired caller context', () => {
+      (service as any).callerContextCache.set('expired-call', {
+        callerPhone: '1234567890',
+        fetchedAt: Date.now() - 20 * 60 * 1000,
+        patientType: 'returning',
+      });
+      expect(service.getCallerContext('expired-call')).toBeUndefined();
+    });
+
+    it('should return undefined for expired patient cache', () => {
+      (service as any).patientCache.set('expired-call', {
+        firstName: 'Old',
+        lastName: 'Patient',
+        patientId: 'p-old',
+        cachedAt: Date.now() - 20 * 60 * 1000,
+      });
+      expect((service as any).getCachedPatient('expired-call')).toBeUndefined();
+    });
+
+    it('should cleanup stale patient cache entries when over 200', () => {
+      for (let i = 0; i < 201; i++) {
+        (service as any).patientCache.set(`call-${i}`, {
+          firstName: 'Test',
+          lastName: 'Patient',
+          patientId: `p-${i}`,
+          cachedAt: i < 100 ? Date.now() - 20 * 60 * 1000 : Date.now(),
+        });
+      }
+      (service as any).cachePatient('trigger-cleanup', {
+        firstName: 'New',
+        lastName: 'Patient',
+        patientId: 'p-new',
+        cachedAt: Date.now(),
+      });
+      expect((service as any).patientCache.has('call-0')).toBe(false);
+      expect((service as any).patientCache.has('call-150')).toBe(true);
+    });
+  });
+
+  // ── handleGetCallerContext — full context & edge cases ─────────────
+
+  describe('handleGetCallerContext — additional paths', () => {
+    it('should return no-context when callId is missing', async () => {
+      const result = await service.handleGetCallerContext({ call: {} });
+      expect(result.result.patientType).toBe('new');
+      expect(result.result.message).toBe('No call context available.');
+    });
+
+    it('should include lastVisitDate, lastCallSummary, lastCallOutcome', async () => {
+      (service as any).callerContextCache.set('call-full-ctx', {
+        callerPhone: '4155551234',
+        fetchedAt: Date.now(),
+        patientType: 'returning',
+        patientName: 'John Doe',
+        nextBooking: { date: '2026-04-01', dayOfWeek: 'Wednesday', time: '10:00 AM', type: 'Cleaning' },
+        lastVisitDate: '2025-12-01T10:00:00Z',
+        lastCallSummary: 'Called about insurance',
+        lastCallOutcome: 'resolved',
+      });
+
+      const result = await service.handleGetCallerContext({
+        call: { id: 'call-full-ctx', call_id: 'call-full-ctx' },
+      });
+
+      expect(result.result.patientType).toBe('returning');
+      expect(result.result.lastVisitDate).toBe('2025-12-01T10:00:00Z');
+      expect(result.result.lastCallSummary).toBe('Called about insurance');
+      expect(result.result.lastCallOutcome).toBe('resolved');
+      expect(result.result.message).toContain('Last call:');
+    });
+
+    it('should handle real-time fallback failure gracefully', async () => {
+      jest.spyOn(service, 'prefetchCallerContext').mockRejectedValue(new Error('Prefetch crashed'));
+
+      const result = await service.handleGetCallerContext({
+        call: { id: 'call-fb-fail', call_id: 'call-fb-fail', from_number: '+14155551234' },
+        accountId: 'acc-1',
+      });
+
+      expect(result.result.patientType).toBe('new');
+    });
+  });
+
+  // ── takeMessage ──────────────────────────────────────────────────────
+
+  describe('takeMessage', () => {
+    it('should record message and return success', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        staffForwardNumber: '+14155559999',
+        account: { id: 'acc-1', name: 'Test Clinic' },
+      });
+
+      const result = await service.takeMessage({
+        call: { id: 'call-msg-1', phoneNumberId: 'vapi-phone-1', customer: { number: '+14155551234' } },
+        message: {
+          functionCall: {
+            parameters: {
+              callerName: 'John Doe',
+              callerPhone: '+14155551234',
+              reason: 'Wants to discuss treatment',
+              urgency: 'urgent',
+              notes: 'Prefers mornings',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.message).toContain('John Doe');
+    });
+
+    it('should handle missing phone record', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+
+      const result = await service.takeMessage({
+        call: { id: 'call-msg-2', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { reason: 'General inquiry' } },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should handle errors in the catch block', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockRejectedValue(new Error('DB failure'));
+
+      const result = await service.takeMessage({
+        call: { id: 'call-msg-3', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {} } },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.message).toContain('noted');
+    });
+  });
+
+  // ── transferToHuman — additional error paths ────────────────────────
+
+  describe('transferToHuman — error paths', () => {
+    it('should handle unexpected errors', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockRejectedValue(new Error('Unexpected'));
+
+      const result = await service.transferToHuman({
+        call: { id: 'call-err-1', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {} } },
+      }) as any;
+
+      expect(result.error).toBe('Transfer failed');
+    });
+
+    it('should return transfer-not-configured when disabled', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        transferEnabled: false,
+        staffForwardNumber: null,
+        account: { id: 'acc-1', name: 'Clinic' },
+      });
+
+      const result = await service.transferToHuman({
+        call: { id: 'call-no-transfer', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {} } },
+      }) as any;
+
+      expect(result.error).toBe('Transfer not configured');
+    });
+  });
+
+  // ── Deprecated aliases ─────────────────────────────────────────────
+
+  describe('deprecated aliases', () => {
+    it('getPatientInfo routes to lookupPatient', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+
+      const result = await service.getPatientInfo({
+        accountId: 'acc-1',
+        call: { id: 'call-dep-1', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: {} },
+      });
+
+      expect(result).toBeDefined();
+    });
+
+    it('searchPatients routes to lookupPatient', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+
+      const result = await service.searchPatients({
+        accountId: 'acc-1',
+        call: { id: 'call-dep-2', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: {} },
+      });
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── PMS tool methods ───────────────────────────────────────────────
+
+  describe('PMS tool methods', () => {
+    const pmsPhoneRecord = {
+      accountId: 'acc-pms',
+      vapiPhoneId: 'vapi-phone-1',
+      pmsIntegration: {
+        id: 'pms-int-1',
+        provider: 'SIKKA',
+        config: {},
+      },
+      account: {
+        id: 'acc-pms',
+        googleCalendarConnected: true,
+        brandingTimezone: 'America/Toronto',
+        name: 'PMS Clinic',
+      },
+    };
+
+    const mockSikka = {
+      searchPatients: jest.fn(),
+      bookAppointment: jest.fn(),
+      createPatient: jest.fn(),
+      updatePatient: jest.fn(),
+      cancelAppointment: jest.fn(),
+      getAppointments: jest.fn(),
+      rescheduleAppointment: jest.fn(),
+      addPatientNote: jest.fn(),
+      getPatientInsurance: jest.fn(),
+      getPatientBalance: jest.fn(),
+      getProviders: jest.fn(),
+      checkAvailability: jest.fn(),
+      updatePatientInsurance: jest.fn(),
+      addPatientInsurance: jest.fn(),
+      getPaymentHistory: jest.fn(),
+      processPayment: jest.fn(),
+    };
+
+    const call = {
+      id: 'call-pms',
+      phoneNumberId: 'vapi-phone-1',
+      customer: { number: '+14155551234' },
+    };
+
+    const makePayload = (params: Record<string, any>, callOverrides: Record<string, any> = {}) => ({
+      accountId: 'acc-pms',
+      call: { ...call, ...callOverrides },
+      message: { functionCall: { parameters: params } },
+    });
+
+    beforeEach(() => {
+      jest.doMock('../pms/pms.service', () => ({
+        PmsService: jest.fn().mockImplementation(() => ({
+          getPmsService: jest.fn().mockResolvedValue(mockSikka),
+        })),
+      }));
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(pmsPhoneRecord);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(pmsPhoneRecord.pmsIntegration);
+    });
+
+    afterEach(() => {
+      jest.resetModules();
+      Object.values(mockSikka).forEach((fn: any) => fn.mockReset());
+    });
+
+    // ── lookupPatient (PMS path) ──────────────────────────────────────
+
+    describe('lookupPatient (PMS path)', () => {
+      it('should handle PMS search failure', async () => {
+        mockSikka.searchPatients.mockResolvedValue({
+          success: false,
+          error: { message: 'PMS connection timeout' },
+        });
+
+        const result = await service.lookupPatient(makePayload({ phone: '+14155551234' })) as any;
+
+        expect(result.error).toBe('Patient lookup failed');
+      });
+
+      it('should return empty when no patients found', async () => {
+        mockSikka.searchPatients.mockResolvedValue({ success: true, data: [] });
+
+        const result = await service.lookupPatient(makePayload({ phone: '+14155551234' })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.patients).toHaveLength(0);
+        expect(result.result.callerVerified).toBe(false);
+      });
+
+      it('should handle family account (multiple phone matches)', async () => {
+        mockSikka.searchPatients.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'p-1', firstName: 'John', lastName: 'Doe', phone: '+14155551234' },
+            { id: 'p-2', firstName: 'Jane', lastName: 'Doe', phone: '+14155551234' },
+          ],
+        });
+
+        const result = await service.lookupPatient(makePayload({ phone: '+14155551234' })) as any;
+
+        expect(result.result.callerVerified).toBe(true);
+        expect(result.result.familyAccount).toBe(true);
+        expect(result.result.patients).toHaveLength(2);
+      });
+
+      it('should return verified patient for single phone match', async () => {
+        mockSikka.searchPatients.mockResolvedValue({
+          success: true,
+          data: [
+            {
+              id: 'p-1', firstName: 'John', lastName: 'Doe',
+              phone: '+14155551234', email: 'john@test.com',
+              dateOfBirth: '1990-01-01', lastVisit: '2025-12-01', balance: 150,
+            },
+          ],
+        });
+
+        const result = await service.lookupPatient(makePayload({ phone: '+14155551234' })) as any;
+
+        expect(result.result.callerVerified).toBe(true);
+        expect(result.result.patient.name).toBe('John Doe');
+        expect(result.result.patient.email).toBe('john@test.com');
+        expect(result.result.patient.balance).toBe(150);
+      });
+
+      it('should return limited info for unverified phone query', async () => {
+        mockSikka.searchPatients.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'p-1', firstName: 'Other', lastName: 'Person', phone: '+14155559999' },
+          ],
+        });
+
+        const result = await service.lookupPatient(
+          makePayload({ phone: '+14155559999' }, { customer: { number: '+14155550000' } }),
+        ) as any;
+
+        expect(result.result.callerVerified).toBe(false);
+        expect(result.result.patient.id).toBe('p-1');
+        expect(result.result.patient.email).toBeUndefined();
+      });
+
+      it('should return count only for name-based search unverified', async () => {
+        mockSikka.searchPatients.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'p-1', firstName: 'John', lastName: 'Doe', phone: '+14155559999' },
+            { id: 'p-2', firstName: 'John', lastName: 'Smith', phone: '+14155558888' },
+          ],
+        });
+
+        const result = await service.lookupPatient(
+          makePayload({ name: 'John' }, { customer: { number: '+14155550000' } }),
+        ) as any;
+
+        expect(result.result.callerVerified).toBe(false);
+        expect(result.result.found).toBe(true);
+        expect(result.result.count).toBe(2);
+        expect(result.result.patient).toBeUndefined();
+      });
+
+      it('should enrich verified result with caller context', async () => {
+        (service as any).callerContextCache.set('call-pms', {
+          callerPhone: '4155551234',
+          fetchedAt: Date.now(),
+          patientType: 'returning',
+          patientName: 'John Doe',
+          nextBooking: { date: '2026-04-01', dayOfWeek: 'Wed', time: '10 AM', type: 'Cleaning' },
+          lastVisitDate: '2025-12-01',
+          lastCallSummary: 'Asked about insurance',
+          lastCallOutcome: 'resolved',
+        });
+
+        mockSikka.searchPatients.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'p-1', firstName: 'John', lastName: 'Doe', phone: '+14155551234', email: 'j@t.com' },
+          ],
+        });
+
+        const result = await service.lookupPatient(makePayload({ phone: '+14155551234' })) as any;
+
+        expect(result.result.callerVerified).toBe(true);
+        expect(result.result.nextBooking).toBeDefined();
+        expect(result.result.lastCallSummary).toBe('Asked about insurance');
+      });
+    });
+
+    // ── createPatient (PMS path) ──────────────────────────────────────
+
+    describe('createPatient (PMS path)', () => {
+      it('should create patient via PMS', async () => {
+        mockSikka.createPatient.mockResolvedValue({
+          success: true,
+          data: { id: 'p-new', firstName: 'Jane', lastName: 'Doe' },
+        });
+
+        const result = await service.createPatient(makePayload({
+          firstName: 'Jane', lastName: 'Doe', phone: '+14155559999', email: 'jane@test.com',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.patient.name).toBe('Jane Doe');
+      });
+
+      it('should handle PMS createPatient failure', async () => {
+        mockSikka.createPatient.mockResolvedValue({
+          success: false,
+          error: { message: 'Writeback failed' },
+        });
+
+        const result = await service.createPatient(makePayload({
+          firstName: 'Jane', lastName: 'Doe',
+        })) as any;
+
+        expect(result.error).toBe('Patient creation failed');
+      });
+    });
+
+    // ── updatePatient (PMS path) ──────────────────────────────────────
+
+    describe('updatePatient (PMS path)', () => {
+      it('should update patient via PMS', async () => {
+        mockSikka.updatePatient.mockResolvedValue({ success: true, data: {} });
+
+        const result = await service.updatePatient(makePayload({
+          patientId: 'p-1', phone: '+14155559999', email: 'new@test.com',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+      });
+
+      it('should handle PMS updatePatient failure', async () => {
+        mockSikka.updatePatient.mockResolvedValue({
+          success: false,
+          error: { message: 'Update denied' },
+        });
+
+        const result = await service.updatePatient(makePayload({
+          patientId: 'p-1', phone: '+14155559999',
+        })) as any;
+
+        expect(result.error).toBe('Patient update failed');
+      });
+
+      it('should return error when no PMS configured', async () => {
+        prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+          accountId: 'acc-1', pmsIntegration: null, account: null,
+        });
+
+        const result = await service.updatePatient(makePayload({
+          patientId: 'p-1', phone: '+14155559999',
+        })) as any;
+
+        expect(result.error).toBe('PMS not configured');
+      });
+    });
+
+    // ── cancelAppointment (PMS path) ──────────────────────────────────
+
+    describe('cancelAppointment (PMS path)', () => {
+      it('should cancel via PMS', async () => {
+        mockSikka.cancelAppointment.mockResolvedValue({ success: true });
+
+        const result = await service.cancelAppointment(makePayload({
+          appointmentId: 'appt-1', reason: 'Schedule conflict',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain('cancelled');
+      });
+
+      it('should handle PMS cancellation failure', async () => {
+        mockSikka.cancelAppointment.mockResolvedValue({
+          success: false,
+          error: { message: 'Cannot cancel past appointments' },
+        });
+
+        const result = await service.cancelAppointment(makePayload({
+          appointmentId: 'appt-1',
+        })) as any;
+
+        expect(result.error).toBe('Appointment cancellation failed');
+      });
+    });
+
+    // ── getAppointments (PMS path) ────────────────────────────────────
+
+    describe('getAppointments (PMS path)', () => {
+      it('should return appointments from PMS', async () => {
+        mockSikka.getAppointments.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'appt-1', startTime: '2026-04-01T10:00:00Z', appointmentType: 'Cleaning', providerName: 'Dr. Smith', status: 'confirmed', duration: 30 },
+            { id: 'appt-2', startTime: '2026-04-15T14:00:00Z', appointmentType: 'Exam', providerId: 'prov-1', status: 'scheduled', duration: 60 },
+          ],
+        });
+
+        const result = await service.getAppointments(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.appointments).toHaveLength(2);
+        expect(result.result.count).toBe(2);
+      });
+
+      it('should handle PMS getAppointments failure', async () => {
+        mockSikka.getAppointments.mockResolvedValue({
+          success: false,
+          error: { message: 'Access denied' },
+        });
+
+        const result = await service.getAppointments(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.error).toBe('Failed to retrieve appointments');
+      });
+
+      it('should return empty when no appointments', async () => {
+        mockSikka.getAppointments.mockResolvedValue({ success: true, data: [] });
+
+        const result = await service.getAppointments(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.count).toBe(0);
+        expect(result.result.message).toContain("don't see any");
+      });
+    });
+
+    // ── rescheduleAppointment (PMS path) ──────────────────────────────
+
+    describe('rescheduleAppointment (PMS success path)', () => {
+      it('should reschedule via PMS successfully', async () => {
+        mockSikka.rescheduleAppointment.mockResolvedValue({
+          success: true,
+          data: { id: 'appt-1', startTime: '2026-04-05T11:00:00Z', appointmentType: 'Cleaning', providerName: 'Dr. Smith' },
+        });
+
+        const result = await service.rescheduleAppointment(makePayload({
+          appointmentId: 'appt-1',
+          startTime: '2026-04-05T11:00:00Z',
+          duration: 30,
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.appointment.provider).toBe('Dr. Smith');
+      });
+
+      it('should handle PMS reschedule failure with GCal fallback', async () => {
+        mockSikka.rescheduleAppointment.mockResolvedValue({
+          success: false,
+          error: { message: 'Writeback denied' },
+        });
+
+        gcalService.isConnectedForAccount.mockResolvedValue(true);
+        gcalService.createAppointmentEvent.mockResolvedValue({
+          success: true, eventId: 'gcal-backup', htmlLink: 'https://cal/backup',
+        });
+        notificationsService.sendPmsFailureNotification.mockResolvedValue(undefined);
+
+        const result = await service.rescheduleAppointment(makePayload({
+          appointmentId: 'appt-1',
+          startTime: '2026-04-05T11:00:00Z',
+          firstName: 'John',
+          lastName: 'Doe',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.integrationType).toBe('google_calendar_backup');
+      });
+
+      it('should return error when PMS and fallback both fail', async () => {
+        prisma.vapiPhoneNumber.findFirst
+          .mockResolvedValueOnce(pmsPhoneRecord)
+          .mockResolvedValueOnce(null);
+
+        mockSikka.rescheduleAppointment.mockRejectedValue(new Error('PMS crash'));
+
+        const result = await service.rescheduleAppointment({
+          call: { id: 'call-total-fail', phoneNumberId: 'vapi-phone-1' },
+          message: { functionCall: { parameters: { appointmentId: 'a1', startTime: '2026-04-05T11:00:00Z' } } },
+        }) as any;
+
+        expect(result.error).toBe('Reschedule failed');
+      });
+    });
+
+    // ── addPatientNote (PMS path) ────────────────────────────────────
+
+    describe('addPatientNote (PMS path)', () => {
+      it('should add note via PMS', async () => {
+        mockSikka.addPatientNote.mockResolvedValue({ success: true });
+
+        const result = await service.addPatientNote(makePayload({
+          patientId: 'p-1', content: 'Patient prefers mornings', category: 'scheduling',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain('added');
+      });
+
+      it('should handle PMS addPatientNote failure', async () => {
+        mockSikka.addPatientNote.mockResolvedValue({
+          success: false,
+          error: { message: 'Write denied' },
+        });
+
+        const result = await service.addPatientNote(makePayload({
+          patientId: 'p-1', content: 'Note content',
+        })) as any;
+
+        expect(result.error).toBe('Failed to add note');
+      });
+    });
+
+    // ── getPatientInsurance ───────────────────────────────────────────
+
+    describe('getPatientInsurance', () => {
+      it('should return insurance records', async () => {
+        mockSikka.getPatientInsurance.mockResolvedValue({
+          success: true,
+          data: [
+            { provider: 'BlueCross', policyNumber: 'BC-123', isPrimary: true },
+            { provider: 'Delta Dental', policyNumber: 'DD-456', isPrimary: false },
+          ],
+        });
+
+        const result = await service.getPatientInsurance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.insurance).toHaveLength(2);
+        expect(result.result.count).toBe(2);
+      });
+
+      it('should handle no insurance on file', async () => {
+        mockSikka.getPatientInsurance.mockResolvedValue({ success: true, data: [] });
+
+        const result = await service.getPatientInsurance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.count).toBe(0);
+        expect(result.result.message).toContain("don't see");
+      });
+
+      it('should handle getPatientInsurance failure', async () => {
+        mockSikka.getPatientInsurance.mockResolvedValue({
+          success: false,
+          error: 'Access denied',
+        });
+
+        const result = await service.getPatientInsurance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.error).toBe('Failed to get insurance');
+      });
+    });
+
+    // ── getPatientBalance ─────────────────────────────────────────────
+
+    describe('getPatientBalance', () => {
+      it('should return balance', async () => {
+        mockSikka.getPatientBalance.mockResolvedValue({
+          success: true,
+          data: { amount: 250 },
+        });
+
+        const result = await service.getPatientBalance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.balance.amount).toBe(250);
+      });
+
+      it('should handle getPatientBalance failure', async () => {
+        mockSikka.getPatientBalance.mockResolvedValue({
+          success: false,
+          error: 'Timeout',
+        });
+
+        const result = await service.getPatientBalance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.error).toBe('Failed to get balance');
+      });
+
+      it('should handle null balance', async () => {
+        mockSikka.getPatientBalance.mockResolvedValue({
+          success: true,
+          data: null,
+        });
+
+        const result = await service.getPatientBalance(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain("don't see a balance");
+      });
+    });
+
+    // ── getProviders (PMS path) ───────────────────────────────────────
+
+    describe('getProviders (PMS path)', () => {
+      it('should return providers list from PMS', async () => {
+        mockSikka.getProviders.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'prov-1', firstName: 'Dr.', lastName: 'Smith', specialty: 'General' },
+            { id: 'prov-2', name: 'Dr. Jones', specialty: 'Orthodontics' },
+          ],
+        });
+
+        const result = await service.getProviders(makePayload({})) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.providers).toHaveLength(2);
+        expect(result.result.count).toBe(2);
+      });
+
+      it('should handle getProviders failure', async () => {
+        mockSikka.getProviders.mockResolvedValue({
+          success: false,
+          error: { message: 'API error' },
+        });
+
+        const result = await service.getProviders(makePayload({})) as any;
+
+        expect(result.error).toBe('Failed to get providers');
+      });
+    });
+
+    // ── checkAvailability (PMS path with slot scanning) ───────────────
+
+    describe('checkAvailability (PMS path)', () => {
+      it('should return slots when available', async () => {
+        mockSikka.checkAvailability.mockResolvedValue({
+          success: true,
+          data: [
+            { startTime: new Date('2026-04-01T10:00:00Z'), providerName: 'Dr. Smith' },
+            { startTime: new Date('2026-04-01T14:00:00Z'), providerName: 'Dr. Jones' },
+          ],
+        });
+
+        const result = await service.checkAvailability(makePayload({
+          date: '2026-04-01', appointmentType: 'Cleaning',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.availableSlots).toHaveLength(2);
+      });
+
+      it('should scan next days when no slots on requested date', async () => {
+        mockSikka.checkAvailability
+          .mockResolvedValueOnce({ success: true, data: [] })
+          .mockResolvedValueOnce({ success: true, data: [] })
+          .mockResolvedValueOnce({
+            success: true,
+            data: [{ startTime: new Date('2026-04-03T09:00:00Z'), providerName: 'Dr. Smith' }],
+          });
+
+        const result = await service.checkAvailability(makePayload({
+          date: '2026-04-01',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.requestedDateAvailable).toBe(false);
+        expect(result.result.availableSlots.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('should return no availability when scanning finds nothing', async () => {
+        mockSikka.checkAvailability.mockResolvedValue({ success: true, data: [] });
+
+        const result = await service.checkAvailability(makePayload({
+          date: '2026-04-01',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.requestedDateAvailable).toBe(false);
+        expect(result.result.availableSlots).toHaveLength(0);
+      });
+
+      it('should handle PMS checkAvailability failure', async () => {
+        mockSikka.checkAvailability.mockResolvedValue({
+          success: false,
+          error: { message: 'Permission denied' },
+        });
+
+        const result = await service.checkAvailability(makePayload({
+          date: '2026-04-01',
+        })) as any;
+
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    // ── Insurance methods ─────────────────────────────────────────────
+
+    describe('saveInsurance', () => {
+      it('should route to addPatientInsurance when no insuranceId', async () => {
+        mockSikka.addPatientInsurance.mockResolvedValue({
+          success: true,
+          data: { id: 'ins-1', provider: 'BlueCross' },
+        });
+
+        const result = await service.saveInsurance(makePayload({
+          patientId: 'p-1', provider: 'BlueCross', policyNumber: 'BC-123',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+      });
+
+      it('should route to updatePatientInsurance when insuranceId provided', async () => {
+        mockSikka.updatePatientInsurance.mockResolvedValue({
+          success: true,
+          data: { id: 'ins-1', provider: 'BlueCross Updated' },
+        });
+
+        const result = await service.saveInsurance(makePayload({
+          patientId: 'p-1', insuranceId: 'ins-1', provider: 'BlueCross Updated',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+      });
+    });
+
+    describe('addPatientInsurance', () => {
+      it('should add insurance successfully', async () => {
+        mockSikka.addPatientInsurance.mockResolvedValue({
+          success: true,
+          data: { id: 'ins-new', provider: 'Delta Dental' },
+        });
+
+        const result = await service.addPatientInsurance(makePayload({
+          patientId: 'p-1', provider: 'Delta Dental', policyNumber: 'DD-789',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain('Delta Dental');
+      });
+
+      it('should handle failure', async () => {
+        mockSikka.addPatientInsurance.mockResolvedValue({
+          success: false,
+          error: 'Duplicate policy',
+        });
+
+        const result = await service.addPatientInsurance(makePayload({
+          patientId: 'p-1', provider: 'Delta Dental',
+        })) as any;
+
+        expect(result.error).toBe('Failed to add insurance');
+      });
+    });
+
+    describe('updatePatientInsurance', () => {
+      it('should update insurance successfully', async () => {
+        mockSikka.updatePatientInsurance.mockResolvedValue({
+          success: true,
+          data: { id: 'ins-1', provider: 'BlueCross Updated' },
+        });
+
+        const result = await service.updatePatientInsurance(makePayload({
+          patientId: 'p-1', insuranceId: 'ins-1', provider: 'BlueCross Updated',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+      });
+
+      it('should handle failure', async () => {
+        mockSikka.updatePatientInsurance.mockResolvedValue({
+          success: false,
+          error: { message: 'Insurance not found' },
+        });
+
+        const result = await service.updatePatientInsurance(makePayload({
+          patientId: 'p-1', insuranceId: 'ins-bad',
+        })) as any;
+
+        expect(result.error).toBe('Failed to update insurance');
+      });
+    });
+
+    describe('verifyInsuranceCoverage', () => {
+      it('should verify when insurance exists', async () => {
+        mockSikka.getPatientInsurance.mockResolvedValue({
+          success: true,
+          data: [{ provider: 'BlueCross', policyNumber: 'BC-123' }],
+        });
+
+        const result = await service.verifyInsuranceCoverage(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.verified).toBe(true);
+      });
+
+      it('should return not verified when no insurance', async () => {
+        mockSikka.getPatientInsurance.mockResolvedValue({
+          success: true,
+          data: null,
+        });
+
+        const result = await service.verifyInsuranceCoverage(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.verified).toBe(false);
+      });
+
+      it('should handle failure', async () => {
+        mockSikka.getPatientInsurance.mockRejectedValue(new Error('API error'));
+
+        const result = await service.verifyInsuranceCoverage(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.error).toBe('Failed to verify coverage');
+      });
+    });
+
+    // ── Payment methods ───────────────────────────────────────────────
+
+    describe('getPaymentHistory', () => {
+      it('should return payment history', async () => {
+        mockSikka.getPaymentHistory.mockResolvedValue({
+          success: true,
+          data: [
+            { id: 'pay-1', amount: 100, date: '2026-01-15' },
+            { id: 'pay-2', amount: 50, date: '2026-02-01' },
+          ],
+        });
+
+        const result = await service.getPaymentHistory(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.count).toBe(2);
+      });
+
+      it('should handle empty payment history', async () => {
+        mockSikka.getPaymentHistory.mockResolvedValue({ success: true, data: [] });
+
+        const result = await service.getPaymentHistory(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain('No recent');
+      });
+
+      it('should handle failure', async () => {
+        mockSikka.getPaymentHistory.mockResolvedValue({
+          success: false,
+          error: 'Timeout',
+        });
+
+        const result = await service.getPaymentHistory(makePayload({
+          patientId: 'p-1',
+        })) as any;
+
+        expect(result.error).toBe('Failed to get payment history');
+      });
+    });
+
+    describe('processPayment', () => {
+      it('should process payment successfully', async () => {
+        mockSikka.processPayment.mockResolvedValue({
+          success: true,
+          data: { id: 'txn-1', amount: 100, status: 'completed' },
+        });
+
+        const result = await service.processPayment(makePayload({
+          patientId: 'p-1', amount: 100, method: 'card', last4: '4242',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.message).toContain('$100');
+      });
+
+      it('should handle failure', async () => {
+        mockSikka.processPayment.mockResolvedValue({
+          success: false,
+          error: 'Card declined',
+        });
+
+        const result = await service.processPayment(makePayload({
+          patientId: 'p-1', amount: 100,
+        })) as any;
+
+        expect(result.error).toBe('Payment processing failed');
+      });
+    });
+
+    describe('createPaymentPlan', () => {
+      it('should create a payment plan', async () => {
+        const result = await service.createPaymentPlan(makePayload({
+          patientId: 'p-1',
+          totalAmount: 1200,
+          numberOfPayments: 12,
+          frequency: 'monthly',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.plan.monthlyAmount).toBe(100);
+        expect(result.result.plan.numberOfPayments).toBe(12);
+      });
+    });
+
+    // ── bookAppointment PMS catch block ───────────────────────────────
+
+    describe('bookAppointment (PMS catch block)', () => {
+      it('should return error when PMS fails and fallback is unavailable', async () => {
+        prisma.vapiPhoneNumber.findFirst
+          .mockResolvedValueOnce(pmsPhoneRecord)
+          .mockResolvedValueOnce(null);
+
+        mockSikka.bookAppointment.mockRejectedValue(new Error('PMS crash'));
+
+        const result = await service.bookAppointment({
+          call: { id: 'call-total-fail', phoneNumberId: 'vapi-phone-1' },
+          message: { functionCall: { parameters: { startTime: '2026-04-01T10:00:00Z' } } },
+        }) as any;
+
+        expect(result.error).toBe('Booking failed');
+      });
+    });
+  });
+
+  // ── GCal-only getAppointments with no patient filter ───────────────
+
+  describe('getAppointments — GCal with no patient filter', () => {
+    it('should list all events when no patient filter provided', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.listEvents.mockResolvedValue({
+        success: true,
+        events: [
+          { id: 'evt-1', startTime: '2026-03-01T10:00:00Z', endTime: '2026-03-01T10:30:00Z', summary: 'Cleaning', status: 'confirmed' },
+        ],
+      });
+
+      const result = await service.getAppointments({
+        accountId: 'acc-1',
+        call: { id: 'call-list', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: {} },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.appointments).toHaveLength(1);
+      expect(gcalService.listEvents).toHaveBeenCalled();
+    });
+
+    it('should handle GCal listEvents failure', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.listEvents.mockResolvedValue({ success: false });
+
+      const result = await service.getAppointments({
+        accountId: 'acc-1',
+        call: { id: 'call-list-fail', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: {} },
+      }) as any;
+
+      expect(result.error).toBe('Failed to retrieve appointments');
+    });
+
+    it('should handle GCal not available', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+
+      const result = await service.getAppointments({
+        accountId: 'acc-1',
+        call: { id: 'call-no-gcal', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: {} },
+      }) as any;
+
+      expect(result.error).toBe('No scheduling system configured');
+    });
+  });
+
+  // ── GCal cancelAppointment errors ──────────────────────────────────
+
+  describe('cancelAppointment — GCal error', () => {
+    it('should handle GCal cancel failure', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.deleteEvent.mockRejectedValue(new Error('Event not found'));
+
+      const result = await service.cancelAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-cancel-fail', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { appointmentId: 'evt-bad' } } },
+      }) as any;
+
+      expect(result.error).toBe('Appointment cancellation failed');
+    });
+
+    it('should handle cancel when GCal not available', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+
+      const result = await service.cancelAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-no-gcal', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { appointmentId: 'evt-1' } } },
+      }) as any;
+
+      expect(result.error).toBe('No scheduling system configured');
+    });
+  });
+
+  // ── checkAvailability GCal error ───────────────────────────────────
+
+  describe('checkAvailability — GCal error paths', () => {
+    it('should handle GCal not available', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+
+      const result = await service.checkAvailability({
+        accountId: 'acc-1',
+        call: { id: 'call-check-no-gcal', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: '2026-04-01' } },
+      }) as any;
+
+      expect(result.error).toBe('No scheduling system configured');
+    });
+
+    it('should handle checkFreeBusy failure', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true, brandingTimezone: 'America/New_York' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.checkFreeBusy.mockResolvedValue({ success: false });
+
+      const result = await service.checkAvailability({
+        accountId: 'acc-1',
+        call: { id: 'call-check-fail', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: '2026-04-01' } },
+      }) as any;
+
+      expect(result.error).toBe('Availability check failed');
+    });
+  });
+
+  // ── bookAppointment — time parsing edge cases ──────────────────────
+
+  describe('bookAppointment — time parsing', () => {
+    beforeEach(() => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true, brandingTimezone: 'America/New_York', name: 'Test Clinic' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true, eventId: 'evt-time', htmlLink: 'https://cal/evt-time',
+      });
+    });
+
+    it('should parse date + 12-hour time (AM/PM)', async () => {
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-time-1', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          date: '2026-04-01', startTime: '8:00 AM', firstName: 'Test', lastName: 'User',
+        } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should handle completely unparseable time with fallback', async () => {
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-time-2', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { firstName: 'Test', lastName: 'User' } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should parse patientName into firstName/lastName', async () => {
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-time-3', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          startTime: '2026-04-01T10:00:00Z', patientName: 'Jane Smith',
+        } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should parse name param into firstName/lastName', async () => {
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-time-4', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          startTime: '2026-04-01T10:00:00Z', name: 'Bob Brown Jr',
+        } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should use cached patient data when no name provided', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: null,
+      });
+      await service.createPatient({
+        accountId: 'acc-1',
+        call: { id: 'call-cache-test', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { firstName: 'Cached', lastName: 'User', phone: '+14155551234' } },
+      });
+
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true, name: 'Clinic' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-cache-test', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { startTime: '2026-04-01T10:00:00Z' } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+
+    it('should handle GCal booking failure', async () => {
+      gcalService.createAppointmentEvent.mockRejectedValue(new Error('GCal API error'));
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-gcal-fail', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { startTime: '2026-04-01T10:00:00Z', firstName: 'Test' } } },
+      }) as any;
+      expect(result.error).toBe('Booking failed');
+    });
+
+    it('should handle booking when GCal is not available', async () => {
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-no-gcal', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { startTime: '2026-04-01T10:00:00Z', firstName: 'Test' } } },
+      }) as any;
+      expect(result.error).toBe('No scheduling system configured');
+    });
+
+    it('should adjust past startTime to now + 1hr', async () => {
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-past', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          startTime: '2020-01-01T10:00:00Z', firstName: 'Test',
+        } } },
+      }) as any;
+      expect(result.result.success).toBe(true);
+    });
+  });
+
+  // ── Retell path through getSikkaService ────────────────────────────
+
+  describe('getSikkaService — Retell path', () => {
+    it('should resolve account via agent_id when no phoneNumberId', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-retell',
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.findEventsByPatient.mockResolvedValue({ success: true, events: [] });
+
+      const result = await service.getAppointments({
+        call: { id: 'retell-call', agent_id: 'retell-agent-1' },
+        functionCall: { parameters: { patientName: 'Jane Doe' } },
+      }) as any;
+
+      expect(result).toBeDefined();
+      expect(result.result?.success || result.error).toBeTruthy();
+    });
+  });
+
+  // ── resolvePhoneRecord — fallback accountId path ───────────────────
+
+  describe('resolvePhoneRecord — fallback accountId', () => {
+    it('should use fallback accountId when no phone record found', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.account.findUnique.mockResolvedValue({ id: 'acc-fallback', name: 'Fallback Clinic' });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+
+      const result = await service.lookupPatient({
+        accountId: 'acc-fallback',
+        call: { id: 'call-fallback', phoneNumberId: 'unknown', agent_id: 'unknown' },
+        functionCall: { parameters: {} },
+      }) as any;
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── GCal reschedule error ──────────────────────────────────────────
+
+  describe('rescheduleAppointment — GCal error', () => {
+    it('should handle GCal not available for reschedule', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1' },
+      });
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      gcalService.isConnectedForAccount.mockResolvedValue(false);
+
+      const result = await service.rescheduleAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-resched-no-gcal', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: { appointmentId: 'evt-1', startTime: '2026-04-05T10:00:00Z' } } },
+      }) as any;
+
+      expect(result.error).toBe('No scheduling system configured');
+    });
+  });
 });

@@ -5,11 +5,36 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SecretsService } from '../common/services/secrets.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
 import { createMockSecretsService } from '../test/mocks/secrets.mock';
+import axios from 'axios';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+jest.mock('./providers/sikka.service', () => ({
+  SikkaPmsService: jest.fn().mockImplementation(() => ({
+    testConnection: jest.fn().mockResolvedValue({ success: true }),
+    getFeatures: jest.fn().mockResolvedValue({ success: true, data: { appointments: true } }),
+  })),
+}));
 
 describe('PmsService', () => {
   let service: PmsService;
   let prisma: any;
   let secrets: any;
+
+  const mockPracticeCredentials = {
+    officeId: 'office-1',
+    secretKey: 'secret-1',
+    requestKey: 'req-1',
+    refreshKey: 'refresh-1',
+    practiceName: 'Test Dental',
+    pmsType: 'Dentrix',
+  };
+
+  const mockUserWithAccount = {
+    id: 'u-1',
+    memberships: [{ account: { id: 'acc-1', name: 'Test Dental' }, accountId: 'acc-1' }],
+  };
 
   beforeEach(async () => {
     const mockPrisma = createMockPrismaService();
@@ -26,6 +51,10 @@ describe('PmsService', () => {
     service = module.get<PmsService>(PmsService);
     prisma = module.get(PrismaService);
     secrets = module.get(SecretsService);
+
+    process.env.SIKKA_APP_ID = 'test-app-id';
+    process.env.SIKKA_APP_KEY = 'test-app-key';
+    process.env.AWS_REGION = 'us-east-1';
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -76,6 +105,27 @@ describe('PmsService', () => {
       expect(result.isConnected).toBe(false);
       expect(result.status).toBe('failed');
     });
+
+    it('should return connecting for unknown status', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        status: 'CONNECTING',
+        metadata: {},
+      });
+      const result = await service.getConnectionStatus('acc-1');
+      expect(result.isConnected).toBe(false);
+      expect(result.status).toBe('connecting');
+    });
+
+    it('should handle ACTIVE with missing metadata fields', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        status: 'ACTIVE',
+        metadata: {},
+      });
+      const result = await service.getConnectionStatus('acc-1');
+      expect(result.isConnected).toBe(true);
+      expect(result).toHaveProperty('practiceName', 'Unknown');
+      expect(result).toHaveProperty('pmsType', 'Unknown');
+    });
   });
 
   describe('getPmsStatus', () => {
@@ -95,6 +145,11 @@ describe('PmsService', () => {
       prisma.user.findUnique.mockResolvedValue(null);
       await expect(service.getPmsStatus('missing')).rejects.toThrow(BadRequestException);
     });
+
+    it('should throw when user has no memberships', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u-1', memberships: [] });
+      await expect(service.getPmsStatus('u-1')).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('setupPmsIntegration', () => {
@@ -108,6 +163,75 @@ describe('PmsService', () => {
       await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
         .rejects.toThrow('No account found for user');
     });
+
+    it('should throw when user is not found', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
+        .rejects.toThrow('No account found for user');
+    });
+
+    it('should throw when no practice credentials exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(null);
+
+      await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
+        .rejects.toThrow('Practice not authorized');
+    });
+
+    it('should throw when PMS connection test fails', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+
+      const { SikkaPmsService } = require('./providers/sikka.service');
+      SikkaPmsService.mockImplementationOnce(() => ({
+        testConnection: jest.fn().mockResolvedValue({ success: false, error: 'Connection timeout' }),
+        getFeatures: jest.fn(),
+      }));
+
+      await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
+        .rejects.toThrow('Failed to connect to Sikka: Connection timeout');
+    });
+
+    it('should throw when system credentials are missing', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      delete process.env.SIKKA_APP_ID;
+
+      await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
+        .rejects.toThrow('Sikka system credentials not configured');
+    });
+
+    it('should successfully set up PMS integration', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.setupPmsIntegration('u-1', {
+        provider: 'SIKKA',
+        config: { syncInterval: 30 },
+      } as any);
+
+      expect(result.success).toBe(true);
+      expect(result.provider).toBe('SIKKA');
+      expect(result.status).toBe('ACTIVE');
+      expect(result.practiceName).toBe('Test Dental');
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalled();
+    });
+
+    it('should handle features fetch failure gracefully', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const { SikkaPmsService } = require('./providers/sikka.service');
+      SikkaPmsService.mockImplementationOnce(() => ({
+        testConnection: jest.fn().mockResolvedValue({ success: true }),
+        getFeatures: jest.fn().mockResolvedValue({ success: false, data: null }),
+      }));
+
+      const result = await service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any);
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('getPmsService', () => {
@@ -120,6 +244,187 @@ describe('PmsService', () => {
       secrets.getPracticeCredentials.mockResolvedValue(null);
       await expect(service.getPmsService('acc-1'))
         .rejects.toThrow('No practice credentials found');
+    });
+
+    it('should return a SikkaPmsService instance when credentials exist', async () => {
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+
+      const pms = await service.getPmsService('acc-1');
+      expect(pms).toBeDefined();
+      expect(pms.testConnection).toBeDefined();
+    });
+
+    it('should throw when system credentials are missing', async () => {
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      delete process.env.SIKKA_APP_ID;
+
+      await expect(service.getPmsService('acc-1'))
+        .rejects.toThrow('Sikka system credentials not configured');
+    });
+
+    it('should use default provider SIKKA when not specified', async () => {
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+
+      const pms = await service.getPmsService('acc-1');
+      expect(pms).toBeDefined();
+    });
+  });
+
+  describe('getSikkaSystemCredentials (via setupPmsIntegration)', () => {
+    it('should throw when SIKKA_APP_KEY is missing', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
+      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      delete process.env.SIKKA_APP_KEY;
+
+      await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
+        .rejects.toThrow('Sikka system credentials not configured');
+    });
+  });
+
+  describe('handleSikkaOAuthCallback', () => {
+    const mockTokenResponse = {
+      data: {
+        request_key: 'req-key-new',
+        refresh_key: 'refresh-key-new',
+        expires_in: 3600,
+      },
+    };
+
+    const mockPracticesResponse = {
+      data: {
+        items: [
+          {
+            office_id: 'office-new',
+            secret_key: 'secret-new',
+            practice_name: 'New Dental',
+            practice_id: 'practice-1',
+            practice_management_system: 'Eaglesoft',
+          },
+        ],
+      },
+    };
+
+    it('should successfully process OAuth callback', async () => {
+      mockedAxios.post.mockResolvedValue(mockTokenResponse);
+      mockedAxios.get.mockResolvedValue(mockPracticesResponse);
+      secrets.storePracticeCredentials.mockResolvedValue('arn:aws:secretsmanager:test:secret');
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handleSikkaOAuthCallback('auth-code-123', 'acc-1');
+
+      expect(result.success).toBe(true);
+      expect(result.practiceName).toBe('New Dental');
+      expect(result.pmsType).toBe('Eaglesoft');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/request_key',
+        expect.objectContaining({
+          grant_type: 'authorization_code',
+          code: 'auth-code-123',
+        }),
+      );
+      expect(secrets.storePracticeCredentials).toHaveBeenCalledWith(
+        'acc-1',
+        expect.objectContaining({ officeId: 'office-new' }),
+      );
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalled();
+    });
+
+    it('should throw when no authorized practices found', async () => {
+      mockedAxios.post.mockResolvedValue(mockTokenResponse);
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handleSikkaOAuthCallback('auth-code', 'acc-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No authorized practices found');
+    });
+
+    it('should return failure when token exchange fails', async () => {
+      mockedAxios.post.mockRejectedValue(new Error('Token exchange failed'));
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handleSikkaOAuthCallback('bad-code', 'acc-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Token exchange failed');
+    });
+
+    it('should save error status to database on failure', async () => {
+      mockedAxios.post.mockRejectedValue(new Error('API error'));
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      await service.handleSikkaOAuthCallback('bad-code', 'acc-1');
+
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ status: 'ERROR' }),
+          update: expect.objectContaining({ status: 'ERROR' }),
+        }),
+      );
+    });
+
+    it('should handle DB error when saving error status', async () => {
+      mockedAxios.post.mockRejectedValue(new Error('API error'));
+      prisma.pmsIntegration.upsert.mockRejectedValue(new Error('DB down'));
+
+      const result = await service.handleSikkaOAuthCallback('bad-code', 'acc-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('API error');
+    });
+
+    it('should throw when system credentials are missing', async () => {
+      delete process.env.SIKKA_APP_ID;
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handleSikkaOAuthCallback('code', 'acc-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Sikka system credentials not configured');
+    });
+  });
+
+  describe('generateRequestKey', () => {
+    it('should exchange credentials for request_key and refresh_key', async () => {
+      mockedAxios.post.mockResolvedValue({
+        data: {
+          request_key: 'new-req-key',
+          refresh_key: 'new-refresh-key',
+          end_time: '2026-04-01T00:00:00Z',
+        },
+      });
+
+      const generateRequestKey = (service as any).generateRequestKey.bind(service);
+      const result = await generateRequestKey('office-1', 'secret-1', 'app-id', 'app-key');
+
+      expect(result.requestKey).toBe('new-req-key');
+      expect(result.refreshKey).toBe('new-refresh-key');
+      expect(result.tokenExpiry).toBe('2026-04-01T00:00:00Z');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/request_key',
+        expect.objectContaining({
+          grant_type: 'request_key',
+          office_id: 'office-1',
+        }),
+      );
+    });
+  });
+
+  describe('getProviderName', () => {
+    it('should return known provider names', () => {
+      const getProviderName = (service as any).getProviderName.bind(service);
+      expect(getProviderName('SIKKA')).toBe('Sikka');
+      expect(getProviderName('KOLLA')).toBe('Kolla');
+      expect(getProviderName('DENTRIX')).toBe('Dentrix');
+      expect(getProviderName('EAGLESOFT')).toBe('Eaglesoft');
+      expect(getProviderName('OPEN_DENTAL')).toBe('Open Dental');
+      expect(getProviderName('CUSTOM')).toBe('Custom');
+    });
+
+    it('should return provider string as-is for unknown providers', () => {
+      const getProviderName = (service as any).getProviderName.bind(service);
+      expect(getProviderName('UNKNOWN_PROVIDER')).toBe('UNKNOWN_PROVIDER');
     });
   });
 });

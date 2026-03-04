@@ -90,12 +90,55 @@ describe('GhlVoiceAgentController', () => {
       expect(result.success).toBe(true);
       expect(result.count).toBe(1);
     });
+
+    it('should throw forbidden when sub-account not found', async () => {
+      prisma.ghlSubAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        controller.getVoiceAgentsBySubAccount('missing', mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      prisma.ghlSubAccount.findUnique.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(
+        controller.getVoiceAgentsBySubAccount('sa-1', mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      prisma.ghlSubAccount.findUnique.mockResolvedValue({ id: 'sa-1', userId: 'u-1' });
+      service.getVoiceAgentsBySubAccount.mockRejectedValue(new Error('DB error'));
+      await expect(
+        controller.getVoiceAgentsBySubAccount('sa-1', mockReq),
+      ).rejects.toThrow(HttpException);
+    });
   });
 
   describe('updateVoiceAgent', () => {
     it('should update voice agent', async () => {
       const result = await controller.updateVoiceAgent('va-1', { name: 'Updated' }, mockReq);
       expect(result.success).toBe(true);
+    });
+
+    it('should throw not found', async () => {
+      service.getVoiceAgent.mockResolvedValue(null);
+      await expect(
+        controller.updateVoiceAgent('missing', { name: 'X' }, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(
+        controller.updateVoiceAgent('va-1', { name: 'X' }, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.updateVoiceAgent.mockRejectedValue(new Error('fail'));
+      await expect(
+        controller.updateVoiceAgent('va-1', { name: 'X' }, mockReq),
+      ).rejects.toThrow(HttpException);
     });
   });
 
@@ -104,12 +147,42 @@ describe('GhlVoiceAgentController', () => {
       const result = await controller.deployVoiceAgent('va-1', mockReq);
       expect(result.success).toBe(true);
     });
+
+    it('should throw not found', async () => {
+      service.getVoiceAgent.mockResolvedValue(null);
+      await expect(controller.deployVoiceAgent('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(controller.deployVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.deployVoiceAgent.mockRejectedValue(new Error('deploy fail'));
+      await expect(controller.deployVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
   });
 
   describe('pauseVoiceAgent', () => {
     it('should pause voice agent', async () => {
       const result = await controller.pauseVoiceAgent('va-1', mockReq);
       expect(result.success).toBe(true);
+    });
+
+    it('should throw not found', async () => {
+      service.getVoiceAgent.mockResolvedValue(null);
+      await expect(controller.pauseVoiceAgent('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(controller.pauseVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.pauseVoiceAgent.mockRejectedValue(new Error('fail'));
+      await expect(controller.pauseVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
     });
   });
 
@@ -118,12 +191,86 @@ describe('GhlVoiceAgentController', () => {
       const result = await controller.activateVoiceAgent('va-1', mockReq);
       expect(result.success).toBe(true);
     });
+
+    it('should throw not found', async () => {
+      service.getVoiceAgent.mockResolvedValue(null);
+      await expect(controller.activateVoiceAgent('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(controller.activateVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.activateVoiceAgent.mockRejectedValue(new Error('fail'));
+      await expect(controller.activateVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
   });
 
   describe('deleteVoiceAgent', () => {
     it('should delete voice agent', async () => {
       const result = await controller.deleteVoiceAgent('va-1', mockReq);
       expect(result.success).toBe(true);
+    });
+
+    it('should throw not found', async () => {
+      service.getVoiceAgent.mockResolvedValue(null);
+      await expect(controller.deleteVoiceAgent('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(controller.deleteVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.deleteVoiceAgent.mockRejectedValue(new Error('fail'));
+      await expect(controller.deleteVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('createVoiceAgent — additional error paths', () => {
+    it('should throw when sub-account not found', async () => {
+      prisma.ghlSubAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        controller.createVoiceAgent(
+          { subAccountId: 'missing', config: { name: 'T', voiceId: 'n' } },
+          mockReq,
+        ),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 when service throws', async () => {
+      prisma.ghlSubAccount.findUnique.mockResolvedValue({ id: 'sa-1', userId: 'u-1' });
+      service.createVoiceAgent.mockRejectedValue(new Error('Create fail'));
+      await expect(
+        controller.createVoiceAgent(
+          { subAccountId: 'sa-1', config: { name: 'T', voiceId: 'n' } },
+          mockReq,
+        ),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('getVoiceAgent — additional error paths', () => {
+    it('should throw forbidden for wrong user', async () => {
+      service.getVoiceAgent.mockResolvedValue({ id: 'va-1', subAccount: { userId: 'other' } });
+      await expect(controller.getVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on non-HttpException', async () => {
+      service.getVoiceAgent.mockRejectedValue(new Error('random error'));
+      await expect(controller.getVoiceAgent('va-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should re-throw HttpException as-is', async () => {
+      service.getVoiceAgent.mockRejectedValue(new HttpException('Custom', 418));
+      try {
+        await controller.getVoiceAgent('va-1', mockReq);
+      } catch (e) {
+        expect((e as HttpException).getStatus()).toBe(418);
+      }
     });
   });
 });

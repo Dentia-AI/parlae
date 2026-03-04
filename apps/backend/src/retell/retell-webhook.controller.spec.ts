@@ -305,6 +305,459 @@ describe('RetellWebhookController', () => {
       const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
     });
+
+    it('should compute duration from timestamps', async () => {
+      prisma.campaignContact = { findUnique: jest.fn(), update: jest.fn(), count: jest.fn() };
+      prisma.outboundCampaign = { findUnique: jest.fn(), update: jest.fn() };
+
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 0, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(0);
+
+      const body = {
+        event: 'call_ended',
+        call: {
+          call_id: 'c-dur',
+          call_status: 'ended',
+          disconnection_reason: 'agent_hangup',
+          start_timestamp: 1000000,
+          end_timestamp: 1030000,
+          metadata: { contactId: 'ct-1', campaignId: 'camp-1' },
+        },
+      };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'COMPLETED',
+            callDurationSec: 30,
+            outcome: 'answered',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('processOutboundCallEnded', () => {
+    beforeEach(() => {
+      prisma.campaignContact = { findUnique: jest.fn(), update: jest.fn(), count: jest.fn() };
+      prisma.outboundCampaign = { findUnique: jest.fn(), update: jest.fn() };
+    });
+
+    const callEndedBody = (overrides: Record<string, any> = {}) => ({
+      event: 'call_ended',
+      call: {
+        call_id: 'c-out',
+        call_status: 'ended',
+        disconnection_reason: 'agent_hangup',
+        start_timestamp: 1000,
+        end_timestamp: 2000,
+        metadata: { contactId: 'ct-1', campaignId: 'camp-1' },
+        ...overrides,
+      },
+    });
+
+    it('skips when no contactId in metadata', async () => {
+      const body = { event: 'call_ended', call: { call_id: 'c-1', metadata: {} } };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+      expect(prisma.campaignContact.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('marks contact COMPLETED on agent_hangup', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(5);
+
+      const body = callEndedBody({ disconnection_reason: 'agent_hangup' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED', outcome: 'answered' }),
+        }),
+      );
+    });
+
+    it('marks contact COMPLETED on user_hangup', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(5);
+
+      const body = callEndedBody({ disconnection_reason: 'user_hangup' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED', outcome: 'answered' }),
+        }),
+      );
+    });
+
+    it('marks contact VOICEMAIL on voicemail_reached', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(5);
+
+      const body = callEndedBody({ disconnection_reason: 'voicemail_reached' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'VOICEMAIL', outcome: 'voicemail_left' }),
+        }),
+      );
+    });
+
+    it('marks contact VOICEMAIL on machine_detected', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(5);
+
+      const body = callEndedBody({ disconnection_reason: 'machine_detected' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'VOICEMAIL', outcome: 'machine_detected' }),
+        }),
+      );
+    });
+
+    it('re-queues contact on no_answer when attempts < max', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = callEndedBody({ disconnection_reason: 'no_answer' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'QUEUED' }),
+        }),
+      );
+      expect(prisma.outboundCampaign.update).not.toHaveBeenCalled();
+    });
+
+    it('marks contact NO_ANSWER when attempts >= max', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 3, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(0);
+
+      const body = callEndedBody({ disconnection_reason: 'no_answer' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'NO_ANSWER' }),
+        }),
+      );
+    });
+
+    it('handles busy disconnection reason', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = callEndedBody({ disconnection_reason: 'busy' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'QUEUED' }),
+        }),
+      );
+    });
+
+    it('marks FAILED on error call_status with unknown disconnection', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 3, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(0);
+
+      const body = callEndedBody({ disconnection_reason: 'unknown_reason', call_status: 'error' });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'FAILED' }),
+        }),
+      );
+    });
+
+    it('marks campaign COMPLETED when no contacts remain', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(0);
+
+      const body = callEndedBody({ disconnection_reason: 'agent_hangup', start_timestamp: 1000, end_timestamp: 20000 });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.outboundCampaign.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'camp-1' }, data: { status: 'COMPLETED' } }),
+      );
+    });
+
+    it('increments successfulCount for long completed calls', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(3);
+
+      const body = callEndedBody({
+        disconnection_reason: 'agent_hangup',
+        start_timestamp: 1000,
+        end_timestamp: 16000,
+      });
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.outboundCampaign.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            completedCount: { increment: 1 },
+            successfulCount: { increment: 1 },
+          }),
+        }),
+      );
+    });
+
+    it('skips when contact not found in DB', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue(null);
+
+      const body = callEndedBody();
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).not.toHaveBeenCalled();
+    });
+
+    it('skips when campaign not found in DB', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1 });
+      prisma.outboundCampaign.findUnique.mockResolvedValue(null);
+
+      const body = callEndedBody();
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).not.toHaveBeenCalled();
+    });
+
+    it('handles DB error in processOutboundCallEnded gracefully', async () => {
+      prisma.campaignContact.findUnique.mockRejectedValue(new Error('DB connection lost'));
+
+      const body = callEndedBody();
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
+
+    it('logs DNC candidate on very short user_hangup', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ id: 'ct-1', attempts: 1, phoneNumber: '+15551001' });
+      prisma.outboundCampaign.findUnique.mockResolvedValue({ id: 'camp-1', maxAttemptsPerContact: 3 });
+      prisma.campaignContact.update.mockResolvedValue({});
+      prisma.outboundCampaign.update.mockResolvedValue({});
+      prisma.campaignContact.count.mockResolvedValue(5);
+
+      const body = callEndedBody({
+        disconnection_reason: 'user_hangup',
+        start_timestamp: 1000,
+        end_timestamp: 3000,
+      });
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
+  });
+
+  describe('processOutboundCallAnalyzed', () => {
+    beforeEach(() => {
+      prisma.campaignContact = { findUnique: jest.fn(), update: jest.fn() };
+      prisma.doNotCallEntry = { upsert: jest.fn() };
+    });
+
+    it('skips when no contactId in metadata', async () => {
+      const body = { event: 'call_analyzed', call: { call_id: 'c-1', metadata: {} } };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
+
+    it('updates contact with call_summary and user_sentiment', async () => {
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a1',
+          metadata: { contactId: 'ct-1', campaignId: 'camp-1' },
+          call_analysis: {
+            call_summary: 'Patient wants to reschedule',
+            user_sentiment: 'positive',
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'ct-1' },
+          data: expect.objectContaining({
+            summary: 'Patient wants to reschedule',
+            sentiment: 'positive',
+          }),
+        }),
+      );
+    });
+
+    it('updates outcome from custom_analysis_data', async () => {
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a2',
+          metadata: { contactId: 'ct-2', campaignId: 'camp-1' },
+          call_analysis: {
+            custom_analysis_data: { outcome: 'appointment_booked' },
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.campaignContact.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            outcome: 'appointment_booked',
+            analysisData: { outcome: 'appointment_booked' },
+          }),
+        }),
+      );
+    });
+
+    it('auto-adds to DNC list when do_not_call is true', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ phoneNumber: '+15551001' });
+      prisma.doNotCallEntry.upsert.mockResolvedValue({});
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a3',
+          metadata: { contactId: 'ct-3', campaignId: 'camp-1', accountId: 'acc-1' },
+          call_analysis: {
+            custom_analysis_data: { do_not_call: true },
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+
+      expect(prisma.doNotCallEntry.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { accountId_phoneNumber: { accountId: 'acc-1', phoneNumber: '+15551001' } },
+          create: expect.objectContaining({
+            accountId: 'acc-1',
+            phoneNumber: '+15551001',
+            reason: 'auto_detected',
+            source: 'call_analysis',
+          }),
+        }),
+      );
+    });
+
+    it('auto-adds to DNC list when do_not_call is string "true"', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ phoneNumber: '+15552002' });
+      prisma.doNotCallEntry.upsert.mockResolvedValue({});
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a4',
+          metadata: { contactId: 'ct-4', campaignId: 'camp-1', accountId: 'acc-1' },
+          call_analysis: {
+            custom_analysis_data: { do_not_call: 'true' },
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.doNotCallEntry.upsert).toHaveBeenCalled();
+    });
+
+    it('does not add to DNC when do_not_call is false', async () => {
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a5',
+          metadata: { contactId: 'ct-5', campaignId: 'camp-1', accountId: 'acc-1' },
+          call_analysis: {
+            custom_analysis_data: { do_not_call: false, outcome: 'scheduled' },
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.doNotCallEntry?.upsert).not.toHaveBeenCalled();
+    });
+
+    it('does not DNC when accountId is missing', async () => {
+      prisma.campaignContact.findUnique.mockResolvedValue({ phoneNumber: '+15551001' });
+      prisma.campaignContact.update.mockResolvedValue({});
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a6',
+          metadata: { contactId: 'ct-6' },
+          call_analysis: {
+            custom_analysis_data: { do_not_call: true },
+          },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.doNotCallEntry?.upsert).not.toHaveBeenCalled();
+    });
+
+    it('does not update when no analysis fields present', async () => {
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a7',
+          metadata: { contactId: 'ct-7' },
+          call_analysis: {},
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.campaignContact.update).not.toHaveBeenCalled();
+    });
+
+    it('handles DB error gracefully', async () => {
+      prisma.campaignContact.update.mockRejectedValue(new Error('DB error'));
+
+      const body = {
+        event: 'call_analyzed',
+        call: {
+          call_id: 'c-a8',
+          metadata: { contactId: 'ct-8' },
+          call_analysis: { call_summary: 'test' },
+        },
+      };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
   });
 
   describe('call_analyzed', () => {
@@ -318,11 +771,107 @@ describe('RetellWebhookController', () => {
     });
   });
 
+  describe('transcript_updated', () => {
+    it('should return received for transcript events', async () => {
+      const body = { event: 'transcript_updated', call: { call_id: 'c-1' } };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
+  });
+
   describe('unhandled event', () => {
     it('should return received for unknown events', async () => {
       const body = { event: 'some_future_event', call: {} };
       const result = await controller.handleWebhook(body, '', createMockReq(body));
       expect(result).toEqual({ received: true });
+    });
+  });
+
+  describe('call_started — edge cases', () => {
+    it('handles callReference upsert failure gracefully', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.callReference.upsert.mockRejectedValue(new Error('upsert failed'));
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'retell-fail', agent_id: 'agent-1' },
+      };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+    });
+
+    it('returns received when call has no call_id', async () => {
+      const body = { event: 'call_started', call: {} };
+      const result = await controller.handleWebhook(body, '', createMockReq(body));
+      expect(result).toEqual({ received: true });
+      expect(prisma.callReference.upsert).not.toHaveBeenCalled();
+    });
+
+    it('resolves account via agent_id lookup error then falls through to phone', async () => {
+      prisma.retellPhoneNumber.findFirst
+        .mockRejectedValueOnce(new Error('DB error'))
+        .mockResolvedValueOnce({ accountId: 'acc-phone' });
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-fallback', agent_id: 'a-1', to_number: '+14165550000' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-phone' }),
+        }),
+      );
+    });
+
+    it('resolves account returns null when phone lookup also fails', async () => {
+      prisma.retellPhoneNumber.findFirst
+        .mockResolvedValueOnce(null)
+        .mockRejectedValueOnce(new Error('DB error'));
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-both-fail', agent_id: 'a-1', to_number: '+14165550000' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('extractClientIp', () => {
+    it('handles x-forwarded-for as array', async () => {
+      process.env.RETELL_API_KEY = 'test-key';
+      const req = createMockReq({ event: 'call_ended', call: { call_id: 'c-1' } });
+      req.headers = { 'x-forwarded-for': ['100.20.5.228', '10.0.0.1'] };
+      const result = await controller.handleWebhook(
+        { event: 'call_ended', call: { call_id: 'c-1' } },
+        'v=123,d=bad',
+        req,
+      );
+      expect(result).toEqual({ received: true });
+    });
+
+    it('uses socket.remoteAddress when no forwarded header', async () => {
+      process.env.RETELL_API_KEY = 'test-key';
+      const req = createMockReq(
+        { event: 'call_ended', call: { call_id: 'c-1' } },
+        undefined,
+        '100.20.5.228',
+      );
+      const result = await controller.handleWebhook(
+        { event: 'call_ended', call: { call_id: 'c-1' } },
+        'v=123,d=bad',
+        req,
+      );
+      expect(result).toEqual({ received: true });
+    });
+  });
+
+  describe('verifySignature — digest length mismatch', () => {
+    it('rejects when digest length differs from expected', async () => {
+      const sig = `v=${Date.now()},d=abc`;
+      const result = await RetellWebhookController.verifySignature('{}', sig, 'test-key');
+      expect(result).toBe(false);
     });
   });
 });

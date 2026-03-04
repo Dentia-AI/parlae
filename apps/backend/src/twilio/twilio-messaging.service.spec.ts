@@ -67,12 +67,45 @@ describe('TwilioMessagingService', () => {
 
   describe('sendSms', () => {
     it('should send SMS successfully', async () => {
-      await service.sendSms({ messagingServiceSid: 'MG_1', to: '+14155551234', body: 'Hi' });
+      const result = await service.sendSms({
+        messagingServiceSid: 'MG_1',
+        to: '+14155551234',
+        body: 'Hi',
+      });
+      expect(result?.sid).toBe('SM_test');
     });
 
-    it('should silently return when no client', async () => {
+    it('should silently return undefined when no client', async () => {
       const svc = await createService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' });
-      await svc.sendSms({ messagingServiceSid: 'MG_1', to: '+14155551234', body: 'Hi' });
+      const result = await svc.sendSms({
+        messagingServiceSid: 'MG_1',
+        to: '+14155551234',
+        body: 'Hi',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    it('should throw when Twilio API fails', async () => {
+      const twilio = require('twilio');
+      twilio().messages.create.mockRejectedValueOnce(new Error('Send failed'));
+      await expect(
+        service.sendSms({ messagingServiceSid: 'MG_1', to: '+14155551234', body: 'Hi' }),
+      ).rejects.toThrow('Send failed');
+    });
+
+    it('should pass correct params to messages.create', async () => {
+      const twilio = require('twilio');
+      const mockCreate = twilio().messages.create;
+      await service.sendSms({
+        messagingServiceSid: 'MG_123',
+        to: '+15551234567',
+        body: 'Test message',
+      });
+      expect(mockCreate).toHaveBeenCalledWith({
+        messagingServiceSid: 'MG_123',
+        to: '+15551234567',
+        body: 'Test message',
+      });
     });
   });
 
@@ -80,6 +113,36 @@ describe('TwilioMessagingService', () => {
     it('should create messaging service', async () => {
       const result = await service.createMessagingService({ accountId: 'a', accountName: 'Test' });
       expect(result.sid).toBe('MG_test');
+    });
+
+    it('should throw when Twilio API fails', async () => {
+      const twilio = require('twilio');
+      const mockCreate = twilio().messaging.v1.services.create;
+      mockCreate.mockRejectedValueOnce(new Error('API error'));
+      await expect(
+        service.createMessagingService({ accountId: 'a', accountName: 'Test' }),
+      ).rejects.toThrow('API error');
+    });
+  });
+
+  describe('addPhoneNumberToService', () => {
+    it('should add phone number to messaging service', async () => {
+      await service.addPhoneNumberToService('MG_1', 'PN_1');
+    });
+
+    it('should throw when no client', async () => {
+      const svc = await createService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' });
+      await expect(svc.addPhoneNumberToService('MG_1', 'PN_1')).rejects.toThrow(
+        'Twilio not configured',
+      );
+    });
+
+    it('should throw when Twilio API fails', async () => {
+      const twilio = require('twilio');
+      const mockServices = twilio().messaging.v1.services;
+      const mockPhoneNumbers = mockServices().phoneNumbers;
+      mockPhoneNumbers.create.mockRejectedValueOnce(new Error('Add failed'));
+      await expect(service.addPhoneNumberToService('MG_1', 'PN_1')).rejects.toThrow('Add failed');
     });
   });
 
@@ -93,6 +156,68 @@ describe('TwilioMessagingService', () => {
       expect(result.phoneNumber).toBe('+14155551234');
       expect(result.messagingServiceSid).toBe('MG_test');
     });
+
+    it('should throw when no available numbers', async () => {
+      const twilio = require('twilio');
+      twilio().availablePhoneNumbers.mockReturnValueOnce({
+        local: { list: jest.fn().mockResolvedValue([]) },
+      });
+      await expect(
+        service.purchasePhoneNumberWithMessagingService({
+          accountId: 'a',
+          accountName: 'Test',
+          areaCode: '999',
+        }),
+      ).rejects.toThrow('No available phone numbers found');
+    });
+
+    it('should throw when no client', async () => {
+      const svc = await createService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' });
+      await expect(
+        svc.purchasePhoneNumberWithMessagingService({
+          accountId: 'a',
+          accountName: 'Test',
+          areaCode: '415',
+        }),
+      ).rejects.toThrow('Twilio not configured');
+    });
+
+    it('should throw when incomingPhoneNumbers.create fails', async () => {
+      const twilio = require('twilio');
+      twilio().incomingPhoneNumbers.create.mockRejectedValueOnce(new Error('Purchase failed'));
+      await expect(
+        service.purchasePhoneNumberWithMessagingService({
+          accountId: 'a',
+          accountName: 'Test',
+          areaCode: '415',
+        }),
+      ).rejects.toThrow('Purchase failed');
+    });
+
+    it('should throw when createMessagingService fails after purchase', async () => {
+      const twilio = require('twilio');
+      twilio().messaging.v1.services.create.mockRejectedValueOnce(new Error('Create service failed'));
+      await expect(
+        service.purchasePhoneNumberWithMessagingService({
+          accountId: 'a',
+          accountName: 'Test',
+          areaCode: '415',
+        }),
+      ).rejects.toThrow('Create service failed');
+    });
+
+    it('should throw when addPhoneNumberToService fails', async () => {
+      const twilio = require('twilio');
+      const mockServices = twilio().messaging.v1.services;
+      mockServices().phoneNumbers.create.mockRejectedValueOnce(new Error('Add number failed'));
+      await expect(
+        service.purchasePhoneNumberWithMessagingService({
+          accountId: 'a',
+          accountName: 'Test',
+          areaCode: '415',
+        }),
+      ).rejects.toThrow('Add number failed');
+    });
   });
 
   describe('deleteMessagingService', () => {
@@ -104,11 +229,31 @@ describe('TwilioMessagingService', () => {
       const svc = await createService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' });
       await expect(svc.deleteMessagingService('MG_1')).rejects.toThrow('Twilio not configured');
     });
+
+    it('should throw when Twilio API fails', async () => {
+      const twilio = require('twilio');
+      const mockServices = twilio().messaging.v1.services;
+      mockServices().remove.mockRejectedValueOnce(new Error('Delete failed'));
+      await expect(service.deleteMessagingService('MG_1')).rejects.toThrow('Delete failed');
+    });
   });
 
   describe('releasePhoneNumber', () => {
     it('should release phone number', async () => {
       await service.releasePhoneNumber('PN_1');
+    });
+
+    it('should throw when no client', async () => {
+      const svc = await createService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' });
+      await expect(svc.releasePhoneNumber('PN_1')).rejects.toThrow('Twilio not configured');
+    });
+
+    it('should throw when Twilio API fails', async () => {
+      const twilio = require('twilio');
+      twilio().incomingPhoneNumbers.mockReturnValueOnce({
+        remove: jest.fn().mockRejectedValue(new Error('Release failed')),
+      });
+      await expect(service.releasePhoneNumber('PN_1')).rejects.toThrow('Release failed');
     });
   });
 });

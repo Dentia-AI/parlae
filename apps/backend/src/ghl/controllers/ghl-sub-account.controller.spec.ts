@@ -96,12 +96,59 @@ describe('GhlSubAccountController', () => {
       const result = await controller.updateSubAccount('sa-1', { businessName: 'Updated' } as any, mockReq);
       expect(result.success).toBe(true);
     });
+
+    it('should throw not found when sub-account missing', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(
+        controller.updateSubAccount('missing', { businessName: 'X' } as any, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(
+        controller.updateSubAccount('sa-1', { businessName: 'X' } as any, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.updateSubAccount.mockRejectedValue(new Error('DB error'));
+      await expect(
+        controller.updateSubAccount('sa-1', { businessName: 'X' } as any, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
   });
 
   describe('updateSetupStep', () => {
     it('should update setup step', async () => {
       const result = await controller.updateSetupStep('sa-1', { setupStep: 3 }, mockReq);
       expect(result.success).toBe(true);
+    });
+
+    it('should throw not found when sub-account missing', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(
+        controller.updateSetupStep('missing', { setupStep: 1 }, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(
+        controller.updateSetupStep('sa-1', { setupStep: 1 }, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.updateSetupStep.mockRejectedValue(new Error('fail'));
+      await expect(
+        controller.updateSetupStep('sa-1', { setupStep: 1 }, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should default completed to false', async () => {
+      await controller.updateSetupStep('sa-1', { setupStep: 2 }, mockReq);
+      expect(service.updateSetupStep).toHaveBeenCalledWith('sa-1', 2, false);
     });
   });
 
@@ -110,6 +157,21 @@ describe('GhlSubAccountController', () => {
       const result = await controller.suspendSubAccount('sa-1', mockReq);
       expect(result.success).toBe(true);
     });
+
+    it('should throw not found', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(controller.suspendSubAccount('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(controller.suspendSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.suspendSubAccount.mockRejectedValue(new Error('fail'));
+      await expect(controller.suspendSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
   });
 
   describe('reactivateSubAccount', () => {
@@ -117,12 +179,42 @@ describe('GhlSubAccountController', () => {
       const result = await controller.reactivateSubAccount('sa-1', mockReq);
       expect(result.success).toBe(true);
     });
+
+    it('should throw not found', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(controller.reactivateSubAccount('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(controller.reactivateSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.reactivateSubAccount.mockRejectedValue(new Error('fail'));
+      await expect(controller.reactivateSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
   });
 
   describe('deleteSubAccount', () => {
     it('should delete', async () => {
       const result = await controller.deleteSubAccount('sa-1', mockReq);
       expect(result.success).toBe(true);
+    });
+
+    it('should throw not found', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(controller.deleteSubAccount('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other' });
+      await expect(controller.deleteSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.deleteSubAccount.mockRejectedValue(new Error('fail'));
+      await expect(controller.deleteSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
     });
   });
 
@@ -136,6 +228,21 @@ describe('GhlSubAccountController', () => {
       service.syncSubAccountFromGhl.mockResolvedValue(null);
       await expect(controller.syncSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
     });
+
+    it('should throw not found', async () => {
+      service.getSubAccountById.mockResolvedValue(null);
+      await expect(controller.syncSubAccount('missing', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw forbidden for wrong user', async () => {
+      service.getSubAccountById.mockResolvedValue({ id: 'sa-1', userId: 'other', ghlLocationId: 'loc-1' });
+      await expect(controller.syncSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.syncSubAccountFromGhl.mockRejectedValue(new Error('GHL down'));
+      await expect(controller.syncSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
   });
 
   describe('listSubAccounts', () => {
@@ -143,6 +250,44 @@ describe('GhlSubAccountController', () => {
       const result = await controller.listSubAccounts(mockReq);
       expect(result.success).toBe(true);
       expect(result.count).toBe(1);
+    });
+
+    it('should throw 500 on service error', async () => {
+      service.listUserSubAccounts.mockRejectedValue(new Error('fail'));
+      await expect(controller.listSubAccounts(mockReq)).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('createSubAccount — error paths', () => {
+    it('should throw 500 when service throws', async () => {
+      service.createSubAccount.mockRejectedValue(new Error('GHL API fail'));
+      await expect(
+        controller.createSubAccount({ businessName: 'Test' } as any, mockReq),
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('getMySubAccount — error paths', () => {
+    it('should throw 500 on service error', async () => {
+      service.getSubAccountByUserId.mockRejectedValue(new Error('DB error'));
+      await expect(controller.getMySubAccount(mockReq)).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('getSubAccount — generic error', () => {
+    it('should throw 500 on non-HttpException', async () => {
+      service.getSubAccountById.mockRejectedValue(new Error('DB error'));
+      await expect(controller.getSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+    });
+
+    it('should re-throw HttpException as-is', async () => {
+      service.getSubAccountById.mockRejectedValue(new HttpException('Custom', 418));
+      await expect(controller.getSubAccount('sa-1', mockReq)).rejects.toThrow(HttpException);
+      try {
+        await controller.getSubAccount('sa-1', mockReq);
+      } catch (e) {
+        expect((e as HttpException).getStatus()).toBe(418);
+      }
     });
   });
 });

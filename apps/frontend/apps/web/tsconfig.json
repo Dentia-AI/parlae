@@ -34,6 +34,24 @@
     "~/types/*": [
       "./types/*"
     ],
+    "@kit/billing": [
+      "../../packages/billing/core/src/index.ts"
+    ],
+    "@kit/billing/*": [
+      "../../packages/billing/core/src/*"
+    ],
+    "@kit/stripe": [
+      "../../packages/billing/stripe/src/index.ts"
+    ],
+    "@kit/stripe/*": [
+      "../../packages/billing/stripe/src/*"
+    ],
+    "@kit/billing-gateway": [
+      "../../packages/billing/gateway/src/index.ts"
+    ],
+    "@kit/billing-gateway/*": [
+      "../../packages/billing/gateway/src/*"
+    ],
     "@kit/*": [
       "../../packages/*/src/index.ts"
     ],
