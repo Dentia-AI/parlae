@@ -5,6 +5,7 @@ jest.mock('@kit/prisma', () => ({
   prisma: {
     account: {
       findMany: jest.fn().mockResolvedValue([{ id: 'acc-1', name: 'Clinic A' }]),
+      count: jest.fn().mockResolvedValue(1),
     },
   },
 }));
