@@ -38,6 +38,7 @@
     "outboundOverview": "Vue d'ensemble",
     "patientCare": "Soins aux patients",
     "financial": "Financier",
+    "outboundCallLogs": "Journal d'appels",
     "dncList": "Liste NPC",
     "manage": "Gérer",
     "settings": "Paramètres",
@@ -1240,6 +1241,10 @@
         "call_analysis": "Analyse d'appel",
         "patient_request": "Demande du patient"
       }
+    },
+    "callLogs": {
+      "pageTitle": "Journal d'appels sortants",
+      "pageDescription": "Consultez les enregistrements d'appels de vos campagnes sortantes"
     }
   },
   "admin": {

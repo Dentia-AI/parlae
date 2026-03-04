@@ -349,14 +349,16 @@ describe('SikkaTokenRefreshService', () => {
       const result = await service.refreshExpiringTokens();
 
       expect(result).toEqual({ success: 1, failed: 0 });
-      const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
       expect(prisma.pmsIntegration.findMany).toHaveBeenCalledWith({
         where: {
           provider: 'SIKKA',
           status: 'ACTIVE',
-          tokenExpiry: { lt: twoHoursFromNow },
+          tokenExpiry: { lt: expect.any(Date) },
         },
       });
+      const actualDate = prisma.pmsIntegration.findMany.mock.calls[0]![0].where.tokenExpiry.lt as Date;
+      const expectedMs = Date.now() + 2 * 60 * 60 * 1000;
+      expect(Math.abs(actualDate.getTime() - expectedMs)).toBeLessThan(5000);
     });
 
     it('returns zero counts when no expiring tokens', async () => {

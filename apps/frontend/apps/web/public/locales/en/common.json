@@ -38,6 +38,7 @@
     "outboundOverview": "Overview",
     "patientCare": "Patient Care",
     "financial": "Financial",
+    "outboundCallLogs": "Call Logs",
     "dncList": "DNC List",
     "manage": "Manage",
     "settings": "Settings",
@@ -1240,6 +1241,10 @@
         "call_analysis": "Call Analysis",
         "patient_request": "Patient Request"
       }
+    },
+    "callLogs": {
+      "pageTitle": "Outbound Call Logs",
+      "pageDescription": "View call records from your outbound campaigns"
     }
   },
   "admin": {

@@ -100,6 +100,11 @@ const routes = [
             Icon: <DollarSign className={iconClasses} />,
           },
           {
+            label: 'common:routes.outboundCallLogs',
+            path: '/home/outbound/call-logs',
+            Icon: <FileText className={iconClasses} />,
+          },
+          {
             label: 'common:routes.dncList',
             path: '/home/outbound/dnc',
             Icon: <ShieldBan className={iconClasses} />,
