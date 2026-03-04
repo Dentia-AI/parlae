@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-
 import { PageBody } from '@kit/ui/page';
 import { prisma } from '@kit/prisma';
 
@@ -8,6 +6,7 @@ import { withI18n } from '~/lib/i18n/with-i18n';
 
 // local imports
 import { CallAnalyticsDashboard } from './analytics/_components/call-analytics-dashboard';
+import { SetupRedirect } from './_components/setup-redirect';
 import { loadUserWorkspace } from './_lib/server/load-user-workspace';
 
 export const generateMetadata = async () => {
@@ -20,7 +19,9 @@ export const generateMetadata = async () => {
 };
 
 async function UserHomePage() {
-  // Redirect new users who haven't completed setup to the wizard
+  // Redirect new users who haven't completed setup to the wizard.
+  // Uses a client-side redirect (SetupRedirect) instead of server-side
+  // redirect() to avoid React error #310 — see setup-redirect.tsx.
   try {
     const workspace = await loadUserWorkspace();
 
@@ -40,15 +41,11 @@ async function UserHomePage() {
         (settings?.vapiSquadId || settings?.retellReceptionistAgentId || settings?.deployType === 'conversation_flow');
 
       if (!hasCompletedSetup) {
-        redirect('/home/agent/setup');
+        return <SetupRedirect />;
       }
     }
-  } catch (error: any) {
-    // redirect() throws a NEXT_REDIRECT error — re-throw it
-    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
-      throw error;
-    }
-    // For other errors (DB not ready, etc.), just show the dashboard
+  } catch {
+    // For errors (DB not ready, etc.), just show the dashboard
   }
 
   return (

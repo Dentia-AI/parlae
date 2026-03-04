@@ -12,6 +12,7 @@ import { DeployingAnimation } from './_components/deploying-animation';
 import { PhoneSetupCard } from './_components/phone-setup-card';
 import { PmsIntegrationCard } from './_components/pms-integration-card';
 import { CallForwardingInstructions } from './_components/call-forwarding-instructions';
+import { SetupRedirect } from '../_components/setup-redirect';
 import { getAccountProvider } from '@kit/shared/voice-provider';
 import { formatPhoneDisplay } from '~/lib/format-phone';
 
@@ -74,7 +75,7 @@ export default async function ReceptionistDashboardPage({
   }
 
   if (!account) {
-    redirect('/home/agent/setup');
+    return <SetupRedirect />;
   }
 
   const integrationSettings = account.phoneIntegrationSettings as any;
@@ -137,7 +138,7 @@ export default async function ReceptionistDashboardPage({
 
   // If no receptionist configured and not deploying, redirect to setup
   if (!hasReceptionist) {
-    redirect('/home/agent/setup');
+    return <SetupRedirect />;
   }
 
   const phoneNumber = integrationSettings?.phoneNumber || '+1 (555) 555-1234';
