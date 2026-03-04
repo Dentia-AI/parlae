@@ -16,6 +16,8 @@ jest.mock('@kit/prisma', () => ({
         accountId: 'acc-1',
         status: 'OPEN',
         reason: 'FOLLOW_UP_REQUIRED',
+        contactName: 'John Doe',
+        contactPhone: '+15551234567',
       }),
       update: jest.fn().mockResolvedValue({
         id: 'ai-1',
@@ -23,6 +25,9 @@ jest.mock('@kit/prisma', () => ({
         resolvedAt: new Date(),
         resolvedByUserId: 'user-1',
       }),
+    },
+    notification: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   },
 }));
