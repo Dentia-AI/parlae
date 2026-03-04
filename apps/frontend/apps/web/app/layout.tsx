@@ -81,6 +81,37 @@ export default async function RootLayout({
           }}
           nonce={nonce}
         />
+        {/* Lightweight boot logger — captures errors and warnings before
+            React hydrates. Stored in window.__BOOT_LOG__ so the console-
+            capture extension (or manual inspection) can read them. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var B = window.__BOOT_LOG__ = { t0: Date.now(), entries: [] };
+                function push(lvl, args) {
+                  B.entries.push({
+                    ms: Date.now() - B.t0,
+                    lvl: lvl,
+                    msg: Array.prototype.slice.call(args).map(function(a) {
+                      return a instanceof Error ? a.name + ': ' + a.message + '\\n' + (a.stack || '') : String(a);
+                    }).join(' ')
+                  });
+                }
+                var oe = console.error, ow = console.warn;
+                console.error = function() { push('ERR', arguments); oe.apply(console, arguments); };
+                console.warn  = function() { push('WRN', arguments); ow.apply(console, arguments); };
+                window.addEventListener('error', function(e) {
+                  push('UE', [e.message + ' at ' + (e.filename||'?') + ':' + (e.lineno||0)]);
+                });
+                window.addEventListener('unhandledrejection', function(e) {
+                  push('UR', [e.reason]);
+                });
+              })();
+            `,
+          }}
+          nonce={nonce}
+        />
       </head>
       <body>
         <RootProviders

@@ -52,19 +52,30 @@ function useI18nClient(settings: InitOptions, resolver: Resolver) {
   // Init failed too many times — render children without i18n rather
   // than crashing the entire app.  Translation keys will show as-is.
   if (consecutiveFailures >= MAX_INIT_RETRIES) {
+    console.warn(
+      `[HYDRATION] i18n init exhausted ${MAX_INIT_RETRIES} retries — rendering without translations`,
+    );
     return i18nInstance;
   }
 
   // An init for these exact settings is already in flight — re-throw
   // the *same* Promise so React Suspense can track it.
   if (pendingInit) {
+    console.log('[HYDRATION] i18n init in flight — re-throwing same Promise for Suspense');
     throw pendingInit;
   }
 
   initSettingsKey = key;
 
+  const initStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  console.log(`[HYDRATION] i18n init starting (key=${key})`);
+
   pendingInit = initializeI18nClient(settings, resolver)
     .then((instance) => {
+      const elapsed = typeof performance !== 'undefined'
+        ? (performance.now() - initStart).toFixed(1)
+        : '?';
+      console.log(`[HYDRATION] i18n init completed in ${elapsed}ms`);
       i18nInstance = instance;
       consecutiveFailures = 0;
     })
