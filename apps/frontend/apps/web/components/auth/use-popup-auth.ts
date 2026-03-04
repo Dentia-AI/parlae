@@ -39,6 +39,8 @@ interface PopupAuthOptions {
   callbackUrl?: string;
 }
 
+let mountCount = 0;
+
 export function usePopupAuth() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const popupRef = useRef<Window | null>(null);
@@ -49,12 +51,17 @@ export function usePopupAuth() {
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
+  const instanceRef = useRef(++mountCount);
 
-  // All handlers use refs so their identities never change,
-  // preventing useEffect dependency churn and stale closures.
+  const tag = `[PopupAuth#${instanceRef.current}]`;
 
   useEffect(() => {
+    console.log(`${tag} useEffect MOUNT — setting up listeners`);
+
     function handleAuthComplete() {
+      console.log(
+        `${tag} handleAuthComplete — completed=${completedRef.current} authenticating=${authenticatingRef.current}`,
+      );
       if (completedRef.current) return;
       if (!authenticatingRef.current) return;
       completedRef.current = true;
@@ -73,6 +80,7 @@ export function usePopupAuth() {
       }
       popupRef.current = null;
       authenticatingRef.current = false;
+      console.log(`${tag} handleAuthComplete — setting isAuthenticating=false, navigating`);
       setIsAuthenticating(false);
       routerRef.current.push(callbackUrlRef.current);
     }
@@ -82,6 +90,7 @@ export function usePopupAuth() {
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
       channel.onmessage = (event) => {
+        console.log(`${tag} BroadcastChannel message received`, event.data);
         if (event.data?.type === MESSAGE_TYPE) handleAuthComplete();
       };
     } catch {
@@ -91,20 +100,23 @@ export function usePopupAuth() {
     function handleWindowMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== MESSAGE_TYPE) return;
+      console.log(`${tag} window.postMessage received`, event.data);
       handleAuthComplete();
     }
     window.addEventListener('message', handleWindowMessage);
 
     return () => {
+      console.log(`${tag} useEffect CLEANUP — tearing down listeners`);
       channel?.close();
       window.removeEventListener('message', handleWindowMessage);
     };
-  }, []); // No dependencies -- handlers use refs, so this never re-runs.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPopupAuth = (options: PopupAuthOptions) => {
     const { identityProvider, screenHint, callbackUrl } = options;
     callbackUrlRef.current = callbackUrl || '/home';
     completedRef.current = false;
+    console.log(`${tag} startPopupAuth called — identityProvider=${identityProvider}`);
 
     if (isMobile()) {
       const authParams: Record<string, string> = {};
@@ -122,6 +134,7 @@ export function usePopupAuth() {
     const popup = openCenteredPopup(popupUrl);
 
     if (!popup || popup.closed) {
+      console.log(`${tag} popup blocked, falling back to redirect`);
       const authParams: Record<string, string> = {};
       if (identityProvider) authParams.identity_provider = identityProvider;
       if (screenHint) authParams.screen_hint = screenHint;
@@ -132,24 +145,32 @@ export function usePopupAuth() {
     popupRef.current = popup;
     authenticatingRef.current = true;
     setIsAuthenticating(true);
+    console.log(`${tag} popup opened — starting poll`);
 
-    // Clear any stale poll
     if (pollRef.current) clearInterval(pollRef.current);
 
     pollRef.current = setInterval(() => {
+      const hasRef = !!popupRef.current;
+      let closed: boolean | undefined;
       try {
-        if (!popupRef.current || popupRef.current.closed) {
-          if (pollRef.current) {
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-          }
-          popupRef.current = null;
-          authenticatingRef.current = false;
-          setIsAuthenticating(false);
-          completedRef.current = false;
-        }
+        closed = popupRef.current?.closed;
       } catch {
-        // popup.closed access failed -- keep waiting
+        // cross-origin access to .closed can sometimes fail
+        return;
+      }
+
+      if (!hasRef || closed) {
+        console.log(
+          `${tag} poll: popup gone — hasRef=${hasRef} closed=${closed} — clearing overlay`,
+        );
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+        popupRef.current = null;
+        authenticatingRef.current = false;
+        setIsAuthenticating(false);
+        completedRef.current = false;
       }
     }, POLL_INTERVAL_MS);
   };

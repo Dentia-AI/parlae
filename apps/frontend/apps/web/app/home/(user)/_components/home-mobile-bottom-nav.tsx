@@ -1,7 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Home, Bell, Bot, User, Menu, ToggleLeft, Palette, CreditCard, Users, UserCog, FileText } from 'lucide-react';
+import {
+  BarChart3,
+  Bell,
+  Bot,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Menu,
+  Palette,
+  PhoneOutgoing,
+  ToggleLeft,
+  User,
+  Users,
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@kit/ui/utils';
@@ -29,10 +42,16 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
 
   const navItems = [
     {
-      name: 'Home',
+      name: 'Dashboard',
       href: '/home',
-      icon: Home,
+      icon: BarChart3,
       matches: (path: string) => path === '/home',
+    },
+    {
+      name: 'Call Logs',
+      href: '/home/call-logs',
+      icon: FileText,
+      matches: (path: string) => path.startsWith('/home/call-logs'),
     },
     {
       name: 'AI Agent',
@@ -41,16 +60,20 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
       matches: (path: string) => path.startsWith('/home/agent'),
     },
     {
-      name: 'Logs',
-      href: '/home/call-logs',
-      icon: FileText,
-      matches: (path: string) => path.startsWith('/home/call-logs'),
+      name: 'Outbound',
+      href: '/home/outbound',
+      icon: PhoneOutgoing,
+      matches: (path: string) => path.startsWith('/home/outbound'),
     },
   ];
 
+  const isMoreActive = pathname.startsWith('/home/activity-log') ||
+    pathname.startsWith('/home/settings') ||
+    pathname.startsWith('/home/features') ||
+    pathname.startsWith('/home/notifications');
+
   return (
     <>
-      {/* Mobile Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t">
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
@@ -69,7 +92,7 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                 )}
               >
                 <Icon className="h-5 w-5" />
-                <span className="text-xs mt-1">{item.name}</span>
+                <span className="text-[10px] mt-1">{item.name}</span>
               </Link>
             );
           })}
@@ -79,11 +102,13 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
               <button
                 className={cn(
                   'flex flex-col items-center justify-center flex-1 h-full relative',
-                  'text-muted-foreground hover:text-foreground',
+                  isMoreActive
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 <Menu className="h-5 w-5" />
-                <span className="text-xs mt-1">Menu</span>
+                <span className="text-[10px] mt-1">More</span>
                 {unreadCount > 0 && (
                   <Badge
                     variant="destructive"
@@ -96,9 +121,19 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh]">
               <SheetHeader>
-                <SheetTitle>Menu</SheetTitle>
+                <SheetTitle>More</SheetTitle>
               </SheetHeader>
-              <div className="py-4 space-y-4">
+              <div className="py-4 space-y-4 overflow-y-auto">
+                {/* Activity Log */}
+                <Link
+                  href="/home/activity-log"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+                  onClick={() => setOpen(false)}
+                >
+                  <ClipboardList className="h-5 w-5" />
+                  <span className="text-sm font-medium">AI Activity Log</span>
+                </Link>
+
                 {/* Notifications */}
                 <Link
                   href="/home/notifications"
@@ -186,7 +221,7 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                   </div>
                 </div>
 
-                {/* Profile Dropdown */}
+                {/* Profile / Sign out */}
                 <div className="pt-4 border-t">
                   <ProfileAccountDropdownContainer
                     user={user}
