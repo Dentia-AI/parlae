@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 const POPUP_WIDTH = 600;
 const POPUP_HEIGHT = 700;
 const POLL_INTERVAL_MS = 500;
+const CHANNEL_NAME = 'parlae-auth';
 const MESSAGE_TYPE = 'parlae-auth-complete';
 
 function isMobile(): boolean {
@@ -55,17 +56,34 @@ export function usePopupAuth() {
   }, []);
 
   useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== MESSAGE_TYPE) return;
-
+    function onAuthComplete() {
       cleanup();
       router.push(callbackUrlRef.current);
     }
 
-    window.addEventListener('message', handleMessage);
+    // BroadcastChannel: works even when window.opener is severed
+    // by cross-origin OAuth redirects (App → Cognito → Google → App).
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(CHANNEL_NAME);
+      channel.onmessage = (event) => {
+        if (event.data?.type === MESSAGE_TYPE) onAuthComplete();
+      };
+    } catch {
+      // BroadcastChannel unsupported
+    }
+
+    // Fallback: window.postMessage (works when opener is preserved)
+    function handleWindowMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== MESSAGE_TYPE) return;
+      onAuthComplete();
+    }
+    window.addEventListener('message', handleWindowMessage);
+
     return () => {
-      window.removeEventListener('message', handleMessage);
+      channel?.close();
+      window.removeEventListener('message', handleWindowMessage);
       cleanup();
     };
   }, [cleanup, router]);

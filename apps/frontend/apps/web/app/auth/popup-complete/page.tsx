@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react';
 
 import { Loader2 } from 'lucide-react';
 
+const CHANNEL_NAME = 'parlae-auth';
+const MESSAGE_TYPE = 'parlae-auth-complete';
+
 export default function PopupCompletePage() {
   const handled = useRef(false);
 
@@ -11,16 +14,27 @@ export default function PopupCompletePage() {
     if (handled.current) return;
     handled.current = true;
 
-    if (window.opener) {
-      window.opener.postMessage(
-        { type: 'parlae-auth-complete', success: true },
-        window.location.origin,
-      );
+    const message = { type: MESSAGE_TYPE, success: true };
 
-      setTimeout(() => window.close(), 300);
-    } else {
-      window.location.href = '/home';
+    // BroadcastChannel works same-origin even when window.opener is severed
+    // by cross-origin redirects during the OAuth flow.
+    try {
+      const channel = new BroadcastChannel(CHANNEL_NAME);
+      channel.postMessage(message);
+      channel.close();
+    } catch {
+      // BroadcastChannel unsupported -- fall through to opener
     }
+
+    if (window.opener) {
+      try {
+        window.opener.postMessage(message, window.location.origin);
+      } catch {
+        // opener access blocked
+      }
+    }
+
+    setTimeout(() => window.close(), 300);
   }, []);
 
   return (
