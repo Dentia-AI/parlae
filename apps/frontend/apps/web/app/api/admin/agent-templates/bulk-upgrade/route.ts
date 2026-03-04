@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // Resolve account IDs when deployAll mode is used
     if (deployAll) {
-      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/api/admin/_lib/admin-pagination');
       const accountWhere: Record<string, unknown> = {};
       if (filters?.templateId) accountWhere.agentTemplateId = filters.templateId;
       if (filters?.version) accountWhere.agentTemplate = { version: filters.version };

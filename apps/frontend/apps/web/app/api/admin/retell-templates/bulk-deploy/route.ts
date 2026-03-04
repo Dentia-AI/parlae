@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (deployAll) {
-      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/api/admin/_lib/admin-pagination');
       const accountWhere: Record<string, unknown> = {};
       if (filters?.templateId) accountWhere.retellAgentTemplateId = filters.templateId;
       if (filters?.version) accountWhere.retellAgentTemplate = { version: filters.version };

@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from '@kit/ui/select';
 import { RefreshCw, Trash2, AlertTriangle, CheckCircle2, Database } from 'lucide-react';
-import { AdminTablePagination } from '~/app/admin/_components/admin-table-pagination';
+import { AdminTablePagination } from '~/admin/_components/admin-table-pagination';
 
 interface RetellAgent {
   agentId: string;

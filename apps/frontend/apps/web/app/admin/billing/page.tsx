@@ -36,7 +36,7 @@ import {
 import { toast } from '@kit/ui/sonner';
 import Link from 'next/link';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
-import { AdminTablePagination } from '~/app/admin/_components/admin-table-pagination';
+import { AdminTablePagination } from '~/admin/_components/admin-table-pagination';
 
 /**
  * Super Admin Billing Management

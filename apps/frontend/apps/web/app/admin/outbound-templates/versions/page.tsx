@@ -36,7 +36,7 @@ import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import {
   AdminTablePagination,
   SelectAllBanner,
-} from '~/app/admin/_components/admin-table-pagination';
+} from '~/admin/_components/admin-table-pagination';
 
 interface AccountOverview {
   accountId: string;

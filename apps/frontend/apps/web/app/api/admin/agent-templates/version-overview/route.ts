@@ -6,7 +6,7 @@ import {
   parsePaginationParams,
   buildPagination,
   buildAccountSearchWhere,
-} from '~/app/api/admin/_lib/admin-pagination';
+} from '~/api/admin/_lib/admin-pagination';
 
 /**
  * GET /api/admin/agent-templates/version-overview
