@@ -40,6 +40,7 @@
     "financial": "Financial",
     "outboundCallLogs": "Call Logs",
     "dncList": "DNC List",
+    "actionItems": "Action Items",
     "manage": "Manage",
     "settings": "Settings",
     "accountSettings": "Account Settings",
@@ -881,7 +882,10 @@
     "outboundSuccessRate": "Success Rate",
     "outboundSuccessDesc": "Positive outcomes",
     "activeCampaigns": "Active Campaigns",
-    "activeCampaignsDesc": "Currently running"
+    "activeCampaignsDesc": "Currently running",
+    "attentionRequired": "{{count}} items need your attention",
+    "attentionDescription": "Calls that require follow-up, review, or human intervention",
+    "viewActionItems": "View Action Items"
   },
   "activityLog": {
     "pageTitle": "AI Activity Log",
@@ -1245,6 +1249,41 @@
     "callLogs": {
       "pageTitle": "Outbound Call Logs",
       "pageDescription": "View call records from your outbound campaigns"
+    }
+  },
+  "actionItems": {
+    "pageTitle": "Action Items",
+    "pageDescription": "Calls that need human follow-up, review, or intervention.",
+    "filterAll": "All",
+    "filterInbound": "Inbound",
+    "filterOutbound": "Outbound",
+    "filterAnyStatus": "Any Status",
+    "itemsTotal": "items",
+    "emptyTitle": "No items need your attention",
+    "emptyDescription": "When calls need follow-up or review, they will appear here.",
+    "unknownContact": "Unknown Contact",
+    "viewCall": "View Call",
+    "actionStart": "Assign to me",
+    "actionResolve": "Mark Resolved",
+    "assignTo": "Assign to...",
+    "assignedTo": "Assigned to",
+    "teamMember": "Team member",
+    "pageInfo": "Page {{page}} of {{totalPages}}",
+    "previous": "Previous",
+    "next": "Next",
+    "reasons": {
+      "FOLLOW_UP_REQUIRED": "Follow-up Required",
+      "TRANSFER_FAILED": "Transfer Failed",
+      "NO_RESOLUTION": "No Resolution",
+      "EMERGENCY": "Emergency",
+      "CALLER_HUNG_UP": "Caller Hung Up",
+      "CALL_ERROR": "Call Error",
+      "VOICEMAIL_REVIEW": "Voicemail Review"
+    },
+    "statuses": {
+      "OPEN": "Open",
+      "IN_PROGRESS": "In Progress",
+      "RESOLVED": "Resolved"
     }
   },
   "admin": {

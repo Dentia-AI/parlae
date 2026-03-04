@@ -11,6 +11,20 @@ import {
   RETELL_POST_CALL_ANALYSIS,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 
+function resolveVoiceModel(voiceId: string): string | undefined {
+  const prefix = voiceId.split('-')[0]?.toLowerCase();
+  switch (prefix) {
+    case '11labs':
+      return 'eleven_turbo_v2_5';
+    case 'cartesia':
+      return 'sonic-3';
+    case 'minimax':
+      return 'speech-02-turbo';
+    default:
+      return undefined;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getSessionUser();
@@ -53,7 +67,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         account: {
-          select: { id: true, name: true, phoneIntegrationSettings: true },
+          select: { id: true, name: true, brandingBusinessName: true, phoneIntegrationSettings: true },
         },
       },
     });
@@ -80,9 +94,14 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const clinicName = s.account?.name || 'Dental Clinic';
+        const clinicName = s.account?.brandingBusinessName || s.account?.name || 'Dental Clinic';
         const groupLabel = template.agentGroup === 'PATIENT_CARE' ? 'Patient Care' : 'Financial';
         const agentName = `${clinicName} - Outbound ${groupLabel} (${template.version})`;
+
+        // Mirror voice from inbound agent config
+        const voiceId: string =
+          integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
+        const voiceModel = resolveVoiceModel(voiceId);
 
         const agentConfig: RetellAgentConfig = {
           agent_name: agentName,
@@ -90,7 +109,8 @@ export async function POST(request: NextRequest) {
             type: 'conversation-flow',
             conversation_flow_id: flow.conversation_flow_id,
           },
-          voice_id: 'retell-Chloe',
+          voice_id: voiceId,
+          ...(voiceModel ? { voice_model: voiceModel } : {}),
           ...SHARED_RETELL_AGENT_CONFIG,
           webhook_url: backendUrl ? `${backendUrl}/retell/webhook` : undefined,
           webhook_events: ['call_started', 'call_ended', 'call_analyzed'],

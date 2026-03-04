@@ -11,11 +11,27 @@ import {
   RETELL_POST_CALL_ANALYSIS,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 
+function resolveVoiceModel(voiceId: string): string | undefined {
+  const prefix = voiceId.split('-')[0]?.toLowerCase();
+  switch (prefix) {
+    case '11labs':
+      return 'eleven_turbo_v2_5';
+    case 'cartesia':
+      return 'sonic-3';
+    case 'minimax':
+      return 'speech-02-turbo';
+    default:
+      return undefined;
+  }
+}
+
 /**
  * POST /api/admin/outbound-templates/bulk-deploy
  *
  * Deploy an outbound agent template to selected accounts.
  * Creates per-account Retell agents from the template's flow config.
+ * Voice, knowledge base, and phone number are mirrored from the
+ * account's inbound agent configuration.
  *
  * Body (mode 1 - include): { templateId: string, accountIds: string[] }
  * Body (mode 2 - deploy all): { templateId: string, deployAll: true, excludeAccountIds?: string[], filters?: { search?, version? } }
@@ -138,6 +154,11 @@ export async function POST(request: NextRequest) {
           | string
           | undefined;
 
+        // Mirror voice from inbound agent config; fall back to default
+        const voiceId: string =
+          integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
+        const voiceModel = resolveVoiceModel(voiceId);
+
         const flowConfig = {
           ...(template.flowConfig as Record<string, unknown>),
         };
@@ -158,7 +179,8 @@ export async function POST(request: NextRequest) {
             type: 'conversation-flow',
             conversation_flow_id: flow.conversation_flow_id,
           },
-          voice_id: 'retell-Chloe',
+          voice_id: voiceId,
+          ...(voiceModel ? { voice_model: voiceModel } : {}),
           ...SHARED_RETELL_AGENT_CONFIG,
           webhook_url: backendUrl ? `${backendUrl}/retell/webhook` : undefined,
           webhook_events: ['call_started', 'call_ended', 'call_analyzed'],
@@ -186,6 +208,18 @@ export async function POST(request: NextRequest) {
 
         const tz = (account as any).brandingTimezone || 'America/New_York';
 
+        // Auto-set fromPhoneNumberId from inbound phone if not already configured
+        let fromPhoneNumberId = existing?.fromPhoneNumberId || undefined;
+        if (!fromPhoneNumberId) {
+          const inboundPhone = await prisma.retellPhoneNumber.findFirst({
+            where: { accountId, isActive: true },
+            select: { id: true },
+          });
+          if (inboundPhone) {
+            fromPhoneNumberId = inboundPhone.id;
+          }
+        }
+
         await prisma.outboundSettings.upsert({
           where: { accountId },
           update: {
@@ -193,6 +227,9 @@ export async function POST(request: NextRequest) {
             [enabledField]: true,
             outboundTemplateVersion: template.version,
             timezone: tz,
+            ...(fromPhoneNumberId && !existing?.fromPhoneNumberId
+              ? { fromPhoneNumberId }
+              : {}),
             outboundUpgradeHistory: [
               ...prevHistory,
               {
@@ -212,6 +249,7 @@ export async function POST(request: NextRequest) {
             [enabledField]: true,
             outboundTemplateVersion: template.version,
             timezone: tz,
+            ...(fromPhoneNumberId ? { fromPhoneNumberId } : {}),
             outboundUpgradeHistory: [
               {
                 version: template.version,
@@ -228,8 +266,16 @@ export async function POST(request: NextRequest) {
         results.push({ accountId, success: true, agentId: agent.agent_id });
 
         logger.info(
-          { accountId, agentId: agent.agent_id, templateVersion: template.version },
-          `[Outbound] Deployed ${groupLabel} agent`,
+          {
+            accountId,
+            agentId: agent.agent_id,
+            templateVersion: template.version,
+            voiceId,
+            voiceModel: voiceModel || 'default',
+            knowledgeBase: retellKbId || 'none',
+            fromPhoneNumberId: fromPhoneNumberId || 'none',
+          },
+          `[Outbound] Deployed ${groupLabel} agent (mirrored inbound config)`,
         );
       } catch (err) {
         logger.error(

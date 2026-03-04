@@ -10,6 +10,7 @@ import {
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentToolsService } from '../agent-tools/agent-tools.service';
+import { ActionItemService } from '../common/services/action-item.service';
 import { StructuredLogger } from '../common/structured-logger';
 import * as crypto from 'crypto';
 
@@ -31,6 +32,7 @@ export class RetellWebhookController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agentToolsService: AgentToolsService,
+    private readonly actionItemService: ActionItemService,
   ) {
     this.logger.log('[Retell Webhook] Controller initialized');
   }
@@ -184,6 +186,7 @@ export class RetellWebhookController {
     }
 
     await this.processOutboundCallAnalyzed(call, analysis);
+    await this.evaluateActionItem(call, analysis);
 
     return { received: true };
   }
@@ -366,6 +369,74 @@ export class RetellWebhookController {
         campaignId,
         err: err instanceof Error ? err.message : err,
         msg: '[Outbound] Error processing outbound call_analyzed',
+      });
+    }
+  }
+
+  /**
+   * Evaluate whether a completed call needs human attention.
+   * Works for both inbound and outbound Retell calls.
+   */
+  private async evaluateActionItem(call: any, analysis: any): Promise<void> {
+    const callId = call?.call_id;
+    if (!callId) return;
+
+    const metadata = call?.metadata || {};
+    const contactId = metadata.contactId;
+    const campaignId = metadata.campaignId;
+    const isOutbound = !!contactId;
+
+    const accountId = metadata.accountId || (await this.resolveAccountFromCall(call));
+    if (!accountId) return;
+
+    let contactName: string | undefined;
+    let contactPhone: string | undefined;
+    let callType: string | undefined;
+
+    if (isOutbound && contactId) {
+      try {
+        const contact = await this.prisma.campaignContact.findUnique({
+          where: { id: contactId },
+          select: {
+            phoneNumber: true,
+            callContext: true,
+            campaign: { select: { callType: true } },
+          },
+        });
+        if (contact) {
+          contactPhone = contact.phoneNumber || undefined;
+          callType = contact.campaign?.callType || undefined;
+          const ctx = contact.callContext as Record<string, any> | null;
+          contactName = ctx?.patient_name || ctx?.patientName || undefined;
+        }
+      } catch {
+        // non-critical
+      }
+    } else {
+      contactPhone = call?.from_number || undefined;
+      const customData = analysis?.custom_analysis_data || {};
+      contactName = customData.patient_name || customData.patientName || undefined;
+    }
+
+    try {
+      await this.actionItemService.createActionItemIfNeeded({
+        accountId,
+        callId,
+        provider: 'RETELL',
+        direction: isOutbound ? 'OUTBOUND' : 'INBOUND',
+        analysis: analysis || {},
+        contactName,
+        contactPhone,
+        summary: analysis?.call_summary,
+        campaignId: campaignId || undefined,
+        callType,
+        disconnectionReason: call?.disconnection_reason,
+      });
+    } catch (err) {
+      this.logger.error({
+        callId,
+        err: err instanceof Error ? err.message : err,
+        msg: '[Retell] Error evaluating action item',
       });
     }
   }

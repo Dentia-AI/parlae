@@ -184,6 +184,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.doNotCallEntry;
   }
 
+  get actionItem(): PrismaClient['actionItem'] {
+    return this.client.actionItem;
+  }
+
   // Call data is managed by Vapi API — only thin CallReference stored locally.
 
   // get vapiSquadTemplate(): PrismaClient['vapiSquadTemplate'] {

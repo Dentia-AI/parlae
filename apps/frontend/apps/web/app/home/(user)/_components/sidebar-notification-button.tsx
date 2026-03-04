@@ -31,7 +31,7 @@ export function SidebarNotificationButton() {
           className="relative h-9 w-9 flex-shrink-0 group-data-[minimized=true]/sidebar:h-8 group-data-[minimized=true]/sidebar:w-8"
           aria-label="Notifications"
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-4 w-4 text-gray-700 dark:text-gray-100" />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
@@ -111,7 +111,7 @@ export function SidebarNotificationButton() {
         {notifications.length > 5 && (
           <div className="border-t px-4 py-2">
             <a
-              href="/home/notifications"
+              href="/home/action-items"
               className="text-xs text-primary hover:underline"
             >
               View all notifications

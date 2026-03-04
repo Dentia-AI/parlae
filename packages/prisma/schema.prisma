@@ -243,6 +243,7 @@ model Account {
   outboundCampaigns     OutboundCampaign[] // Outbound calling campaigns
   outboundSettings      OutboundSettings? // Outbound feature toggles and config
   doNotCallEntries      DoNotCallEntry[] // Do-not-call list entries
+  actionItems           ActionItem[] // Calls needing human attention
 
   @@map("accounts")
 }
@@ -1473,4 +1474,62 @@ model DoNotCallEntry {
   @@unique([accountId, phoneNumber])
   @@index([accountId])
   @@map("do_not_call_list")
+}
+
+// ============================================================================
+// Action Items — calls needing human attention
+// ============================================================================
+
+enum ActionItemStatus {
+  OPEN        @map("open")
+  IN_PROGRESS @map("in_progress")
+  RESOLVED    @map("resolved")
+}
+
+enum ActionItemReason {
+  FOLLOW_UP_REQUIRED @map("follow_up_required")
+  TRANSFER_FAILED    @map("transfer_failed")
+  NO_RESOLUTION      @map("no_resolution")
+  EMERGENCY          @map("emergency")
+  CALLER_HUNG_UP     @map("caller_hung_up")
+  CALL_ERROR         @map("call_error")
+  VOICEMAIL_REVIEW   @map("voicemail_review")
+}
+
+enum CallDirection {
+  INBOUND  @map("inbound")
+  OUTBOUND @map("outbound")
+}
+
+model ActionItem {
+  id        String           @id @default(uuid())
+  accountId String           @map("account_id")
+  callId    String           @map("call_id")
+  provider  VoiceProvider
+  direction CallDirection
+  reason    ActionItemReason
+  status    ActionItemStatus @default(OPEN)
+
+  contactName  String? @map("contact_name")
+  contactPhone String? @map("contact_phone")
+  summary      String? @db.Text
+  agentNotes   String? @map("agent_notes") @db.Text
+  staffNotes   String? @map("staff_notes") @db.Text
+
+  assignedToUserId String?   @map("assigned_to_user_id")
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedByUserId String?   @map("resolved_by_user_id")
+
+  campaignId String? @map("campaign_id")
+  callType   String? @map("call_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status])
+  @@index([accountId, direction])
+  @@index([createdAt])
+  @@map("action_items")
 }

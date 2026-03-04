@@ -55,6 +55,7 @@ export const createMockPrismaService = (): MockPrismaClient => {
     doNotCallEntry: prismaMock.doNotCallEntry,
     aiActionLog: prismaMock.aiActionLog,
     agentTemplate: prismaMock.agentTemplate,
+    actionItem: prismaMock.actionItem,
     $transaction: prismaMock.$transaction,
     $queryRaw: prismaMock.$queryRaw,
     $executeRaw: prismaMock.$executeRaw,

@@ -27,7 +27,7 @@ export function NotificationBellSidebar() {
         className="w-full justify-start relative"
         onClick={() => setExpanded(!expanded)}
       >
-        <Bell className="h-5 w-5 group-data-[minimized=false]/sidebar:mr-2" />
+        <Bell className="h-5 w-5 text-gray-700 dark:text-gray-100 group-data-[minimized=false]/sidebar:mr-2" />
         <span className="flex-1 text-left group-data-[minimized=true]/sidebar:hidden">Notifications</span>
         {unreadCount > 0 && (
           <Badge
@@ -83,7 +83,7 @@ export function NotificationBellSidebar() {
               size="sm"
               className="w-full"
               onClick={() => {
-                window.location.href = '/home/notifications';
+                window.location.href = '/home/action-items';
               }}
             >
               View all notifications

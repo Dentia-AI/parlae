@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   BarChart3,
   FileText,
   Bot,
@@ -37,6 +38,11 @@ const routes = [
         label: 'common:routes.callLogs',
         path: '/home/call-logs',
         Icon: <FileText className={iconClasses} />,
+      },
+      {
+        label: 'common:routes.actionItems',
+        path: '/home/action-items',
+        Icon: <AlertCircle className={iconClasses} />,
       },
       {
         label: 'common:routes.activityLog',

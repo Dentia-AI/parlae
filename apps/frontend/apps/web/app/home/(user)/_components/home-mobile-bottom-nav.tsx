@@ -136,7 +136,7 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
 
                 {/* Notifications */}
                 <Link
-                  href="/home/notifications"
+                  href="/home/action-items"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
                   onClick={() => setOpen(false)}
                 >

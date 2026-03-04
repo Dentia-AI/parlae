@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Button } from '@kit/ui/button';
 import {
+  AlertCircle,
   Phone,
   TrendingUp,
   Clock,
@@ -61,8 +63,10 @@ interface OutboundData {
 
 export function CallAnalyticsDashboard() {
   const { t } = useTranslation('common');
+  const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [outboundData, setOutboundData] = useState<OutboundData | null>(null);
+  const [actionItemCount, setActionItemCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'1d' | '7d' | '14d'>('7d');
   const activityRef = useRef<HTMLDivElement>(null);
@@ -95,9 +99,10 @@ export function CallAnalyticsDashboard() {
 
       const dateParams = `startDate=${startDate.toISOString()}&endDate=${new Date().toISOString()}`;
 
-      const [callsRes, outboundRes] = await Promise.all([
+      const [callsRes, outboundRes, actionRes] = await Promise.all([
         fetch(`/api/analytics/calls?${dateParams}`),
         fetch(`/api/analytics/outbound?${dateParams}`).catch(() => null),
+        fetch('/api/action-items/count').catch(() => null),
       ]);
 
       if (callsRes.ok) {
@@ -108,6 +113,11 @@ export function CallAnalyticsDashboard() {
       if (outboundRes?.ok) {
         const obData = await outboundRes.json();
         setOutboundData(obData);
+      }
+
+      if (actionRes?.ok) {
+        const acData = await actionRes.json();
+        setActionItemCount(acData.count || 0);
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -184,6 +194,33 @@ export function CallAnalyticsDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Attention Required Banner */}
+      {actionItemCount > 0 && (
+        <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-2">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                {t('dashboard.attentionRequired', { count: actionItemCount })}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('dashboard.attentionDescription')}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0 text-xs border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+              onClick={() => router.push('/home/action-items')}
+            >
+              {t('dashboard.viewActionItems')}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Key Metrics */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">

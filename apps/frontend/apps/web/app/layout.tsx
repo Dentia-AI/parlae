@@ -42,6 +42,7 @@ export default async function RootLayout({
       <head>
         <meta name="color-scheme" content="light dark" />
         <style
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: [
               'html{background-color:hsl(0,0%,100%);color-scheme:light}',

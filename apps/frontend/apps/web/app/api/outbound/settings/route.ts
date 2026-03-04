@@ -40,6 +40,20 @@ const DEFAULT_REMINDER_CONFIG = {
   hoursBeforeAppointment: 24,
 };
 
+function resolveVoiceModel(voiceId: string): string | undefined {
+  const prefix = voiceId.split('-')[0]?.toLowerCase();
+  switch (prefix) {
+    case '11labs':
+      return 'eleven_turbo_v2_5';
+    case 'cartesia':
+      return 'sonic-3';
+    case 'minimax':
+      return 'speech-02-turbo';
+    default:
+      return undefined;
+  }
+}
+
 async function getAccountId(userId: string) {
   const account = await prisma.account.findFirst({
     where: { primaryOwnerId: userId, isPersonalAccount: true },
@@ -62,9 +76,9 @@ async function createOutboundRetellAgent(
 
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { name: true, phoneIntegrationSettings: true },
+    select: { name: true, brandingBusinessName: true, phoneIntegrationSettings: true },
   });
-  const clinicName = account?.name || 'Dental Clinic';
+  const clinicName = account?.brandingBusinessName || account?.name || 'Dental Clinic';
 
   const retell = createRetellService();
   if (!retell.isEnabled()) {
@@ -79,6 +93,11 @@ async function createOutboundRetellAgent(
   const retellKbId = integrationSettings.retellKnowledgeBaseId as
     | string
     | undefined;
+
+  // Mirror voice from inbound agent config; fall back to default
+  const voiceId: string =
+    integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
+  const voiceModel = resolveVoiceModel(voiceId);
 
   const flowConfig = { ...(template.flowConfig as Record<string, unknown>) };
   if (retellKbId) {
@@ -97,7 +116,8 @@ async function createOutboundRetellAgent(
       type: 'conversation-flow',
       conversation_flow_id: flow.conversation_flow_id,
     },
-    voice_id: 'retell-Chloe',
+    voice_id: voiceId,
+    ...(voiceModel ? { voice_model: voiceModel } : {}),
     ...SHARED_RETELL_AGENT_CONFIG,
     webhook_url: backendUrl ? `${backendUrl}/retell/webhook` : undefined,
     webhook_events: ['call_started', 'call_ended', 'call_analyzed'],
@@ -213,6 +233,17 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error(`[Outbound] Failed to create Retell agent for ${group}:`, err);
+      }
+    }
+
+    // Auto-set fromPhoneNumberId from inbound phone if not already configured
+    if (!existing?.fromPhoneNumberId) {
+      const inboundPhone = await prisma.retellPhoneNumber.findFirst({
+        where: { accountId, isActive: true },
+        select: { id: true },
+      });
+      if (inboundPhone) {
+        updateData.fromPhoneNumberId = inboundPhone.id;
       }
     }
 

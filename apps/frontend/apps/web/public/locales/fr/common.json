@@ -40,6 +40,7 @@
     "financial": "Financier",
     "outboundCallLogs": "Journal d'appels",
     "dncList": "Liste NPC",
+    "actionItems": "Actions requises",
     "manage": "Gérer",
     "settings": "Paramètres",
     "accountSettings": "Paramètres du compte",
@@ -881,7 +882,10 @@
     "outboundSuccessRate": "Taux de réussite",
     "outboundSuccessDesc": "Résultats positifs",
     "activeCampaigns": "Campagnes actives",
-    "activeCampaignsDesc": "En cours d'exécution"
+    "activeCampaignsDesc": "En cours d'exécution",
+    "attentionRequired": "{{count}} éléments nécessitent votre attention",
+    "attentionDescription": "Appels nécessitant un suivi, un examen ou une intervention humaine",
+    "viewActionItems": "Voir les actions"
   },
   "activityLog": {
     "pageTitle": "Journal d'activité IA",
@@ -1245,6 +1249,41 @@
     "callLogs": {
       "pageTitle": "Journal d'appels sortants",
       "pageDescription": "Consultez les enregistrements d'appels de vos campagnes sortantes"
+    }
+  },
+  "actionItems": {
+    "pageTitle": "Actions requises",
+    "pageDescription": "Appels nécessitant un suivi humain, un examen ou une intervention.",
+    "filterAll": "Tous",
+    "filterInbound": "Entrants",
+    "filterOutbound": "Sortants",
+    "filterAnyStatus": "Tout statut",
+    "itemsTotal": "éléments",
+    "emptyTitle": "Aucun élément nécessitant votre attention",
+    "emptyDescription": "Quand des appels nécessiteront un suivi ou un examen, ils apparaîtront ici.",
+    "unknownContact": "Contact inconnu",
+    "viewCall": "Voir l'appel",
+    "actionStart": "M'assigner",
+    "actionResolve": "Marquer résolu",
+    "assignTo": "Assigner à...",
+    "assignedTo": "Assigné à",
+    "teamMember": "Membre de l'équipe",
+    "pageInfo": "Page {{page}} sur {{totalPages}}",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "reasons": {
+      "FOLLOW_UP_REQUIRED": "Suivi requis",
+      "TRANSFER_FAILED": "Transfert échoué",
+      "NO_RESOLUTION": "Sans résolution",
+      "EMERGENCY": "Urgence",
+      "CALLER_HUNG_UP": "Appelant a raccroché",
+      "CALL_ERROR": "Erreur d'appel",
+      "VOICEMAIL_REVIEW": "Messagerie à examiner"
+    },
+    "statuses": {
+      "OPEN": "Ouvert",
+      "IN_PROGRESS": "En cours",
+      "RESOLVED": "Résolu"
     }
   },
   "admin": {
