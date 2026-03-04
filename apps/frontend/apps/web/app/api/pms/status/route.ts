@@ -30,7 +30,7 @@ export async function GET() {
 
     const integration = await prisma.pmsIntegration.findFirst({
       where: { accountId: { in: allAccountIds }, status: 'ACTIVE' },
-      select: { provider: true, config: true, metadata: true },
+      select: { provider: true, providerName: true, config: true, metadata: true },
     });
 
     if (!integration) {
@@ -43,10 +43,12 @@ export async function GET() {
     const actualPmsType = meta?.actualPmsType || config?.actualPmsType;
     const practiceName = meta?.practiceName || config?.practiceName;
 
+    // Prefer the real PMS name from metadata/config, then providerName,
+    // then practiceName. Never return the raw enum (e.g. "SIKKA") as display.
     const displayProvider =
       (actualPmsType && actualPmsType !== 'Unknown')
         ? actualPmsType
-        : practiceName || integration.provider;
+        : integration.providerName || practiceName || null;
 
     return NextResponse.json({
       connected: true,

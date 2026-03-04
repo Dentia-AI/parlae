@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         const meta = pmsIntegration.metadata as any;
         pmsProvider = (meta?.actualPmsType && meta.actualPmsType !== 'Unknown')
           ? meta.actualPmsType
-          : meta?.practiceName || null;
+          : pmsIntegration.providerName || meta?.practiceName || null;
         pmsStatus = pmsIntegration.status;
       }
     } catch {
