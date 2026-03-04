@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -36,6 +36,7 @@ import {
 import { toast } from '@kit/ui/sonner';
 import Link from 'next/link';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+import { AdminTablePagination } from '~/app/admin/_components/admin-table-pagination';
 
 /**
  * Super Admin Billing Management
@@ -92,34 +93,58 @@ const FEATURE_LABELS: Record<string, string> = {
   payments: 'Payment Collection',
 };
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminBillingPage() {
   const [clinics, setClinics] = useState<ClinicBilling[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
   const [selectedClinic, setSelectedClinic] = useState<ClinicBilling | null>(null);
   const [editConfig, setEditConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
   const [isSaving, startSaving] = useTransition();
   const csrfToken = useCsrfToken();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadClinics();
-  }, []);
+  }, [page, searchQuery]);
 
   const loadClinics = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/admin/billing/clinics', {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '50');
+      if (searchQuery) params.set('search', searchQuery);
+
+      const response = await fetch(`/api/admin/billing/clinics?${params}`, {
         headers: { 'x-csrf-token': csrfToken },
       });
       if (response.ok) {
         const data = await response.json();
         setClinics(data.clinics || []);
+        setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
       }
     } catch (error) {
       console.error('Failed to load clinics:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearchChange = (value: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      setPage(1);
+    }, 400);
   };
 
   const selectClinic = (clinic: ClinicBilling) => {
@@ -171,11 +196,7 @@ export default function AdminBillingPage() {
     );
   };
 
-  const filteredClinics = clinics.filter(
-    (c) =>
-      c.accountName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.accountEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false),
-  );
+  const filteredClinics = clinics;
 
   // Detail view for a selected clinic
   if (selectedClinic) {
@@ -443,14 +464,19 @@ export default function AdminBillingPage() {
           <CardDescription>
             Click on a clinic to configure their billing and pricing
           </CardDescription>
-          <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search clinics by name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              {pagination.total} clinic{pagination.total !== 1 ? 's' : ''} total
+            </div>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search clinics by name or email..."
+                defaultValue={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -522,6 +548,13 @@ export default function AdminBillingPage() {
                 ))}
               </TableBody>
             </Table>
+            <AdminTablePagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={pagination.limit}
+              onPageChange={setPage}
+            />
           )}
         </CardContent>
       </Card>

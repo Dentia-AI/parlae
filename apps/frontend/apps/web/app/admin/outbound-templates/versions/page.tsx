@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@kit/ui/button';
 import {
   Card,
@@ -33,6 +33,10 @@ import {
 import { toast } from '@kit/ui/sonner';
 import { cn } from '@kit/ui/utils';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+import {
+  AdminTablePagination,
+  SelectAllBanner,
+} from '~/app/admin/_components/admin-table-pagination';
 
 interface AccountOverview {
   accountId: string;
@@ -47,10 +51,16 @@ interface AccountOverview {
   isOnLatest: boolean;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 interface VersionGroup {
   version: string;
   count: number;
-  accountIds: string[];
 }
 
 interface TemplateSummary {
@@ -74,23 +84,41 @@ export default function OutboundVersionOverviewPage() {
   const csrfToken = useCsrfToken();
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<AccountOverview[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [versionGroups, setVersionGroups] = useState<VersionGroup[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+
   const [search, setSearch] = useState('');
+  const [filterVersion, setFilterVersion] = useState('');
+  const [page, setPage] = useState(1);
 
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [excludedAccounts, setExcludedAccounts] = useState<Set<string>>(new Set());
   const [deployTemplateId, setDeployTemplateId] = useState('');
   const [deploying, setDeploying] = useState(false);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buildQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('limit', '50');
+    if (search) params.set('search', search);
+    if (filterVersion) params.set('version', filterVersion);
+    return params.toString();
+  }, [page, search, filterVersion]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/outbound-templates/version-overview');
+      const res = await fetch(`/api/admin/outbound-templates/version-overview?${buildQueryParams()}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
 
       setAccounts(data.accounts || []);
+      setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
       setVersionGroups(data.versionGroups || []);
       setTemplates(data.templates || []);
       setStats(data.stats || null);
@@ -99,67 +127,106 @@ export default function OutboundVersionOverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [buildQueryParams]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const filteredAccounts = accounts.filter((a) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      a.accountName?.toLowerCase().includes(q) ||
-      a.accountEmail?.toLowerCase().includes(q) ||
-      a.outboundTemplateVersion?.toLowerCase().includes(q)
-    );
-  });
-
-  const toggleAccount = (id: string) => {
-    setSelectedAccounts((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      clearSelection();
+    }, 400);
   };
 
-  const toggleAll = () => {
-    if (selectedAccounts.size === filteredAccounts.length) {
-      setSelectedAccounts(new Set());
+  const handleFilterChange = (value: string) => {
+    setFilterVersion(value);
+    setPage(1);
+    clearSelection();
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    if (!selectAllMatching) setSelectedAccounts(new Set());
+  };
+
+  const toggleAccount = (id: string) => {
+    if (selectAllMatching) {
+      setExcludedAccounts((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
     } else {
-      setSelectedAccounts(new Set(filteredAccounts.map((a) => a.accountId)));
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
     }
   };
 
-  const handleBulkDeploy = async () => {
-    if (!deployTemplateId || selectedAccounts.size === 0) return;
+  const handleToggleAll = () => {
+    if (selectAllMatching) {
+      clearSelection();
+      return;
+    }
+    const pageIds = accounts.map((a) => a.accountId);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedAccounts.has(id));
+    if (allPageSelected) {
+      setSelectAllMatching(true);
+      setSelectedAccounts(new Set());
+      setExcludedAccounts(new Set());
+    } else {
+      setSelectedAccounts(new Set(pageIds));
+    }
+  };
 
+  const isAccountSelected = (id: string) =>
+    selectAllMatching ? !excludedAccounts.has(id) : selectedAccounts.has(id);
+
+  const effectiveSelectedCount = selectAllMatching
+    ? pagination.total - excludedAccounts.size
+    : selectedAccounts.size;
+
+  const clearSelection = () => {
+    setSelectedAccounts(new Set());
+    setSelectAllMatching(false);
+    setExcludedAccounts(new Set());
+  };
+
+  const handleBulkDeploy = async () => {
+    if (!deployTemplateId || effectiveSelectedCount === 0) return;
     setDeploying(true);
     try {
+      const body: any = { templateId: deployTemplateId };
+      if (selectAllMatching) {
+        body.deployAll = true;
+        body.excludeAccountIds = [...excludedAccounts];
+        body.filters = {
+          search: search || undefined,
+          version: filterVersion || undefined,
+        };
+      } else {
+        body.accountIds = [...selectedAccounts];
+      }
+
       const res = await fetch('/api/admin/outbound-templates/bulk-deploy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
-        },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
         credentials: 'include',
-        body: JSON.stringify({
-          templateId: deployTemplateId,
-          accountIds: [...selectedAccounts],
-        }),
+        body: JSON.stringify(body),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Deploy failed');
 
       const successes = data.results?.filter((r: any) => r.success).length || 0;
       const failures = data.results?.filter((r: any) => !r.success).length || 0;
-
-      toast.success(
-        `Deployed to ${successes} account(s)${failures > 0 ? `, ${failures} failed` : ''}`,
-      );
-      setSelectedAccounts(new Set());
+      toast.success(`Deployed to ${successes} account(s)${failures > 0 ? `, ${failures} failed` : ''}`);
+      clearSelection();
       fetchData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Bulk deploy failed');
@@ -168,7 +235,9 @@ export default function OutboundVersionOverviewPage() {
     }
   };
 
-  if (loading) {
+  const uniqueVersions = [...new Set(versionGroups.map((g) => g.version))].filter((v) => v !== 'unversioned');
+
+  if (loading && accounts.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -178,7 +247,6 @@ export default function OutboundVersionOverviewPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -195,7 +263,6 @@ export default function OutboundVersionOverviewPage() {
         </Button>
       </div>
 
-      {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card>
@@ -237,7 +304,6 @@ export default function OutboundVersionOverviewPage() {
         </div>
       )}
 
-      {/* Version Groups */}
       {versionGroups.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {versionGroups.map((g) => (
@@ -256,12 +322,20 @@ export default function OutboundVersionOverviewPage() {
         </div>
       )}
 
-      {/* Bulk deploy bar */}
-      {selectedAccounts.size > 0 && (
+      {selectAllMatching && (
+        <SelectAllBanner
+          totalMatching={pagination.total}
+          excludeCount={excludedAccounts.size}
+          onClear={clearSelection}
+        />
+      )}
+
+      {effectiveSelectedCount > 0 && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 flex items-center gap-4">
             <span className="text-sm font-medium">
-              {selectedAccounts.size} account{selectedAccounts.size !== 1 ? 's' : ''} selected
+              {effectiveSelectedCount} account{effectiveSelectedCount !== 1 ? 's' : ''} selected
+              {selectAllMatching && ' (all matching)'}
             </span>
             <select
               value={deployTemplateId}
@@ -269,48 +343,48 @@ export default function OutboundVersionOverviewPage() {
               className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="">Deploy template...</option>
-              {templates
-                .filter((t) => t.isActive)
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.agentGroup === 'PATIENT_CARE' ? 'PC' : 'Fin'}) - {t.version}
-                  </option>
-                ))}
+              {templates.filter((t) => t.isActive).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.agentGroup === 'PATIENT_CARE' ? 'PC' : 'Fin'}) - {t.version}
+                </option>
+              ))}
             </select>
-            <Button
-              size="sm"
-              onClick={handleBulkDeploy}
-              disabled={!deployTemplateId || deploying}
-            >
-              {deploying ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Rocket className="h-4 w-4 mr-1" />
-              )}
+            <Button size="sm" onClick={handleBulkDeploy} disabled={!deployTemplateId || deploying}>
+              {deploying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Rocket className="h-4 w-4 mr-1" />}
               Deploy
             </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>Clear</Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Account Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">Accounts</CardTitle>
-              <CardDescription>
-                {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}
-              </CardDescription>
+              <CardDescription>{pagination.total} account{pagination.total !== 1 ? 's' : ''} total</CardDescription>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search accounts..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-2">
+              <select
+                value={filterVersion}
+                onChange={(e) => handleFilterChange(e.target.value)}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">All Versions</option>
+                {uniqueVersions.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search accounts..."
+                  value={search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -320,8 +394,8 @@ export default function OutboundVersionOverviewPage() {
               <TableRow>
                 <TableHead className="w-[50px]">
                   <Checkbox
-                    checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
-                    onCheckedChange={toggleAll}
+                    checked={selectAllMatching || (accounts.length > 0 && accounts.every((a) => selectedAccounts.has(a.accountId)))}
+                    onCheckedChange={handleToggleAll}
                     aria-label="Select all"
                   />
                 </TableHead>
@@ -333,18 +407,16 @@ export default function OutboundVersionOverviewPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAccounts.length === 0 ? (
+              {accounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No accounts found
-                  </TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">No accounts found</TableCell>
                 </TableRow>
               ) : (
-                filteredAccounts.map((a) => (
+                accounts.map((a) => (
                   <TableRow key={a.accountId}>
                     <TableCell>
                       <Checkbox
-                        checked={selectedAccounts.has(a.accountId)}
+                        checked={isAccountSelected(a.accountId)}
                         onCheckedChange={() => toggleAccount(a.accountId)}
                         aria-label={`Select ${a.accountName}`}
                       />
@@ -356,13 +428,11 @@ export default function OutboundVersionOverviewPage() {
                     <TableCell>
                       {a.patientCareAgentId ? (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Active
+                          <CheckCircle2 className="h-3 w-3 mr-1" />Active
                         </Badge>
                       ) : a.patientCareEnabled ? (
                         <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          No Agent
+                          <AlertCircle className="h-3 w-3 mr-1" />No Agent
                         </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">Off</span>
@@ -371,13 +441,11 @@ export default function OutboundVersionOverviewPage() {
                     <TableCell>
                       {a.financialAgentId ? (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Active
+                          <CheckCircle2 className="h-3 w-3 mr-1" />Active
                         </Badge>
                       ) : a.financialEnabled ? (
                         <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          No Agent
+                          <AlertCircle className="h-3 w-3 mr-1" />No Agent
                         </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">Off</span>
@@ -393,13 +461,11 @@ export default function OutboundVersionOverviewPage() {
                     <TableCell>
                       {a.isOnLatest ? (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Latest
+                          <CheckCircle2 className="h-3 w-3 mr-1" />Latest
                         </Badge>
                       ) : a.hasOutboundAgent ? (
                         <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          Outdated
+                          <AlertCircle className="h-3 w-3 mr-1" />Outdated
                         </Badge>
                       ) : (
                         <Badge variant="outline">No Agent</Badge>
@@ -410,6 +476,13 @@ export default function OutboundVersionOverviewPage() {
               )}
             </TableBody>
           </Table>
+          <AdminTablePagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={pagination.limit}
+            onPageChange={handlePageChange}
+          />
         </CardContent>
       </Card>
     </div>

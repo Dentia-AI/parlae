@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@kit/shared/auth';
 import { isAdminUser } from '~/lib/auth/admin';
 import { prisma } from '@kit/prisma';
+import {
+  parsePaginationParams,
+  buildPagination,
+  buildAccountSearchWhere,
+} from '~/app/api/admin/_lib/admin-pagination';
 
 /**
  * GET /api/admin/agent-templates/version-overview
  *
- * Returns all accounts with their current template version info,
- * grouped by version for easy overview.
+ * Returns paginated accounts with their current template version info,
+ * plus global stats and version groups.
  *
- * Query params:
- *   category?: string    - Filter by template category
+ * Query params: page, limit, search, templateId, version, category
  */
 export async function GET(request: NextRequest) {
   try {
@@ -25,30 +29,47 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
+    const params = parsePaginationParams(new URL(request.url));
 
-    // Get all accounts with their template info
-    const accounts = await prisma.account.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        agentTemplateId: true,
-        phoneIntegrationSettings: true,
-        agentTemplate: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            version: true,
-            category: true,
-            isActive: true,
+    const accountWhere: Record<string, unknown> = {};
+
+    if (params.templateId) {
+      accountWhere.agentTemplateId = params.templateId;
+    }
+
+    if (params.version) {
+      accountWhere.agentTemplate = { version: params.version };
+    }
+
+    const where = buildAccountSearchWhere(params.search, accountWhere);
+
+    const [accounts, total] = await Promise.all([
+      prisma.account.findMany({
+        where: where as any,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          agentTemplateId: true,
+          phoneIntegrationSettings: true,
+          agentTemplate: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              version: true,
+              category: true,
+              isActive: true,
+            },
           },
         },
-      },
-      orderBy: { name: 'asc' },
-    });
+        orderBy: { name: 'asc' },
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+      prisma.account.count({ where: where as any }),
+    ]);
 
-    // Get all templates for the dropdown/comparison
     const templateWhere: any = {};
     if (category) {
       templateWhere.category = category;
@@ -64,35 +85,14 @@ export async function GET(request: NextRequest) {
         category: true,
         isActive: true,
         isDefault: true,
-        _count: {
-          select: { accounts: true },
-        },
+        _count: { select: { accounts: true } },
       },
       orderBy: [{ category: 'asc' }, { version: 'desc' }],
     });
 
-    // Build the overview
-    type AccountOverview = {
-      accountId: string;
-      accountName: string | null;
-      accountEmail: string | null;
-      templateId: string | null;
-      templateName: string | null;
-      templateDisplayName: string | null;
-      templateVersion: string | null;
-      templateCategory: string | null;
-      hasSquad: boolean;
-      hasUpgradeHistory: boolean;
-      upgradeCount: number;
-      lastUpgradeDate: string | null;
-      lastUpgradeBy: string | null;
-      isOnLatestDefault: boolean;
-    };
-
-    // Find the default template for comparison
     const defaultTemplate = templates.find((t) => t.isDefault && t.isActive);
 
-    const accountOverviews: AccountOverview[] = accounts.map((account) => {
+    const accountOverviews = accounts.map((account) => {
       const settings = account.phoneIntegrationSettings as any;
       const history = settings?.upgradeHistory || [];
 
@@ -116,53 +116,47 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Group by version for summary stats
-    const versionGroups: Record<
-      string,
-      { version: string; templateName: string; count: number; accountIds: string[] }
-    > = {};
+    // Global stats
+    const [totalAccounts, withTemplate] = await Promise.all([
+      prisma.account.count(),
+      prisma.account.count({ where: { agentTemplateId: { not: null } } }),
+    ]);
 
-    for (const overview of accountOverviews) {
-      if (!overview.hasSquad) continue;
+    const onLatestDefault = defaultTemplate
+      ? await prisma.account.count({ where: { agentTemplateId: defaultTemplate.id } })
+      : 0;
 
-      const key = overview.templateVersion || 'unversioned';
-      if (!versionGroups[key]) {
-        versionGroups[key] = {
-          version: key,
-          templateName: overview.templateName || 'Unknown',
-          count: 0,
-          accountIds: [],
-        };
+    const versionGroups: Record<string, { version: string; templateName: string; count: number }> = {};
+    for (const t of templates) {
+      if (t._count.accounts > 0) {
+        const key = t.version || 'unversioned';
+        if (!versionGroups[key]) {
+          versionGroups[key] = { version: key, templateName: t.name, count: 0 };
+        }
+        versionGroups[key]!.count += t._count.accounts;
       }
-      versionGroups[key].count++;
-      versionGroups[key].accountIds.push(overview.accountId);
     }
 
     return NextResponse.json({
       success: true,
       accounts: accountOverviews,
+      pagination: buildPagination(params.page, params.limit, total),
       versionGroups: Object.values(versionGroups),
       templates,
       defaultTemplate: defaultTemplate
         ? { id: defaultTemplate.id, version: defaultTemplate.version, name: defaultTemplate.name }
         : null,
       stats: {
-        totalAccounts: accounts.length,
-        withSquad: accountOverviews.filter((a) => a.hasSquad).length,
-        withoutSquad: accountOverviews.filter((a) => !a.hasSquad).length,
-        onLatestDefault: accountOverviews.filter((a) => a.isOnLatestDefault).length,
+        totalAccounts,
+        withTemplate,
+        onLatestDefault,
         uniqueVersions: Object.keys(versionGroups).length,
       },
     });
   } catch (error) {
     console.error('Version overview error:', error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to get version overview',
-      },
+      { error: error instanceof Error ? error.message : 'Failed to get version overview' },
       { status: 500 },
     );
   }

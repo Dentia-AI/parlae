@@ -7,27 +7,50 @@ const SIKKA_BASE_URL = 'https://api.sikkasoft.com/v4';
 
 /**
  * GET /api/admin/pms
- * List all PMS integrations with their status
+ * List PMS integrations with their status, paginated.
+ *
+ * Query params: page, limit, search, status
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getSessionUser();
     if (!session || !isAdminUser(session.id)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const integrations = await prisma.pmsIntegration.findMany({
-      include: {
-        account: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
+    const url = new URL(request.url);
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
+    const searchQuery = url.searchParams.get('search') || '';
+    const statusFilter = url.searchParams.get('status') || '';
+
+    const pmsWhere: any = {};
+    if (statusFilter) {
+      pmsWhere.status = statusFilter;
+    }
+    if (searchQuery.trim()) {
+      pmsWhere.account = {
+        OR: [
+          { name: { contains: searchQuery.trim(), mode: 'insensitive' } },
+          { email: { contains: searchQuery.trim(), mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const [integrations, total] = await Promise.all([
+      prisma.pmsIntegration.findMany({
+        where: pmsWhere,
+        include: {
+          account: {
+            select: { id: true, name: true, slug: true },
           },
         },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.pmsIntegration.count({ where: pmsWhere }),
+    ]);
 
     const safe = integrations.map((i) => ({
       id: i.id,
@@ -59,6 +82,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       integrations: safe,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       envCheck,
     });
   } catch (error) {

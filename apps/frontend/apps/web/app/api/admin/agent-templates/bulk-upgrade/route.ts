@@ -48,11 +48,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       templateId,
-      accountIds,
       upgradeFromVersion,
       dryRun = false,
       force = false,
+      deployAll,
+      excludeAccountIds,
+      filters,
     } = body;
+    let { accountIds } = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -80,6 +83,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve account IDs when deployAll mode is used
+    if (deployAll) {
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const accountWhere: Record<string, unknown> = {};
+      if (filters?.templateId) accountWhere.agentTemplateId = filters.templateId;
+      if (filters?.version) accountWhere.agentTemplate = { version: filters.version };
+      const where = buildAccountSearchWhere(filters?.search || '', accountWhere);
+
+      const allMatching = await prisma.account.findMany({
+        where: where as any,
+        select: { id: true },
+      });
+      accountIds = excludeFromIds(
+        allMatching.map((a) => a.id),
+        excludeAccountIds || [],
+      );
+    }
+
     // Build the query to find eligible accounts
     const whereClause: any = {};
 
@@ -88,14 +109,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (upgradeFromVersion) {
-      // Only accounts whose phoneIntegrationSettings.templateVersion matches
       whereClause.phoneIntegrationSettings = {
         path: ['templateVersion'],
         equals: upgradeFromVersion,
       };
     }
 
-    // If no specific filter, get all accounts with an agent deployed
     const accounts = await prisma.account.findMany({
       where: whereClause,
       select: {

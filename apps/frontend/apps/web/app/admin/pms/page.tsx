@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -31,6 +31,7 @@ import {
 import { toast } from '@kit/ui/sonner';
 import Link from 'next/link';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
+import { AdminTablePagination } from '~/app/admin/_components/admin-table-pagination';
 
 interface PmsIntegration {
   id: string;
@@ -59,14 +60,25 @@ interface EnvCheck {
   hasSikkaAppKey: boolean;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminPmsPage() {
   const [pending, startTransition] = useTransition();
   const csrfToken = useCsrfToken();
   const [integrations, setIntegrations] = useState<PmsIntegration[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [envCheck, setEnvCheck] = useState<EnvCheck | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Create form state
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [accountId, setAccountId] = useState('');
   const [masterCustomerId, setMasterCustomerId] = useState('');
@@ -74,16 +86,24 @@ export default function AdminPmsPage() {
   const [practiceId, setPracticeId] = useState('');
   const [spuInstallationKey, setSpuInstallationKey] = useState('');
 
-  // Test results
   const [testResults, setTestResults] = useState<Record<string, any>>({});
   const [cronResult, setCronResult] = useState<any>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadIntegrations = async () => {
+    setLoading(true);
     try {
-      const res = await fetch('/api/admin/pms', { credentials: 'include' });
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '50');
+      if (searchQuery) params.set('search', searchQuery);
+      if (statusFilter) params.set('status', statusFilter);
+
+      const res = await fetch(`/api/admin/pms?${params}`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setIntegrations(data.integrations);
+        setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
         setEnvCheck(data.envCheck);
       }
     } catch {
@@ -95,7 +115,15 @@ export default function AdminPmsPage() {
 
   useEffect(() => {
     loadIntegrations();
-  }, []);
+  }, [page, searchQuery, statusFilter]);
+
+  const handleSearchChange = (value: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      setPage(1);
+    }, 400);
+  };
 
   // Load accounts for dropdown
   const [accounts, setAccounts] = useState<
@@ -454,6 +482,32 @@ export default function AdminPmsPage() {
         </Card>
       )}
 
+      {/* Search & Filter */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hidden" />
+          <Input
+            placeholder="Search by account name or email..."
+            defaultValue={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+        >
+          <option value="">All Statuses</option>
+          <option value="ACTIVE">Active</option>
+          <option value="SETUP_REQUIRED">Setup Required</option>
+          <option value="ERROR">Error</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {pagination.total} integration{pagination.total !== 1 ? 's' : ''}
+        </span>
+      </div>
+
       {/* Existing Integrations */}
       {integrations.length === 0 ? (
         <Card>
@@ -609,6 +663,16 @@ export default function AdminPmsPage() {
             </CardContent>
           </Card>
         ))
+      )}
+
+      {pagination.totalPages > 1 && (
+        <AdminTablePagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          limit={pagination.limit}
+          onPageChange={setPage}
+        />
       )}
     </div>
   );

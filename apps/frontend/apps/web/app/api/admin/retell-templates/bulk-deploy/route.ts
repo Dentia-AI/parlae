@@ -10,7 +10,8 @@ import { getLogger } from '@kit/shared/logger';
  * This updates each account's retellAgentTemplateId and triggers
  * a redeploy of Retell agents using the template config.
  *
- * Body: { templateId: string, accountIds: string[] }
+ * Body (mode 1 - include): { templateId: string, accountIds: string[] }
+ * Body (mode 2 - deploy all): { templateId: string, deployAll: true, excludeAccountIds?: string[], filters?: { search?, templateId?, version? } }
  */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
@@ -18,11 +19,37 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
 
-    const { templateId, accountIds } = await request.json();
+    const body = await request.json();
+    const { templateId, deployAll, excludeAccountIds, filters } = body;
+    let { accountIds } = body;
 
-    if (!templateId || !accountIds?.length) {
+    if (!templateId) {
       return NextResponse.json(
-        { success: false, error: 'templateId and accountIds are required' },
+        { success: false, error: 'templateId is required' },
+        { status: 400 },
+      );
+    }
+
+    if (deployAll) {
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const accountWhere: Record<string, unknown> = {};
+      if (filters?.templateId) accountWhere.retellAgentTemplateId = filters.templateId;
+      if (filters?.version) accountWhere.retellAgentTemplate = { version: filters.version };
+      const where = buildAccountSearchWhere(filters?.search || '', accountWhere);
+
+      const allMatching = await prisma.account.findMany({
+        where: where as any,
+        select: { id: true },
+      });
+      accountIds = excludeFromIds(
+        allMatching.map((a) => a.id),
+        excludeAccountIds || [],
+      );
+    }
+
+    if (!accountIds?.length) {
+      return NextResponse.json(
+        { success: false, error: 'No accounts to deploy to' },
         { status: 400 },
       );
     }

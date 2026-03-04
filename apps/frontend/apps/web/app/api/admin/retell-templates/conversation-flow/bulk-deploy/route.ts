@@ -9,7 +9,8 @@ import { getLogger } from '@kit/shared/logger';
  * Deploy a conversation flow template to selected accounts.
  * Assigns the template and triggers a redeploy of the conversation flow agent.
  *
- * Body: { templateId: string, accountIds: string[] }
+ * Body (mode 1 - include): { templateId: string, accountIds: string[] }
+ * Body (mode 2 - deploy all): { templateId: string, deployAll: true, excludeAccountIds?: string[], filters?: { search?, templateId?, version? } }
  */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
@@ -17,11 +18,37 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
 
-    const { templateId, accountIds } = await request.json();
+    const body = await request.json();
+    const { templateId, deployAll, excludeAccountIds, filters } = body;
+    let { accountIds } = body;
 
-    if (!templateId || !accountIds?.length) {
+    if (!templateId) {
       return NextResponse.json(
-        { error: 'templateId and accountIds are required' },
+        { error: 'templateId is required' },
+        { status: 400 },
+      );
+    }
+
+    if (deployAll) {
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const accountWhere: Record<string, unknown> = {};
+      if (filters?.templateId) accountWhere.retellFlowTemplateId = filters.templateId;
+      if (filters?.version) accountWhere.retellFlowTemplate = { version: filters.version };
+      const where = buildAccountSearchWhere(filters?.search || '', accountWhere);
+
+      const allMatching = await prisma.account.findMany({
+        where: where as any,
+        select: { id: true },
+      });
+      accountIds = excludeFromIds(
+        allMatching.map((a) => a.id),
+        excludeAccountIds || [],
+      );
+    }
+
+    if (!accountIds?.length) {
+      return NextResponse.json(
+        { error: 'No accounts to deploy to' },
         { status: 400 },
       );
     }

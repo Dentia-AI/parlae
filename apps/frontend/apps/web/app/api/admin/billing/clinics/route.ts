@@ -1,27 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
 import { requireAdmin } from '~/lib/auth/is-admin';
+import {
+  parsePaginationParams,
+  buildPagination,
+  buildAccountSearchWhere,
+} from '~/app/api/admin/_lib/admin-pagination';
 
 /**
  * GET /api/admin/billing/clinics
- * Returns all clinic accounts with their billing configuration
+ * Returns paginated clinic accounts with their billing configuration.
+ *
+ * Query params: page, limit, search
  */
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin();
 
-    const accounts = await prisma.account.findMany({
-      where: {
-        isPersonalAccount: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        publicData: true,
-      },
-      orderBy: { name: 'asc' },
-    });
+    const params = parsePaginationParams(new URL(request.url));
+    const where = buildAccountSearchWhere(params.search, { isPersonalAccount: true });
+
+    const [accounts, total] = await Promise.all([
+      prisma.account.findMany({
+        where: where as any,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          publicData: true,
+        },
+        orderBy: { name: 'asc' },
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+      prisma.account.count({ where: where as any }),
+    ]);
 
     const clinics = accounts.map((account) => {
       const publicData = (account.publicData as Record<string, unknown>) ?? {};
@@ -48,7 +61,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ clinics });
+    return NextResponse.json({
+      clinics,
+      pagination: buildPagination(params.page, params.limit, total),
+    });
   } catch (error) {
     console.error('Error fetching clinics for billing:', error);
 

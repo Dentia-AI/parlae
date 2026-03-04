@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@kit/ui/button';
 import {
   Card,
@@ -23,10 +23,10 @@ import {
 } from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
 import { cn } from '@kit/ui/utils';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import {
+  AdminTablePagination,
+  SelectAllBanner,
+} from '~/app/admin/_components/admin-table-pagination';
 
 interface AccountOverview {
   accountId: string;
@@ -41,11 +41,17 @@ interface AccountOverview {
   isOnLatestDefault: boolean;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 interface VersionGroup {
   version: string;
   templateName: string;
   count: number;
-  accountIds: string[];
 }
 
 interface TemplateSummary {
@@ -60,100 +66,165 @@ interface TemplateSummary {
 
 interface Stats {
   totalAccounts: number;
-  withRetellAgents: number;
-  withoutRetellAgents: number;
   withTemplate: number;
   onLatestDefault: number;
   uniqueVersions: number;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function RetellVersionOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<AccountOverview[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [versionGroups, setVersionGroups] = useState<VersionGroup[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
-  const [defaultTemplate, setDefaultTemplate] = useState<{
-    id: string;
-    version: string;
-    name: string;
-  } | null>(null);
+  const [defaultTemplate, setDefaultTemplate] = useState<{ id: string; version: string; name: string } | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [search, setSearch] = useState('');
 
-  // Bulk deploy state
-  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(
-    new Set(),
-  );
+  // Filters
+  const [search, setSearch] = useState('');
+  const [filterTemplateId, setFilterTemplateId] = useState('');
+  const [filterVersion, setFilterVersion] = useState('');
+  const [page, setPage] = useState(1);
+
+  // Bulk deploy
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [excludedAccounts, setExcludedAccounts] = useState<Set<string>>(new Set());
   const [deployTemplateId, setDeployTemplateId] = useState('');
   const [deploying, setDeploying] = useState(false);
 
-  const fetchData = async () => {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buildQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('limit', '50');
+    if (search) params.set('search', search);
+    if (filterTemplateId) params.set('templateId', filterTemplateId);
+    if (filterVersion) params.set('version', filterVersion);
+    return params.toString();
+  }, [page, search, filterTemplateId, filterVersion]);
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/retell-templates/version-overview');
+      const res = await fetch(`/api/admin/retell-templates/version-overview?${buildQueryParams()}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
 
       setAccounts(data.accounts || []);
+      setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
       setVersionGroups(data.versionGroups || []);
       setTemplates(data.templates || []);
       setDefaultTemplate(data.defaultTemplate || null);
       setStats(data.stats || null);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load version overview');
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildQueryParams]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const filteredAccounts = accounts.filter((a) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      a.accountName?.toLowerCase().includes(q) ||
-      a.accountEmail?.toLowerCase().includes(q) ||
-      a.templateVersion?.toLowerCase().includes(q) ||
-      a.templateDisplayName?.toLowerCase().includes(q)
-    );
-  });
-
-  const toggleAccount = (id: string) => {
-    setSelectedAccounts((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      setSelectedAccounts(new Set());
+      setSelectAllMatching(false);
+      setExcludedAccounts(new Set());
+    }, 400);
   };
 
-  const toggleAll = () => {
-    if (selectedAccounts.size === filteredAccounts.length) {
+  const handleFilterChange = (setter: (v: string) => void, value: string) => {
+    setter(value);
+    setPage(1);
+    setSelectedAccounts(new Set());
+    setSelectAllMatching(false);
+    setExcludedAccounts(new Set());
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    if (!selectAllMatching) {
       setSelectedAccounts(new Set());
-    } else {
-      setSelectedAccounts(new Set(filteredAccounts.map((a) => a.accountId)));
     }
   };
 
+  const toggleAccount = (id: string) => {
+    if (selectAllMatching) {
+      setExcludedAccounts((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } else {
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleAll = () => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setExcludedAccounts(new Set());
+      setSelectedAccounts(new Set());
+      return;
+    }
+
+    const pageIds = accounts.map((a) => a.accountId);
+    const allPageSelected = pageIds.every((id) => selectedAccounts.has(id));
+
+    if (allPageSelected) {
+      setSelectAllMatching(true);
+      setSelectedAccounts(new Set());
+      setExcludedAccounts(new Set());
+    } else {
+      setSelectedAccounts(new Set(pageIds));
+    }
+  };
+
+  const isAccountSelected = (id: string) => {
+    if (selectAllMatching) return !excludedAccounts.has(id);
+    return selectedAccounts.has(id);
+  };
+
+  const effectiveSelectedCount = selectAllMatching
+    ? pagination.total - excludedAccounts.size
+    : selectedAccounts.size;
+
   const handleBulkDeploy = async () => {
-    if (!deployTemplateId || selectedAccounts.size === 0) return;
+    if (!deployTemplateId || effectiveSelectedCount === 0) return;
 
     setDeploying(true);
     try {
+      const body: any = { templateId: deployTemplateId };
+
+      if (selectAllMatching) {
+        body.deployAll = true;
+        body.excludeAccountIds = [...excludedAccounts];
+        body.filters = {
+          search: search || undefined,
+          templateId: filterTemplateId || undefined,
+          version: filterVersion || undefined,
+        };
+      } else {
+        body.accountIds = [...selectedAccounts];
+      }
+
       const res = await fetch('/api/admin/retell-templates/bulk-deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: deployTemplateId,
-          accountIds: [...selectedAccounts],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -162,28 +233,32 @@ export default function RetellVersionOverviewPage() {
       }
 
       const data = await res.json();
-      const successes = data.deployResults?.filter(
-        (r: any) => r.success,
-      ).length;
-      const failures = data.deployResults?.filter(
-        (r: any) => !r.success,
-      ).length;
+      const successes = data.deployResults?.filter((r: any) => r.success).length;
+      const failures = data.deployResults?.filter((r: any) => !r.success).length;
 
       toast.success(
         `Deployed to ${successes} account(s)${failures > 0 ? `, ${failures} failed` : ''}`,
       );
       setSelectedAccounts(new Set());
+      setSelectAllMatching(false);
+      setExcludedAccounts(new Set());
       fetchData();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Bulk deploy failed',
-      );
+      toast.error(err instanceof Error ? err.message : 'Bulk deploy failed');
     } finally {
       setDeploying(false);
     }
   };
 
-  if (loading) {
+  const clearSelection = () => {
+    setSelectedAccounts(new Set());
+    setSelectAllMatching(false);
+    setExcludedAccounts(new Set());
+  };
+
+  const uniqueVersions = [...new Set(templates.map((t) => t.version))].filter(Boolean);
+
+  if (loading && accounts.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -205,60 +280,36 @@ export default function RetellVersionOverviewPage() {
           </p>
         </div>
         <Button variant="outline" onClick={fetchData} disabled={loading}>
-          <RefreshCw
-            className={cn('h-4 w-4 mr-2', loading && 'animate-spin')}
-          />
+          <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
           Refresh
         </Button>
       </div>
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold">{stats.totalAccounts}</div>
-              <div className="text-xs text-muted-foreground">
-                Total Accounts
-              </div>
+              <div className="text-xs text-muted-foreground">Total Accounts</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {stats.withRetellAgents}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                With Retell Agents
-              </div>
+              <div className="text-2xl font-bold text-amber-600">{stats.withTemplate}</div>
+              <div className="text-xs text-muted-foreground">Assigned Template</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-amber-600">
-                {stats.withTemplate}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Assigned Template
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {stats.onLatestDefault}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                On Latest Default
-              </div>
+              <div className="text-2xl font-bold text-blue-600">{stats.onLatestDefault}</div>
+              <div className="text-xs text-muted-foreground">On Latest Default</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold">{stats.uniqueVersions}</div>
-              <div className="text-xs text-muted-foreground">
-                Unique Versions
-              </div>
+              <div className="text-xs text-muted-foreground">Unique Versions</div>
             </CardContent>
           </Card>
         </div>
@@ -272,12 +323,8 @@ export default function RetellVersionOverviewPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Badge variant="secondary" className="text-sm">
-                      {g.version}
-                    </Badge>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {g.templateName}
-                    </p>
+                    <Badge variant="secondary" className="text-sm">{g.version}</Badge>
+                    <p className="text-xs text-muted-foreground mt-1">{g.templateName}</p>
                   </div>
                   <div className="flex items-center gap-1.5 text-sm font-medium">
                     <Users className="h-4 w-4 text-muted-foreground" />
@@ -290,13 +337,22 @@ export default function RetellVersionOverviewPage() {
         </div>
       )}
 
+      {/* Select All Banner */}
+      {selectAllMatching && (
+        <SelectAllBanner
+          totalMatching={pagination.total}
+          excludeCount={excludedAccounts.size}
+          onClear={clearSelection}
+        />
+      )}
+
       {/* Bulk deploy bar */}
-      {selectedAccounts.size > 0 && (
+      {effectiveSelectedCount > 0 && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 flex items-center gap-4">
             <span className="text-sm font-medium">
-              {selectedAccounts.size} account
-              {selectedAccounts.size !== 1 ? 's' : ''} selected
+              {effectiveSelectedCount} account{effectiveSelectedCount !== 1 ? 's' : ''} selected
+              {selectAllMatching && ' (all matching)'}
             </span>
             <select
               value={deployTemplateId}
@@ -324,6 +380,9 @@ export default function RetellVersionOverviewPage() {
               )}
               Deploy
             </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -335,18 +394,41 @@ export default function RetellVersionOverviewPage() {
             <div>
               <CardTitle className="text-lg">Accounts</CardTitle>
               <CardDescription>
-                {filteredAccounts.length} account
-                {filteredAccounts.length !== 1 ? 's' : ''}
+                {pagination.total} account{pagination.total !== 1 ? 's' : ''} total
               </CardDescription>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search accounts..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-2">
+              <select
+                value={filterTemplateId}
+                onChange={(e) => handleFilterChange(setFilterTemplateId, e.target.value)}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">All Templates</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.displayName} ({t.version})
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterVersion}
+                onChange={(e) => handleFilterChange(setFilterVersion, e.target.value)}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">All Versions</option>
+                {uniqueVersions.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search accounts..."
+                  value={search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -359,78 +441,83 @@ export default function RetellVersionOverviewPage() {
                     <input
                       type="checkbox"
                       checked={
-                        selectedAccounts.size === filteredAccounts.length &&
-                        filteredAccounts.length > 0
+                        selectAllMatching ||
+                        (accounts.length > 0 && accounts.every((a) => selectedAccounts.has(a.accountId)))
                       }
-                      onChange={toggleAll}
+                      onChange={handleToggleAll}
                       className="rounded"
                     />
                   </th>
                   <th className="text-left px-4 py-2 font-medium">Account</th>
-                  <th className="text-left px-4 py-2 font-medium">
-                    Template
-                  </th>
+                  <th className="text-left px-4 py-2 font-medium">Template</th>
                   <th className="text-left px-4 py-2 font-medium">Version</th>
                   <th className="text-left px-4 py-2 font-medium">Status</th>
-                  <th className="text-right px-4 py-2 font-medium">
-                    Agents
-                  </th>
+                  <th className="text-right px-4 py-2 font-medium">Agents</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredAccounts.map((a) => (
-                  <tr key={a.accountId} className="border-b last:border-0">
-                    <td className="px-4 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedAccounts.has(a.accountId)}
-                        onChange={() => toggleAccount(a.accountId)}
-                        className="rounded"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="font-medium">
-                        {a.accountName || 'Unnamed'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {a.accountEmail}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {a.templateDisplayName || (
-                        <span className="italic">None</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {a.templateVersion ? (
-                        <Badge variant="secondary">{a.templateVersion}</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {a.isOnLatestDefault ? (
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Latest
-                        </Badge>
-                      ) : a.hasRetellAgents ? (
-                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          Outdated
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">No Agents</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
-                      {a.retellAgentCount || '—'}
+                {accounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No accounts found
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  accounts.map((a) => (
+                    <tr key={a.accountId} className="border-b last:border-0">
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={isAccountSelected(a.accountId)}
+                          onChange={() => toggleAccount(a.accountId)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="font-medium">{a.accountName || 'Unnamed'}</div>
+                        <div className="text-xs text-muted-foreground">{a.accountEmail}</div>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {a.templateDisplayName || <span className="italic">None</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        {a.templateVersion ? (
+                          <Badge variant="secondary">{a.templateVersion}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {a.isOnLatestDefault ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Latest
+                          </Badge>
+                        ) : a.hasRetellAgents ? (
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            Outdated
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">No Agents</Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted-foreground">
+                        {a.retellAgentCount || '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+          <AdminTablePagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={pagination.limit}
+            onPageChange={handlePageChange}
+          />
         </CardContent>
       </Card>
     </div>

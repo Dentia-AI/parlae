@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@kit/ui/select';
 import { RefreshCw, Trash2, AlertTriangle, CheckCircle2, Database } from 'lucide-react';
+import { AdminTablePagination } from '~/app/admin/_components/admin-table-pagination';
 
 interface RetellAgent {
   agentId: string;
@@ -63,6 +64,8 @@ export function RetellAgentsList() {
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
@@ -109,14 +112,25 @@ export function RetellAgentsList() {
     return result;
   }, [agents, filterMode, search]);
 
+  const totalFiltered = filteredAgents.length;
+  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
+  const paginatedAgents = useMemo(
+    () => filteredAgents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredAgents, page],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterMode]);
+
   const allFilteredSelected =
-    filteredAgents.length > 0 && filteredAgents.every((a) => selectedIds.has(a.agentId));
+    paginatedAgents.length > 0 && paginatedAgents.every((a) => selectedIds.has(a.agentId));
 
   function toggleSelectAll() {
     if (allFilteredSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredAgents.map((a) => a.agentId)));
+      setSelectedIds(new Set(paginatedAgents.map((a) => a.agentId)));
     }
   }
 
@@ -374,14 +388,14 @@ export function RetellAgentsList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAgents.length === 0 ? (
+                  {paginatedAgents.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         {agents.length === 0 ? 'No agents found in Retell' : 'No agents match your filters'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredAgents.map((agent) => (
+                    paginatedAgents.map((agent) => (
                       <TableRow
                         key={agent.agentId}
                         className={agent.isOrphaned ? 'bg-destructive/5' : ''}
@@ -442,6 +456,15 @@ export function RetellAgentsList() {
                   )}
                 </TableBody>
               </Table>
+          )}
+          {totalFiltered > PAGE_SIZE && (
+            <AdminTablePagination
+              page={page}
+              totalPages={totalPages}
+              total={totalFiltered}
+              limit={PAGE_SIZE}
+              onPageChange={setPage}
+            />
           )}
         </CardContent>
       </Card>

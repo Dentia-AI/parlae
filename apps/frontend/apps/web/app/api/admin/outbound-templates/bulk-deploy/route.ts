@@ -17,7 +17,8 @@ import {
  * Deploy an outbound agent template to selected accounts.
  * Creates per-account Retell agents from the template's flow config.
  *
- * Body: { templateId: string, accountIds: string[] }
+ * Body (mode 1 - include): { templateId: string, accountIds: string[] }
+ * Body (mode 2 - deploy all): { templateId: string, deployAll: true, excludeAccountIds?: string[], filters?: { search?, version? } }
  */
 export async function POST(request: NextRequest) {
   const logger = await getLogger();
@@ -25,11 +26,46 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
 
-    const { templateId, accountIds } = await request.json();
+    const body = await request.json();
+    const { templateId, deployAll, excludeAccountIds, filters } = body;
+    let { accountIds } = body;
 
-    if (!templateId || !accountIds?.length) {
+    if (!templateId) {
       return NextResponse.json(
-        { error: 'templateId and accountIds are required' },
+        { error: 'templateId is required' },
+        { status: 400 },
+      );
+    }
+
+    if (deployAll) {
+      const { buildAccountSearchWhere, excludeFromIds } = await import('~/app/api/admin/_lib/admin-pagination');
+      const accountWhere: Record<string, unknown> = { isPersonalAccount: true };
+      const where = buildAccountSearchWhere(filters?.search || '', accountWhere);
+
+      // Filter by version via outboundSettings if specified
+      let matchedIds: string[] | null = null;
+      if (filters?.version) {
+        const settingsWithVersion = await prisma.outboundSettings.findMany({
+          where: { outboundTemplateVersion: filters.version },
+          select: { accountId: true },
+        });
+        matchedIds = settingsWithVersion.map((s) => s.accountId);
+        (where as any).id = { in: matchedIds };
+      }
+
+      const allMatching = await prisma.account.findMany({
+        where: where as any,
+        select: { id: true },
+      });
+      accountIds = excludeFromIds(
+        allMatching.map((a) => a.id),
+        excludeAccountIds || [],
+      );
+    }
+
+    if (!accountIds?.length) {
+      return NextResponse.json(
+        { error: 'No accounts to deploy to' },
         { status: 400 },
       );
     }
