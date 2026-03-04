@@ -12,7 +12,7 @@ import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import {
   PhoneOutgoing, MessageSquare, Mail, ChevronDown, ChevronUp,
   Pause, Play, XCircle, Users, CheckCircle2, Clock, Phone,
-  AlertCircle, Loader2, Trash2, ShieldBan,
+  AlertCircle, Loader2, Trash2, ShieldBan, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 const CHANNEL_ICONS: Record<string, typeof PhoneOutgoing> = {
@@ -31,8 +31,16 @@ interface CampaignContact {
   lastAttemptAt: string | null;
 }
 
+interface ContactsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 interface CampaignDetail {
   contacts: CampaignContact[];
+  contactsPagination: ContactsPagination;
   statusBreakdown: Record<string, number>;
   outcomeBreakdown: Record<string, number>;
 }
@@ -73,6 +81,8 @@ const CONTACT_STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   SKIPPED: XCircle,
 };
 
+const CONTACTS_PER_PAGE = 20;
+
 export function CampaignCard({ campaign, callTypeLabel, channelLabel }: CampaignCardProps) {
   const { t } = useTranslation('common');
   const csrfToken = useCsrfToken();
@@ -84,6 +94,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [contactActionPending, setContactActionPending] = useState(false);
   const [patientNames, setPatientNames] = useState<Record<string, string>>({});
+  const [contactPage, setContactPage] = useState(1);
 
   const ChannelIcon = CHANNEL_ICONS[campaign.channel] || PhoneOutgoing;
   const progress = campaign.totalContacts > 0
@@ -95,11 +106,14 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const canResume = campaign.status === 'PAUSED';
   const canCancel = ['ACTIVE', 'PAUSED', 'SCHEDULED', 'DRAFT'].includes(campaign.status);
 
-  async function fetchDetail() {
-    if (detail) return;
+  const fetchDetail = useCallback(async (page = 1) => {
     setLoadingDetail(true);
     try {
-      const res = await fetch(`/api/outbound/campaigns/${campaign.id}`);
+      const params = new URLSearchParams({
+        contactPage: String(page),
+        contactLimit: String(CONTACTS_PER_PAGE),
+      });
+      const res = await fetch(`/api/outbound/campaigns/${campaign.id}?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setDetail(data);
@@ -112,7 +126,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
           body: JSON.stringify({ patientIds: ids }),
         })
           .then((r) => (r.ok ? r.json() : null))
-          .then((d) => { if (d?.names) setPatientNames(d.names); })
+          .then((d) => { if (d?.names) setPatientNames((prev) => ({ ...prev, ...d.names })); })
           .catch(() => {});
       }
     } catch {
@@ -120,13 +134,22 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     } finally {
       setLoadingDetail(false);
     }
-  }
+  }, [campaign.id]);
 
   function handleToggleExpand() {
     const next = !expanded;
     setExpanded(next);
-    if (next) fetchDetail();
+    if (next) {
+      setContactPage(1);
+      fetchDetail(1);
+    }
     if (!next) setSelectedIds(new Set());
+  }
+
+  function handleContactPageChange(newPage: number) {
+    setContactPage(newPage);
+    setSelectedIds(new Set());
+    fetchDetail(newPage);
   }
 
   function handleAction(action: 'pause' | 'resume' | 'cancel' | 'approve') {
@@ -207,8 +230,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
       }
 
       setSelectedIds(new Set());
-      setDetail(null);
-      await fetchDetail();
+      fetchDetail(contactPage);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed');
@@ -220,6 +242,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const statusColor = STATUS_COLORS[campaign.status] || 'bg-gray-500';
   const allSelected = detail ? selectedIds.size === detail.contacts.length && detail.contacts.length > 0 : false;
   const someSelected = selectedIds.size > 0;
+  const cPag = detail?.contactsPagination;
 
   return (
     <Card className={expanded ? 'ring-1 ring-primary/20' : 'hover:shadow-sm transition-shadow'}>
@@ -381,11 +404,11 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                   </div>
                 )}
 
-                {detail.contacts.length > 0 && (
+                {(detail.contacts.length > 0 || (cPag && cPag.total > 0)) && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm font-medium">
-                        {t('outbound.campaignActions.recentContacts')} ({detail.contacts.length})
+                        {t('outbound.campaignActions.recentContacts')} ({cPag?.total ?? detail.contacts.length})
                       </p>
                       {someSelected && (
                         <div className="flex items-center gap-2">
@@ -424,7 +447,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                       )}
                     </div>
                     <div className="border rounded-lg overflow-hidden">
-                      <div className="max-h-60 overflow-y-auto">
+                      <div className="max-h-80 overflow-y-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-muted/50 sticky top-0">
                             <tr>
@@ -498,6 +521,36 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                           </tbody>
                         </table>
                       </div>
+
+                      {cPag && cPag.totalPages > 1 && (
+                        <div className="flex items-center justify-between px-3 py-2 border-t bg-muted/30">
+                          <div className="text-xs text-muted-foreground">
+                            Page {cPag.page} of {cPag.totalPages} ({cPag.total} contacts)
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              disabled={contactPage <= 1 || loadingDetail}
+                              onClick={() => handleContactPageChange(contactPage - 1)}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                              Prev
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              disabled={contactPage >= cPag.totalPages || loadingDetail}
+                              onClick={() => handleContactPageChange(contactPage + 1)}
+                            >
+                              Next
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

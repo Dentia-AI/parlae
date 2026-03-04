@@ -187,7 +187,7 @@ export function ActivityLogList() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: '25' });
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (source !== 'all') params.set('source', source);
       if (action && action !== 'all') params.set('action', action);
       if (status && status !== 'all') params.set('status', status);

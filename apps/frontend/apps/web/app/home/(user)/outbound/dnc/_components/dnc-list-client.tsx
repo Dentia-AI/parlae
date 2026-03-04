@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Input } from '@kit/ui/input';
 import { Badge } from '@kit/ui/badge';
 import { toast } from '@kit/ui/sonner';
-import { useRouter } from 'next/navigation';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
-import { Search, Plus, Trash2, ShieldBan } from 'lucide-react';
+import { Search, Plus, Trash2, ShieldBan, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 interface DncEntry {
   id: string;
@@ -19,9 +18,15 @@ interface DncEntry {
   createdAt: string;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 interface DncListClientProps {
   accountId: string;
-  initialEntries: DncEntry[];
 }
 
 const SOURCE_KEYS: Record<string, string> = {
@@ -30,26 +35,54 @@ const SOURCE_KEYS: Record<string, string> = {
   patient_request: 'outbound.dnc.source.patient_request',
 };
 
-export function DncListClient({ accountId, initialEntries }: DncListClientProps) {
+export function DncListClient({ accountId }: DncListClientProps) {
   const { t } = useTranslation('common');
   const csrfToken = useCsrfToken();
-  const router = useRouter();
-  const [entries, setEntries] = useState(initialEntries);
+  const [entries, setEntries] = useState<DncEntry[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [loading, setLoading] = useState(true);
   const [newPhone, setNewPhone] = useState('');
   const [newReason, setNewReason] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return entries;
-    const q = search.toLowerCase();
-    return entries.filter(
-      (e) =>
-        e.phoneNumber.toLowerCase().includes(q) ||
-        (e.reason?.toLowerCase() || '').includes(q),
-    );
-  }, [entries, search]);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const fetchEntries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+
+      const res = await fetch(`/api/outbound/dnc?${params}`);
+      const data = await res.json();
+
+      if (res.ok) {
+        setEntries(data.entries);
+        setPagination(data.pagination);
+      } else {
+        toast.error(data.error || 'Failed to fetch DNC entries');
+      }
+    } catch {
+      toast.error('Failed to fetch DNC entries');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, debouncedSearch]);
+
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
 
   const handleAdd = () => {
     if (!newPhone.trim()) return;
@@ -71,22 +104,12 @@ export function DncListClient({ accountId, initialEntries }: DncListClientProps)
 
         if (!res.ok) throw new Error('Failed to add');
 
-        const entry = await res.json();
-        setEntries((prev) => [
-          {
-            id: entry.id,
-            phoneNumber: entry.phoneNumber,
-            reason: entry.reason,
-            source: entry.source,
-            createdAt: entry.createdAt,
-          },
-          ...prev.filter((e) => e.phoneNumber !== entry.phoneNumber),
-        ]);
         setNewPhone('');
         setNewReason('');
         setShowAdd(false);
         toast.success(t('outbound.dnc.addedSuccess'));
-        router.refresh();
+        setPage(1);
+        fetchEntries();
       } catch {
         toast.error(t('outbound.dnc.addedError'));
       }
@@ -108,9 +131,8 @@ export function DncListClient({ accountId, initialEntries }: DncListClientProps)
 
         if (!res.ok) throw new Error('Failed to remove');
 
-        setEntries((prev) => prev.filter((e) => e.id !== id));
         toast.success(t('outbound.dnc.removedSuccess'));
-        router.refresh();
+        fetchEntries();
       } catch {
         toast.error(t('outbound.dnc.removedError'));
       }
@@ -168,7 +190,11 @@ export function DncListClient({ accountId, initialEntries }: DncListClientProps)
       )}
 
       <div className="flex-1 overflow-auto min-h-0">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : entries.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="pt-10 pb-10 text-center">
               <ShieldBan className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -194,7 +220,7 @@ export function DncListClient({ accountId, initialEntries }: DncListClientProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((entry) => (
+                  {entries.map((entry) => (
                     <tr key={entry.id} className="border-b last:border-0">
                       <td className="py-3 text-sm font-medium">{entry.phoneNumber}</td>
                       <td className="py-3 text-sm text-muted-foreground">
@@ -224,15 +250,48 @@ export function DncListClient({ accountId, initialEntries }: DncListClientProps)
                 </tbody>
               </table>
             </CardContent>
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t">
+                <div className="text-sm text-muted-foreground">
+                  {t('outbound.dnc.pageInfo', {
+                    page: pagination.page,
+                    totalPages: pagination.totalPages,
+                    total: pagination.total,
+                    defaultValue: `Page ${pagination.page} of ${pagination.totalPages} (${pagination.total} total)`,
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    {t('activityLog.previous', 'Previous')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= pagination.totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    {t('activityLog.next', 'Next')}
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         )}
       </div>
 
-      <div className="flex-shrink-0 text-xs text-muted-foreground py-2">
-        {t('outbound.dnc.totalEntries', { count: entries.length })}
-        {search && filtered.length !== entries.length &&
-          ` · ${t('outbound.dnc.showing', { count: filtered.length })}`}
-      </div>
+      {pagination && (
+        <div className="flex-shrink-0 text-xs text-muted-foreground py-2">
+          {t('outbound.dnc.totalEntries', { count: pagination.total })}
+        </div>
+      )}
     </div>
   );
 }

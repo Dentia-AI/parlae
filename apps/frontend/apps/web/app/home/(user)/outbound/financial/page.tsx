@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { Card, CardContent } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
-import { Badge } from '@kit/ui/badge';
 import { Trans } from '@kit/ui/trans';
 import { PageBody } from '@kit/ui/page';
 import { DollarSign, Database } from 'lucide-react';
@@ -9,8 +8,9 @@ import Link from 'next/link';
 import { loadUserWorkspace } from '../../_lib/server/load-user-workspace';
 import { prisma } from '@kit/prisma';
 import { EnableAgentToggle } from '../_components/enable-agent-toggle';
-import { CampaignCard } from '../_components/campaign-card';
 import { createI18nServerInstance } from '~/lib/i18n/i18n.server';
+
+import { FinancialCampaigns } from './_components/financial-campaigns';
 
 const FINANCIAL_CALL_TYPES = ['PAYMENT', 'BENEFITS'];
 
@@ -27,19 +27,10 @@ export default async function FinancialPage() {
   const accountId = workspace.workspace.id;
 
   let settings: any = null;
-  let campaigns: any[] = [];
 
   try {
     settings = await prisma.outboundSettings.findUnique({
       where: { accountId },
-    });
-
-    campaigns = await prisma.outboundCampaign.findMany({
-      where: {
-        accountId,
-        callType: { in: FINANCIAL_CALL_TYPES as any },
-      },
-      orderBy: { createdAt: 'desc' },
     });
   } catch {
     // Tables may not exist yet
@@ -58,9 +49,6 @@ export default async function FinancialPage() {
   } catch {
     // Table may not exist yet
   }
-
-  const callTypeLabel = (type: string) =>
-    i18n.t(`common:outbound.financial.callTypes.${type.toLowerCase()}`, type);
 
   return (
     <PageBody className="pt-4 pb-0 min-h-0 overflow-hidden">
@@ -120,59 +108,7 @@ export default async function FinancialPage() {
             </CardContent>
           </Card>
         ) : (
-          <>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {FINANCIAL_CALL_TYPES.map((type) => {
-                const typeCampaigns = campaigns.filter((c) => c.callType === type);
-                const active = typeCampaigns.filter((c) => c.status === 'ACTIVE').length;
-                const total = typeCampaigns.reduce((s, c) => s + c.totalContacts, 0);
-
-                return (
-                  <Card key={type} className="hover:shadow-sm transition-shadow">
-                    <CardContent className="pt-4 pb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium">{callTypeLabel(type)}</p>
-                        {active > 0 && (
-                          <Badge variant="default" className="bg-green-600 text-xs">
-                            {i18n.t('common:outbound.campaign.activeCount', { count: active })}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>{i18n.t('common:outbound.campaign.campaignsCount', { count: typeCampaigns.length })}</span>
-                        <span>{i18n.t('common:outbound.campaign.contactsCount', { count: total })}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-
-            <h3 className="text-lg font-semibold">
-              <Trans i18nKey="common:outbound.financial.campaigns" />
-            </h3>
-
-            {campaigns.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="pt-8 pb-8 text-center">
-                  <p className="text-muted-foreground">
-                    <Trans i18nKey="common:outbound.financial.noCampaigns" />
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {campaigns.map((campaign) => (
-                  <CampaignCard
-                    key={campaign.id}
-                    campaign={campaign}
-                    callTypeLabel={callTypeLabel(campaign.callType)}
-                    channelLabel={i18n.t(`common:outbound.channels.${campaign.channel.toLowerCase()}`)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+          <FinancialCampaigns callTypes={FINANCIAL_CALL_TYPES} />
         )}
       </div>
     </PageBody>

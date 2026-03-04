@@ -11,7 +11,7 @@ async function getAccountId(userId: string) {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -23,35 +23,47 @@ export async function GET(
     if (!accountId) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
     const { id } = await params;
+    const url = request.nextUrl;
+    const contactPage = Math.max(1, parseInt(url.searchParams.get('contactPage') || '1', 10));
+    const contactLimit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('contactLimit') || '20', 10)));
 
     const campaign = await prisma.outboundCampaign.findFirst({
       where: { id, accountId },
-      include: {
-        contacts: {
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        },
-      },
     });
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const statusCounts = await prisma.campaignContact.groupBy({
-      by: ['status'],
-      where: { campaignId: id },
-      _count: true,
-    });
-
-    const outcomeCounts = await prisma.campaignContact.groupBy({
-      by: ['outcome'],
-      where: { campaignId: id, outcome: { not: null } },
-      _count: true,
-    });
+    const [contacts, contactsTotal, statusCounts, outcomeCounts] = await Promise.all([
+      prisma.campaignContact.findMany({
+        where: { campaignId: id },
+        orderBy: { updatedAt: 'desc' },
+        skip: (contactPage - 1) * contactLimit,
+        take: contactLimit,
+      }),
+      prisma.campaignContact.count({ where: { campaignId: id } }),
+      prisma.campaignContact.groupBy({
+        by: ['status'],
+        where: { campaignId: id },
+        _count: true,
+      }),
+      prisma.campaignContact.groupBy({
+        by: ['outcome'],
+        where: { campaignId: id, outcome: { not: null } },
+        _count: true,
+      }),
+    ]);
 
     return NextResponse.json({
       ...campaign,
+      contacts,
+      contactsPagination: {
+        page: contactPage,
+        limit: contactLimit,
+        total: contactsTotal,
+        totalPages: Math.ceil(contactsTotal / contactLimit),
+      },
       statusBreakdown: statusCounts.reduce(
         (acc, s) => ({ ...acc, [s.status]: s._count }),
         {} as Record<string, number>,
