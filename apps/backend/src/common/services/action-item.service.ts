@@ -70,6 +70,7 @@ export class ActionItemService {
         params.accountId,
         params.contactName || params.contactPhone || 'a patient',
         reason,
+        actionItem.id,
       );
 
       this.logger.log({
@@ -164,6 +165,7 @@ export class ActionItemService {
     accountId: string,
     contactIdentifier: string,
     reason: string,
+    actionItemId: string,
   ): Promise<void> {
     try {
       const reasonLabel = REASON_LABELS[reason] || reason;
@@ -173,7 +175,7 @@ export class ActionItemService {
           body: `A call with ${contactIdentifier} needs your attention: ${reasonLabel}`,
           type: 'WARNING',
           channel: 'IN_APP',
-          link: '/home/action-items',
+          link: `/home/action-items?ref=${actionItemId}`,
         },
       });
     } catch (err) {

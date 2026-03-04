@@ -2,15 +2,18 @@
 
 import { useState } from 'react';
 import {
+  AlertCircle,
   BarChart3,
   Bell,
   Bot,
   ClipboardList,
   CreditCard,
   FileText,
+  Megaphone,
   Menu,
   Palette,
   PhoneOutgoing,
+  ShieldBan,
   ToggleLeft,
   User,
   Users,
@@ -54,23 +57,23 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
       matches: (path: string) => path.startsWith('/home/call-logs'),
     },
     {
+      name: 'Action Items',
+      href: '/home/action-items',
+      icon: AlertCircle,
+      matches: (path: string) => path.startsWith('/home/action-items'),
+    },
+    {
       name: 'AI Agent',
       href: '/home/agent',
       icon: Bot,
       matches: (path: string) => path.startsWith('/home/agent'),
-    },
-    {
-      name: 'Outbound',
-      href: '/home/outbound',
-      icon: PhoneOutgoing,
-      matches: (path: string) => path.startsWith('/home/outbound'),
     },
   ];
 
   const isMoreActive = pathname.startsWith('/home/activity-log') ||
     pathname.startsWith('/home/settings') ||
     pathname.startsWith('/home/features') ||
-    pathname.startsWith('/home/notifications');
+    pathname.startsWith('/home/outbound');
 
   return (
     <>
@@ -124,16 +127,6 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                 <SheetTitle>More</SheetTitle>
               </SheetHeader>
               <div className="py-4 space-y-4 overflow-y-auto">
-                {/* Activity Log */}
-                <Link
-                  href="/home/activity-log"
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
-                  onClick={() => setOpen(false)}
-                >
-                  <ClipboardList className="h-5 w-5" />
-                  <span className="text-sm font-medium">AI Activity Log</span>
-                </Link>
-
                 {/* Notifications */}
                 <Link
                   href="/home/action-items"
@@ -161,6 +154,64 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                   </div>
                 </Link>
 
+                {/* Activity */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                    Activity
+                  </p>
+                  <div className="space-y-1">
+                    <Link
+                      href="/home/outbound/patient-care"
+                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      <Megaphone className="h-4 w-4" />
+                      <span className="text-sm">Campaigns</span>
+                    </Link>
+                    <Link
+                      href="/home/activity-log"
+                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      <ClipboardList className="h-4 w-4" />
+                      <span className="text-sm">AI Activity Logs</span>
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Configure */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                    Configure
+                  </p>
+                  <div className="space-y-1">
+                    <Link
+                      href="/home/settings/branding"
+                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      <Palette className="h-4 w-4" />
+                      <span className="text-sm">Business Profile</span>
+                    </Link>
+                    <Link
+                      href="/home/outbound"
+                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      <PhoneOutgoing className="h-4 w-4" />
+                      <span className="text-sm">Outbound Programs</span>
+                    </Link>
+                    <Link
+                      href="/home/outbound/dnc"
+                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      <ShieldBan className="h-4 w-4" />
+                      <span className="text-sm">DNC List</span>
+                    </Link>
+                  </div>
+                </div>
+
                 {/* Account Settings */}
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
@@ -174,14 +225,6 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                     >
                       <User className="h-4 w-4" />
                       <span className="text-sm">Profile</span>
-                    </Link>
-                    <Link
-                      href="/home/settings/branding"
-                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
-                      onClick={() => setOpen(false)}
-                    >
-                      <Palette className="h-4 w-4" />
-                      <span className="text-sm">Branding</span>
                     </Link>
                     <Link
                       href="/home/settings/billing"

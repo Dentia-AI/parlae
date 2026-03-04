@@ -11,8 +11,8 @@ import { AppLogo } from '~/components/app-logo';
 import { ProfileAccountDropdownContainer } from '~/components/personal-account-dropdown-container';
 import { personalAccountNavigationConfig } from '~/config/personal-account-navigation.config';
 import { SidebarNotificationButton } from './sidebar-notification-button';
+import { SidebarScrollShadow } from './sidebar-scroll-shadow';
 
-// home imports
 import type { UserWorkspace } from '../_lib/server/load-user-workspace';
 
 interface HomeSidebarProps {
@@ -62,7 +62,8 @@ export function HomeSidebar(props: HomeSidebarProps) {
         <SidebarNavigation config={personalAccountNavigationConfig} />
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="relative">
+        <SidebarScrollShadow />
         <div className="flex flex-col gap-2 w-full">
           <div className="flex items-center gap-1 w-full">
             <div className="flex-1 min-w-0">

@@ -9,7 +9,12 @@ jest.mock('@kit/prisma', () => ({
   prisma: {
     account: {
       findFirst: jest.fn().mockResolvedValue({ id: 'acc-1' }),
-      findUnique: jest.fn().mockResolvedValue({ brandingTimezone: 'America/Toronto' }),
+      findUnique: jest.fn().mockResolvedValue({
+        brandingTimezone: 'America/Toronto',
+        name: 'Test Clinic',
+        brandingBusinessName: null,
+        phoneIntegrationSettings: {},
+      }),
     },
     outboundSettings: {
       findUnique: jest.fn().mockResolvedValue({
@@ -20,6 +25,7 @@ jest.mock('@kit/prisma', () => ({
         financialRetellAgentId: null,
         channelDefaults: {},
         outboundUpgradeHistory: [],
+        fromPhoneNumberId: null,
       }),
       update: jest.fn().mockImplementation(({ data }) =>
         Promise.resolve({ accountId: 'acc-1', ...data }),
@@ -35,6 +41,9 @@ jest.mock('@kit/prisma', () => ({
         version: 'v1.0',
         flowConfig: { some: 'config' },
       }),
+    },
+    retellPhoneNumber: {
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   },
 }));

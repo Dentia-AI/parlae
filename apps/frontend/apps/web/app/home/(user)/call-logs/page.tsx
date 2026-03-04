@@ -2,11 +2,11 @@ import { Suspense } from 'react';
 import { PageBody } from '@kit/ui/page';
 import { Trans } from '@kit/ui/trans';
 
-import { CallLogsTable } from './_components/call-logs-table';
+import { UnifiedCallLogs } from './_components/unified-call-logs';
 
 export const metadata = {
   title: 'Call Logs',
-  description: 'View and manage call records from your AI receptionist',
+  description: 'View and manage call records from your AI agent',
 };
 
 export default function CallLogsPage() {
@@ -27,7 +27,7 @@ export default function CallLogsPage() {
             </div>
           }
         >
-          <CallLogsTable />
+          <UnifiedCallLogs />
         </Suspense>
       </div>
     </PageBody>

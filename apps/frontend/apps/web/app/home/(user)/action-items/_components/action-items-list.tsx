@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
 import { Button } from '@kit/ui/button';
@@ -83,6 +84,7 @@ export function ActionItemsList() {
   const { t } = useTranslation('common');
   const router = useRouter();
   const csrfToken = useCsrfToken();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -138,6 +140,7 @@ export function ActionItemsList() {
         setItems((prev) =>
           prev.map((item) => (item.id === id ? { ...item, ...updated } : item)),
         );
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
       }
     } catch (err) {
       console.error('Failed to update action item:', err);

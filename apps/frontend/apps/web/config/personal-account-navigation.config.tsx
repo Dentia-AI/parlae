@@ -8,6 +8,7 @@ import {
   ToggleLeft,
   Sparkles,
   BookOpen,
+  Mic,
   Phone,
   Plug2,
   ClipboardList,
@@ -15,6 +16,8 @@ import {
   Heart,
   DollarSign,
   ShieldBan,
+  Megaphone,
+  Palette,
 } from 'lucide-react';
 import { z } from 'zod';
 
@@ -26,7 +29,7 @@ const iconClasses = 'w-4';
 
 const routes = [
   {
-    label: 'common:routes.application',
+    label: 'common:routes.overview',
     children: [
       {
         label: 'common:routes.dashboard',
@@ -35,14 +38,19 @@ const routes = [
         end: true,
       },
       {
-        label: 'common:routes.callLogs',
-        path: '/home/call-logs',
-        Icon: <FileText className={iconClasses} />,
-      },
-      {
         label: 'common:routes.actionItems',
         path: '/home/action-items',
         Icon: <AlertCircle className={iconClasses} />,
+      },
+    ],
+  },
+  {
+    label: 'common:routes.activity',
+    children: [
+      {
+        label: 'common:routes.callLogs',
+        path: '/home/call-logs',
+        Icon: <FileText className={iconClasses} />,
       },
       {
         label: 'common:routes.activityLog',
@@ -50,43 +58,9 @@ const routes = [
         Icon: <ClipboardList className={iconClasses} />,
       },
       {
-        label: 'common:routes.setup',
-        path: '/home/agent',
-        Icon: <Bot className={iconClasses} />,
-        collapsible: true,
-        collapsed: true,
-        children: [
-          {
-            label: 'common:routes.agentOverview',
-            path: '/home/agent',
-            Icon: <Sparkles className={iconClasses} />,
-          },
-          {
-            label: 'common:routes.knowledgeBase',
-            path: '/home/agent/knowledge',
-            Icon: <BookOpen className={iconClasses} />,
-          },
-          {
-            label: 'common:routes.integrations',
-            path: '/home/agent/integrations',
-            Icon: <Plug2 className={iconClasses} />,
-          },
-          {
-            label: 'common:routes.phoneSettings',
-            path: '/home/agent/phone-settings',
-            Icon: <Phone className={iconClasses} />,
-          },
-          {
-            label: 'common:routes.advancedSetup',
-            path: '/home/agent/advanced',
-            Icon: <Wrench className={iconClasses} />,
-          },
-        ],
-      },
-      {
-        label: 'common:routes.outbound',
+        label: 'common:routes.outboundCampaigns',
         path: '/home/outbound',
-        Icon: <PhoneOutgoing className={iconClasses} />,
+        Icon: <Megaphone className={iconClasses} />,
         collapsible: true,
         collapsed: true,
         children: [
@@ -94,6 +68,7 @@ const routes = [
             label: 'common:routes.outboundOverview',
             path: '/home/outbound',
             Icon: <PhoneOutgoing className={iconClasses} />,
+            end: true,
           },
           {
             label: 'common:routes.patientCare',
@@ -105,10 +80,63 @@ const routes = [
             path: '/home/outbound/financial',
             Icon: <DollarSign className={iconClasses} />,
           },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'common:routes.configure',
+    children: [
+      {
+        label: 'common:routes.aiAgent',
+        path: '/home/agent',
+        Icon: <Bot className={iconClasses} />,
+        collapsible: true,
+        collapsed: true,
+        children: [
           {
-            label: 'common:routes.outboundCallLogs',
-            path: '/home/outbound/call-logs',
-            Icon: <FileText className={iconClasses} />,
+            label: 'common:routes.agentOverview',
+            path: '/home/agent',
+            Icon: <Sparkles className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.voice',
+            path: '/home/agent/setup?manage=true',
+            Icon: <Mic className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.knowledgeBase',
+            path: '/home/agent/knowledge',
+            Icon: <BookOpen className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.phoneSettings',
+            path: '/home/agent/phone-settings',
+            Icon: <Phone className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.integrations',
+            path: '/home/agent/integrations',
+            Icon: <Plug2 className={iconClasses} />,
+          },
+          {
+            label: 'common:routes.advancedSetup',
+            path: '/home/agent/advanced',
+            Icon: <Wrench className={iconClasses} />,
+          },
+        ],
+      },
+      {
+        label: 'common:routes.outboundCalling',
+        path: '/home/outbound/settings',
+        Icon: <PhoneOutgoing className={iconClasses} />,
+        collapsible: true,
+        collapsed: true,
+        children: [
+          {
+            label: 'common:routes.outboundSettings',
+            path: '/home/outbound/settings',
+            Icon: <PhoneOutgoing className={iconClasses} />,
           },
           {
             label: 'common:routes.dncList',
@@ -116,6 +144,12 @@ const routes = [
             Icon: <ShieldBan className={iconClasses} />,
           },
         ],
+      },
+      {
+        label: 'common:routes.businessProfile',
+        path: '/home/settings/branding',
+        Icon: <Palette className={iconClasses} />,
+        end: true,
       },
     ],
   },
@@ -126,13 +160,14 @@ const routes = [
         label: 'common:routes.accountSettings',
         path: pathsConfig.app.personalAccountSettings,
         Icon: <UserCog className={iconClasses} />,
+        end: true,
       },
       {
         label: 'common:routes.features',
         path: '/home/features',
         Icon: <ToggleLeft className={iconClasses} />,
       },
-    ].filter((route) => !!route),
+    ],
   },
 ] satisfies z.infer<typeof NavigationConfigSchema>['routes'];
 

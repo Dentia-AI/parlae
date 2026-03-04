@@ -166,7 +166,7 @@ describe('ActionItemService', () => {
           accountId: 'acc-1',
           type: 'WARNING',
           channel: 'IN_APP',
-          link: '/home/action-items',
+          link: expect.stringContaining('/home/action-items?ref='),
         }),
       });
     });

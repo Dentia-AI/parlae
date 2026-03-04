@@ -122,7 +122,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
       if (ids.length > 0) {
         fetch('/api/outbound/patients/resolve', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
           body: JSON.stringify({ patientIds: ids }),
         })
           .then((r) => (r.ok ? r.json() : null))

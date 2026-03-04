@@ -174,7 +174,11 @@ function getOutcomeIcon(outcome: string) {
   }
 }
 
-export function OutboundCallLogsTable() {
+interface OutboundCallLogsTableProps {
+  basePath?: string;
+}
+
+export function OutboundCallLogsTable({ basePath = '/home/outbound/call-logs' }: OutboundCallLogsTableProps) {
   const { t } = useTranslation('common');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -235,7 +239,7 @@ export function OutboundCallLogsTable() {
   const updatePage = (newPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', newPage.toString());
-    router.push(`/home/outbound/call-logs?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   };
 
   const clearFilters = () => {
@@ -243,7 +247,7 @@ export function OutboundCallLogsTable() {
     setOutcomeFilter('');
     setCallTypeFilter('');
     setDateRange('14d');
-    router.push('/home/outbound/call-logs');
+    router.push(basePath);
   };
 
   const hasActiveFilters = searchTerm || outcomeFilter || callTypeFilter || dateRange !== '14d';

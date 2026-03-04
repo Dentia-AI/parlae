@@ -17,6 +17,11 @@ jest.mock('@kit/prisma', () => ({
       ]),
       count: jest.fn().mockResolvedValue(2),
     },
+    accountMembership: {
+      findMany: jest.fn().mockResolvedValue([
+        { userId: 'user-1', user: { id: 'user-1', displayName: 'Test User', email: 'test@example.com' } },
+      ]),
+    },
   },
 }));
 

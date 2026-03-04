@@ -61,6 +61,17 @@ export async function PATCH(
     });
 
     if (body.status === 'RESOLVED' || body.status === 'IN_PROGRESS' || body.assignedToUserId) {
+      // Dismiss notifications linked to this action item (new format: link contains the ID)
+      await prisma.notification.updateMany({
+        where: {
+          accountId: account.id,
+          dismissed: false,
+          link: { contains: id },
+        },
+        data: { dismissed: true },
+      });
+
+      // Fallback: dismiss old-format notifications matched by contact name/phone in body
       const contactIdentifier = existing.contactName || existing.contactPhone || '';
       if (contactIdentifier) {
         await prisma.notification.updateMany({
