@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -45,52 +45,44 @@ export function usePopupAuth() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callbackUrlRef = useRef<string>('/home');
   const completedRef = useRef(false);
+  const authenticatingRef = useRef(false);
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
+  // All handlers use refs so their identities never change,
+  // preventing useEffect dependency churn and stale closures.
 
-  const onAuthComplete = useCallback(() => {
-    if (completedRef.current) return;
-    completedRef.current = true;
-
-    stopPolling();
-
-    // Force-close the popup if still open
-    try {
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
-      }
-    } catch {
-      // cross-origin close blocked
-    }
-    popupRef.current = null;
-    setIsAuthenticating(false);
-    router.push(callbackUrlRef.current);
-  }, [stopPolling, router]);
-
-  const onPopupClosed = useCallback(() => {
-    stopPolling();
-    popupRef.current = null;
-    setIsAuthenticating(false);
-    completedRef.current = false;
-  }, [stopPolling]);
-
-  // Listen for the auth-complete signal from the popup.
-  // BroadcastChannel is the primary mechanism (survives severed
-  // window.opener from cross-origin OAuth redirects).
-  // window.postMessage is a secondary fallback.
   useEffect(() => {
+    function handleAuthComplete() {
+      if (completedRef.current) return;
+      if (!authenticatingRef.current) return;
+      completedRef.current = true;
+
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+
+      try {
+        if (popupRef.current && !popupRef.current.closed) {
+          popupRef.current.close();
+        }
+      } catch {
+        // cross-origin close blocked
+      }
+      popupRef.current = null;
+      authenticatingRef.current = false;
+      setIsAuthenticating(false);
+      routerRef.current.push(callbackUrlRef.current);
+    }
+
     let channel: BroadcastChannel | null = null;
 
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
       channel.onmessage = (event) => {
-        if (event.data?.type === MESSAGE_TYPE) onAuthComplete();
+        if (event.data?.type === MESSAGE_TYPE) handleAuthComplete();
       };
     } catch {
       // BroadcastChannel unsupported
@@ -99,58 +91,68 @@ export function usePopupAuth() {
     function handleWindowMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== MESSAGE_TYPE) return;
-      onAuthComplete();
+      handleAuthComplete();
     }
     window.addEventListener('message', handleWindowMessage);
 
     return () => {
       channel?.close();
       window.removeEventListener('message', handleWindowMessage);
-      // Do NOT reset isAuthenticating here -- useEffect teardown should
-      // only clean up listeners, not end the auth flow.
     };
-  }, [onAuthComplete]);
+  }, []); // No dependencies -- handlers use refs, so this never re-runs.
 
-  const startPopupAuth = useCallback(
-    (options: PopupAuthOptions) => {
-      const { identityProvider, screenHint, callbackUrl } = options;
-      callbackUrlRef.current = callbackUrl || '/home';
-      completedRef.current = false;
+  const startPopupAuth = (options: PopupAuthOptions) => {
+    const { identityProvider, screenHint, callbackUrl } = options;
+    callbackUrlRef.current = callbackUrl || '/home';
+    completedRef.current = false;
 
-      if (isMobile()) {
-        const authParams: Record<string, string> = {};
-        if (identityProvider) authParams.identity_provider = identityProvider;
-        if (screenHint) authParams.screen_hint = screenHint;
-        void signIn('cognito', { callbackUrl }, authParams);
-        return;
-      }
+    if (isMobile()) {
+      const authParams: Record<string, string> = {};
+      if (identityProvider) authParams.identity_provider = identityProvider;
+      if (screenHint) authParams.screen_hint = screenHint;
+      void signIn('cognito', { callbackUrl }, authParams);
+      return;
+    }
 
-      const params = new URLSearchParams();
-      if (identityProvider) params.set('identity_provider', identityProvider);
-      if (screenHint) params.set('screen_hint', screenHint);
+    const params = new URLSearchParams();
+    if (identityProvider) params.set('identity_provider', identityProvider);
+    if (screenHint) params.set('screen_hint', screenHint);
 
-      const popupUrl = `/auth/popup-sign-in?${params.toString()}`;
-      const popup = openCenteredPopup(popupUrl);
+    const popupUrl = `/auth/popup-sign-in?${params.toString()}`;
+    const popup = openCenteredPopup(popupUrl);
 
-      if (!popup || popup.closed) {
-        const authParams: Record<string, string> = {};
-        if (identityProvider) authParams.identity_provider = identityProvider;
-        if (screenHint) authParams.screen_hint = screenHint;
-        void signIn('cognito', { callbackUrl }, authParams);
-        return;
-      }
+    if (!popup || popup.closed) {
+      const authParams: Record<string, string> = {};
+      if (identityProvider) authParams.identity_provider = identityProvider;
+      if (screenHint) authParams.screen_hint = screenHint;
+      void signIn('cognito', { callbackUrl }, authParams);
+      return;
+    }
 
-      popupRef.current = popup;
-      setIsAuthenticating(true);
+    popupRef.current = popup;
+    authenticatingRef.current = true;
+    setIsAuthenticating(true);
 
-      pollRef.current = setInterval(() => {
+    // Clear any stale poll
+    if (pollRef.current) clearInterval(pollRef.current);
+
+    pollRef.current = setInterval(() => {
+      try {
         if (!popupRef.current || popupRef.current.closed) {
-          onPopupClosed();
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+          popupRef.current = null;
+          authenticatingRef.current = false;
+          setIsAuthenticating(false);
+          completedRef.current = false;
         }
-      }, POLL_INTERVAL_MS);
-    },
-    [onPopupClosed],
-  );
+      } catch {
+        // popup.closed access failed -- keep waiting
+      }
+    }, POLL_INTERVAL_MS);
+  };
 
   return { startPopupAuth, isAuthenticating };
 }

@@ -52,6 +52,13 @@ export function PopupAuthCloser() {
 
   useEffect(() => {
     if (handled.current) return;
+
+    // Skip on popup-specific pages: popup-sign-in sets the flag right
+    // before calling signIn(), so if we fired here the parent would
+    // receive a premature "auth-complete" signal. popup-complete already
+    // handles notification itself.
+    if (window.location.pathname.startsWith('/auth/popup-')) return;
+
     if (sessionStorage.getItem(POPUP_FLAG) !== 'true') return;
     handled.current = true;
 
