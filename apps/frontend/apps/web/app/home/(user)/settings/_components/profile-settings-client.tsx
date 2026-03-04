@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@kit/ui/badge';
@@ -61,6 +61,14 @@ export function ProfileSettingsClient({
   // Account name editing state
   const [isEditingAccountName, setIsEditingAccountName] = useState(false);
   const [editAccountName, setEditAccountName] = useState(account?.name ?? '');
+
+  useEffect(() => {
+    if (!isEditingName) setEditName(user.displayName);
+  }, [user.displayName, isEditingName]);
+
+  useEffect(() => {
+    if (!isEditingAccountName) setEditAccountName(account?.name ?? '');
+  }, [account?.name, isEditingAccountName]);
 
   // Password change state
   const [isChangingPassword, setIsChangingPassword] = useState(false);

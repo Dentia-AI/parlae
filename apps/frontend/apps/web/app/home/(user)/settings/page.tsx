@@ -14,31 +14,36 @@ export const generateMetadata = async () => {
 };
 
 async function PersonalAccountSettingsPage() {
-  const user = await requireUserInServerComponent();
+  const sessionUser = await requireUserInServerComponent();
 
-  // Fetch account info
-  const account = await prisma.account.findFirst({
-    where: {
-      primaryOwnerId: user.id,
-      isPersonalAccount: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      slug: true,
-      pictureUrl: true,
-      createdAt: true,
-    },
-  });
+  const [dbUser, account] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      select: { displayName: true, avatarUrl: true },
+    }),
+    prisma.account.findFirst({
+      where: {
+        primaryOwnerId: sessionUser.id,
+        isPersonalAccount: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        slug: true,
+        pictureUrl: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
   return (
     <ProfileSettingsClient
       user={{
-        id: user.id,
-        email: user.email ?? '',
-        displayName: user.name ?? user.email ?? '',
-        avatarUrl: user.image ?? null,
+        id: sessionUser.id,
+        email: sessionUser.email ?? '',
+        displayName: dbUser?.displayName ?? sessionUser.email ?? '',
+        avatarUrl: dbUser?.avatarUrl ?? null,
       }}
       account={account ? {
         id: account.id,
