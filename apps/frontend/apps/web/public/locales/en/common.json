@@ -1014,41 +1014,60 @@
     "offMessage": "Your AI receptionist is turned off. Enable it to start answering calls.",
     "featureControls": "Feature Controls",
     "featureControlsDesc": "Toggle individual features on or off. Changes take effect immediately.",
-    "infoNote": "Core features are enabled by default. Toggle optional features based on your needs. Features marked \"Coming Soon\" are in development.",
     "comingSoon": "Coming Soon",
+    "disableDialog": {
+      "title": "Turn off AI Receptionist?",
+      "description": "This will disable all AI call handling, including inbound answering, outbound campaigns, and automated notifications. Your phone lines will stop being answered by the AI.",
+      "confirm": "Yes, Turn Off"
+    },
+    "toggleOffDialog": {
+      "title": "Disable {{feature}}?",
+      "description": "Are you sure you want to turn off {{feature}}? This change takes effect immediately.",
+      "confirm": "Yes, Disable"
+    },
     "categories": {
-      "core": "Core Features",
-      "coreDesc": "Essential AI receptionist capabilities",
+      "inbound": "Inbound",
+      "inboundDesc": "AI-powered call answering and appointment scheduling",
+      "outbound": "Outbound",
+      "outboundDesc": "Automated outreach campaigns for patient engagement",
       "communication": "Communication",
-      "communicationDesc": "Patient notifications and outreach",
+      "communicationDesc": "Patient notifications via SMS and email",
       "integration": "Integrations",
-      "integrationDesc": "Connect with external services",
+      "integrationDesc": "Connect with external services and calendars",
       "advanced": "Advanced",
-      "advancedDesc": "Coming soon - advanced capabilities"
+      "advancedDesc": "Coming soon — advanced capabilities"
     },
-    "aiReceptionist": {
-      "name": "AI Receptionist",
-      "description": "Your AI-powered phone receptionist answers calls, books appointments, and handles patient inquiries 24/7."
+    "inboundCalls": {
+      "name": "AI Call Answering",
+      "description": "Your AI receptionist answers calls, handles inquiries, and routes conversations 24/7."
     },
-    "callLogging": {
-      "name": "Call Logging & Analytics",
-      "description": "Track all incoming calls, view transcripts, and monitor AI performance with detailed analytics."
+    "appointmentScheduling": {
+      "name": "Appointment Scheduling",
+      "description": "Automatically book, reschedule, and cancel appointments during calls."
     },
-    "knowledgeBase": {
-      "name": "Knowledge Base",
-      "description": "Upload documents to train your AI on your services, policies, and FAQs."
+    "outboundCalls": {
+      "name": "Outbound Campaigns",
+      "description": "Automated outreach programs for appointment reminders, follow-ups, and patient recall."
+    },
+    "outboundPatientCare": {
+      "name": "Patient Care",
+      "description": "Appointment reminders, follow-up calls, and patient recall campaigns."
+    },
+    "outboundFinancial": {
+      "name": "Financial",
+      "description": "Billing reminders, outstanding balance notifications, and payment follow-ups."
+    },
+    "outboundAutoApprove": {
+      "name": "Auto-Approve Campaigns",
+      "description": "Automatically approve and start new campaigns without manual review."
     },
     "smsConfirmations": {
-      "name": "SMS Confirmations",
+      "name": "SMS Notifications",
       "description": "Send SMS appointment confirmations and reminders to patients."
     },
     "emailConfirmations": {
-      "name": "Email Confirmations",
+      "name": "Email Notifications",
       "description": "Send branded email confirmations for appointments, cancellations, and reschedules."
-    },
-    "outboundCalls": {
-      "name": "Outbound Calls",
-      "description": "Proactively reach out to patients for appointment reminders, follow-ups, and recall campaigns."
     },
     "googleCalendar": {
       "name": "Google Calendar",
@@ -1070,6 +1089,8 @@
       "name": "Lead Management",
       "description": "Capture and manage new patient leads from calls, track conversion rates, and automate follow-ups."
     },
+    "capabilitiesTitle": "Included Capabilities",
+    "capabilitiesNote": "All plans include call logging & analytics, knowledge base with website scraping, customizable AI voice selection, multi-language support (40+ languages), and detailed call transcripts.",
     "saved": "Feature settings saved",
     "saveFailed": "Failed to save feature settings"
   },

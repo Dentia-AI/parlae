@@ -1014,41 +1014,60 @@
     "offMessage": "Votre réceptionniste IA est désactivé. Activez-le pour commencer à répondre aux appels.",
     "featureControls": "Contrôle des fonctionnalités",
     "featureControlsDesc": "Activez ou désactivez les fonctionnalités individuellement. Les changements prennent effet immédiatement.",
-    "infoNote": "Les fonctionnalités principales sont activées par défaut. Activez les fonctionnalités optionnelles selon vos besoins. Les fonctionnalités marquées « Bientôt disponible » sont en développement.",
     "comingSoon": "Bientôt disponible",
+    "disableDialog": {
+      "title": "Désactiver le réceptionniste IA ?",
+      "description": "Cela désactivera la gestion de tous les appels par l'IA, y compris la réponse aux appels entrants, les campagnes sortantes et les notifications automatisées. Vos lignes téléphoniques ne seront plus répondues par l'IA.",
+      "confirm": "Oui, désactiver"
+    },
+    "toggleOffDialog": {
+      "title": "Désactiver {{feature}} ?",
+      "description": "Êtes-vous sûr de vouloir désactiver {{feature}} ? Ce changement prend effet immédiatement.",
+      "confirm": "Oui, désactiver"
+    },
     "categories": {
-      "core": "Fonctionnalités principales",
-      "coreDesc": "Capacités essentielles du réceptionniste IA",
+      "inbound": "Appels entrants",
+      "inboundDesc": "Réponse aux appels et prise de rendez-vous assistées par l'IA",
+      "outbound": "Appels sortants",
+      "outboundDesc": "Campagnes de sensibilisation automatisées pour l'engagement des patients",
       "communication": "Communication",
-      "communicationDesc": "Notifications et sensibilisation des patients",
+      "communicationDesc": "Notifications aux patients par SMS et courriel",
       "integration": "Intégrations",
-      "integrationDesc": "Connexion avec les services externes",
+      "integrationDesc": "Connexion avec les services et calendriers externes",
       "advanced": "Avancé",
       "advancedDesc": "Bientôt disponible — capacités avancées"
     },
-    "aiReceptionist": {
-      "name": "Réceptionniste IA",
-      "description": "Votre réceptionniste téléphonique alimenté par l'IA répond aux appels, réserve des rendez-vous et gère les demandes des patients 24h/24."
+    "inboundCalls": {
+      "name": "Réponse IA aux appels",
+      "description": "Votre réceptionniste IA répond aux appels, gère les demandes et dirige les conversations 24h/24."
     },
-    "callLogging": {
-      "name": "Journalisation et analytique des appels",
-      "description": "Suivez tous les appels entrants, consultez les transcriptions et surveillez les performances de l'IA avec des analyses détaillées."
+    "appointmentScheduling": {
+      "name": "Prise de rendez-vous",
+      "description": "Réservez, reprogrammez et annulez automatiquement des rendez-vous pendant les appels."
     },
-    "knowledgeBase": {
-      "name": "Base de connaissances",
-      "description": "Téléchargez des documents pour former votre IA sur vos services, politiques et FAQ."
+    "outboundCalls": {
+      "name": "Campagnes sortantes",
+      "description": "Programmes de sensibilisation automatisés pour les rappels de rendez-vous, suivis et rappel de patients."
+    },
+    "outboundPatientCare": {
+      "name": "Soins aux patients",
+      "description": "Rappels de rendez-vous, appels de suivi et campagnes de rappel de patients."
+    },
+    "outboundFinancial": {
+      "name": "Financier",
+      "description": "Rappels de facturation, notifications de soldes impayés et suivis de paiement."
+    },
+    "outboundAutoApprove": {
+      "name": "Approbation automatique des campagnes",
+      "description": "Approuver et lancer automatiquement les nouvelles campagnes sans examen manuel."
     },
     "smsConfirmations": {
-      "name": "Confirmations par SMS",
+      "name": "Notifications SMS",
       "description": "Envoyez des confirmations et rappels de rendez-vous par SMS aux patients."
     },
     "emailConfirmations": {
-      "name": "Confirmations par courriel",
+      "name": "Notifications par courriel",
       "description": "Envoyez des courriels de confirmation personnalisés pour les rendez-vous, annulations et reprogrammations."
-    },
-    "outboundCalls": {
-      "name": "Appels sortants",
-      "description": "Contactez proactivement les patients pour les rappels de rendez-vous, suivis et campagnes de rappel."
     },
     "googleCalendar": {
       "name": "Google Agenda",
@@ -1070,6 +1089,8 @@
       "name": "Gestion des prospects",
       "description": "Capturez et gérez les nouveaux prospects de patients à partir des appels, suivez les taux de conversion et automatisez les suivis."
     },
+    "capabilitiesTitle": "Capacités incluses",
+    "capabilitiesNote": "Tous les forfaits incluent la journalisation et l'analytique des appels, la base de connaissances avec extraction de sites web, la sélection de voix IA personnalisable, le support multilingue (40+ langues) et les transcriptions détaillées des appels.",
     "saved": "Paramètres de fonctionnalités enregistrés",
     "saveFailed": "Échec de l'enregistrement des paramètres"
   },
