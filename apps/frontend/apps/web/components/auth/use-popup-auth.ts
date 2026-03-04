@@ -44,26 +44,49 @@ export function usePopupAuth() {
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callbackUrlRef = useRef<string>('/home');
+  const completedRef = useRef(false);
   const router = useRouter();
 
-  const cleanup = useCallback(() => {
+  const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-    popupRef.current = null;
-    setIsAuthenticating(false);
   }, []);
 
-  useEffect(() => {
-    function onAuthComplete() {
-      cleanup();
-      router.push(callbackUrlRef.current);
-    }
+  const onAuthComplete = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
 
-    // BroadcastChannel: works even when window.opener is severed
-    // by cross-origin OAuth redirects (App → Cognito → Google → App).
+    stopPolling();
+
+    // Force-close the popup if still open
+    try {
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+    } catch {
+      // cross-origin close blocked
+    }
+    popupRef.current = null;
+    setIsAuthenticating(false);
+    router.push(callbackUrlRef.current);
+  }, [stopPolling, router]);
+
+  const onPopupClosed = useCallback(() => {
+    stopPolling();
+    popupRef.current = null;
+    setIsAuthenticating(false);
+    completedRef.current = false;
+  }, [stopPolling]);
+
+  // Listen for the auth-complete signal from the popup.
+  // BroadcastChannel is the primary mechanism (survives severed
+  // window.opener from cross-origin OAuth redirects).
+  // window.postMessage is a secondary fallback.
+  useEffect(() => {
     let channel: BroadcastChannel | null = null;
+
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
       channel.onmessage = (event) => {
@@ -73,7 +96,6 @@ export function usePopupAuth() {
       // BroadcastChannel unsupported
     }
 
-    // Fallback: window.postMessage (works when opener is preserved)
     function handleWindowMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== MESSAGE_TYPE) return;
@@ -84,14 +106,16 @@ export function usePopupAuth() {
     return () => {
       channel?.close();
       window.removeEventListener('message', handleWindowMessage);
-      cleanup();
+      // Do NOT reset isAuthenticating here -- useEffect teardown should
+      // only clean up listeners, not end the auth flow.
     };
-  }, [cleanup, router]);
+  }, [onAuthComplete]);
 
   const startPopupAuth = useCallback(
     (options: PopupAuthOptions) => {
       const { identityProvider, screenHint, callbackUrl } = options;
       callbackUrlRef.current = callbackUrl || '/home';
+      completedRef.current = false;
 
       if (isMobile()) {
         const authParams: Record<string, string> = {};
@@ -120,12 +144,12 @@ export function usePopupAuth() {
       setIsAuthenticating(true);
 
       pollRef.current = setInterval(() => {
-        if (popupRef.current?.closed) {
-          cleanup();
+        if (!popupRef.current || popupRef.current.closed) {
+          onPopupClosed();
         }
       }, POLL_INTERVAL_MS);
     },
-    [cleanup],
+    [onPopupClosed],
   );
 
   return { startPopupAuth, isAuthenticating };

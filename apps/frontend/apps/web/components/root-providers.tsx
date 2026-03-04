@@ -14,6 +14,7 @@ import { If } from '@kit/ui/if';
 import { VersionUpdater } from '@kit/ui/version-updater';
 
 import { AuthProvider } from '~/components/auth-provider';
+import { PopupAuthCloser } from '~/components/auth/popup-auth-closer';
 import appConfig from '~/config/app.config';
 import featuresFlagConfig from '~/config/feature-flags.config';
 import { i18nResolver } from '~/lib/i18n/i18n.resolver';
@@ -50,6 +51,7 @@ export function RootProviders({
       <MonitoringProvider>
         <AppEventsProvider>
           <ReactQueryProvider>
+            <PopupAuthCloser />
             <AuthProvider session={session}>
               <ThemeProvider
                 attribute="class"
