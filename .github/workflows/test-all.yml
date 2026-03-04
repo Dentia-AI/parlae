@@ -44,6 +44,9 @@ jobs:
         run: pnpm --filter @apps/backend typecheck
         continue-on-error: true
 
+      - name: Build backend
+        run: pnpm --filter @apps/backend build
+
       - name: Run backend tests with coverage
         run: pnpm --filter @apps/backend test:cov
         env:
