@@ -234,9 +234,9 @@ Always be polite, clear, and solution-oriented.`);
   };
 
   return (
-    <div className="container max-w-6xl py-8">
+    <div className="container max-w-6xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Customize Your AI Agent</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Customize Your AI Agent</h1>
         <p className="text-muted-foreground mt-2">
           {agentType === 'marketplace'
             ? `Customize "${marketplaceAgent?.name || 'your agent'}" to fit your business needs`

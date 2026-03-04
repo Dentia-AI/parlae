@@ -150,7 +150,7 @@ function PhoneSetupContent() {
   };
 
   return (
-    <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
+    <div className="container max-w-4xl mx-auto py-4 h-[calc(100vh-4rem)] flex flex-col">
       {/* Header - Compact */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">

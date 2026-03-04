@@ -66,7 +66,7 @@ export default function ReviewDeployPage() {
 
   if (!subAccountId) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div className="container max-w-4xl mx-auto py-8">
         <Card>
           <CardContent className="pt-6">
             <p className="text-red-500">Error: Sub-account ID is required</p>
@@ -157,9 +157,9 @@ export default function ReviewDeployPage() {
   };
 
   return (
-    <div className="container max-w-4xl py-8">
+    <div className="container max-w-4xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Review & Deploy</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Review & Deploy</h1>
         <p className="text-muted-foreground mt-2">
           Review your configuration and deploy your AI voice agent
         </p>

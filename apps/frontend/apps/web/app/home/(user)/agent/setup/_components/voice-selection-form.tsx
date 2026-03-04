@@ -136,7 +136,7 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, voic
 
       {/* Voice Cards */}
       <RadioGroup
-        value={selectedVoice?.id}
+        value={selectedVoice?.id || ''}
         onValueChange={(value) => {
           const voice = availableVoices.find((v) => v.id === value);
           handleVoiceSelect(voice || null);

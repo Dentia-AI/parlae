@@ -97,9 +97,9 @@ export default async function PhoneIntegrationSettingsPage() {
   const isActive = !!(settings.vapiSquadId || settings.retellReceptionistAgentId || settings.deployType === 'conversation_flow');
 
   return (
-    <div className="container max-w-4xl py-8 space-y-6">
+    <div className="container max-w-4xl mx-auto py-8 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="text-2xl font-bold tracking-tight">
           <Trans i18nKey={'phoneSettingsPage.title'} defaults="Phone Integration" />
         </h1>
         <p className="text-muted-foreground mt-2">

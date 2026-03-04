@@ -21,7 +21,7 @@ export default function AgentTypePage() {
 
   if (!subAccountId) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div className="container max-w-4xl mx-auto py-8">
         <Card>
           <CardContent className="pt-6">
             <p className="text-red-500">Error: Sub-account ID is required</p>
@@ -45,9 +45,9 @@ export default function AgentTypePage() {
   };
 
   return (
-    <div className="container max-w-5xl py-8">
+    <div className="container max-w-5xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Choose Agent Type</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Choose Agent Type</h1>
         <p className="text-muted-foreground mt-2">
           Select how you'd like to create your AI voice agent
         </p>

@@ -12,11 +12,11 @@ export default function ActionItemsPage() {
     <PageBody className="pt-4 pb-0 min-h-0 overflow-hidden">
       <div className="flex flex-col h-full min-h-0 overflow-hidden">
         <div className="flex-shrink-0 pb-4">
-          <h1 className="text-2xl font-bold">
-            <Trans i18nKey="common:actionItems.pageTitle" />
+          <h1 className="text-2xl font-bold tracking-tight">
+            <Trans i18nKey="common:actionItems.pageTitle" defaults="Action Items" />
           </h1>
           <p className="text-muted-foreground">
-            <Trans i18nKey="common:actionItems.pageDescription" />
+            <Trans i18nKey="common:actionItems.pageDescription" defaults="Calls that need human follow-up, review, or intervention." />
           </p>
         </div>
         <ActionItemsList />

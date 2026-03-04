@@ -13,7 +13,7 @@ import { Trans } from '@kit/ui/trans';
 import { useTranslation } from 'react-i18next';
 import { useSetupProgress } from '../_lib/use-setup-progress';
 import { updateVoiceAction } from '../_lib/actions';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 
 interface VoiceSelectionPageClientProps {
   accountId: string;
@@ -154,32 +154,104 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
 
   const saving = isSaving || isPending;
 
+  if (manage) {
+    return (
+      <div className="container max-w-4xl mx-auto py-8 space-y-6">
+        {/* Header with inline Save */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              <Trans i18nKey="common:setup.voice.manageTitle" defaults="Change Voice" />
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              <Trans i18nKey="common:setup.voice.manageSubtitle" defaults="Update the voice for your AI receptionist. Changes apply to all agents immediately." />
+            </p>
+          </div>
+          <Button
+            onClick={handleSaveVoice}
+            disabled={!selectedVoice || !clinicName.trim() || saving}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {saving
+              ? <Trans i18nKey="common:setup.voice.saving" defaults="Saving..." />
+              : <Trans i18nKey="common:setup.voice.saveVoice" defaults="Save Voice" />}
+          </Button>
+        </div>
+
+        {/* Clinic Name */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
+              <Trans i18nKey="common:setup.clinicName.title" defaults="Your Clinic" />
+            </CardTitle>
+            <CardDescription className="text-sm">
+              <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI receptionist when greeting callers." />
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="clinicName">
+                <Trans i18nKey="common:setup.clinicName.label" defaults="Clinic / Business Name" />
+              </Label>
+              <Input
+                id="clinicName"
+                value={clinicName}
+                onChange={(e) => setClinicName(e.target.value)}
+                placeholder={t('common:setup.clinicName.placeholder', 'e.g. Maple Dental Clinic')}
+                className="max-w-md"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Voice Selection */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
+              <Trans i18nKey="common:setup.voice.title" />
+            </CardTitle>
+            <CardDescription className="text-sm">
+              <Trans i18nKey="common:setup.voice.description" />
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoiceSelectionForm
+              accountId={accountId}
+              businessName={businessName}
+              initialVoice={selectedVoice}
+              voiceProvider={voiceProvider}
+              onVoiceSelect={setSelectedVoice}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
       {/* Header */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">
-          {manage
-            ? <Trans i18nKey="common:setup.voice.manageTitle" defaults="Change Voice" />
-            : <Trans i18nKey="common:setup.title" />}
+          <Trans i18nKey="common:setup.title" />
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {manage
-            ? <Trans i18nKey="common:setup.voice.manageSubtitle" defaults="Update the voice for your AI receptionist. Changes apply to all agents immediately." />
-            : <Trans i18nKey="common:setup.subtitle" />}
+          <Trans i18nKey="common:setup.subtitle" />
         </p>
       </div>
 
-      {/* Progress Steps - Wizard mode only */}
-      {!manage && (
-        <div className="mb-6 flex-shrink-0">
-          <Stepper
-            steps={steps}
-            currentStep={0}
-            onStepClick={handleStepClick}
-          />
-        </div>
-      )}
+      {/* Progress Steps */}
+      <div className="mb-6 flex-shrink-0">
+        <Stepper
+          steps={steps}
+          currentStep={0}
+          onStepClick={handleStepClick}
+        />
+      </div>
 
       {/* Scrollable Content Area with Fade */}
       <div className="flex-1 relative min-h-0">
@@ -237,40 +309,14 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
 
       {/* Navigation - Fixed at bottom */}
       <div className="pt-4 border-t border-border/40 flex-shrink-0 bg-background">
-        {manage ? (
-          <div className="flex justify-between">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/home/agent')}
-              disabled={saving}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              <Trans i18nKey="common:setup.voice.backToOverview" defaults="Back to Overview" />
-            </Button>
-            <Button
-              onClick={handleSaveVoice}
-              disabled={!selectedVoice || !clinicName.trim() || saving}
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              {saving
-                ? <Trans i18nKey="common:setup.voice.saving" defaults="Saving..." />
-                : <Trans i18nKey="common:setup.voice.saveVoice" defaults="Save Voice" />}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <Button
-              onClick={handleContinue}
-              disabled={!selectedVoice || !clinicName.trim() || saving}
-            >
-              {saving ? 'Saving...' : <Trans i18nKey="common:setup.voice.continueToKnowledge" />}
-            </Button>
-          </div>
-        )}
+        <div className="flex justify-end">
+          <Button
+            onClick={handleContinue}
+            disabled={!selectedVoice || !clinicName.trim() || saving}
+          >
+            {saving ? 'Saving...' : <Trans i18nKey="common:setup.voice.continueToKnowledge" />}
+          </Button>
+        </div>
       </div>
     </div>
   );

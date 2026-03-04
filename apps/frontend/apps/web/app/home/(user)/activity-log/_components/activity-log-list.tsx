@@ -12,9 +12,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@kit/ui/card';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
@@ -247,24 +244,21 @@ export function ActivityLogList() {
             headerCollapsed ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'
           }`}
         >
-          <CardHeader className="pb-4">
+          <div className="px-6 pt-4 pb-4 space-y-3">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{t('activityLog.pageTitle')}</CardTitle>
-                <CardDescription>
-                  {loading
-                    ? t('activityLog.loadingLog')
-                    : pagination
-                      ? t('activityLog.showingEntries', { shown: logs.length, total: pagination.total })
-                      : t('activityLog.defaultDescription')}
-                </CardDescription>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                {loading
+                  ? t('activityLog.loadingLog')
+                  : pagination
+                    ? t('activityLog.showingEntries', { shown: logs.length, total: pagination.total })
+                    : t('activityLog.defaultDescription')}
+              </p>
               <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 {t('activityLog.refresh')}
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-3 mt-4">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 max-w-xs">
                 <Input
                   placeholder={t('activityLog.searchPlaceholder')}
@@ -309,7 +303,7 @@ export function ActivityLogList() {
                 </SelectContent>
               </Select>
             </div>
-          </CardHeader>
+          </div>
         </div>
 
         {/* Table content */}

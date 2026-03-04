@@ -336,7 +336,7 @@ export default function FeaturesPage() {
   const categories = ['inbound', 'outbound', 'communication', 'integration'];
 
   return (
-    <div className="container max-w-3xl py-6 space-y-6 mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="container max-w-4xl py-8 space-y-6 mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Master Control */}
       <Card className={masterEnabled ? 'bg-green-50/50 dark:bg-green-950/30 border-green-200 dark:border-green-900' : 'bg-red-50/50 dark:bg-red-950/30 border-red-200 dark:border-red-900'}>
         <CardContent className="flex items-center gap-4 p-5">
@@ -349,7 +349,7 @@ export default function FeaturesPage() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">{t('common:features.title')}</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t('common:features.title')}</h1>
               <Badge
                 variant="outline"
                 className={masterEnabled

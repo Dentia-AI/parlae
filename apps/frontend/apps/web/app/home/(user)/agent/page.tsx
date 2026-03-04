@@ -153,7 +153,7 @@ export default async function ReceptionistDashboardPage({
   const displayPhone = formatPhoneDisplay(phoneNumber);
 
   return (
-    <div className="container max-w-6xl py-8 space-y-6">
+    <div className="container max-w-5xl mx-auto py-8 space-y-6">
       {/* Deployment success banner + forwarding instructions */}
       {params.deployed === 'true' && (
         <DeployedBanner
@@ -165,7 +165,7 @@ export default async function ReceptionistDashboardPage({
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight"><Trans i18nKey="common:agentOverview.title" /></h1>
+        <h1 className="text-2xl font-bold tracking-tight"><Trans i18nKey="common:agentOverview.title" /></h1>
         <p className="text-muted-foreground mt-2">
           <Trans i18nKey="common:agentOverview.description" />
         </p>

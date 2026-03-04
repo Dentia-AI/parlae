@@ -23,7 +23,7 @@ export default function PhoneNumberSelectionPage() {
 
   if (!subAccountId) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div className="container max-w-4xl mx-auto py-8">
         <Card>
           <CardContent className="pt-6">
             <p className="text-red-500">Error: Sub-account ID is required</p>
@@ -53,9 +53,9 @@ export default function PhoneNumberSelectionPage() {
   };
 
   return (
-    <div className="container max-w-4xl py-8">
+    <div className="container max-w-4xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Select Phone Number</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Select Phone Number</h1>
         <p className="text-muted-foreground mt-2">
           Choose a phone number for your AI agent
         </p>
@@ -115,7 +115,7 @@ export default function PhoneNumberSelectionPage() {
               </p>
 
               <RadioGroup
-                value={selectedPhone?.phoneNumber}
+                value={selectedPhone?.phoneNumber || ''}
                 onValueChange={(value) => {
                   const phone = phoneNumbers.find((p) => p.phoneNumber === value);
                   setSelectedPhone(phone || null);

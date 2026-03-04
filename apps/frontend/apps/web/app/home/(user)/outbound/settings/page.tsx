@@ -47,7 +47,7 @@ export default async function OutboundSettingsPage() {
   const channelDefaults = (settings?.channelDefaults as Record<string, string>) || {};
 
   return (
-    <div className="container max-w-2xl py-8 space-y-6 mx-auto">
+    <div className="container max-w-4xl py-8 space-y-6 mx-auto">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">
             <Trans i18nKey="common:outbound.settings.title" defaults="Outbound Calling Settings" />

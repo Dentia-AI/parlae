@@ -105,14 +105,14 @@ export default function IntegrationsManagementPage() {
 
   if (loading) {
     return (
-      <div className="container max-w-4xl py-8 flex items-center justify-center min-h-[400px]">
+      <div className="container max-w-4xl mx-auto py-8 flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="container max-w-4xl py-8 space-y-6">
+    <div className="container max-w-4xl mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('integrationsPage.title')}</h1>

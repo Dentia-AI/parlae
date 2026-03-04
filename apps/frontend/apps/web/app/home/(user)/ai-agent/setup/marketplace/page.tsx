@@ -90,7 +90,7 @@ export default function MarketplacePage() {
 
   if (!subAccountId) {
     return (
-      <div className="container max-w-6xl py-8">
+      <div className="container max-w-6xl mx-auto py-8">
         <Card>
           <CardContent className="pt-6">
             <p className="text-red-500">Error: Sub-account ID is required</p>
@@ -129,9 +129,9 @@ export default function MarketplacePage() {
   const categories = categoriesData?.categories || [];
 
   return (
-    <div className="container max-w-7xl py-8">
+    <div className="container max-w-7xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Browse Marketplace Agents</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Browse Marketplace Agents</h1>
         <p className="text-muted-foreground mt-2">
           Install a pre-built agent and customize it for your business
         </p>
