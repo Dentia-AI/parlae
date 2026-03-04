@@ -46,13 +46,17 @@ export function PmsIntegrationCard({
       );
       if (response.ok) {
         const data = await response.json();
-        setIsConnected(data.isConnected);
-        setStatus(data.status);
-        if (data.provider) {
-          setPmsName(data.provider);
-        }
-        if (data.practiceName) {
-          setPracticeName(data.practiceName);
+        if (data.isConnected) {
+          setIsConnected(true);
+          setStatus(data.status);
+          if (data.provider) {
+            setPmsName(data.provider);
+          }
+          if (data.practiceName) {
+            setPracticeName(data.practiceName);
+          }
+        } else if (!isConnected) {
+          setStatus(data.status);
         }
       }
     } catch (error) {

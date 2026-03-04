@@ -30,7 +30,7 @@ export async function GET() {
 
     const integration = await prisma.pmsIntegration.findFirst({
       where: { accountId: { in: allAccountIds }, status: 'ACTIVE' },
-      select: { provider: true, config: true },
+      select: { provider: true, config: true, metadata: true },
     });
 
     if (!integration) {
@@ -38,16 +38,20 @@ export async function GET() {
     }
 
     const config = integration.config as Record<string, any> | null;
+    const meta = (integration as any).metadata as Record<string, any> | null;
+
+    const actualPmsType = meta?.actualPmsType || config?.actualPmsType;
+    const practiceName = meta?.practiceName || config?.practiceName;
 
     const displayProvider =
-      (config?.actualPmsType && config.actualPmsType !== 'Unknown')
-        ? config.actualPmsType
-        : config?.practiceName || integration.provider;
+      (actualPmsType && actualPmsType !== 'Unknown')
+        ? actualPmsType
+        : practiceName || integration.provider;
 
     return NextResponse.json({
       connected: true,
       providerName: displayProvider,
-      practiceName: config?.practiceName || undefined,
+      practiceName: practiceName || undefined,
     });
   } catch {
     return NextResponse.json({ connected: false });

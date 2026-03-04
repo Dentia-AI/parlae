@@ -111,6 +111,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (!account) {
+      if (process.env.NODE_ENV === 'development') {
+        const searchParams = request.nextUrl.searchParams;
+        const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+        const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
+        return NextResponse.json(generateMockOutboundCallLogs(page, limit));
+      }
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
@@ -130,6 +136,9 @@ export async function GET(request: NextRequest) {
     if (settings?.financialRetellAgentId) agentIds.push(settings.financialRetellAgentId);
 
     if (agentIds.length === 0) {
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json(generateMockOutboundCallLogs(page, limit));
+      }
       return NextResponse.json({
         calls: [],
         pagination: { page, limit, total: 0, totalPages: 0, hasMore: false },
@@ -196,6 +205,10 @@ export async function GET(request: NextRequest) {
 
     let mappedCalls = allCalls.map((call) => mapRetellCallToListItem(call, campaignContactMap));
 
+    if (mappedCalls.length === 0 && process.env.NODE_ENV === 'development') {
+      return NextResponse.json(generateMockOutboundCallLogs(page, limit));
+    }
+
     // Apply filters
     if (outcome) {
       mappedCalls = mappedCalls.filter((c) => c.outcome === outcome);
@@ -242,6 +255,104 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error('Error fetching outbound call logs:', error);
+    if (process.env.NODE_ENV === 'development') {
+      const searchParams = request.nextUrl.searchParams;
+      const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+      const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
+      return NextResponse.json(generateMockOutboundCallLogs(page, limit));
+    }
     return NextResponse.json({ error: 'Failed to fetch outbound call logs' }, { status: 500 });
   }
+}
+
+function generateMockOutboundCallLogs(page: number, limit: number) {
+  const names = [
+    'Patricia Williams', 'Robert Garcia', 'Linda Martinez', 'William Brown',
+    'Elizabeth Jones', 'David Miller', 'Barbara Davis', 'Richard Wilson',
+    'Susan Anderson', 'Thomas Taylor',
+  ];
+  const callTypes = ['RECALL', 'REMINDER', 'FOLLOW_UP', 'RECALL', 'REMINDER', 'RECALL', 'FOLLOW_UP', 'REMINDER'];
+  const campaigns = [
+    '6-Month Recall Campaign', 'Appointment Reminders', 'Post-Treatment Follow-up',
+    'Annual Checkup Recall', 'Hygiene Recall', 'Treatment Follow-up',
+  ];
+  const outcomes = ['BOOKED', 'VOICEMAIL', 'BOOKED', 'NO_ANSWER', 'RESCHEDULED', 'VOICEMAIL', 'BOOKED', 'INFORMATION'];
+  const sentiments = ['positive', 'neutral', 'positive', 'neutral', null, null, 'positive', 'negative'];
+  const disconnectionReasons = [
+    'agent_hangup', 'customer_hangup', 'voicemail_reached', 'agent_hangup',
+    'no_answer', 'voicemail_reached', 'customer_hangup', 'agent_hangup',
+  ];
+  const summaries = [
+    'Called patient for 6-month recall. Successfully booked cleaning for next Thursday at 3 PM with Dr. Patel.',
+    'Reached voicemail for appointment reminder. Left message about upcoming visit on Monday.',
+    'Follow-up call after root canal treatment. Patient reports no pain, recovery going well. Scheduled 2-week checkup.',
+    'Called for annual recall. No answer after 4 rings.',
+    'Patient requested to reschedule their cleaning from Wednesday to Friday. Updated appointment in system.',
+    'Left voicemail reminding patient of outstanding treatment plan for crown.',
+    'Called to confirm tomorrow\'s appointment. Patient confirmed attendance.',
+    'Patient had questions about post-treatment care. Provided guidance and offered to connect with hygienist.',
+  ];
+
+  const total = 30;
+  const offset = (page - 1) * limit;
+  const calls = [];
+
+  for (let i = offset; i < Math.min(offset + limit, total); i++) {
+    const callStartedAt = new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000);
+    const duration = Math.floor(30 + Math.random() * 240);
+    const callEndedAt = new Date(callStartedAt.getTime() + duration * 1000);
+    const outcome = outcomes[i % outcomes.length]!;
+    const callType = callTypes[i % callTypes.length]!;
+
+    calls.push({
+      id: `mock-outbound-call-${i}`,
+      callId: `mock-outbound-call-${i}`,
+      phoneNumber: `+1555${String(Math.floor(Math.random() * 10000000)).padStart(7, '0')}`,
+      callType,
+      duration: outcome === 'NO_ANSWER' ? 0 : duration,
+      status: 'COMPLETED',
+      outcome,
+      callReason: callType === 'RECALL' ? 'recall' : callType === 'REMINDER' ? 'reminder' : 'follow_up',
+      urgencyLevel: 'routine',
+      contactName: names[i % names.length],
+      contactEmail: null,
+      summary: summaries[i % summaries.length],
+      appointmentSet: outcome === 'BOOKED',
+      insuranceVerified: false,
+      paymentPlanDiscussed: false,
+      transferredToStaff: false,
+      transferredTo: null,
+      followUpRequired: outcome === 'VOICEMAIL' || outcome === 'NO_ANSWER',
+      customerSentiment: sentiments[i % sentiments.length],
+      costCents: null,
+      callStartedAt: callStartedAt.toISOString(),
+      callEndedAt: callEndedAt.toISOString(),
+      campaignName: campaigns[i % campaigns.length],
+      disconnectionReason: disconnectionReasons[i % disconnectionReasons.length],
+    });
+  }
+
+  calls.sort((a, b) => new Date(b.callStartedAt).getTime() - new Date(a.callStartedAt).getTime());
+
+  const outcomeCounts = new Map<string, number>();
+  const callTypeCounts = new Map<string, number>();
+  for (const c of calls) {
+    outcomeCounts.set(c.outcome, (outcomeCounts.get(c.outcome) || 0) + 1);
+    callTypeCounts.set(c.callType, (callTypeCounts.get(c.callType) || 0) + 1);
+  }
+
+  return {
+    calls,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total,
+    },
+    filters: {
+      outcomes: Array.from(outcomeCounts.entries()).map(([value, count]) => ({ value, count })),
+      callTypes: Array.from(callTypeCounts.entries()).map(([value, count]) => ({ value, count })),
+    },
+  };
 }
