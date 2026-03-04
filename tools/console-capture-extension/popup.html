@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=380" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 360px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f13;
+    color: #e4e4e7;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h1 .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3f3f46;
+    flex-shrink: 0;
+  }
+  h1 .dot.recording {
+    background: #ef4444;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .3; }
+  }
+
+  .tab-info {
+    background: #18181b;
+    border: 1px solid #27272a;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #a1a1aa;
+    word-break: break-all;
+    max-height: 48px;
+    overflow: hidden;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .controls button {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s, background .15s;
+  }
+  .controls button:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+  #btn-start {
+    background: #22c55e;
+    color: #052e16;
+  }
+  #btn-start:hover:not(:disabled) { background: #16a34a; }
+  #btn-stop {
+    background: #ef4444;
+    color: #fff;
+  }
+  #btn-stop:hover:not(:disabled) { background: #dc2626; }
+
+  .stats {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .stats .count {
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stats .label {
+    color: #71717a;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .stats .timer {
+    font-size: 12px;
+    color: #71717a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .actions button {
+    flex: 1;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s, background .15s;
+  }
+  .actions button:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+  #btn-download {
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+  }
+  #btn-download:hover:not(:disabled) { background: #2563eb; }
+  #btn-clear {
+    background: transparent;
+    color: #a1a1aa;
+    border: 1px solid #27272a;
+  }
+  #btn-clear:hover:not(:disabled) { background: #27272a; }
+
+  .hint {
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: #1c1917;
+    border: 1px solid #292524;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #78716c;
+    line-height: 1.6;
+  }
+  .hint strong { color: #a8a29e; }
+</style>
+</head>
+<body>
+
+<h1>
+  <span class="dot" id="status-dot"></span>
+  Console Log Capture
+</h1>
+
+<div class="tab-info" id="tab-info">Detecting tab…</div>
+
+<div class="controls">
+  <button id="btn-start">Start Recording</button>
+  <button id="btn-stop" disabled>Stop Recording</button>
+</div>
+
+<div class="stats">
+  <div>
+    <div class="count" id="log-count">0</div>
+    <div class="label">entries captured</div>
+  </div>
+  <div class="timer" id="timer"></div>
+</div>
+
+<div class="actions">
+  <button id="btn-download" disabled>Download .txt</button>
+  <button id="btn-clear">Clear</button>
+</div>
+
+<div class="hint">
+  <strong>How to use:</strong> Click <strong>Start Recording</strong>, then
+  navigate to the page you want to debug. Logs are captured even without
+  DevTools open and survive page navigations &amp; redirects. Click
+  <strong>Stop Recording</strong> when done, then download the log file.
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

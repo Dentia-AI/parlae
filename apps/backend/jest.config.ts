@@ -5,9 +5,25 @@ const config: Config = {
   rootDir: 'src',
   testRegex: '.*\.spec\.ts$',
   transform: {
-    '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: { allowJs: true } }],
+    '^.+\\.(t|j)s$': ['@swc/jest', {
+      jsc: {
+        parser: { syntax: 'typescript', decorators: true },
+        transform: { legacyDecorator: true, decoratorMetadata: true },
+        target: 'es2021',
+      },
+    }],
   },
-  collectCoverageFrom: ['**/*.(t|j)s'],
+  maxWorkers: '50%',
+  collectCoverageFrom: [
+    '**/*.(t|j)s',
+    '!**/*.spec.ts',
+    '!**/*.mock.ts',
+    '!**/test/**',
+    '!**/main.ts',
+    '!**/*.module.ts',
+    '!**/*.dto.ts',
+    '!**/index.ts',
+  ],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
 };

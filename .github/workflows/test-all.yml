@@ -44,19 +44,7 @@ jobs:
         run: pnpm --filter @apps/backend typecheck
         continue-on-error: true
 
-      - name: Build backend
-        run: pnpm --filter @apps/backend build
-
-      - name: Run backend tests
-        run: pnpm --filter @apps/backend test
-        env:
-          NODE_ENV: test
-          COGNITO_USER_POOL_ID: test-pool
-          COGNITO_CLIENT_ID: test-client
-          AWS_REGION: us-east-1
-          COGNITO_ISSUER: https://cognito-idp.us-east-1.amazonaws.com/test-pool
-
-      - name: Generate backend coverage
+      - name: Run backend tests with coverage
         run: pnpm --filter @apps/backend test:cov
         env:
           NODE_ENV: test
