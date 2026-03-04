@@ -41,15 +41,34 @@ export class OutboundSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSettings(accountId: string): Promise<OutboundSettings | null> {
-    return this.prisma.outboundSettings.findUnique({
-      where: { accountId },
-    });
+    try {
+      return await this.prisma.outboundSettings.findUnique({
+        where: { accountId },
+      });
+    } catch (err: any) {
+      if (err?.message?.includes('auto_approve_campaigns')) {
+        const row = await this.prisma.outboundSettings.findUnique({
+          where: { accountId },
+          select: {
+            id: true, accountId: true, patientCareEnabled: true, financialEnabled: true,
+            patientCareRetellAgentId: true, financialRetellAgentId: true,
+            callingWindowStart: true, callingWindowEnd: true, timezone: true,
+            maxConcurrentCalls: true, fromPhoneNumberId: true, channelDefaults: true,
+            followUpConfig: true, reactivationConfig: true, reminderConfig: true,
+            leaveVoicemail: true, maxRetries: true, retryDelayMinutes: true,
+            outboundTemplateVersion: true, outboundUpgradeHistory: true,
+            createdAt: true, updatedAt: true,
+          },
+        });
+        if (!row) return null;
+        return { ...row, autoApproveCampaigns: false } as OutboundSettings;
+      }
+      throw err;
+    }
   }
 
   async getOrCreateSettings(accountId: string): Promise<OutboundSettings> {
-    const existing = await this.prisma.outboundSettings.findUnique({
-      where: { accountId },
-    });
+    const existing = await this.getSettings(accountId);
     if (existing) return existing;
 
     const account = await this.prisma.account.findUnique({
@@ -57,12 +76,25 @@ export class OutboundSettingsService {
       select: { brandingTimezone: true },
     });
 
-    return this.prisma.outboundSettings.create({
-      data: {
-        accountId,
-        timezone: account?.brandingTimezone || 'America/New_York',
-      },
-    });
+    try {
+      return await this.prisma.outboundSettings.create({
+        data: {
+          accountId,
+          timezone: account?.brandingTimezone || 'America/New_York',
+        },
+      });
+    } catch (err: any) {
+      if (err?.message?.includes('auto_approve_campaigns')) {
+        await this.prisma.$executeRawUnsafe(
+          `INSERT INTO outbound_settings (account_id, timezone) VALUES ($1, $2) ON CONFLICT (account_id) DO NOTHING`,
+          accountId,
+          account?.brandingTimezone || 'America/New_York',
+        );
+        const created = await this.getSettings(accountId);
+        return created!;
+      }
+      throw err;
+    }
   }
 
   async updateSettings(

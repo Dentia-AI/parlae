@@ -31,11 +31,11 @@ export async function GET() {
 
     const featureSettings = (account.featureSettings as Record<string, boolean>) ?? {};
 
-    let outboundSettings: { patientCareEnabled: boolean; financialEnabled: boolean; autoApproveCampaigns: boolean } | null = null;
+    let outboundSettings: { patientCareEnabled: boolean; financialEnabled: boolean } | null = null;
     try {
       outboundSettings = await prisma.outboundSettings.findUnique({
         where: { accountId: account.id },
-        select: { patientCareEnabled: true, financialEnabled: true, autoApproveCampaigns: true },
+        select: { patientCareEnabled: true, financialEnabled: true },
       });
     } catch {
       // Table may not exist yet
@@ -44,9 +44,20 @@ export async function GET() {
     if (outboundSettings) {
       featureSettings['outbound-patient-care'] = outboundSettings.patientCareEnabled;
       featureSettings['outbound-financial'] = outboundSettings.financialEnabled;
-      featureSettings['outbound-auto-approve'] = outboundSettings.autoApproveCampaigns;
       featureSettings['outbound-calls'] =
         outboundSettings.patientCareEnabled || outboundSettings.financialEnabled;
+
+      try {
+        const autoApprove = await prisma.outboundSettings.findUnique({
+          where: { accountId: account.id },
+          select: { autoApproveCampaigns: true },
+        });
+        if (autoApprove) {
+          featureSettings['outbound-auto-approve'] = autoApprove.autoApproveCampaigns;
+        }
+      } catch {
+        // Column may not exist yet
+      }
     }
 
     return NextResponse.json({ featureSettings });

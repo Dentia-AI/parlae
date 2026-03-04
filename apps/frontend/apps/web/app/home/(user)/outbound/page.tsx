@@ -37,6 +37,12 @@ export default async function OutboundOverviewPage() {
   try {
     settings = await prisma.outboundSettings.findUnique({
       where: { accountId },
+      select: {
+        patientCareEnabled: true,
+        financialEnabled: true,
+        channelDefaults: true,
+        fromPhoneNumberId: true,
+      },
     });
 
     campaigns = await prisma.outboundCampaign.findMany({
@@ -73,7 +79,18 @@ export default async function OutboundOverviewPage() {
 
   const patientCareEnabled = settings?.patientCareEnabled || false;
   const financialEnabled = settings?.financialEnabled || false;
-  const autoApproveCampaigns = settings?.autoApproveCampaigns || false;
+  let autoApproveCampaigns = false;
+  if (settings) {
+    try {
+      const aa = await prisma.outboundSettings.findUnique({
+        where: { accountId },
+        select: { autoApproveCampaigns: true },
+      });
+      autoApproveCampaigns = aa?.autoApproveCampaigns || false;
+    } catch {
+      // Column may not exist yet
+    }
+  }
   const anyEnabled = patientCareEnabled || financialEnabled;
   const pendingCampaigns = campaigns.filter((c) => c.status === 'DRAFT').length;
   const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;

@@ -189,12 +189,22 @@ export async function POST(request: NextRequest) {
     const { action, group } = body;
 
     if (action === 'setAutoApprove') {
-      const settings = await prisma.outboundSettings.update({
-        where: { accountId },
-        data: { autoApproveCampaigns: body.value === true },
-      });
-      await syncToFeatureSettings(accountId, { autoApproveCampaigns: body.value === true });
-      return NextResponse.json(settings);
+      try {
+        const settings = await prisma.outboundSettings.update({
+          where: { accountId },
+          data: { autoApproveCampaigns: body.value === true },
+        });
+        await syncToFeatureSettings(accountId, { autoApproveCampaigns: body.value === true });
+        return NextResponse.json(settings);
+      } catch (err: any) {
+        if (err?.message?.includes('auto_approve_campaigns')) {
+          return NextResponse.json(
+            { error: 'Auto-approve feature requires a database migration. Please contact support.' },
+            { status: 501 },
+          );
+        }
+        throw err;
+      }
     }
 
     if (action === 'setChannelDefaults') {
@@ -248,6 +258,16 @@ export async function POST(request: NextRequest) {
 
     const existing = await prisma.outboundSettings.findUnique({
       where: { accountId },
+      select: {
+        patientCareEnabled: true,
+        financialEnabled: true,
+        patientCareRetellAgentId: true,
+        financialRetellAgentId: true,
+        channelDefaults: true,
+        fromPhoneNumberId: true,
+        outboundUpgradeHistory: true,
+        outboundTemplateVersion: true,
+      },
     });
     const existingChannelDefaults = (existing?.channelDefaults as Record<string, string>) || {};
 
