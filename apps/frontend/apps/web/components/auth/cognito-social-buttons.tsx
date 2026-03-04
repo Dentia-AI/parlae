@@ -1,11 +1,14 @@
 'use client';
 
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
+
+import { Loader2, Globe } from 'lucide-react';
 
 import { Badge } from '@kit/ui/badge';
 import { Separator } from '@kit/ui/separator';
+
 import { CognitoSignInButton } from './cognito-sign-in-button';
-import { Globe } from 'lucide-react';
+import { usePopupAuth } from './use-popup-auth';
 
 const providerLabels: Record<string, string> = {
   Google: 'Google',
@@ -50,6 +53,20 @@ function formatProviderLabel(provider: string) {
   return providerLabels[provider] ?? provider.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function AuthOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-border/60 bg-card p-10 shadow-2xl">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <div className="space-y-1 text-center">
+          <p className="text-base font-medium">Signing you in...</p>
+          <p className="text-sm text-muted-foreground">Complete sign-in in the popup window</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CognitoSocialSignInButtons({
   providers,
   callbackUrl,
@@ -59,6 +76,8 @@ export function CognitoSocialSignInButtons({
   callbackUrl?: string;
   mode?: 'signin' | 'signup';
 }) {
+  const { startPopupAuth, isAuthenticating } = usePopupAuth();
+
   const providerDetails = useMemo(
     () =>
       providers.map((provider) => {
@@ -77,29 +96,38 @@ export function CognitoSocialSignInButtons({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        {providerDetails.map((provider) => (
-          <CognitoSignInButton
-            key={provider.id}
-            callbackUrl={callbackUrl}
-            identityProvider={provider.id}
-            screenHint={mode === 'signup' ? 'signup' : undefined}
-            variant="outline"
-            leadingIcon={provider.icon}
-          >
-            Continue with {provider.label}
-          </CognitoSignInButton>
-        ))}
-      </div>
+    <>
+      {isAuthenticating && <AuthOverlay />}
 
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-        <Separator className="flex-1" />
-        <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
-          Or continue with email
-        </Badge>
-        <Separator className="flex-1" />
+      <div className="space-y-4">
+        <div className="space-y-2">
+          {providerDetails.map((provider) => (
+            <CognitoSignInButton
+              key={provider.id}
+              onStartAuth={() =>
+                startPopupAuth({
+                  identityProvider: provider.id,
+                  screenHint: mode === 'signup' ? 'signup' : undefined,
+                  callbackUrl,
+                })
+              }
+              isAuthenticating={isAuthenticating}
+              variant="outline"
+              leadingIcon={provider.icon}
+            >
+              Continue with {provider.label}
+            </CognitoSignInButton>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+          <Separator className="flex-1" />
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
+            Or continue with email
+          </Badge>
+          <Separator className="flex-1" />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
