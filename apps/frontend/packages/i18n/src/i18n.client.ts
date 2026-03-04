@@ -2,11 +2,45 @@ import i18next, {
   type InitOptions,
   type ReadCallback,
   type ResourceKey,
+  type Resource,
   i18n,
 } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import resourcesToBackend from 'i18next-resources-to-backend';
 import { initReactI18next } from 'react-i18next';
+
+/**
+ * Synchronously initialize i18next using pre-loaded translation resources
+ * that were serialized into the HTML by the server. This avoids the async
+ * Suspense throw during hydration, preventing a visible flicker where the
+ * server-rendered HTML is momentarily replaced by a fallback spinner.
+ *
+ * Returns the i18n instance on success, or null if init fails (caller
+ * should fall back to the async path).
+ */
+export function initializeI18nClientSync(
+  settings: InitOptions,
+  resources: Resource,
+): i18n | null {
+  if (i18next.isInitialized) {
+    return i18next;
+  }
+
+  try {
+    i18next
+      .use(initReactI18next)
+      .init({
+        ...settings,
+        resources,
+        initImmediate: false,
+        interpolation: { escapeValue: false },
+      });
+
+    return i18next;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Initialize the i18n instance on the client.

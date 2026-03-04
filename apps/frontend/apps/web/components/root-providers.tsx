@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 
 import { ThemeProvider } from 'next-themes';
 
@@ -84,16 +84,6 @@ export function RootProviders({
 }
 
 function I18nHydrationFallback() {
-  useEffect(() => {
-    console.warn(
-      '[HYDRATION] I18n Suspense fallback MOUNTED — translations still loading. ' +
-        'If this stays visible, i18n init may be stuck.',
-    );
-    return () => {
-      console.log('[HYDRATION] I18n Suspense fallback unmounted — translations ready');
-    };
-  }, []);
-
   return (
     <div
       className="bg-background fixed inset-0 z-50 flex items-center justify-center"

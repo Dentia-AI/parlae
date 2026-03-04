@@ -24,12 +24,6 @@ type AuthProviderProps = React.PropsWithChildren<{ session?: Session | null }>;
  * client-side avoids this entirely.
  */
 export function AuthProvider({ session, children }: AuthProviderProps) {
-  if (typeof window !== 'undefined') {
-    console.log(
-      `[HYDRATION] AuthProvider render — serverSession=${session ? 'present' : 'null'}`,
-    );
-  }
-
   return (
     <AuthErrorBoundary>
       <SafeSessionProvider serverSession={session}>
@@ -54,15 +48,7 @@ function SafeSessionProvider({
   serverSession?: Session | null;
   children: ReactNode;
 }) {
-  const [initialSession] = useState(() => {
-    const resolved = serverSession ?? undefined;
-    if (typeof window !== 'undefined') {
-      console.log(
-        `[HYDRATION] SafeSessionProvider init — passing ${resolved ? 'session' : 'undefined'} to SessionProvider`,
-      );
-    }
-    return resolved;
-  });
+  const [initialSession] = useState(() => serverSession ?? undefined);
 
   return (
     <SessionProvider

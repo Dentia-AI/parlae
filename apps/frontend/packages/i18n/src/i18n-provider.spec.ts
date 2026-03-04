@@ -21,6 +21,7 @@ jest.mock('./i18n.client', () => ({
       });
     },
   ),
+  initializeI18nClientSync: jest.fn(() => null),
 }));
 
 function loadModule() {

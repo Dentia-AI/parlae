@@ -13,8 +13,6 @@ import { ClarityAnalytics } from '@kit/shared/analytics';
 
 import '../styles/globals.css';
 
-import Script from 'next/script';
-
 // Trigger CI/CD build - 2026-02-14
 export const generateMetadata = () => {
   return generateRootMetadata();
@@ -25,7 +23,8 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { language } = await createI18nServerInstance();
+  const i18nInstance = await createI18nServerInstance();
+  const language = i18nInstance.language;
   const theme = await getRootTheme();
   const className = getFontsClassName(theme);
   const nonce = await getCspNonce();
@@ -81,37 +80,7 @@ export default async function RootLayout({
           }}
           nonce={nonce}
         />
-        {/* Lightweight boot logger — captures errors and warnings before
-            React hydrates. Stored in window.__BOOT_LOG__ so the console-
-            capture extension (or manual inspection) can read them. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                var B = window.__BOOT_LOG__ = { t0: Date.now(), entries: [] };
-                function push(lvl, args) {
-                  B.entries.push({
-                    ms: Date.now() - B.t0,
-                    lvl: lvl,
-                    msg: Array.prototype.slice.call(args).map(function(a) {
-                      return a instanceof Error ? a.name + ': ' + a.message + '\\n' + (a.stack || '') : String(a);
-                    }).join(' ')
-                  });
-                }
-                var oe = console.error, ow = console.warn;
-                console.error = function() { push('ERR', arguments); oe.apply(console, arguments); };
-                console.warn  = function() { push('WRN', arguments); ow.apply(console, arguments); };
-                window.addEventListener('error', function(e) {
-                  push('UE', [e.message + ' at ' + (e.filename||'?') + ':' + (e.lineno||0)]);
-                });
-                window.addEventListener('unhandledrejection', function(e) {
-                  push('UR', [e.reason]);
-                });
-              })();
-            `,
-          }}
-          nonce={nonce}
-        />
+        <I18nPreloadScript i18nInstance={i18nInstance} nonce={nonce} />
       </head>
       <body>
         <RootProviders
@@ -136,4 +105,35 @@ async function getCspNonce() {
   const headersStore = await headers();
 
   return headersStore.get('x-nonce') ?? undefined;
+}
+
+/**
+ * Serializes the translation resources loaded during SSR into a script tag
+ * so the client can initialise i18next synchronously during hydration.
+ * This prevents the Suspense fallback from flashing while translations
+ * load asynchronously via dynamic imports.
+ */
+function I18nPreloadScript({
+  i18nInstance: i18n,
+  nonce,
+}: {
+  i18nInstance: { store?: { data?: unknown } };
+  nonce?: string;
+}) {
+  const resources = i18n.store?.data;
+
+  if (!resources) return null;
+
+  const serialized = JSON.stringify(resources)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e');
+
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `window.__I18N_DATA__=${serialized};`,
+      }}
+      nonce={nonce}
+    />
+  );
 }
