@@ -77,7 +77,6 @@ async function seedForAccount(accountId: string, label: string) {
         'inbound-calls': true,
         'sms-confirmations': true,
         'email-confirmations': true,
-        'outbound-calls': true,
       },
       phoneIntegrationSettings: {
         ...existingSettings,
@@ -203,16 +202,22 @@ async function seedForAccount(accountId: string, label: string) {
   // ── 4. Seed Outbound Settings ──────────────────────────────────────────
   console.log('   4. Upserting outbound settings...');
 
+  const hasPms = await prisma.pmsIntegration.findFirst({
+    where: { accountId, status: 'ACTIVE' },
+    select: { id: true },
+  }).catch(() => null);
+  const outboundOn = !!hasPms;
+
   await prisma.outboundSettings.upsert({
     where: { accountId },
     update: {
-      patientCareEnabled: true,
-      financialEnabled: true,
+      patientCareEnabled: outboundOn,
+      financialEnabled: outboundOn,
     },
     create: {
       accountId,
-      patientCareEnabled: true,
-      financialEnabled: true,
+      patientCareEnabled: outboundOn,
+      financialEnabled: outboundOn,
       callingWindowStart: '09:00',
       callingWindowEnd: '17:00',
       timezone: 'America/New_York',

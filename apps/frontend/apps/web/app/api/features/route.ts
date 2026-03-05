@@ -157,7 +157,7 @@ export async function PUT(request: NextRequest) {
     const account = userId
       ? await prisma.account.findFirst({
           where: { primaryOwnerId: userId, isPersonalAccount: true },
-          select: { id: true },
+          select: { id: true, featureSettings: true },
         })
       : null;
 
@@ -165,24 +165,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    const enablingWizardGated = [...WIZARD_GATED_KEYS].some(
-      (key) => featureSettings[key] === true,
+    const currentFs = (account.featureSettings as Record<string, boolean>) ?? {};
+
+    const newlyEnablingWizardGated = [...WIZARD_GATED_KEYS].some(
+      (key) => featureSettings[key] === true && currentFs[key] !== true,
     );
-    const enablingOutbound = [...OUTBOUND_KEYS].some(
-      (key) => featureSettings[key] === true,
+    const newlyEnablingOutbound = [...OUTBOUND_KEYS].some(
+      (key) => featureSettings[key] === true && currentFs[key] !== true,
     );
 
-    if (enablingWizardGated || enablingOutbound) {
+    if (newlyEnablingWizardGated || newlyEnablingOutbound) {
       const prereqs = await getAccountPrerequisites(account.id, userId!);
 
-      if (enablingWizardGated && !prereqs.wizardCompleted) {
+      if (newlyEnablingWizardGated && !prereqs.wizardCompleted) {
         return NextResponse.json(
           { error: 'Complete the setup wizard before enabling these features' },
           { status: 400 },
         );
       }
 
-      if (enablingOutbound && !prereqs.pmsConnected) {
+      if (newlyEnablingOutbound && !prereqs.pmsConnected) {
         return NextResponse.json(
           { error: 'Connect your PMS before enabling outbound' },
           { status: 400 },

@@ -285,7 +285,7 @@ export default function FeaturesPage() {
   }, []);
 
   const persistSettings = useCallback(
-    async (updatedFeatures: Feature[], master: boolean) => {
+    async (updatedFeatures: Feature[], master: boolean): Promise<boolean> => {
       setSaving(true);
       try {
         const featureSettings: Record<string, boolean> = {
@@ -312,8 +312,10 @@ export default function FeaturesPage() {
           throw new Error(errorBody?.error || 'Failed to save');
         }
         toast.success(t('common:features.saved'));
+        return true;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t('common:features.saveFailed'));
+        return false;
       } finally {
         setSaving(false);
       }
@@ -321,19 +323,21 @@ export default function FeaturesPage() {
     [t, getCsrfToken],
   );
 
-  const toggleMaster = (enable: boolean) => {
+  const toggleMaster = async (enable: boolean) => {
     if (!enable) {
       setShowDisableDialog(true);
       return;
     }
     setMasterEnabled(true);
-    persistSettings(features, true);
+    const ok = await persistSettings(features, true);
+    if (!ok) setMasterEnabled(false);
   };
 
-  const confirmDisableMaster = () => {
+  const confirmDisableMaster = async () => {
     setMasterEnabled(false);
     setShowDisableDialog(false);
-    persistSettings(features, false);
+    const ok = await persistSettings(features, false);
+    if (!ok) setMasterEnabled(true);
   };
 
   const requestToggle = (featureId: string, featureName: string, currentlyEnabled: boolean) => {
@@ -344,9 +348,11 @@ export default function FeaturesPage() {
     applyToggle(featureId);
   };
 
-  const applyToggle = (featureId: string) => {
+  const applyToggle = async (featureId: string) => {
     let updated: Feature[] = [];
+    let previous: Feature[] = [];
     setFeatures((prev) => {
+      previous = prev;
       updated = prev.map((f) => {
         if (f.id === featureId && f.available && !f.readOnly) {
           const newEnabled = !f.enabled;
@@ -372,7 +378,8 @@ export default function FeaturesPage() {
       });
       return updated;
     });
-    persistSettings(updated, masterEnabled);
+    const ok = await persistSettings(updated, masterEnabled);
+    if (!ok) setFeatures(previous);
   };
 
   const confirmToggleOff = () => {
