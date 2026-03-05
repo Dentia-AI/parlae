@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@kit/ui/card';
 import { Badge } from '@kit/ui/badge';
@@ -33,6 +34,7 @@ import {
   CheckCircle2,
   Phone,
   Plug2,
+  ExternalLink,
 } from 'lucide-react';
 
 interface Feature {
@@ -45,6 +47,7 @@ interface Feature {
   comingSoon?: boolean;
   readOnly?: boolean;
   connectionStatus?: boolean;
+  linkHref?: string;
   category: 'inbound' | 'outbound' | 'communication' | 'integration' | 'advanced';
   children?: Feature[];
 }
@@ -148,6 +151,7 @@ const defaultFeatures: Feature[] = [
     enabled: true,
     available: true,
     readOnly: true,
+    linkHref: '/home/agent/integrations',
     category: 'integration',
   },
   {
@@ -158,6 +162,7 @@ const defaultFeatures: Feature[] = [
     enabled: true,
     available: true,
     readOnly: true,
+    linkHref: '/home/agent/integrations',
     category: 'integration',
   },
 
@@ -579,15 +584,26 @@ function FeatureCard({
 
         <div className="flex items-center gap-2 flex-shrink-0">
           {feature.readOnly && connectionStatus !== undefined ? (
-            <Badge
-              variant="outline"
-              className={connectionStatus
-                ? 'text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800'
-                : 'text-xs text-muted-foreground border-muted'
-              }
-            >
-              {connectionStatus ? t('common:features.connected') : t('common:features.notConnected')}
-            </Badge>
+            <>
+              <Badge
+                variant="outline"
+                className={connectionStatus
+                  ? 'text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800'
+                  : 'text-xs text-muted-foreground border-muted'
+                }
+              >
+                {connectionStatus ? t('common:features.connected') : t('common:features.notConnected')}
+              </Badge>
+              {feature.linkHref && (
+                <Link
+                  href={feature.linkHref}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline whitespace-nowrap"
+                >
+                  {connectionStatus ? t('common:features.manage') : t('common:features.setup')}
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </>
           ) : feature.readOnly && isChild ? (
             <Badge
               variant="outline"

@@ -1096,6 +1096,8 @@
     },
     "connected": "Connecté",
     "notConnected": "Non connecté",
+    "manage": "Gérer",
+    "setup": "Configurer",
     "capabilitiesTitle": "Capacités incluses",
     "capabilitiesNote": "Tous les forfaits incluent la journalisation et l'analytique des appels, la base de connaissances avec extraction de sites web, la sélection de voix IA personnalisable, le support multilingue (40+ langues) et les transcriptions détaillées des appels.",
     "saved": "Paramètres de fonctionnalités enregistrés",

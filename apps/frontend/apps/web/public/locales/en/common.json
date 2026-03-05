@@ -1096,6 +1096,8 @@
     },
     "connected": "Connected",
     "notConnected": "Not Connected",
+    "manage": "Manage",
+    "setup": "Set up",
     "capabilitiesTitle": "Included Capabilities",
     "capabilitiesNote": "All plans include call logging & analytics, knowledge base with website scraping, customizable AI voice selection, multi-language support (40+ languages), and detailed call transcripts.",
     "saved": "Feature settings saved",
