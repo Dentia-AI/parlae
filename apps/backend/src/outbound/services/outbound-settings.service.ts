@@ -85,11 +85,8 @@ export class OutboundSettingsService {
       });
     } catch (err: any) {
       if (err?.message?.includes('auto_approve_campaigns')) {
-        await this.prisma.$executeRawUnsafe(
-          `INSERT INTO outbound_settings (account_id, timezone) VALUES ($1, $2) ON CONFLICT (account_id) DO NOTHING`,
-          accountId,
-          account?.brandingTimezone || 'America/New_York',
-        );
+        const tz = account?.brandingTimezone || 'America/New_York';
+        await this.prisma.$executeRaw`INSERT INTO outbound_settings (account_id, timezone) VALUES (${accountId}, ${tz}) ON CONFLICT (account_id) DO NOTHING`;
         const created = await this.getSettings(accountId);
         return created!;
       }
