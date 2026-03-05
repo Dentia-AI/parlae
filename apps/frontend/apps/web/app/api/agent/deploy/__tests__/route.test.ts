@@ -69,4 +69,50 @@ describe('POST /api/agent/deploy', () => {
     const res = await POST(makeRequest({ voice: { voiceId: 'v1' } }));
     expect(res.status).toBe(401);
   });
+
+  it('initializes feature settings on first successful deployment', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ phoneIntegrationSettings: {} })
+      .mockResolvedValueOnce({ featureSettings: {} });
+
+    const res = await POST(
+      makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+    );
+
+    expect(res.status).toBe(200);
+
+    const updateCalls = prisma.account.update.mock.calls;
+    const lastUpdateData = updateCalls[updateCalls.length - 1]?.[0]?.data;
+
+    expect(lastUpdateData?.featureSettings).toBeDefined();
+    expect(lastUpdateData.featureSettings['ai-receptionist']).toBe(true);
+    expect(lastUpdateData.featureSettings['inbound-calls']).toBe(true);
+    expect(lastUpdateData.featureSettings['sms-confirmations']).toBe(true);
+    expect(lastUpdateData.featureSettings['email-confirmations']).toBe(true);
+    expect(lastUpdateData.featureSettings['outbound-calls']).toBeUndefined();
+  });
+
+  it('does not overwrite feature settings if already initialized', async () => {
+    const { prisma } = require('@kit/prisma');
+    const existingFeatures = {
+      'ai-receptionist': false,
+      'inbound-calls': false,
+      'sms-confirmations': true,
+    };
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ phoneIntegrationSettings: {} })
+      .mockResolvedValueOnce({ featureSettings: existingFeatures });
+
+    const res = await POST(
+      makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+    );
+
+    expect(res.status).toBe(200);
+
+    const updateCalls = prisma.account.update.mock.calls;
+    const lastUpdateData = updateCalls[updateCalls.length - 1]?.[0]?.data;
+
+    expect(lastUpdateData.featureSettings).toBeUndefined();
+  });
 });

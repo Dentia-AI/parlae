@@ -245,16 +245,40 @@ export async function POST(request: NextRequest) {
     });
     const freshSettings = (freshAccount?.phoneIntegrationSettings as Record<string, unknown>) || {};
 
+    const updateData: Record<string, unknown> = {
+      phoneIntegrationSettings: {
+        ...freshSettings,
+        deploymentStatus: result.success ? 'completed' : 'failed',
+        deploymentError: result.success ? null : (result.error || null),
+        deploymentCompletedAt: new Date().toISOString(),
+      },
+    };
+
+    if (result.success) {
+      const existingAccount = await prisma.account.findUnique({
+        where: { id: account.id },
+        select: { featureSettings: true },
+      });
+      const existingFs = (existingAccount?.featureSettings as Record<string, boolean>) ?? {};
+      const hasExistingToggles = Object.keys(existingFs).some((k) =>
+        ['ai-receptionist', 'inbound-calls'].includes(k),
+      );
+
+      if (!hasExistingToggles) {
+        updateData.featureSettings = {
+          ...existingFs,
+          'ai-receptionist': true,
+          'inbound-calls': true,
+          'sms-confirmations': true,
+          'email-confirmations': true,
+        };
+        logger.info({ accountId: account.id }, '[Deploy API] Initialized default feature settings');
+      }
+    }
+
     await prisma.account.update({
       where: { id: account.id },
-      data: {
-        phoneIntegrationSettings: {
-          ...freshSettings,
-          deploymentStatus: result.success ? 'completed' : 'failed',
-          deploymentError: result.success ? null : (result.error || null),
-          deploymentCompletedAt: new Date().toISOString(),
-        },
-      },
+      data: updateData,
     });
 
     logger.info(

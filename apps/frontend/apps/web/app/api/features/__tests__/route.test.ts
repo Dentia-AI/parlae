@@ -18,6 +18,9 @@ jest.mock('@kit/prisma', () => ({
         },
       }),
       findUnique: jest.fn().mockResolvedValue({
+        phoneIntegrationMethod: 'vapi',
+        phoneIntegrationSettings: { vapiSquadId: 'squad-1' },
+        paymentMethodVerified: true,
         featureSettings: {
           'ai-receptionist': true,
           'inbound-calls': true,
@@ -35,13 +38,16 @@ jest.mock('@kit/prisma', () => ({
       }),
       upsert: jest.fn().mockResolvedValue({}),
     },
+    pmsIntegration: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'pms-1' }),
+    },
   },
 }));
 
 describe('GET /api/features', () => {
   afterEach(() => jest.clearAllMocks());
 
-  it('returns feature settings merged with outbound settings', async () => {
+  it('returns feature settings merged with outbound settings and prerequisites', async () => {
     const res = await GET();
     const body = await res.json();
 
@@ -54,6 +60,10 @@ describe('GET /api/features', () => {
     expect(body.featureSettings['outbound-financial']).toBe(false);
     expect(body.featureSettings['outbound-auto-approve']).toBe(false);
     expect(body.featureSettings['outbound-calls']).toBe(true);
+
+    expect(body.wizardCompleted).toBe(true);
+    expect(body.pmsConnected).toBe(true);
+    expect(body.paymentVerified).toBe(true);
   });
 
   it('returns 404 when account not found', async () => {
@@ -112,6 +122,41 @@ describe('GET /api/features', () => {
 
     expect(body.featureSettings['outbound-calls']).toBe(false);
   });
+
+  it('returns wizardCompleted=false when no phone integration', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findFirst.mockResolvedValueOnce({
+      id: 'acc-1',
+      featureSettings: {},
+    });
+    prisma.outboundSettings.findUnique.mockResolvedValue(null);
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: 'none',
+      phoneIntegrationSettings: {},
+      paymentMethodVerified: false,
+    });
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.wizardCompleted).toBe(false);
+    expect(body.paymentVerified).toBe(false);
+  });
+
+  it('returns pmsConnected=false when no active PMS integration', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findFirst.mockResolvedValueOnce({
+      id: 'acc-1',
+      featureSettings: {},
+    });
+    prisma.outboundSettings.findUnique.mockResolvedValue(null);
+    prisma.pmsIntegration.findFirst.mockResolvedValueOnce(null);
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.pmsConnected).toBe(false);
+  });
 });
 
 describe('PUT /api/features', () => {
@@ -149,7 +194,7 @@ describe('PUT /api/features', () => {
     });
   });
 
-  it('persists ai-receptionist master toggle', async () => {
+  it('persists ai-receptionist master toggle when disabling', async () => {
     const { prisma } = require('@kit/prisma');
     const req = new NextRequest('http://localhost/api/features', {
       method: 'PUT',
@@ -167,7 +212,7 @@ describe('PUT /api/features', () => {
     expect(prisma.outboundSettings.upsert).not.toHaveBeenCalled();
   });
 
-  it('persists inbound-calls toggle', async () => {
+  it('persists inbound-calls toggle when disabling', async () => {
     const { prisma } = require('@kit/prisma');
     const req = new NextRequest('http://localhost/api/features', {
       method: 'PUT',
@@ -184,7 +229,7 @@ describe('PUT /api/features', () => {
     });
   });
 
-  it('persists email-confirmations toggle', async () => {
+  it('persists email-confirmations toggle when disabling', async () => {
     const { prisma } = require('@kit/prisma');
     const req = new NextRequest('http://localhost/api/features', {
       method: 'PUT',
@@ -251,5 +296,130 @@ describe('PUT /api/features', () => {
     });
     const res = await PUT(req);
     expect(res.status).toBe(401);
+  });
+
+  it('blocks enabling ai-receptionist when wizard not completed', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: 'none',
+      phoneIntegrationSettings: {},
+      paymentMethodVerified: false,
+    });
+
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'ai-receptionist': true },
+      }),
+    });
+    const res = await PUT(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('setup wizard');
+    expect(prisma.account.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks enabling inbound-calls when wizard not completed', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: null,
+      phoneIntegrationSettings: {},
+      paymentMethodVerified: false,
+    });
+
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'inbound-calls': true },
+      }),
+    });
+    const res = await PUT(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('setup wizard');
+  });
+
+  it('blocks enabling outbound-calls when PMS not connected', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: 'vapi',
+      phoneIntegrationSettings: { vapiSquadId: 'squad-1' },
+      paymentMethodVerified: true,
+    });
+    prisma.pmsIntegration.findFirst.mockResolvedValueOnce(null);
+
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'outbound-calls': true },
+      }),
+    });
+    const res = await PUT(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('PMS');
+  });
+
+  it('blocks enabling outbound when payment not verified', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: 'vapi',
+      phoneIntegrationSettings: { vapiSquadId: 'squad-1' },
+      paymentMethodVerified: false,
+    });
+    prisma.pmsIntegration.findFirst.mockResolvedValueOnce({ id: 'pms-1' });
+
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'outbound-patient-care': true },
+      }),
+    });
+    const res = await PUT(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('payment');
+  });
+
+  it('allows enabling master/inbound when wizard is completed', async () => {
+    const { prisma } = require('@kit/prisma');
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'ai-receptionist': true, 'inbound-calls': true },
+      }),
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(prisma.account.update).toHaveBeenCalled();
+  });
+
+  it('allows disabling features without prerequisite checks', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findUnique.mockResolvedValueOnce({
+      phoneIntegrationMethod: 'none',
+      phoneIntegrationSettings: {},
+      paymentMethodVerified: false,
+    });
+
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: {
+          'ai-receptionist': false,
+          'inbound-calls': false,
+          'outbound-calls': false,
+        },
+      }),
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(prisma.account.update).toHaveBeenCalled();
   });
 });

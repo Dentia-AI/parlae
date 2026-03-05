@@ -35,6 +35,7 @@ import {
   Phone,
   Plug2,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Feature {
@@ -58,7 +59,7 @@ const defaultFeatures: Feature[] = [
     nameKey: 'features.inboundCalls.name',
     descriptionKey: 'features.inboundCalls.description',
     icon: PhoneIncoming,
-    enabled: true,
+    enabled: false,
     available: true,
     category: 'inbound',
     children: [
@@ -67,7 +68,7 @@ const defaultFeatures: Feature[] = [
         nameKey: 'features.inboundAiAnswering.name',
         descriptionKey: 'features.inboundAiAnswering.description',
         icon: Phone,
-        enabled: true,
+        enabled: false,
         available: true,
         readOnly: true,
         category: 'inbound',
@@ -77,7 +78,7 @@ const defaultFeatures: Feature[] = [
         nameKey: 'features.inboundAppointmentScheduling.name',
         descriptionKey: 'features.inboundAppointmentScheduling.description',
         icon: Calendar,
-        enabled: true,
+        enabled: false,
         available: true,
         readOnly: true,
         category: 'inbound',
@@ -129,7 +130,7 @@ const defaultFeatures: Feature[] = [
     nameKey: 'features.smsConfirmations.name',
     descriptionKey: 'features.smsConfirmations.description',
     icon: MessageSquare,
-    enabled: true,
+    enabled: false,
     available: true,
     category: 'communication',
   },
@@ -138,7 +139,7 @@ const defaultFeatures: Feature[] = [
     nameKey: 'features.emailConfirmations.name',
     descriptionKey: 'features.emailConfirmations.description',
     icon: Mail,
-    enabled: true,
+    enabled: false,
     available: true,
     category: 'communication',
   },
@@ -226,16 +227,25 @@ export default function FeaturesPage() {
   const getCsrfToken = useCsrfToken;
   const [features, setFeatures] = useState(defaultFeatures);
   const [saving, setSaving] = useState(false);
-  const [masterEnabled, setMasterEnabled] = useState(true);
+  const [masterEnabled, setMasterEnabled] = useState(false);
   const [showDisableDialog, setShowDisableDialog] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ id: string; name: string } | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, boolean>>({});
+  const [wizardCompleted, setWizardCompleted] = useState(false);
+  const [pmsConnected, setPmsConnected] = useState(false);
+  const [paymentVerified, setPaymentVerified] = useState(false);
 
   useEffect(() => {
     fetch('/api/features')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!data?.featureSettings) return;
+        if (!data) return;
+
+        if (data.wizardCompleted !== undefined) setWizardCompleted(data.wizardCompleted);
+        if (data.pmsConnected !== undefined) setPmsConnected(data.pmsConnected);
+        if (data.paymentVerified !== undefined) setPaymentVerified(data.paymentVerified);
+
+        if (!data.featureSettings) return;
         const settings = data.featureSettings as Record<string, boolean>;
 
         if (settings['ai-receptionist'] !== undefined) {
@@ -297,10 +307,13 @@ export default function FeaturesPage() {
           },
           body: JSON.stringify({ featureSettings }),
         });
-        if (!res.ok) throw new Error('Failed to save');
+        if (!res.ok) {
+          const errorBody = await res.json().catch(() => null);
+          throw new Error(errorBody?.error || 'Failed to save');
+        }
         toast.success(t('common:features.saved'));
-      } catch {
-        toast.error(t('common:features.saveFailed'));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t('common:features.saveFailed'));
       } finally {
         setSaving(false);
       }
@@ -411,9 +424,21 @@ export default function FeaturesPage() {
           <Switch
             checked={masterEnabled}
             onCheckedChange={toggleMaster}
+            disabled={!wizardCompleted}
             className="scale-125"
           />
         </CardContent>
+        {!wizardCompleted && (
+          <div className="flex items-center gap-2 px-5 pb-4 -mt-1">
+            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              {t('common:features.wizardRequired')}{' '}
+              <Link href="/home/agent/setup" className="text-primary hover:underline">
+                {t('common:features.completeSetup')}
+              </Link>
+            </p>
+          </div>
+        )}
       </Card>
 
       {/* Master disable confirmation */}
@@ -473,6 +498,9 @@ export default function FeaturesPage() {
         if (topLevelFeatures.length === 0) return null;
         const { labelKey, descriptionKey } = categoryKeys[category]!;
 
+        const outboundLocked = category === 'outbound' && (!pmsConnected || !paymentVerified);
+        const inboundLocked = (category === 'inbound' || category === 'communication') && !wizardCompleted;
+
         return (
           <div key={category}>
             <div className="mb-3">
@@ -488,6 +516,7 @@ export default function FeaturesPage() {
                     onToggle={requestToggle}
                     masterEnabled={masterEnabled}
                     connectionStatus={connectionStatuses[feature.id]}
+                    prerequisiteLocked={outboundLocked || inboundLocked}
                     t={t}
                   />
                   {feature.children && (
@@ -499,6 +528,7 @@ export default function FeaturesPage() {
                           onToggle={requestToggle}
                           masterEnabled={masterEnabled}
                           parentEnabled={feature.enabled}
+                          prerequisiteLocked={outboundLocked || inboundLocked}
                           t={t}
                           isChild
                         />
@@ -507,6 +537,18 @@ export default function FeaturesPage() {
                   )}
                 </div>
               ))}
+
+              {outboundLocked && (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground">
+                    {t('common:features.outboundPrerequisite')}{' '}
+                    <Link href="/home/agent/integrations" className="text-primary hover:underline">
+                      {t('common:features.connectPms')}
+                    </Link>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -531,6 +573,7 @@ function FeatureCard({
   masterEnabled,
   parentEnabled,
   connectionStatus,
+  prerequisiteLocked,
   t,
   isChild,
 }: {
@@ -539,10 +582,11 @@ function FeatureCard({
   masterEnabled: boolean;
   parentEnabled?: boolean;
   connectionStatus?: boolean;
+  prerequisiteLocked?: boolean;
   t: (key: string, opts?: Record<string, string>) => string;
   isChild?: boolean;
 }) {
-  const disabled = !feature.available || !masterEnabled || feature.readOnly || (isChild && parentEnabled === false);
+  const disabled = !feature.available || !masterEnabled || feature.readOnly || prerequisiteLocked || (isChild && parentEnabled === false);
   const isActive = feature.enabled && masterEnabled && (!isChild || parentEnabled !== false);
 
   return (
