@@ -82,6 +82,22 @@ export class VoiceRoutingController {
       const ownerAccount = vapiPhone?.account || retellPhone?.account;
       const ownerAccountId = vapiPhone?.accountId || retellPhone?.accountId;
 
+      if (ownerAccountId) {
+        const acct = await this.prisma.account.findUnique({
+          where: { id: ownerAccountId },
+          select: { featureSettings: true },
+        });
+        const fs = (acct?.featureSettings as Record<string, unknown>) ?? {};
+        if (fs['ai-receptionist'] === false || fs['inbound-calls'] === false) {
+          this.logger.log(
+            `[VoiceRouting] Rejecting call — features disabled for account ${ownerAccountId}`,
+          );
+          res.set('Content-Type', 'text/xml');
+          res.status(HttpStatus.OK).send(this.buildRejectTwiml());
+          return;
+        }
+      }
+
       // Determine effective provider: per-account override > global toggle > default
       let activeProvider: string;
 
@@ -175,6 +191,15 @@ export class VoiceRoutingController {
       retellReady: retellCount > 0,
       accountOverrides: overrideAccounts,
     };
+  }
+
+  private buildRejectTwiml(): string {
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<Response>',
+      '  <Reject reason="busy"/>',
+      '</Response>',
+    ].join('\n');
   }
 
   private buildTwiml(forwardTo: string, callerNumber?: string): string {

@@ -89,6 +89,19 @@ export class OutboundDispatcherService {
   }
 
   private async processCampaign(campaign: OutboundCampaign): Promise<void> {
+    const acct = await this.prisma.account.findUnique({
+      where: { id: campaign.accountId },
+      select: { featureSettings: true },
+    });
+    const fs = ((acct?.featureSettings) as Record<string, unknown>) ?? {};
+    if (fs['ai-receptionist'] === false) {
+      this.logger.log({
+        accountId: campaign.accountId,
+        msg: 'Skipping campaign — AI receptionist disabled',
+      });
+      return;
+    }
+
     const settings = await this.settingsService.getSettings(campaign.accountId);
     if (!settings) return;
 

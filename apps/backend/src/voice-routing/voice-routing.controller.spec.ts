@@ -24,6 +24,7 @@ describe('VoiceRoutingController', () => {
     },
     account: {
       findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({ featureSettings: {} }),
     },
   };
 
@@ -140,6 +141,97 @@ describe('VoiceRoutingController', () => {
 
       const twiml: string = res.send.mock.calls[0][0];
       expect(twiml).toContain('+14165554444');
+    });
+
+    it('should reject call when ai-receptionist is disabled', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        phoneNumber: '+14165551111',
+        account: { voiceProviderOverride: null },
+      });
+      prisma.account.findUnique.mockResolvedValueOnce({
+        featureSettings: { 'ai-receptionist': false },
+      });
+
+      const res = mockRes();
+      await controller.routeCall(
+        { To: '+14165551111', From: '+14165559999', CallSid: 'CS-reject-master' },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      const twiml: string = res.send.mock.calls[0][0];
+      expect(twiml).toContain('<Reject');
+      expect(twiml).toContain('busy');
+      expect(twiml).not.toContain('<Dial');
+    });
+
+    it('should reject call when inbound-calls is disabled', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        phoneNumber: '+14165551111',
+        account: { voiceProviderOverride: null },
+      });
+      prisma.account.findUnique.mockResolvedValueOnce({
+        featureSettings: { 'ai-receptionist': true, 'inbound-calls': false },
+      });
+
+      const res = mockRes();
+      await controller.routeCall(
+        { To: '+14165551111', From: '+14165559999', CallSid: 'CS-reject-inbound' },
+        res,
+      );
+
+      const twiml: string = res.send.mock.calls[0][0];
+      expect(twiml).toContain('<Reject');
+      expect(twiml).not.toContain('<Dial');
+    });
+
+    it('should route normally when features are enabled', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        phoneNumber: '+14165551111',
+        account: { voiceProviderOverride: null },
+      });
+      prisma.account.findUnique.mockResolvedValueOnce({
+        featureSettings: { 'ai-receptionist': true, 'inbound-calls': true },
+      });
+      prisma.voiceProviderToggle.findFirst.mockResolvedValueOnce({
+        activeProvider: 'RETELL',
+      });
+
+      const res = mockRes();
+      await controller.routeCall(
+        { To: '+14165551111', From: '+14165559999', CallSid: 'CS-enabled' },
+        res,
+      );
+
+      const twiml: string = res.send.mock.calls[0][0];
+      expect(twiml).toContain('<Dial');
+      expect(twiml).not.toContain('<Reject');
+    });
+
+    it('should route normally when featureSettings is empty (defaults to enabled)', async () => {
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({
+        accountId: 'acc-1',
+        phoneNumber: '+14165551111',
+        account: { voiceProviderOverride: null },
+      });
+      prisma.account.findUnique.mockResolvedValueOnce({
+        featureSettings: {},
+      });
+      prisma.voiceProviderToggle.findFirst.mockResolvedValueOnce({
+        activeProvider: 'RETELL',
+      });
+
+      const res = mockRes();
+      await controller.routeCall(
+        { To: '+14165551111', From: '+14165559999', CallSid: 'CS-default' },
+        res,
+      );
+
+      const twiml: string = res.send.mock.calls[0][0];
+      expect(twiml).toContain('<Dial');
     });
 
     it('should return TwiML even on error', async () => {

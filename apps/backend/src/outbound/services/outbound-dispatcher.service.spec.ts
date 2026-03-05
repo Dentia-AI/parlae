@@ -117,6 +117,7 @@ describe('OutboundDispatcherService', () => {
         .mockResolvedValueOnce([campaign]) // active campaigns
         .mockResolvedValueOnce([]); // scheduled campaigns
       prisma.campaignContact.count.mockResolvedValue(0);
+      prisma.account.findUnique.mockResolvedValue({ featureSettings: {} });
       if (contacts.length) {
         campaignService.getQueuedContacts.mockResolvedValue(contacts);
       }
@@ -248,6 +249,55 @@ describe('OutboundDispatcherService', () => {
       await service.processQueue();
 
       expect(campaignService.getQueuedContacts).not.toHaveBeenCalled();
+    });
+
+    it('skips campaign when ai-receptionist is disabled for account', async () => {
+      prisma.outboundCampaign.findMany
+        .mockResolvedValueOnce([mockCampaign])
+        .mockResolvedValueOnce([]);
+      prisma.account.findUnique.mockResolvedValue({
+        featureSettings: { 'ai-receptionist': false },
+      });
+
+      await service.processQueue();
+
+      expect(settingsService.getSettings).not.toHaveBeenCalled();
+      expect(campaignService.getQueuedContacts).not.toHaveBeenCalled();
+    });
+
+    it('processes campaign when ai-receptionist is explicitly enabled', async () => {
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.outboundCampaign.findMany
+        .mockResolvedValueOnce([{ ...mockCampaign, channel: 'SMS' }])
+        .mockResolvedValueOnce([]);
+      prisma.campaignContact.count.mockResolvedValue(0);
+      prisma.account.findUnique.mockResolvedValue({
+        featureSettings: { 'ai-receptionist': true },
+      });
+      campaignService.getQueuedContacts.mockResolvedValue([
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      expect(settingsService.getSettings).toHaveBeenCalled();
+      expect(campaignService.updateContactStatus).toHaveBeenCalled();
+    });
+
+    it('processes campaign when featureSettings is empty (defaults to enabled)', async () => {
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.outboundCampaign.findMany
+        .mockResolvedValueOnce([{ ...mockCampaign, channel: 'SMS' }])
+        .mockResolvedValueOnce([]);
+      prisma.campaignContact.count.mockResolvedValue(0);
+      prisma.account.findUnique.mockResolvedValue({ featureSettings: {} });
+      campaignService.getQueuedContacts.mockResolvedValue([
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      expect(settingsService.getSettings).toHaveBeenCalled();
     });
   });
 });

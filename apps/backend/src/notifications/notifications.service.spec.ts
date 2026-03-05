@@ -108,6 +108,58 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('sendAppointmentConfirmation – email-confirmations feature flag', () => {
+    const params = {
+      accountId: 'acc-1',
+      patient: { firstName: 'John', lastName: 'Doe', phone: '+14155551234', email: 'john@example.com' },
+      appointment: { appointmentType: 'Cleaning', startTime: new Date('2026-03-01T14:00:00Z'), duration: 30 },
+      integrationType: 'google_calendar' as const,
+    };
+
+    it('should skip patient email when email-confirmations is disabled', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: { 'email-confirmations': false },
+      });
+      const result = await service.sendAppointmentConfirmation(params);
+      expect(result.smsSent).toBe(true);
+      expect(result.emailSent).toBe(false);
+      // Clinic notification email is still sent; patient email (to john@example.com) is not
+      const emailCalls = emailService.sendEmail.mock.calls;
+      const patientEmailCalls = emailCalls.filter((call: any[]) => call[0]?.to === 'john@example.com');
+      expect(patientEmailCalls).toHaveLength(0);
+    });
+
+    it('should send email when email-confirmations is explicitly enabled', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: { 'email-confirmations': true },
+      });
+      const result = await service.sendAppointmentConfirmation(params);
+      expect(result.emailSent).toBe(true);
+      expect(emailService.sendEmail).toHaveBeenCalled();
+    });
+
+    it('should send email when featureSettings is empty (defaults to enabled)', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: {},
+      });
+      const result = await service.sendAppointmentConfirmation(params);
+      expect(result.emailSent).toBe(true);
+    });
+
+    it('should skip both SMS and email when both features are disabled', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: { 'sms-confirmations': false, 'email-confirmations': false },
+      });
+      const result = await service.sendAppointmentConfirmation(params);
+      expect(result.smsSent).toBe(false);
+      expect(result.emailSent).toBe(false);
+    });
+  });
+
   describe('sendAppointmentCancellation', () => {
     it('should send cancellation notifications', async () => {
       prisma.account.findUnique.mockResolvedValue(mockAccount);
@@ -131,6 +183,23 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('sendAppointmentCancellation – email-confirmations flag', () => {
+    it('should skip patient email when email-confirmations is disabled', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: { 'email-confirmations': false },
+      });
+      const result = await service.sendAppointmentCancellation({
+        accountId: 'acc-1',
+        patient: { firstName: 'Jane', lastName: 'Smith', phone: '+14155559999', email: 'jane@test.com' },
+        appointment: { appointmentType: 'Checkup', startTime: new Date(), duration: 30 },
+        reason: 'Schedule conflict',
+      });
+      expect(result.smsSent).toBe(true);
+      expect(result.emailSent).toBe(false);
+    });
+  });
+
   describe('sendAppointmentReschedule', () => {
     it('should send reschedule notifications', async () => {
       prisma.account.findUnique.mockResolvedValue(mockAccount);
@@ -142,6 +211,21 @@ describe('NotificationsService', () => {
       });
       expect(result.emailSent).toBe(true);
       expect(result.smsSent).toBe(true);
+    });
+
+    it('should skip patient email when email-confirmations is disabled', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...mockAccount,
+        featureSettings: { 'email-confirmations': false },
+      });
+      const result = await service.sendAppointmentReschedule({
+        accountId: 'acc-1',
+        patient: { firstName: 'Bob', lastName: 'Lee', phone: '+14155550000', email: 'bob@test.com' },
+        oldAppointment: { appointmentType: 'Cleaning', startTime: new Date(), duration: 30 },
+        newAppointment: { appointmentType: 'Cleaning', startTime: new Date(Date.now() + 86400000), duration: 30 },
+      });
+      expect(result.smsSent).toBe(true);
+      expect(result.emailSent).toBe(false);
     });
   });
 

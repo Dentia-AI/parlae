@@ -188,9 +188,15 @@ export class OutboundSchedulerService {
 
     const settingsList = await this.prisma.outboundSettings.findMany({
       where: { [field]: true },
+      include: { account: { select: { featureSettings: true } } },
     });
 
-    return settingsList.map((s) => ({ id: s.accountId, settings: s }));
+    return settingsList
+      .filter((s) => {
+        const fs = ((s as any).account?.featureSettings as Record<string, unknown>) ?? {};
+        return fs['ai-receptionist'] !== false;
+      })
+      .map((s) => ({ id: s.accountId, settings: s }));
   }
 
   private async createCampaignNotification(

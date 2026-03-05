@@ -132,8 +132,14 @@ export class NotificationsService {
       });
     }
 
-    // Send email to patient
-    if (patient.email) {
+    // Send email to patient (only if feature is enabled)
+    const emailEnabled = this.isFeatureEnabled(account.featureSettings, 'email-confirmations');
+    if (!emailEnabled) {
+      this.logger.log({
+        accountId,
+        msg: 'Email skipped — email-confirmations feature disabled',
+      });
+    } else if (patient.email) {
       try {
         await this.sendConfirmationEmail(
           patient.email,
@@ -255,8 +261,11 @@ export class NotificationsService {
       this.logger.log({ accountId, msg: 'Cancellation SMS skipped — sms-confirmations feature disabled' });
     }
 
-    // Send email to patient
-    if (patient.email) {
+    // Send email to patient (only if feature is enabled)
+    const emailEnabled = this.isFeatureEnabled(account.featureSettings, 'email-confirmations');
+    if (!emailEnabled) {
+      this.logger.log({ accountId, msg: 'Cancellation email skipped — email-confirmations feature disabled' });
+    } else if (patient.email) {
       try {
         await this.sendCancellationEmail(
           patient.email,
@@ -368,8 +377,11 @@ export class NotificationsService {
       this.logger.log({ accountId, msg: 'Reschedule SMS skipped — sms-confirmations feature disabled' });
     }
 
-    // Send email to patient
-    if (patient.email) {
+    // Send email to patient (only if feature is enabled)
+    const emailEnabled = this.isFeatureEnabled(account.featureSettings, 'email-confirmations');
+    if (!emailEnabled) {
+      this.logger.log({ accountId, msg: 'Reschedule email skipped — email-confirmations feature disabled' });
+    } else if (patient.email) {
       try {
         await this.sendRescheduleEmail(
           patient.email,

@@ -68,7 +68,7 @@ describe('OutboundSchedulerService', () => {
   describe('scanRecallCandidates', () => {
     it('processes recall for each enabled account', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([
-        { accountId: 'acc-1', ...mockSettings },
+        { accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } },
       ]);
       prisma.pmsIntegration.findFirst.mockResolvedValue(null);
 
@@ -76,17 +76,32 @@ describe('OutboundSchedulerService', () => {
 
       expect(prisma.outboundSettings.findMany).toHaveBeenCalledWith({
         where: { patientCareEnabled: true },
+        include: { account: { select: { featureSettings: true } } },
       });
     });
 
     it('handles errors for individual accounts without stopping', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([
-        { accountId: 'acc-1' },
-        { accountId: 'acc-2' },
+        { accountId: 'acc-1', account: { featureSettings: {} } },
+        { accountId: 'acc-2', account: { featureSettings: {} } },
       ]);
       prisma.pmsIntegration.findFirst.mockRejectedValueOnce(new Error('DB error')).mockResolvedValueOnce(null);
 
       await expect(service.scanRecallCandidates()).resolves.toBeUndefined();
+    });
+
+    it('filters out accounts with ai-receptionist disabled', async () => {
+      const spy = jest.spyOn(service as any, 'processRecallForAccount').mockResolvedValue(undefined);
+      prisma.outboundSettings.findMany.mockResolvedValue([
+        { ...mockSettings, accountId: 'acc-1', account: { featureSettings: { 'ai-receptionist': false } } },
+        { ...mockSettings, accountId: 'acc-2', account: { featureSettings: {} } },
+      ]);
+
+      await service.scanRecallCandidates();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith('acc-2', expect.anything());
+      spy.mockRestore();
     });
   });
 
@@ -94,7 +109,9 @@ describe('OutboundSchedulerService', () => {
     it('processes reminders for enabled accounts', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([]);
       await service.scanReminderCandidates();
-      expect(prisma.outboundSettings.findMany).toHaveBeenCalled();
+      expect(prisma.outboundSettings.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ include: { account: { select: { featureSettings: true } } } }),
+      );
     });
   });
 
@@ -543,8 +560,8 @@ describe('OutboundSchedulerService', () => {
 
     it('scanRecallCandidates processes multiple accounts', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([
-        { accountId: 'acc-1', ...mockSettings },
-        { accountId: 'acc-2', ...mockSettings },
+        { accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } },
+        { accountId: 'acc-2', ...mockSettings, account: { featureSettings: {} } },
       ]);
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
@@ -555,8 +572,22 @@ describe('OutboundSchedulerService', () => {
       expect(campaignService.createCampaign).toHaveBeenCalledTimes(2);
     });
 
+    it('scanRecallCandidates skips accounts with ai-receptionist disabled', async () => {
+      prisma.outboundSettings.findMany.mockResolvedValue([
+        { ...mockSettings, accountId: 'acc-1', account: { featureSettings: { 'ai-receptionist': false } } },
+        { ...mockSettings, accountId: 'acc-2', account: { featureSettings: { 'ai-receptionist': true } } },
+      ]);
+      mockPmsProvider.getAppointments.mockResolvedValue({
+        success: true,
+        data: [{ patientId: 'p-1', patientPhone: '+15551001', patientName: 'A', date: '2025-06-01' }],
+      });
+
+      await service.scanRecallCandidates();
+      expect(campaignService.createCampaign).toHaveBeenCalledTimes(1);
+    });
+
     it('scanReminderCandidates creates reminder campaigns', async () => {
-      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings }]);
+      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } }]);
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
         data: [{ patientId: 'p-1', patientPhone: '+15551001', patientName: 'A', date: '2026-03-04' }],
@@ -569,7 +600,7 @@ describe('OutboundSchedulerService', () => {
     });
 
     it('scanNoShowCandidates creates noshow campaigns', async () => {
-      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings }]);
+      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } }]);
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
         data: [{ patientId: 'p-1', patientPhone: '+15551001', patientName: 'A', date: '2026-03-02' }],
@@ -582,7 +613,7 @@ describe('OutboundSchedulerService', () => {
     });
 
     it('scanReactivationCandidates creates reactivation campaigns', async () => {
-      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings }]);
+      prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } }]);
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
         data: [{ patientId: 'p-1', patientPhone: '+15551001', patientName: 'A', date: '2024-01-01' }],
@@ -596,8 +627,8 @@ describe('OutboundSchedulerService', () => {
 
     it('scanRecallCandidates continues to next account on error', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([
-        { accountId: 'acc-1', ...mockSettings },
-        { accountId: 'acc-2', ...mockSettings },
+        { accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } },
+        { accountId: 'acc-2', ...mockSettings, account: { featureSettings: {} } },
       ]);
       mockPmsProvider.getAppointments
         .mockRejectedValueOnce(new Error('PMS error'))

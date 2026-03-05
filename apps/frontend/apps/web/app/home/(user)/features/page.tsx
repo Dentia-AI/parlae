@@ -31,6 +31,8 @@ import {
   Mail,
   Megaphone,
   CheckCircle2,
+  Phone,
+  Plug2,
 } from 'lucide-react';
 
 interface Feature {
@@ -41,6 +43,8 @@ interface Feature {
   enabled: boolean;
   available: boolean;
   comingSoon?: boolean;
+  readOnly?: boolean;
+  connectionStatus?: boolean;
   category: 'inbound' | 'outbound' | 'communication' | 'integration' | 'advanced';
   children?: Feature[];
 }
@@ -54,15 +58,28 @@ const defaultFeatures: Feature[] = [
     enabled: true,
     available: true,
     category: 'inbound',
-  },
-  {
-    id: 'appointment-scheduling',
-    nameKey: 'features.appointmentScheduling.name',
-    descriptionKey: 'features.appointmentScheduling.description',
-    icon: Calendar,
-    enabled: true,
-    available: true,
-    category: 'inbound',
+    children: [
+      {
+        id: 'inbound-ai-answering',
+        nameKey: 'features.inboundAiAnswering.name',
+        descriptionKey: 'features.inboundAiAnswering.description',
+        icon: Phone,
+        enabled: true,
+        available: true,
+        readOnly: true,
+        category: 'inbound',
+      },
+      {
+        id: 'inbound-appointment-scheduling',
+        nameKey: 'features.inboundAppointmentScheduling.name',
+        descriptionKey: 'features.inboundAppointmentScheduling.description',
+        icon: Calendar,
+        enabled: true,
+        available: true,
+        readOnly: true,
+        category: 'inbound',
+      },
+    ],
   },
 
   {
@@ -124,21 +141,23 @@ const defaultFeatures: Feature[] = [
   },
 
   {
+    id: 'pms-integration',
+    nameKey: 'features.pmsIntegration.name',
+    descriptionKey: 'features.pmsIntegration.description',
+    icon: Plug2,
+    enabled: true,
+    available: true,
+    readOnly: true,
+    category: 'integration',
+  },
+  {
     id: 'google-calendar',
     nameKey: 'features.googleCalendar.name',
     descriptionKey: 'features.googleCalendar.description',
     icon: Calendar,
     enabled: true,
     available: true,
-    category: 'integration',
-  },
-  {
-    id: 'pms-integration',
-    nameKey: 'features.pmsIntegration.name',
-    descriptionKey: 'features.pmsIntegration.description',
-    icon: Zap,
-    enabled: true,
-    available: true,
+    readOnly: true,
     category: 'integration',
   },
 
@@ -205,6 +224,7 @@ export default function FeaturesPage() {
   const [masterEnabled, setMasterEnabled] = useState(true);
   const [showDisableDialog, setShowDisableDialog] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ id: string; name: string } | null>(null);
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch('/api/features')
@@ -220,18 +240,33 @@ export default function FeaturesPage() {
         setFeatures((prev) =>
           prev.map((f) => {
             const updated = { ...f };
-            if (settings[f.id] !== undefined) updated.enabled = settings[f.id]!;
+            if (settings[f.id] !== undefined && !f.readOnly) {
+              updated.enabled = settings[f.id]!;
+            }
             if (f.children) {
-              updated.children = f.children.map((c) => ({
-                ...c,
-                enabled: settings[c.id] !== undefined ? settings[c.id]! : c.enabled,
-              }));
+              updated.children = f.children.map((c) => {
+                if (c.readOnly) return { ...c, enabled: updated.enabled };
+                return {
+                  ...c,
+                  enabled: settings[c.id] !== undefined ? settings[c.id]! : c.enabled,
+                };
+              });
             }
             return updated;
           }),
         );
       })
       .catch(() => {});
+
+    Promise.all([
+      fetch('/api/pms/status').then((r) => (r.ok ? r.json() : { connected: false })).catch(() => ({ connected: false })),
+      fetch('/api/google-calendar/status').then((r) => (r.ok ? r.json() : { connected: false })).catch(() => ({ connected: false })),
+    ]).then(([pms, gcal]) => {
+      setConnectionStatuses({
+        'pms-integration': pms.connected || false,
+        'google-calendar': gcal.connected || false,
+      });
+    });
   }, []);
 
   const persistSettings = useCallback(
@@ -242,10 +277,10 @@ export default function FeaturesPage() {
           'ai-receptionist': master,
         };
         for (const f of updatedFeatures) {
-          featureSettings[f.id] = f.enabled;
+          if (!f.readOnly) featureSettings[f.id] = f.enabled;
           if (f.children) {
             for (const c of f.children) {
-              featureSettings[c.id] = c.enabled;
+              if (!c.readOnly) featureSettings[c.id] = c.enabled;
             }
           }
         }
@@ -295,18 +330,20 @@ export default function FeaturesPage() {
     let updated: Feature[] = [];
     setFeatures((prev) => {
       updated = prev.map((f) => {
-        if (f.id === featureId && f.available) {
+        if (f.id === featureId && f.available && !f.readOnly) {
           const newEnabled = !f.enabled;
-          const newChildren = !newEnabled && f.children
-            ? f.children.map((c) => ({ ...c, enabled: false }))
-            : f.children;
+          const newChildren = f.children
+            ? f.children.map((c) =>
+                c.readOnly ? { ...c, enabled: newEnabled } : (!newEnabled ? { ...c, enabled: false } : c),
+              )
+            : undefined;
           return { ...f, enabled: newEnabled, children: newChildren };
         }
         if (f.children) {
           const updatedChildren = f.children.map((c) =>
-            c.id === featureId && c.available ? { ...c, enabled: !c.enabled } : c,
+            c.id === featureId && c.available && !c.readOnly ? { ...c, enabled: !c.enabled } : c,
           );
-          const anyChildEnabled = updatedChildren.some((c) => c.enabled);
+          const anyChildEnabled = updatedChildren.some((c) => c.enabled && !c.readOnly);
           return {
             ...f,
             children: updatedChildren,
@@ -445,9 +482,10 @@ export default function FeaturesPage() {
                     feature={feature}
                     onToggle={requestToggle}
                     masterEnabled={masterEnabled}
+                    connectionStatus={connectionStatuses[feature.id]}
                     t={t}
                   />
-                  {feature.children && feature.enabled && (
+                  {feature.children && (
                     <div className="ml-6 mt-2 grid gap-2 border-l-2 border-muted pl-4">
                       {feature.children.map((child) => (
                         <FeatureCard
@@ -455,6 +493,7 @@ export default function FeaturesPage() {
                           feature={child}
                           onToggle={requestToggle}
                           masterEnabled={masterEnabled}
+                          parentEnabled={feature.enabled}
                           t={t}
                           isChild
                         />
@@ -485,17 +524,21 @@ function FeatureCard({
   feature,
   onToggle,
   masterEnabled,
+  parentEnabled,
+  connectionStatus,
   t,
   isChild,
 }: {
   feature: Feature;
   onToggle: (id: string, name: string, currentlyEnabled: boolean) => void;
   masterEnabled: boolean;
+  parentEnabled?: boolean;
+  connectionStatus?: boolean;
   t: (key: string, opts?: Record<string, string>) => string;
   isChild?: boolean;
 }) {
-  const disabled = !feature.available || !masterEnabled;
-  const isActive = feature.enabled && !disabled;
+  const disabled = !feature.available || !masterEnabled || feature.readOnly || (isChild && parentEnabled === false);
+  const isActive = feature.enabled && masterEnabled && (!isChild || parentEnabled !== false);
 
   return (
     <Card
@@ -505,7 +548,7 @@ function FeatureCard({
           : isActive
             ? 'bg-primary/[0.02] border-primary/20'
             : ''
-      } ${!masterEnabled ? 'opacity-60' : ''}`}
+      } ${!masterEnabled ? 'opacity-60' : ''} ${isChild && parentEnabled === false ? 'opacity-50' : ''}`}
     >
       <CardContent className={`flex items-center gap-4 ${isChild ? 'p-3' : 'p-4'}`}>
         <div
@@ -535,18 +578,42 @@ function FeatureCard({
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {isActive && !isChild && (
-            <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800">
-              {t('common:features.active')}
+          {feature.readOnly && connectionStatus !== undefined ? (
+            <Badge
+              variant="outline"
+              className={connectionStatus
+                ? 'text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800'
+                : 'text-xs text-muted-foreground border-muted'
+              }
+            >
+              {connectionStatus ? t('common:features.connected') : t('common:features.notConnected')}
             </Badge>
+          ) : feature.readOnly && isChild ? (
+            <Badge
+              variant="outline"
+              className={isActive
+                ? 'text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800'
+                : 'text-xs text-muted-foreground border-muted'
+              }
+            >
+              {isActive ? t('common:features.active') : t('common:features.inactive')}
+            </Badge>
+          ) : (
+            <>
+              {isActive && !isChild && (
+                <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:text-green-400 dark:border-green-800">
+                  {t('common:features.active')}
+                </Badge>
+              )}
+              <Switch
+                checked={feature.enabled}
+                onCheckedChange={() =>
+                  onToggle(feature.id, t(`common:${feature.nameKey}`), feature.enabled)
+                }
+                disabled={disabled}
+              />
+            </>
           )}
-          <Switch
-            checked={feature.enabled}
-            onCheckedChange={() =>
-              onToggle(feature.id, t(`common:${feature.nameKey}`), feature.enabled)
-            }
-            disabled={disabled}
-          />
         </div>
       </CardContent>
     </Card>

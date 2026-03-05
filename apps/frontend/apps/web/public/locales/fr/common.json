@@ -1039,10 +1039,14 @@
       "advancedDesc": "Bientôt disponible — capacités avancées"
     },
     "inboundCalls": {
+      "name": "Appels entrants",
+      "description": "Réponse IA aux appels, demandes de patients et prise de rendez-vous."
+    },
+    "inboundAiAnswering": {
       "name": "Réponse IA aux appels",
       "description": "Votre réceptionniste IA répond aux appels, gère les demandes et dirige les conversations 24h/24."
     },
-    "appointmentScheduling": {
+    "inboundAppointmentScheduling": {
       "name": "Prise de rendez-vous",
       "description": "Réservez, reprogrammez et annulez automatiquement des rendez-vous pendant les appels."
     },
@@ -1090,6 +1094,8 @@
       "name": "Gestion des prospects",
       "description": "Capturez et gérez les nouveaux prospects de patients à partir des appels, suivez les taux de conversion et automatisez les suivis."
     },
+    "connected": "Connecté",
+    "notConnected": "Non connecté",
     "capabilitiesTitle": "Capacités incluses",
     "capabilitiesNote": "Tous les forfaits incluent la journalisation et l'analytique des appels, la base de connaissances avec extraction de sites web, la sélection de voix IA personnalisable, le support multilingue (40+ langues) et les transcriptions détaillées des appels.",
     "saved": "Paramètres de fonctionnalités enregistrés",

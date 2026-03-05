@@ -10,10 +10,20 @@ jest.mock('@kit/prisma', () => ({
     account: {
       findFirst: jest.fn().mockResolvedValue({
         id: 'acc-1',
-        featureSettings: { 'sms-confirmations': true, 'inbound-calls': true },
+        featureSettings: {
+          'ai-receptionist': true,
+          'inbound-calls': true,
+          'sms-confirmations': true,
+          'email-confirmations': true,
+        },
       }),
       findUnique: jest.fn().mockResolvedValue({
-        featureSettings: { 'sms-confirmations': true, 'inbound-calls': true },
+        featureSettings: {
+          'ai-receptionist': true,
+          'inbound-calls': true,
+          'sms-confirmations': true,
+          'email-confirmations': true,
+        },
       }),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -36,7 +46,10 @@ describe('GET /api/features', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
+    expect(body.featureSettings['ai-receptionist']).toBe(true);
+    expect(body.featureSettings['inbound-calls']).toBe(true);
     expect(body.featureSettings['sms-confirmations']).toBe(true);
+    expect(body.featureSettings['email-confirmations']).toBe(true);
     expect(body.featureSettings['outbound-patient-care']).toBe(true);
     expect(body.featureSettings['outbound-financial']).toBe(false);
     expect(body.featureSettings['outbound-auto-approve']).toBe(false);
@@ -49,6 +62,55 @@ describe('GET /api/features', () => {
 
     const res = await GET();
     expect(res.status).toBe(404);
+  });
+
+  it('returns master toggle and inbound-calls from featureSettings', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findFirst.mockResolvedValueOnce({
+      id: 'acc-1',
+      featureSettings: { 'ai-receptionist': false, 'inbound-calls': false },
+    });
+    prisma.outboundSettings.findUnique.mockResolvedValueOnce(null);
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.featureSettings['ai-receptionist']).toBe(false);
+    expect(body.featureSettings['inbound-calls']).toBe(false);
+  });
+
+  it('derives outbound-calls as true when either patient-care or financial is enabled', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findFirst.mockResolvedValueOnce({
+      id: 'acc-1',
+      featureSettings: {},
+    });
+    prisma.outboundSettings.findUnique
+      .mockResolvedValueOnce({ patientCareEnabled: false, financialEnabled: true })
+      .mockResolvedValueOnce({ autoApproveCampaigns: false });
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.featureSettings['outbound-calls']).toBe(true);
+    expect(body.featureSettings['outbound-financial']).toBe(true);
+    expect(body.featureSettings['outbound-patient-care']).toBe(false);
+  });
+
+  it('derives outbound-calls as false when both are disabled', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.account.findFirst.mockResolvedValueOnce({
+      id: 'acc-1',
+      featureSettings: {},
+    });
+    prisma.outboundSettings.findUnique
+      .mockResolvedValueOnce({ patientCareEnabled: false, financialEnabled: false })
+      .mockResolvedValueOnce({ autoApproveCampaigns: false });
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body.featureSettings['outbound-calls']).toBe(false);
   });
 });
 
@@ -84,6 +146,58 @@ describe('PUT /api/features', () => {
       where: { accountId: 'acc-1' },
       update: { patientCareEnabled: true, financialEnabled: false },
       create: { accountId: 'acc-1', patientCareEnabled: true, financialEnabled: false },
+    });
+  });
+
+  it('persists ai-receptionist master toggle', async () => {
+    const { prisma } = require('@kit/prisma');
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'ai-receptionist': false },
+      }),
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(prisma.account.update).toHaveBeenCalledWith({
+      where: { id: 'acc-1' },
+      data: { featureSettings: { 'ai-receptionist': false } },
+    });
+    expect(prisma.outboundSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it('persists inbound-calls toggle', async () => {
+    const { prisma } = require('@kit/prisma');
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'inbound-calls': false },
+      }),
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(prisma.account.update).toHaveBeenCalledWith({
+      where: { id: 'acc-1' },
+      data: { featureSettings: { 'inbound-calls': false } },
+    });
+  });
+
+  it('persists email-confirmations toggle', async () => {
+    const { prisma } = require('@kit/prisma');
+    const req = new NextRequest('http://localhost/api/features', {
+      method: 'PUT',
+      body: JSON.stringify({
+        featureSettings: { 'email-confirmations': false },
+      }),
+    });
+    const res = await PUT(req);
+
+    expect(res.status).toBe(200);
+    expect(prisma.account.update).toHaveBeenCalledWith({
+      where: { id: 'acc-1' },
+      data: { featureSettings: { 'email-confirmations': false } },
     });
   });
 
