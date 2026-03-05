@@ -103,6 +103,34 @@ describe('OutboundSchedulerService', () => {
       expect(spy).toHaveBeenCalledWith('acc-2', expect.anything());
       spy.mockRestore();
     });
+
+    it('filters out accounts with outbound-calls disabled', async () => {
+      const spy = jest.spyOn(service as any, 'processRecallForAccount').mockResolvedValue(undefined);
+      prisma.outboundSettings.findMany.mockResolvedValue([
+        { ...mockSettings, accountId: 'acc-1', account: { featureSettings: { 'outbound-calls': false } } },
+        { ...mockSettings, accountId: 'acc-2', account: { featureSettings: { 'outbound-calls': true } } },
+      ]);
+
+      await service.scanRecallCandidates();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith('acc-2', expect.anything());
+      spy.mockRestore();
+    });
+
+    it('filters out accounts with both ai-receptionist and outbound-calls disabled', async () => {
+      const spy = jest.spyOn(service as any, 'processRecallForAccount').mockResolvedValue(undefined);
+      prisma.outboundSettings.findMany.mockResolvedValue([
+        { ...mockSettings, accountId: 'acc-1', account: { featureSettings: { 'ai-receptionist': false, 'outbound-calls': false } } },
+        { ...mockSettings, accountId: 'acc-2', account: { featureSettings: { 'ai-receptionist': true, 'outbound-calls': true } } },
+      ]);
+
+      await service.scanRecallCandidates();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith('acc-2', expect.anything());
+      spy.mockRestore();
+    });
   });
 
   describe('scanReminderCandidates', () => {

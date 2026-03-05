@@ -265,6 +265,20 @@ describe('OutboundDispatcherService', () => {
       expect(campaignService.getQueuedContacts).not.toHaveBeenCalled();
     });
 
+    it('skips campaign when outbound-calls is disabled for account', async () => {
+      prisma.outboundCampaign.findMany
+        .mockResolvedValueOnce([mockCampaign])
+        .mockResolvedValueOnce([]);
+      prisma.account.findUnique.mockResolvedValue({
+        featureSettings: { 'ai-receptionist': true, 'outbound-calls': false },
+      });
+
+      await service.processQueue();
+
+      expect(settingsService.getSettings).not.toHaveBeenCalled();
+      expect(campaignService.getQueuedContacts).not.toHaveBeenCalled();
+    });
+
     it('processes campaign when ai-receptionist is explicitly enabled', async () => {
       prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
       prisma.outboundCampaign.findMany

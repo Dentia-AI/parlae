@@ -194,7 +194,7 @@ export class OutboundSchedulerService {
     return settingsList
       .filter((s) => {
         const fs = ((s as any).account?.featureSettings as Record<string, unknown>) ?? {};
-        return fs['ai-receptionist'] !== false;
+        return fs['ai-receptionist'] !== false && fs['outbound-calls'] !== false;
       })
       .map((s) => ({ id: s.accountId, settings: s }));
   }

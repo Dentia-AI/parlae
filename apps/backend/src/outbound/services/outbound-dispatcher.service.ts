@@ -94,10 +94,10 @@ export class OutboundDispatcherService {
       select: { featureSettings: true },
     });
     const fs = ((acct?.featureSettings) as Record<string, unknown>) ?? {};
-    if (fs['ai-receptionist'] === false) {
+    if (fs['ai-receptionist'] === false || fs['outbound-calls'] === false) {
       this.logger.log({
         accountId: campaign.accountId,
-        msg: 'Skipping campaign — AI receptionist disabled',
+        msg: `Skipping campaign — ${fs['ai-receptionist'] === false ? 'AI receptionist' : 'outbound calls'} disabled`,
       });
       return;
     }
