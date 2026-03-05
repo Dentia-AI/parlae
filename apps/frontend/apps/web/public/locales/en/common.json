@@ -39,6 +39,7 @@
     "voice": "Voice",
     "voiceAndPhone": "Voice & Phone",
     "integrations": "Integrations",
+    "pmsIntegrations": "PMS Integrations",
     "advancedSetup": "Advanced Setup",
     "businessProfile": "Business Profile",
     "outbound": "Outbound",
@@ -598,7 +599,7 @@
     "connect": "Connect"
   },
   "integrationsPage": {
-    "title": "Integrations",
+    "title": "PMS Integrations",
     "description": "Manage your practice management system and calendar connections",
     "refresh": "Refresh",
     "pmsTitle": "Practice Management System",

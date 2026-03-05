@@ -39,6 +39,7 @@
     "voice": "Voix",
     "voiceAndPhone": "Voix et téléphone",
     "integrations": "Intégrations",
+    "pmsIntegrations": "Intégrations PMS",
     "advancedSetup": "Configuration avancée",
     "businessProfile": "Profil d'entreprise",
     "outbound": "Appels sortants",
@@ -598,7 +599,7 @@
     "connect": "Connecter"
   },
   "integrationsPage": {
-    "title": "Intégrations",
+    "title": "Intégrations PMS",
     "description": "Gérez votre système de gestion de cabinet et vos connexions d'agenda",
     "refresh": "Actualiser",
     "pmsTitle": "Système de gestion de cabinet",
