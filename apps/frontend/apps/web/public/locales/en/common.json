@@ -1100,7 +1100,7 @@
     "setup": "Set up",
     "wizardRequired": "Complete the setup wizard to enable your AI receptionist.",
     "completeSetup": "Complete setup",
-    "outboundPrerequisite": "Connect your PMS and add a payment method to enable outbound campaigns.",
+    "outboundPrerequisite": "Connect your PMS to enable outbound campaigns.",
     "connectPms": "Go to PMS Integrations",
     "capabilitiesTitle": "Included Capabilities",
     "capabilitiesNote": "All plans include call logging & analytics, knowledge base with website scraping, customizable AI voice selection, multi-language support (40+ languages), and detailed call transcripts.",

@@ -498,7 +498,7 @@ export default function FeaturesPage() {
         if (topLevelFeatures.length === 0) return null;
         const { labelKey, descriptionKey } = categoryKeys[category]!;
 
-        const outboundLocked = category === 'outbound' && (!pmsConnected || !paymentVerified);
+        const outboundLocked = category === 'outbound' && !pmsConnected;
         const inboundLocked = (category === 'inbound' || category === 'communication') && !wizardCompleted;
 
         return (

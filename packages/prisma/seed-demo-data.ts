@@ -70,6 +70,15 @@ async function seedForAccount(accountId: string, label: string) {
     data: {
       phoneIntegrationMethod: 'forwarded',
       brandingBusinessName: account.name || BUSINESS_NAME,
+      paymentMethodVerified: true,
+      paymentMethodVerifiedAt: new Date(),
+      featureSettings: {
+        'ai-receptionist': true,
+        'inbound-calls': true,
+        'sms-confirmations': true,
+        'email-confirmations': true,
+        'outbound-calls': true,
+      },
       phoneIntegrationSettings: {
         ...existingSettings,
         phoneNumber: '+15145551234',

@@ -28,6 +28,7 @@ jest.mock('@kit/prisma', () => ({
           'email-confirmations': true,
         },
       }),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
     },
     outboundSettings: {
@@ -363,7 +364,7 @@ describe('PUT /api/features', () => {
     expect(body.error).toContain('PMS');
   });
 
-  it('blocks enabling outbound when payment not verified', async () => {
+  it('allows enabling outbound when PMS connected even without payment', async () => {
     const { prisma } = require('@kit/prisma');
     prisma.account.findUnique.mockResolvedValueOnce({
       phoneIntegrationMethod: 'vapi',
@@ -379,10 +380,8 @@ describe('PUT /api/features', () => {
       }),
     });
     const res = await PUT(req);
-    const body = await res.json();
 
-    expect(res.status).toBe(400);
-    expect(body.error).toContain('payment');
+    expect(res.status).toBe(200);
   });
 
   it('allows enabling master/inbound when wizard is completed', async () => {

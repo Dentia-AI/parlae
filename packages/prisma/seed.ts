@@ -52,12 +52,17 @@ async function main() {
   // Create a test account for the user
   const testAccount = await prisma.account.upsert({
     where: { slug: 'test-account' },
-    update: {},
+    update: {
+      paymentMethodVerified: true,
+      paymentMethodVerifiedAt: new Date(),
+    },
     create: {
       name: 'Test Account',
       slug: 'test-account',
       primaryOwnerId: testUser.id,
       pictureUrl: null,
+      paymentMethodVerified: true,
+      paymentMethodVerifiedAt: new Date(),
     },
   });
 

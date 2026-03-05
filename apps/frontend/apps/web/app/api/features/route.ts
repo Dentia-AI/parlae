@@ -17,7 +17,7 @@ const OUTBOUND_KEYS = new Set([
 
 const WIZARD_GATED_KEYS = new Set(['ai-receptionist', 'inbound-calls']);
 
-async function getAccountPrerequisites(accountId: string) {
+async function getAccountPrerequisites(accountId: string, userId: string) {
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: {
@@ -36,8 +36,18 @@ async function getAccountPrerequisites(accountId: string) {
 
   let pmsConnected = false;
   try {
+    const allAccountIds = [accountId];
+    const teamAccounts = await prisma.account.findMany({
+      where: {
+        memberships: { some: { userId } },
+        id: { not: accountId },
+      },
+      select: { id: true },
+    });
+    allAccountIds.push(...teamAccounts.map((a) => a.id));
+
     const pms = await prisma.pmsIntegration.findFirst({
-      where: { accountId, status: 'ACTIVE' },
+      where: { accountId: { in: allAccountIds }, status: 'ACTIVE' },
       select: { id: true },
     });
     pmsConnected = !!pms;
@@ -105,7 +115,7 @@ export async function GET() {
       }
     }
 
-    const prerequisites = await getAccountPrerequisites(account.id);
+    const prerequisites = await getAccountPrerequisites(account.id, userId!);
 
     return NextResponse.json({
       featureSettings,
@@ -163,7 +173,7 @@ export async function PUT(request: NextRequest) {
     );
 
     if (enablingWizardGated || enablingOutbound) {
-      const prereqs = await getAccountPrerequisites(account.id);
+      const prereqs = await getAccountPrerequisites(account.id, userId!);
 
       if (enablingWizardGated && !prereqs.wizardCompleted) {
         return NextResponse.json(
@@ -172,9 +182,9 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      if (enablingOutbound && (!prereqs.pmsConnected || !prereqs.paymentVerified)) {
+      if (enablingOutbound && !prereqs.pmsConnected) {
         return NextResponse.json(
-          { error: 'Connect your PMS and add a payment method before enabling outbound' },
+          { error: 'Connect your PMS before enabling outbound' },
           { status: 400 },
         );
       }

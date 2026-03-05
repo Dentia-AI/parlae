@@ -23,6 +23,22 @@ export function initializeI18nClientSync(
   resources: Resource,
 ): i18n | null {
   if (i18next.isInitialized) {
+    const targetLng = settings.lng;
+
+    if (targetLng && i18next.language !== targetLng) {
+      Object.entries(resources).forEach(([lang, namespaces]) => {
+        Object.entries(namespaces as Record<string, unknown>).forEach(
+          ([ns, bundle]) => {
+            if (!i18next.hasResourceBundle(lang, ns)) {
+              i18next.addResourceBundle(lang, ns, bundle);
+            }
+          },
+        );
+      });
+
+      i18next.changeLanguage(targetLng);
+    }
+
     return i18next;
   }
 
@@ -51,9 +67,13 @@ export async function initializeI18nClient(
   settings: InitOptions,
   resolver: (lang: string, namespace: string) => Promise<object>,
 ): Promise<i18n> {
-  // Guard: i18next is a singleton. If it's already been initialised
-  // (e.g. from a previous render pass or HMR), just return it.
   if (i18next.isInitialized) {
+    const targetLng = settings.lng;
+
+    if (targetLng && i18next.language !== targetLng) {
+      await i18next.changeLanguage(targetLng);
+    }
+
     return i18next;
   }
 

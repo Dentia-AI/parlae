@@ -50,9 +50,9 @@ export function LanguageSelector({
         onChange(locale);
       }
 
+      document.cookie = `lang=${locale};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
       await i18n.changeLanguage(locale);
 
-      // refresh cached translations
       window.location.reload();
     },
     [i18n, onChange],
@@ -100,6 +100,7 @@ export function SubMenuLanguageSelector() {
 
   const languageChanged = useCallback(
     async (locale: string) => {
+      document.cookie = `lang=${locale};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
       await i18n.changeLanguage(locale);
       window.location.reload();
     },
