@@ -62,6 +62,14 @@ jest.mock('@kit/shared/retell/templates/dental-clinic.retell-template', () => ({
   RETELL_POST_CALL_ANALYSIS: [],
 }));
 
+jest.mock('@kit/shared/retell/templates/outbound/patient-care.flow-template', () => ({
+  buildPatientCareOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
+}));
+
+jest.mock('@kit/shared/retell/templates/outbound/financial.flow-template', () => ({
+  buildFinancialOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
+}));
+
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/outbound/settings', {
     method: 'POST',
@@ -126,6 +134,22 @@ describe('POST /api/outbound/settings', () => {
 
     const retell = createRetellService();
     expect(retell.createConversationFlow).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 and does not enable when agent deployment fails', async () => {
+    const { prisma } = require('@kit/prisma');
+    const { createRetellService } = require('@kit/shared/retell/retell.service');
+    const retell = createRetellService();
+    retell.createConversationFlow.mockRejectedValueOnce(
+      new Error('Retell POST /create-conversation-flow (400): schema validation error'),
+    );
+
+    const res = await POST(makeRequest({ action: 'enable', group: 'PATIENT_CARE' }));
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toContain('Failed to deploy outbound agent');
+    expect(prisma.outboundSettings.upsert).not.toHaveBeenCalled();
   });
 
   it('returns 400 for invalid action/group combos', async () => {

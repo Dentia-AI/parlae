@@ -30,6 +30,7 @@ import type {
   ConversationFlowTool,
   ConversationFlowEdge,
   ConversationFlowConversationNode,
+  ConversationFlowEquation,
   RetellCustomTool,
 } from '../../retell.service';
 
@@ -93,7 +94,7 @@ function promptEdge(
 }
 
 function equationEdge(
-  equation: string,
+  equations: ConversationFlowEquation[],
   destinationNodeId: string,
   description?: string,
 ): ConversationFlowEdge {
@@ -101,9 +102,13 @@ function equationEdge(
   return {
     id: `ob_edge_${_edgeCounter}`,
     description,
-    transition_condition: { type: 'equation', equation },
+    transition_condition: { type: 'equation', equations, operator: '||' },
     destination_node_id: destinationNodeId,
   };
+}
+
+function eqVar(variable: string, operator: ConversationFlowEquation['operator'], right?: string): ConversationFlowEquation {
+  return right !== undefined ? { left: variable, operator, right } : { left: variable, operator };
 }
 
 export function buildPatientCareOutboundFlow(
@@ -181,15 +186,15 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: OUTBOUND_ROUTER_PROMPT },
     edges: [
-      equationEdge('{{call_type}} == "recall"', 'recall_node', 'Recall'),
-      equationEdge('{{call_type}} == "reminder"', 'reminder_node', 'Reminder'),
-      equationEdge('{{call_type}} == "followup"', 'followup_node', 'Follow-up'),
-      equationEdge('{{call_type}} == "noshow"', 'noshow_node', 'No-show'),
-      equationEdge('{{call_type}} == "treatment_plan"', 'treatment_plan_node', 'Treatment plan'),
-      equationEdge('{{call_type}} == "postop"', 'postop_node', 'Post-op'),
-      equationEdge('{{call_type}} == "reactivation"', 'reactivation_node', 'Reactivation'),
-      equationEdge('{{call_type}} == "survey"', 'survey_node', 'Survey'),
-      equationEdge('{{call_type}} == "welcome"', 'welcome_node', 'Welcome'),
+      equationEdge([eqVar('{{call_type}}', '==', 'recall')], 'recall_node', 'Recall'),
+      equationEdge([eqVar('{{call_type}}', '==', 'reminder')], 'reminder_node', 'Reminder'),
+      equationEdge([eqVar('{{call_type}}', '==', 'followup')], 'followup_node', 'Follow-up'),
+      equationEdge([eqVar('{{call_type}}', '==', 'noshow')], 'noshow_node', 'No-show'),
+      equationEdge([eqVar('{{call_type}}', '==', 'treatment_plan')], 'treatment_plan_node', 'Treatment plan'),
+      equationEdge([eqVar('{{call_type}}', '==', 'postop')], 'postop_node', 'Post-op'),
+      equationEdge([eqVar('{{call_type}}', '==', 'reactivation')], 'reactivation_node', 'Reactivation'),
+      equationEdge([eqVar('{{call_type}}', '==', 'survey')], 'survey_node', 'Survey'),
+      equationEdge([eqVar('{{call_type}}', '==', 'welcome')], 'welcome_node', 'Welcome'),
     ],
     else_edge: { destination_node_id: 'recall_node' },
   };

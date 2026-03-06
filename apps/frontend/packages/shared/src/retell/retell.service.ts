@@ -105,11 +105,26 @@ export interface RetellAgentSwapTool {
 // Conversation Flow Types
 // ---------------------------------------------------------------------------
 
-export interface ConversationFlowTransitionCondition {
-  type: 'prompt' | 'equation';
-  prompt?: string;
-  equation?: string;
+export interface ConversationFlowEquation {
+  left: string;
+  operator: '==' | '!=' | '>' | '>=' | '<' | '<=' | 'contains' | 'not_contains' | 'exists' | 'not_exist';
+  right?: string;
 }
+
+export interface ConversationFlowPromptCondition {
+  type: 'prompt';
+  prompt: string;
+}
+
+export interface ConversationFlowEquationCondition {
+  type: 'equation';
+  equations: ConversationFlowEquation[];
+  operator: '||' | '&&';
+}
+
+export type ConversationFlowTransitionCondition =
+  | ConversationFlowPromptCondition
+  | ConversationFlowEquationCondition;
 
 export interface ConversationFlowEdge {
   id: string;

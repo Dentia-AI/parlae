@@ -9,6 +9,8 @@ import {
   SHARED_RETELL_AGENT_CONFIG,
   RETELL_POST_CALL_ANALYSIS,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { buildPatientCareOutboundFlow } from '@kit/shared/retell/templates/outbound/patient-care.flow-template';
+import { buildFinancialOutboundFlow } from '@kit/shared/retell/templates/outbound/financial.flow-template';
 
 const DEFAULT_CHANNEL_DEFAULTS: Record<string, string> = {
   recall: 'phone',
@@ -95,14 +97,6 @@ async function createOutboundRetellAgent(
   accountId: string,
   group: 'PATIENT_CARE' | 'FINANCIAL',
 ): Promise<{ agentId: string; conversationFlowId: string; templateVersion: string } | null> {
-  const template = await prisma.outboundAgentTemplate.findUnique({
-    where: { agentGroup: group },
-  });
-
-  if (!template || !template.flowConfig) {
-    return null;
-  }
-
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: { name: true, brandingBusinessName: true, phoneIntegrationSettings: true },
@@ -117,27 +111,46 @@ async function createOutboundRetellAgent(
 
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || '';
+  const webhookSecret = process.env.RETELL_WEBHOOK_SECRET || process.env.BACKEND_WEBHOOK_SECRET || '';
 
   const integrationSettings = (account?.phoneIntegrationSettings as any) ?? {};
   const retellKbId = integrationSettings.retellKnowledgeBaseId as
     | string
     | undefined;
+  const clinicPhone = integrationSettings.phoneNumber as string || '';
 
-  // Mirror voice from inbound agent config; fall back to default
   const voiceId: string =
     integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
   const voiceModel = resolveVoiceModel(voiceId);
 
-  const flowConfig = { ...(template.flowConfig as Record<string, unknown>) };
+  const buildConfig = {
+    clinicName,
+    clinicPhone,
+    webhookUrl: backendUrl ? `${backendUrl}/retell/webhook` : '',
+    webhookSecret,
+    accountId,
+  };
+
+  const flowConfig = group === 'PATIENT_CARE'
+    ? buildPatientCareOutboundFlow(buildConfig)
+    : buildFinancialOutboundFlow(buildConfig);
+
   if (retellKbId) {
-    flowConfig.knowledge_base_ids = [retellKbId];
+    (flowConfig as any).knowledge_base_ids = [retellKbId];
   }
+
+  const template = await prisma.outboundAgentTemplate.findUnique({
+    where: { agentGroup: group },
+    select: { id: true, version: true },
+  });
+  const templateVersion = template?.version || (group === 'PATIENT_CARE' ? 'ob-pc-v1.0' : 'ob-fin-v1.0');
+
   const flow = await retell.createConversationFlow(flowConfig as any);
   if (!flow) {
     throw new Error(`Failed to create conversation flow for outbound ${group}`);
   }
 
-  const agentName = `${clinicName} - Outbound ${group === 'PATIENT_CARE' ? 'Patient Care' : 'Financial'} (${template.version})`;
+  const agentName = `${clinicName} - Outbound ${group === 'PATIENT_CARE' ? 'Patient Care' : 'Financial'} (${templateVersion})`;
 
   const agentConfig: RetellAgentConfig = {
     agent_name: agentName,
@@ -155,8 +168,8 @@ async function createOutboundRetellAgent(
     metadata: {
       accountId,
       agentGroup: group,
-      templateId: template.id,
-      templateVersion: template.version,
+      templateId: template?.id || group,
+      templateVersion,
       deployType: 'outbound_conversation_flow',
     },
   };
@@ -172,7 +185,7 @@ async function createOutboundRetellAgent(
   return {
     agentId: agent.agent_id,
     conversationFlowId: flow.conversation_flow_id,
-    templateVersion: template.version,
+    templateVersion,
   };
 }
 
@@ -311,6 +324,10 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error(`[Outbound] Failed to create Retell agent for ${group}:`, err);
+        return NextResponse.json(
+          { error: `Failed to deploy outbound agent for ${group === 'PATIENT_CARE' ? 'Patient Care' : 'Financial'}. Please try again later.` },
+          { status: 500 },
+        );
       }
     }
 

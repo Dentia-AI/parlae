@@ -21,6 +21,7 @@ import type {
   ConversationFlowTool,
   ConversationFlowEdge,
   ConversationFlowConversationNode,
+  ConversationFlowEquation,
   RetellCustomTool,
 } from '../../retell.service';
 
@@ -85,7 +86,7 @@ function promptEdge(
 }
 
 function equationEdge(
-  equation: string,
+  equations: ConversationFlowEquation[],
   destinationNodeId: string,
   description?: string,
 ): ConversationFlowEdge {
@@ -93,9 +94,13 @@ function equationEdge(
   return {
     id: `fin_edge_${_edgeCounter}`,
     description,
-    transition_condition: { type: 'equation', equation },
+    transition_condition: { type: 'equation', equations, operator: '||' },
     destination_node_id: destinationNodeId,
   };
+}
+
+function eqVar(variable: string, operator: ConversationFlowEquation['operator'], right?: string): ConversationFlowEquation {
+  return right !== undefined ? { left: variable, operator, right } : { left: variable, operator };
 }
 
 export function buildFinancialOutboundFlow(
@@ -159,8 +164,8 @@ export function buildFinancialOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: FINANCIAL_ROUTER_PROMPT },
     edges: [
-      equationEdge('{{call_type}} == "payment"', 'payment_node', 'Payment'),
-      equationEdge('{{call_type}} == "benefits"', 'benefits_node', 'Benefits'),
+      equationEdge([eqVar('{{call_type}}', '==', 'payment')], 'payment_node', 'Payment'),
+      equationEdge([eqVar('{{call_type}}', '==', 'benefits')], 'benefits_node', 'Benefits'),
     ],
     else_edge: { destination_node_id: 'payment_node' },
   };
