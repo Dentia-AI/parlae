@@ -23,10 +23,22 @@ const outcomeColors: Record<string, { dot: string; bar: string }> = {
   OTHER: { dot: 'bg-slate-500', bar: 'bg-gradient-to-r from-slate-500 to-slate-400' },
 };
 
+const MAX_VISIBLE = 4;
+
 export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
   const { t } = useTranslation('common');
   const sortedData = [...data].sort((a, b) => b.count - a.count);
   const totalCalls = sortedData.reduce((sum, item) => sum + item.count, 0);
+
+  // Show top 4 categories; group the rest into "Other"
+  let displayData = sortedData;
+  if (sortedData.length > MAX_VISIBLE + 1) {
+    const top = sortedData.slice(0, MAX_VISIBLE);
+    const rest = sortedData.slice(MAX_VISIBLE);
+    const otherCount = rest.reduce((sum, item) => sum + item.count, 0);
+    const otherPct = totalCalls > 0 ? (otherCount / totalCalls) * 100 : 0;
+    displayData = [...top, { outcome: 'OTHER', count: otherCount, percentage: otherPct }];
+  }
 
   return (
     <Card>
@@ -42,12 +54,12 @@ export function CallOutcomesChart({ data }: CallOutcomesChartProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-5">
-          {sortedData.length === 0 ? (
+          {displayData.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {t('dashboard.noOutcomeData')}
             </div>
           ) : (
-            sortedData.map((item, index) => {
+            displayData.map((item, index) => {
               const config = outcomeColors[item.outcome] || outcomeColors.OTHER!;
 
               return (

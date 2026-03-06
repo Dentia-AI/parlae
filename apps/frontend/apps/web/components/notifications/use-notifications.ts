@@ -1,63 +1,41 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getNotificationsAction,
-  dismissNotificationAction,
-  dismissAllNotificationsAction,
-} from '@kit/shared/notifications/server-actions';
-import { toast } from '@kit/ui/sonner';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+interface ActionItem {
+  id: string;
+  callerName: string | null;
+  reason: string | null;
+  status: string;
+  createdAt: string;
+}
 
 export function useNotifications() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['action-items-notifications'],
     queryFn: async () => {
-      const result = await getNotificationsAction();
-      return result.data || [];
-    },
-    refetchInterval: 30000,
-  });
-
-  const { data: actionItemCount = 0 } = useQuery({
-    queryKey: ['action-items-count'],
-    queryFn: async () => {
-      const res = await fetch('/api/action-items/count');
-      if (!res.ok) return 0;
+      const res = await fetch('/api/action-items?status=OPEN&limit=5');
+      if (!res.ok) return { items: [], total: 0 };
       const json = await res.json();
-      return json.count ?? 0;
+      return {
+        items: (json.items || []) as ActionItem[],
+        total: json.pagination?.total ?? 0,
+      };
     },
     refetchInterval: 30000,
   });
 
-  const notifications = data || [];
-  const unreadNotifications = notifications.filter((n: any) => !n.dismissed).length;
-  const unreadCount = Math.max(unreadNotifications, actionItemCount);
-
-  const dismissMutation = useMutation({
-    mutationFn: (notificationId: number) =>
-      dismissNotificationAction({ notificationId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
-
-  const dismissAllMutation = useMutation({
-    mutationFn: () => dismissAllNotificationsAction(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success('All notifications marked as read');
-    },
-  });
+  const actionItems = data?.items || [];
+  const actionItemCount = data?.total ?? 0;
 
   return {
-    notifications,
-    unreadCount,
+    actionItems,
     actionItemCount,
     isLoading,
-    dismiss: (id: number) => dismissMutation.mutate(id),
-    dismissAll: () => dismissAllMutation.mutate(),
+    refetch: () =>
+      queryClient.invalidateQueries({ queryKey: ['action-items-notifications'] }),
   };
 }
 

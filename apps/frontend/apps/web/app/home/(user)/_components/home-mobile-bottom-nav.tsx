@@ -39,7 +39,7 @@ interface HomeMobileBottomNavProps {
 
 export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
   const pathname = usePathname();
-  const { unreadCount } = useNotifications();
+  const { actionItemCount } = useNotifications();
   const [open, setOpen] = useState(false);
   const { user } = workspace;
 
@@ -112,12 +112,12 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
               >
                 <Menu className="h-5 w-5" />
                 <span className="text-[10px] mt-1">More</span>
-                {unreadCount > 0 && (
+                {actionItemCount > 0 && (
                   <Badge
                     variant="destructive"
                     className="absolute top-1 right-1/4 h-4 min-w-4 rounded-full px-1 text-[10px]"
                   >
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {actionItemCount > 9 ? '9+' : actionItemCount}
                   </Badge>
                 )}
               </button>
@@ -135,20 +135,20 @@ export function HomeMobileBottomNav({ workspace }: HomeMobileBottomNavProps) {
                 >
                   <div className="relative">
                     <Bell className="h-5 w-5" />
-                    {unreadCount > 0 && (
+                    {actionItemCount > 0 && (
                       <Badge
                         variant="destructive"
                         className="absolute -top-2 -right-2 h-4 min-w-4 rounded-full px-1 text-[10px]"
                       >
-                        {unreadCount > 9 ? '9+' : unreadCount}
+                        {actionItemCount > 9 ? '9+' : actionItemCount}
                       </Badge>
                     )}
                   </div>
                   <div>
-                    <span className="text-sm font-medium">Notifications</span>
-                    {unreadCount > 0 && (
+                    <span className="text-sm font-medium">Action Items</span>
+                    {actionItemCount > 0 && (
                       <span className="text-xs text-muted-foreground ml-1">
-                        ({unreadCount} unread)
+                        ({actionItemCount} open)
                       </span>
                     )}
                   </div>

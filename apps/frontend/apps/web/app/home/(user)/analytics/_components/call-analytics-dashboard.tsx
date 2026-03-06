@@ -163,6 +163,24 @@ export function CallAnalyticsDashboard() {
           </Badge>
         </div>
 
+        {/* Attention Required Banner - inline between title and range picker */}
+        {actionItemCount > 0 && (
+          <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-1.5 order-last sm:order-none">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <span className="text-sm font-medium whitespace-nowrap">
+              {t('dashboard.attentionRequired', { count: actionItemCount })}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0 text-xs h-7 px-2.5 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+              onClick={() => router.push('/home/action-items')}
+            >
+              {t('dashboard.viewActionItems')}
+            </Button>
+          </div>
+        )}
+
         <div className="flex gap-1.5 sm:gap-2">
           <Button
             variant={dateRange === '1d' ? 'default' : 'outline'}
@@ -194,33 +212,6 @@ export function CallAnalyticsDashboard() {
           </Button>
         </div>
       </div>
-
-      {/* Attention Required Banner */}
-      {actionItemCount > 0 && (
-        <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-2">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">
-                {t('dashboard.attentionRequired', { count: actionItemCount })}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t('dashboard.attentionDescription')}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-shrink-0 text-xs border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-              onClick={() => router.push('/home/action-items')}
-            >
-              {t('dashboard.viewActionItems')}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Key Metrics */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">

@@ -140,8 +140,7 @@ export function ActionItemsList() {
         setItems((prev) =>
           prev.map((item) => (item.id === id ? { ...item, ...updated } : item)),
         );
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['action-items-count'] });
+        queryClient.invalidateQueries({ queryKey: ['action-items-notifications'] });
       }
     } catch (err) {
       console.error('Failed to update action item:', err);

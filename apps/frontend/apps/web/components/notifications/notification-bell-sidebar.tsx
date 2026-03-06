@@ -1,24 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell } from 'lucide-react';
+import { AlertCircle, Bell } from 'lucide-react';
 import { Button } from '@kit/ui/button';
 import { Badge } from '@kit/ui/badge';
 import { Card } from '@kit/ui/card';
-import { cn } from '@kit/ui/utils';
 import { useNotifications } from './use-notifications';
 import { formatDistanceToNow } from 'date-fns';
 
+const reasonLabels: Record<string, string> = {
+  FOLLOW_UP: 'Follow-up required',
+  TRANSFER_FAILED: 'Transfer failed',
+  NO_RESOLUTION: 'No resolution',
+  EMERGENCY: 'Emergency handled',
+  VOICEMAIL: 'Left voicemail',
+  CALLBACK_REQUESTED: 'Callback requested',
+};
+
 export function NotificationBellSidebar() {
   const [expanded, setExpanded] = useState(false);
-  const { notifications, unreadCount, dismissNotification } = useNotifications();
-
-  // Get top 3 unread notifications
-  const topNotifications = notifications
-    .filter((n) => !n.dismissed)
-    .slice(0, 3);
-
-  const hasNotifications = topNotifications.length > 0;
+  const { actionItems, actionItemCount } = useNotifications();
 
   return (
     <div className="w-full">
@@ -28,56 +29,43 @@ export function NotificationBellSidebar() {
         onClick={() => setExpanded(!expanded)}
       >
         <Bell className="h-5 w-5 text-gray-700 dark:text-gray-100 group-data-[minimized=false]/sidebar:mr-2" />
-        <span className="flex-1 text-left group-data-[minimized=true]/sidebar:hidden">Notifications</span>
-        {unreadCount > 0 && (
+        <span className="flex-1 text-left group-data-[minimized=true]/sidebar:hidden">Action Items</span>
+        {actionItemCount > 0 && (
           <Badge
             variant="destructive"
             className="h-5 min-w-5 rounded-full px-1 text-xs absolute -top-1 -right-1 group-data-[minimized=false]/sidebar:static"
           >
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {actionItemCount > 9 ? '9+' : actionItemCount}
           </Badge>
         )}
       </Button>
 
-      {expanded && hasNotifications && (
+      {expanded && actionItems.length > 0 && (
         <div className="mt-2 space-y-2 px-2">
-          {topNotifications.map((notification) => (
-            <Card
-              key={notification.id}
-              className={cn(
-                'p-3 cursor-pointer hover:bg-muted/50 transition-colors',
-                notification.dismissed && 'opacity-50'
-              )}
-              onClick={() => {
-                if (!notification.dismissed) {
-                  dismissNotification(notification.id);
-                }
-              }}
-            >
-              <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {notification.title}
-                  </p>
-                  {notification.body && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {notification.body}
+          {actionItems.slice(0, 3).map((item) => (
+            <a key={item.id} href="/home/action-items">
+              <Card className="p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {item.callerName || 'Unknown caller'}
                     </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(notification.createdAt), {
-                      addSuffix: true,
-                    })}
-                  </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {reasonLabels[item.reason || ''] || item.reason || 'Needs attention'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatDistanceToNow(new Date(item.createdAt), {
+                        addSuffix: true,
+                      })}
+                    </p>
+                  </div>
                 </div>
-                {!notification.dismissed && (
-                  <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
-                )}
-              </div>
-            </Card>
+              </Card>
+            </a>
           ))}
 
-          {notifications.length > 3 && (
+          {actionItemCount > 3 && (
             <Button
               variant="ghost"
               size="sm"
@@ -86,17 +74,17 @@ export function NotificationBellSidebar() {
                 window.location.href = '/home/action-items';
               }}
             >
-              View all notifications
+              View all {actionItemCount} action items
             </Button>
           )}
         </div>
       )}
 
-      {expanded && !hasNotifications && (
+      {expanded && actionItems.length === 0 && (
         <div className="mt-2 px-2">
           <Card className="p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              No new notifications
+              No open action items
             </p>
           </Card>
         </div>
@@ -104,4 +92,3 @@ export function NotificationBellSidebar() {
     </div>
   );
 }
-
