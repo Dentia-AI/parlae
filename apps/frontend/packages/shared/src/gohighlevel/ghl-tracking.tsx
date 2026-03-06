@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import Script from 'next/script';
 
 /**
  * GoHighLevel External Tracking Script Component
@@ -8,13 +8,11 @@ import { useEffect } from 'react';
  * Loads the GHL external tracking script that records page views,
  * form submissions, and user activity — tied to contacts in your GHL CRM.
  *
- * This uses the current GHL external tracking format:
- * ```html
- * <script
- *   src="https://{tracking-domain}/js/external-tracking.js"
- *   data-tracking-id="tk_xxxxx">
- * </script>
- * ```
+ * Uses Next.js Script component with afterInteractive strategy so the
+ * tracking tag renders as a real <script> element (same as pasting the
+ * snippet from GHL directly into HTML). Dynamic createElement injection
+ * can break tracking scripts that rely on document.currentScript or
+ * synchronous attribute reads during initialisation.
  *
  * Get the tracking code from GHL: Settings → External Tracking → Copy Script
  *
@@ -23,59 +21,25 @@ import { useEffect } from 'react';
  * - NEXT_PUBLIC_GHL_TRACKING_ID — e.g. "tk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
  *
  * Only loads in production to avoid console errors during development.
- *
- * @example
- * ```tsx
- * import { GHLTracking } from '@kit/shared/gohighlevel';
- *
- * export function Layout({ children }) {
- *   return (
- *     <>
- *       {children}
- *       <GHLTracking />
- *     </>
- *   );
- * }
- * ```
  */
 export function GHLTracking() {
   const trackingDomain = process.env.NEXT_PUBLIC_GHL_TRACKING_DOMAIN;
   const trackingId = process.env.NEXT_PUBLIC_GHL_TRACKING_ID;
-  const isDev = process.env.NODE_ENV === 'development';
 
-  useEffect(() => {
-    if (isDev) {
-      return;
-    }
+  if (process.env.NODE_ENV === 'development') {
+    return null;
+  }
 
-    if (!trackingDomain || !trackingId) {
-      return;
-    }
+  if (!trackingDomain || !trackingId) {
+    return null;
+  }
 
-    const existingScript = document.getElementById('ghl-tracking-script');
-    if (existingScript) {
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'ghl-tracking-script';
-    script.src = `https://${trackingDomain}/js/external-tracking.js`;
-    script.async = true;
-    script.setAttribute('data-tracking-id', trackingId);
-
-    script.onerror = () => {
-      console.warn('[GHL Tracking] Failed to load tracking script');
-    };
-
-    document.body.appendChild(script);
-
-    return () => {
-      const scriptToRemove = document.getElementById('ghl-tracking-script');
-      if (scriptToRemove) {
-        scriptToRemove.remove();
-      }
-    };
-  }, [trackingDomain, trackingId, isDev]);
-
-  return null;
+  return (
+    <Script
+      id="ghl-tracking-script"
+      src={`https://${trackingDomain}/js/external-tracking.js`}
+      data-tracking-id={trackingId}
+      strategy="afterInteractive"
+    />
+  );
 }
