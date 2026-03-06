@@ -91,11 +91,11 @@ export default async function RootLayout({
           session={session}
         >
           {children}
-          <GHLTracking />
         </RootProviders>
 
         <Toaster richColors={true} theme={theme} position="top-center" />
         <GHLChatWidget />
+        <GHLTracking />
         <ClarityAnalytics />
       </body>
     </html>

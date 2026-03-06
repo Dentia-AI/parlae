@@ -3,10 +3,9 @@
 import { useEffect, useRef } from 'react';
 
 import Script from 'next/script';
-import { useSession } from 'next-auth/react';
 
 const GHL_IDENTIFY_STORAGE_KEY = 'ghl-identified-email';
-const IDENTIFY_DELAY_MS = 3000;
+const IDENTIFY_DELAY_MS = 4000;
 
 /**
  * GoHighLevel External Tracking Script Component
@@ -67,28 +66,42 @@ export function GHLTracking() {
  * email, identifies the browser, and retroactively attributes all prior
  * anonymous page views to the contact.
  *
+ * Reads the session directly from the NextAuth session endpoint instead
+ * of useSession() to avoid requiring a SessionProvider ancestor — this
+ * component renders outside the providers tree in the root layout.
+ *
  * Identification fires once per email per browser (persisted in localStorage).
  */
 function GHLIdentify() {
-  const { data: session, status } = useSession();
   const firedRef = useRef(false);
 
   useEffect(() => {
-    if (status !== 'authenticated' || firedRef.current) return;
+    if (firedRef.current) return;
 
-    const email = session?.user?.email;
-    if (!email) return;
+    const timer = setTimeout(async () => {
+      if (firedRef.current) return;
 
-    try {
-      if (localStorage.getItem(GHL_IDENTIFY_STORAGE_KEY) === email) return;
-    } catch {
-      // localStorage unavailable — continue anyway
-    }
+      let email: string | undefined;
 
-    firedRef.current = true;
+      try {
+        const res = await fetch('/api/auth/session');
+        if (!res.ok) return;
+        const data = await res.json();
+        email = data?.user?.email;
+      } catch {
+        return;
+      }
 
-    // Wait for the tracking script to load and attach its listeners.
-    const timer = setTimeout(() => {
+      if (!email) return;
+
+      try {
+        if (localStorage.getItem(GHL_IDENTIFY_STORAGE_KEY) === email) return;
+      } catch {
+        // localStorage unavailable — continue anyway
+      }
+
+      firedRef.current = true;
+
       const iframe = document.createElement('iframe');
       iframe.name = 'ghl-id-frame';
       iframe.style.cssText =
@@ -137,7 +150,7 @@ function GHLIdentify() {
     }, IDENTIFY_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [session, status]);
+  }, []);
 
   return null;
 }
