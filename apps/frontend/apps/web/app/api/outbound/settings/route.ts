@@ -335,23 +335,28 @@ export async function POST(request: NextRequest) {
     if (!existing?.fromPhoneNumberId) {
       const inboundPhone = await prisma.retellPhoneNumber.findFirst({
         where: { accountId, isActive: true },
-        select: { id: true, phoneNumber: true },
+        select: { id: true },
       });
       if (inboundPhone) {
         updateData.fromPhoneNumberId = inboundPhone.id;
+      }
+    }
 
-        // Register the outbound agent on the Retell phone number so Retell
-        // knows which agent handles outbound calls from this number.
-        const outboundAgentId = updateData[agentIdField] as string | undefined;
-        if (outboundAgentId && inboundPhone.phoneNumber) {
-          try {
-            const retell = createRetellService();
-            await retell.updatePhoneNumber(inboundPhone.phoneNumber, {
-              outbound_agent_id: outboundAgentId,
-            });
-          } catch (err) {
-            console.warn('[Outbound] Failed to set outbound_agent_id on Retell phone number:', err);
-          }
+    // Always register the outbound agent on the Retell phone number
+    const outboundAgentId = (updateData[agentIdField] ?? currentAgentId) as string | undefined;
+    if (outboundAgentId) {
+      const phoneRecord = await prisma.retellPhoneNumber.findFirst({
+        where: { accountId, isActive: true },
+        select: { phoneNumber: true },
+      });
+      if (phoneRecord?.phoneNumber) {
+        try {
+          const retell = createRetellService();
+          await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
+            outbound_agent_id: outboundAgentId,
+          });
+        } catch (err) {
+          console.warn('[Outbound] Failed to set outbound_agent_id on Retell phone number:', err);
         }
       }
     }

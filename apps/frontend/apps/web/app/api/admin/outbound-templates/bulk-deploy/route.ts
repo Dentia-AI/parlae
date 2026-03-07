@@ -217,23 +217,28 @@ export async function POST(request: NextRequest) {
           });
           if (inboundPhone) {
             fromPhoneNumberId = inboundPhone.id;
-
-            // Register outbound agent on the Retell phone number
-            if (inboundPhone.phoneNumber) {
-              try {
-                await retell.updatePhoneNumber(inboundPhone.phoneNumber, {
-                  outbound_agent_id: agent.agent_id,
-                });
-              } catch (err) {
-                logger.warn(
-                  { accountId, error: err instanceof Error ? err.message : err },
-                  '[Outbound] Failed to set outbound_agent_id on Retell phone number',
-                );
-              }
-            }
           }
         }
 
+        // Always register outbound agent on the Retell phone number
+        const phoneRecord = await prisma.retellPhoneNumber.findFirst({
+          where: { accountId, isActive: true },
+          select: { phoneNumber: true },
+        });
+        if (phoneRecord?.phoneNumber) {
+          try {
+            await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
+              outbound_agent_id: agent.agent_id,
+            });
+          } catch (err) {
+            logger.warn(
+              { accountId, error: err instanceof Error ? err.message : err },
+              '[Outbound] Failed to set outbound_agent_id on Retell phone number',
+            );
+          }
+        }
+
+        // Persist new agent to DB first, then clean up old one
         await prisma.outboundSettings.upsert({
           where: { accountId },
           update: {
@@ -276,6 +281,27 @@ export async function POST(request: NextRequest) {
             ],
           },
         });
+
+        // New agent persisted — now clean up old Retell agent + flow
+        if (previousAgentId && previousAgentId !== agent.agent_id) {
+          try {
+            const oldAgent = await retell.getAgent(previousAgentId);
+            const oldFlowId = oldAgent?.response_engine?.conversation_flow_id;
+            await retell.deleteAgent(previousAgentId);
+            if (oldFlowId) {
+              await retell.deleteConversationFlow(oldFlowId);
+            }
+            logger.info(
+              { accountId, oldAgentId: previousAgentId, oldFlowId },
+              '[Outbound] Deleted previous agent and flow',
+            );
+          } catch (err) {
+            logger.warn(
+              { accountId, previousAgentId, error: err instanceof Error ? err.message : err },
+              '[Outbound] Failed to clean up previous agent (may already be deleted)',
+            );
+          }
+        }
 
         results.push({ accountId, success: true, agentId: agent.agent_id });
 
