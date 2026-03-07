@@ -400,13 +400,13 @@ describe('RetellToolController', () => {
       expect(payload.functionCall.parameters.note).toBe('Call from +1111 to +2222');
     });
 
-    it('should leave unresolvable template vars intact', async () => {
+    it('should return empty string for unresolvable template vars', async () => {
       agentToolsService.lookupPatient.mockResolvedValue({});
 
       await invokeTool('lookupPatient', { custom: '{{call.unknown_field}}' });
 
       const payload = agentToolsService.lookupPatient.mock.calls[0][0];
-      expect(payload.functionCall.parameters.custom).toBe('{{call.unknown_field}}');
+      expect(payload.functionCall.parameters.custom).toBe('');
     });
 
     it('should resolve templates in nested objects', async () => {

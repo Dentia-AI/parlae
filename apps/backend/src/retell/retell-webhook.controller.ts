@@ -102,7 +102,7 @@ export class RetellWebhookController {
     const event = body?.event;
     const callId = body?.call?.call_id;
 
-    this.logger.log(`[Retell Webhook] Event: ${event}, Call ID: ${callId}`);
+    this.logger.log({ event, callId, msg: '[Retell Webhook] Event received' });
 
     switch (event) {
       case 'call_started':
@@ -118,7 +118,7 @@ export class RetellWebhookController {
         return { received: true };
 
       default:
-        this.logger.warn(`[Retell Webhook] Unhandled event: ${event}`);
+        this.logger.warn({ event, msg: '[Retell Webhook] Unhandled event' });
         return { received: true };
     }
   }
@@ -140,18 +140,16 @@ export class RetellWebhookController {
           },
           update: {},
         });
-        this.logger.log(`[Retell] Call reference created: ${callId}`);
+        this.logger.log({ callId, msg: '[Retell] Call reference created' });
       } catch (err) {
-        this.logger.error(
-          `[Retell] Failed to create call reference: ${err instanceof Error ? err.message : err}`,
-        );
+        this.logger.error({ callId, error: err instanceof Error ? err.message : err, msg: '[Retell] Failed to create call reference' });
       }
 
       if (call.from_number) {
         this.agentToolsService
           .prefetchCallerContext(callId, call.from_number, accountId, 'RETELL')
           .catch((err) =>
-            this.logger.error(`[Retell] Caller context prefetch failed: ${err instanceof Error ? err.message : err}`),
+            this.logger.error({ callId, error: err instanceof Error ? err.message : err, msg: '[Retell] Caller context prefetch failed' }),
           );
       }
     }
@@ -474,7 +472,7 @@ export class RetellWebhookController {
       }
     }
 
-    this.logger.warn(`[Retell] Could not resolve account for call ${call?.call_id}`);
+    this.logger.warn({ callId: call?.call_id, msg: '[Retell] Could not resolve account for call' });
     return null;
   }
 

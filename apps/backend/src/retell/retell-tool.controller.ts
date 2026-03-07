@@ -70,9 +70,7 @@ export class RetellToolController {
     const args = this.resolveTemplateVars(body?.args || {}, call);
     const callId = call?.call_id;
 
-    this.logger.log(
-      `[Retell Tool] ${toolName} | callId=${callId} | args=${JSON.stringify(args).slice(0, 300)}`,
-    );
+    this.logger.log({ toolName, callId, args: JSON.stringify(args).slice(0, 300), msg: '[Retell Tool] Invoked' });
 
     this.logger.verbose({
       callId,
@@ -88,14 +86,14 @@ export class RetellToolController {
     // Rate limiting
     const rateLimitError = this.checkToolRateLimit(callId, toolName);
     if (rateLimitError) {
-      this.logger.warn(`[Retell Rate Limit] ${toolName} blocked for call ${callId}`);
+      this.logger.warn({ toolName, callId, msg: '[Retell Rate Limit] Blocked' });
       return { error: rateLimitError };
     }
 
     // Validation
     const validationError = this.validateToolParams(toolName, args);
     if (validationError) {
-      this.logger.warn(`[Retell Tool Validation] ${toolName}: ${validationError}`);
+      this.logger.warn({ toolName, error: validationError, msg: '[Retell Tool Validation] Failed' });
       return { error: validationError };
     }
 
@@ -144,7 +142,7 @@ export class RetellToolController {
 
     const handler = toolMap[toolName];
     if (!handler) {
-      this.logger.warn(`[Retell] Unknown tool: ${toolName}`);
+      this.logger.warn({ toolName, msg: '[Retell] Unknown tool' });
       return { error: `Unknown tool: ${toolName}` };
     }
 
@@ -184,9 +182,7 @@ export class RetellToolController {
       const resultStr = JSON.stringify(result) ?? '{}';
 
       if (hasError) {
-        this.logger.warn(
-          `[Retell Tool Error] ${toolName} | ${resultStr.slice(0, 500)}`,
-        );
+        this.logger.warn({ toolName, callId, result: resultStr.slice(0, 500), msg: '[Retell Tool Error]' });
         this.logger.verbose({
           callId,
           toolName,
@@ -198,9 +194,7 @@ export class RetellToolController {
         return result;
       }
 
-      this.logger.log(
-        `[Retell Tool Response] ${toolName} (${actualDurationMs}ms, exec=${durationMs}ms) | ${resultStr.slice(0, 500)}`,
-      );
+      this.logger.log({ toolName, callId, durationMs: actualDurationMs, execMs: durationMs, result: resultStr.slice(0, 500), msg: '[Retell Tool Response]' });
 
       this.logger.verbose({
         callId,
@@ -216,7 +210,7 @@ export class RetellToolController {
       const durationMs = Date.now() - toolStartMs;
       const errMsg = error instanceof Error ? error.message : 'Tool execution failed';
 
-      this.logger.error(`[Retell Tool Error] ${toolName} THROWN | ${errMsg}`);
+      this.logger.error({ toolName, callId, error: errMsg, msg: '[Retell Tool Error] THROWN' });
       this.recordToolCall(callId, {
         toolName,
         parameters: args,
@@ -286,11 +280,11 @@ export class RetellToolController {
           select: { accountId: true },
         });
         if (retellPhone) {
-          this.logger.log(`[resolveAccount] via RetellPhoneNumber (agentId=${agentId})`);
+          this.logger.log({ agentId, msg: '[resolveAccount] Resolved via RetellPhoneNumber agentId' });
           return retellPhone.accountId;
         }
       } catch (err) {
-        this.logger.error(`[resolveAccount] DB error: ${err instanceof Error ? err.message : err}`);
+        this.logger.error({ error: err instanceof Error ? err.message : err, msg: '[resolveAccount] DB error' });
       }
     }
 
@@ -303,17 +297,15 @@ export class RetellToolController {
           select: { accountId: true },
         });
         if (retellPhone) {
-          this.logger.log(`[resolveAccount] via RetellPhoneNumber phone (number=${phoneNumber})`);
+          this.logger.log({ phoneNumber, msg: '[resolveAccount] Resolved via RetellPhoneNumber phone' });
           return retellPhone.accountId;
         }
       } catch (err) {
-        this.logger.error(`[resolveAccount] DB error: ${err instanceof Error ? err.message : err}`);
+        this.logger.error({ error: err instanceof Error ? err.message : err, msg: '[resolveAccount] DB error' });
       }
     }
 
-    this.logger.warn(
-      `[resolveAccount] Could not resolve account for Retell call: agentId=${agentId}, phone=${call?.to_number}`,
-    );
+    this.logger.warn({ agentId, phone: call?.to_number, msg: '[resolveAccount] Could not resolve account for Retell call' });
     return null;
   }
 
@@ -337,12 +329,17 @@ export class RetellToolController {
           const key = templateMatch[1].trim();
           const resolved = varMap[key];
           if (resolved !== undefined) {
-            this.logger.log(`[Retell Template] Resolved {{${key}}} → ${resolved}`);
+            this.logger.log({ template: key, resolved, msg: '[Retell Template] Resolved variable' });
             return resolved;
           }
+          this.logger.warn({ template: key, msg: '[Retell Template] Unresolved variable — returning empty string' });
+          return '';
         }
         return value.replace(/\{\{(.+?)\}\}/g, (_match, key: string) => {
-          return varMap[key.trim()] ?? _match;
+          const resolved = varMap[key.trim()];
+          if (resolved !== undefined) return resolved;
+          this.logger.warn({ template: key.trim(), msg: '[Retell Template] Unresolved inline variable — removed' });
+          return '';
         });
       }
       if (Array.isArray(value)) return value.map(resolve);

@@ -77,14 +77,16 @@ export class HipaaAuditService {
       `;
 
       this.logger.log({
-        message: 'PHI access logged',
+        msg: 'PHI access logged',
         pmsIntegrationId: entry.pmsIntegrationId,
         action: entry.action,
         phiAccessed: entry.phiAccessed,
       });
     } catch (error: any) {
-      // Audit failure must not break patient-facing workflows
-      this.logger.error(`HIPAA audit logging failed: ${error.message}`, error.stack);
+      this.logger.error({
+        msg: 'HIPAA audit logging failed',
+        error: error.message,
+      });
     }
   }
 

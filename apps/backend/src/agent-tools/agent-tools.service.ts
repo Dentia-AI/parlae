@@ -843,7 +843,7 @@ export class AgentToolsService {
       const today = new Date().toISOString().slice(0, 10);
       let requestedDate = params.date || today;
       if (requestedDate < today) {
-        this.logger.warn(`[checkAvailability] AI sent past date "${requestedDate}", correcting to today "${today}"`);
+        this.logger.warn({ requestedDate, correctedTo: today, msg: '[checkAvailability] AI sent past date — correcting to today' });
         requestedDate = today;
       }
       params.date = requestedDate;
@@ -1064,7 +1064,7 @@ export class AgentToolsService {
         const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
         searchQuery.cell = normalized;
         if (rawPhone.trim() !== normalized) {
-          this.logger.log(`[lookupPatient] Phone normalized: "${rawPhone.trim()}" → "${normalized}"`);
+          this.logger.log({ raw: rawPhone.trim(), normalized, msg: '[lookupPatient] Phone normalized' });
         }
       } else if (params.email) {
         searchQuery.email = params.email;
@@ -1085,7 +1085,27 @@ export class AgentToolsService {
 
       const nameForFallback = this.extractNameQuery(params);
       if (nameForFallback) {
-        this.logger.log(`[lookupPatient] Name available for OR fallback: "${nameForFallback.firstname} ${nameForFallback.lastname || ''}".trim()`);
+        this.logger.log({ nameForFallback, msg: '[lookupPatient] Name available for OR fallback' });
+      }
+
+      const hasSearchCriteria = searchQuery.cell || searchQuery.email || searchQuery.firstname || searchQuery.lastname || searchQuery.query;
+      if (!hasSearchCriteria && !nameForFallback) {
+        this.logger.warn({ params: Object.keys(params), msg: '[lookupPatient] No search criteria — asking caller for info' });
+        return {
+          result: {
+            success: true,
+            patients: [],
+            count: 0,
+            callerVerified: false,
+            message: "I don't have enough information to look you up. Could you please provide your name or the phone number you used when booking?",
+            _hipaa: ANTI_HALLUCINATION_DISCLAIMER,
+          },
+        };
+      }
+
+      if (!hasSearchCriteria && nameForFallback) {
+        searchQuery.firstname = nameForFallback.firstname;
+        if (nameForFallback.lastname) searchQuery.lastname = nameForFallback.lastname;
       }
 
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
@@ -1093,7 +1113,7 @@ export class AgentToolsService {
       const callerCtx = call?.id ? this.getCallerContext(call.id) : undefined;
 
       if (!phoneRecord?.pmsIntegration) {
-        this.logger.log('[lookupPatient] No PMS configured — GCal-only mode');
+        this.logger.log({ msg: '[lookupPatient] No PMS configured — GCal-only mode' });
 
         const gcalResult: Record<string, any> = {
           success: true,
@@ -1417,7 +1437,7 @@ export class AgentToolsService {
         const patientId = `gcal-${Date.now()}`;
         const callId = call?.id;
 
-        this.logger.log(`[createPatient] No PMS — GCal-only mode. Noted: ${patientName}, ${params.email || 'no email'}, ${patientPhone}`);
+        this.logger.log({ patientName, email: params.email || 'no email', phone: patientPhone, msg: '[createPatient] No PMS — GCal-only mode' });
 
         if (callId) {
           this.cachePatient(callId, {
@@ -1967,7 +1987,7 @@ export class AgentToolsService {
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
-        this.logger.log(`[addPatientNote] No PMS — GCal-only mode. Note: ${(params.content || '').slice(0, 100)}`);
+        this.logger.log({ note: (params.content || '').slice(0, 100), msg: '[addPatientNote] No PMS — GCal-only mode' });
         return {
           result: {
             success: true,
@@ -2436,7 +2456,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      this.logger.log(`[createPaymentPlan] Creating plan for patient ${params.patientId}: $${params.totalAmount} over ${params.numberOfPayments} payments`);
+      this.logger.log({ patientId: params.patientId, totalAmount: params.totalAmount, numberOfPayments: params.numberOfPayments, msg: '[createPaymentPlan] Creating plan' });
 
       const monthlyAmount = (params.totalAmount / params.numberOfPayments).toFixed(2);
 
@@ -2616,7 +2636,7 @@ export class AgentToolsService {
 
   private async isGoogleCalendarAvailable(accountId: string | null | undefined): Promise<boolean> {
     if (!accountId) {
-      this.logger.warn('[GCal Check] No accountId provided');
+      this.logger.warn({ msg: '[GCal Check] No accountId provided' });
       return false;
     }
     if (!this.googleCalendar.isConfigured()) {
@@ -2846,7 +2866,7 @@ export class AgentToolsService {
 
       // Safety: reject bookings in the past — bump to now + 1 hour
       if (startTime < now) {
-        this.logger.warn(`[GCal Booking] AI sent past startTime "${startTime.toISOString()}", adjusting to now + 1hr`);
+        this.logger.warn({ startTime: startTime.toISOString(), msg: '[GCal Booking] AI sent past startTime — adjusting to now + 1hr' });
         startTime = new Date(now.getTime() + 60 * 60 * 1000);
       }
 
@@ -2875,12 +2895,12 @@ export class AgentToolsService {
       if (!patientFirstName && cached) {
         patientFirstName = cached.firstName || '';
         patientLastName = cached.lastName || '';
-        this.logger.log(`[GCal Booking] Using cached patient data from createPatient: ${patientFirstName} ${patientLastName}`);
+        this.logger.log({ patientFirstName, patientLastName, msg: '[GCal Booking] Using cached patient data from createPatient' });
       }
 
       if (!patientFirstName) {
         patientFirstName = 'Patient';
-        this.logger.warn('[GCal Booking] No patient name provided by AI and no cache — falling back to "Patient"');
+        this.logger.warn({ msg: '[GCal Booking] No patient name provided by AI and no cache — falling back to "Patient"' });
       }
 
       const patientPhone = params.phone || cached?.phone || callerPhone;
@@ -3243,7 +3263,7 @@ export class AgentToolsService {
       );
 
       if (!events || events.length === 0) {
-        this.logger.warn(`[GCal Fallback] updatePatient: no upcoming events found for caller phone`);
+        this.logger.warn({ msg: '[GCal Fallback] updatePatient: no upcoming events found for caller phone' });
         return {
           error: 'No matching events',
           message: "Let me take your updated information manually.",

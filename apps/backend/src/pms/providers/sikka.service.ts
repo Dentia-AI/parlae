@@ -58,6 +58,7 @@ export class SikkaPmsService extends BasePmsService {
   private officeId?: string;
   private secretKey?: string;
   private practiceId?: string;
+  private practiceIdVerified = false;
   
   constructor(
     accountId: string,
@@ -152,19 +153,24 @@ export class SikkaPmsService extends BasePmsService {
     if (this.requestKey && this.tokenExpiry) {
       const bufferMs = 60 * 60 * 1000; // 1 hour
       if (Date.now() < this.tokenExpiry.getTime() - bufferMs) {
-        return; // Token is still valid
+        if (!this.practiceIdVerified) {
+          await this.verifyPracticeId();
+        }
+        return;
       }
     }
     
-    // Need to refresh or get initial token
     if (this.refreshKey) {
       await this.refreshToken();
     } else if (this.officeId && this.secretKey) {
       await this.getInitialToken();
     } else {
-      // Need to fetch authorized_practices first
       await this.fetchAuthorizedPractices();
       await this.getInitialToken();
+    }
+
+    if (!this.practiceIdVerified) {
+      await this.verifyPracticeId();
     }
   }
   
@@ -310,6 +316,39 @@ export class SikkaPmsService extends BasePmsService {
     }
   }
   
+  private async verifyPracticeId(): Promise<void> {
+    try {
+      const response = await axios.get(`${this.baseUrl}/authorized_practices`, {
+        headers: { 'App-Id': this.appId, 'App-Key': this.appKey },
+        timeout: 10000,
+      });
+
+      const practices = response.data.items || [];
+      if (practices.length > 0) {
+        const authorizedId = practices[0].practice_id;
+        if (this.practiceId && this.practiceId !== authorizedId) {
+          this.logger.warn({
+            configuredPracticeId: this.practiceId,
+            authorizedPracticeId: authorizedId,
+            msg: '[Sikka] Practice ID mismatch — auto-correcting to authorized value',
+          });
+          this.practiceId = authorizedId;
+        } else if (!this.practiceId) {
+          this.practiceId = authorizedId;
+        }
+        if (!this.officeId) this.officeId = practices[0].office_id;
+        if (!this.secretKey) this.secretKey = practices[0].secret_key;
+      }
+      this.practiceIdVerified = true;
+    } catch (error) {
+      this.logger.warn({
+        error: error instanceof Error ? error.message : String(error),
+        msg: '[Sikka] Could not verify practice_id — continuing with configured value',
+      });
+      this.practiceIdVerified = true;
+    }
+  }
+
   // ============================================================================
   // Writeback Status Tracking
   // ============================================================================
