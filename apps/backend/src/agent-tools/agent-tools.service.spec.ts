@@ -1649,16 +1649,37 @@ describe('AgentToolsService', () => {
         expect(result.error).toBe('Patient update failed');
       });
 
-      it('should return error when no PMS configured', async () => {
+      it('should fall back to gcal when no PMS configured', async () => {
+        prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+          accountId: 'acc-1', pmsIntegration: null, account: { id: 'acc-1' },
+        });
+        gcalService.isConnectedForAccount.mockResolvedValue(true);
+        gcalService.findEventsByPatient.mockResolvedValue({
+          success: true,
+          events: [{ id: 'evt-1', description: 'Name: Test\nPhone: +14155559999', summary: 'Cleaning - Test' }],
+        });
+        gcalService.updateEvent.mockResolvedValue({ success: true, eventId: 'evt-1' });
+
+        const result = await service.updatePatient(makePayload({
+          email: 'new@email.com',
+        })) as any;
+
+        expect(result.result.success).toBe(true);
+        expect(result.result.integrationType).toBe('google_calendar');
+        expect(gcalService.updateEvent).toHaveBeenCalled();
+      });
+
+      it('should return error when no PMS and no gcal configured', async () => {
         prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
           accountId: 'acc-1', pmsIntegration: null, account: null,
         });
+        gcalService.isConnectedForAccount.mockResolvedValue(false);
 
         const result = await service.updatePatient(makePayload({
           patientId: 'p-1', phone: '+14155559999',
         })) as any;
 
-        expect(result.error).toBe('PMS not configured');
+        expect(result.error).toBe('No system configured');
       });
     });
 
