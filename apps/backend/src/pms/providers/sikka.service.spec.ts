@@ -31,6 +31,7 @@ function createMockClient() {
   const mockGet = jest.fn();
   const mockPost = jest.fn();
   const mockPatch = jest.fn();
+  const mockPut = jest.fn();
   const mockDelete = jest.fn();
 
   const client = {
@@ -55,6 +56,13 @@ function createMockClient() {
       }
       return mockPatch(url, data, config);
     }),
+    put: jest.fn(async (url: string, data?: any, config: any = {}) => {
+      const cfg = { method: 'PUT', url, data, headers: {}, ...config };
+      if (requestHandler) {
+        await requestHandler(cfg);
+      }
+      return mockPut(url, data, config);
+    }),
     delete: jest.fn(async (url: string, config: any = {}) => {
       const cfg = { method: 'DELETE', url, headers: {}, ...config };
       if (requestHandler) {
@@ -75,7 +83,7 @@ function createMockClient() {
     },
   };
 
-  return { client, mockGet, mockPost, mockPatch, mockDelete };
+  return { client, mockGet, mockPost, mockPatch, mockPut, mockDelete };
 }
 
 describe('SikkaPmsService', () => {
@@ -83,15 +91,17 @@ describe('SikkaPmsService', () => {
   let mockGet: jest.Mock;
   let mockPost: jest.Mock;
   let mockPatch: jest.Mock;
+  let mockPut: jest.Mock;
   let mockDelete: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    const { client, mockGet: mg, mockPost: mp, mockPatch: mpa, mockDelete: md } = createMockClient();
+    const { client, mockGet: mg, mockPost: mp, mockPatch: mpa, mockPut: mpu, mockDelete: md } = createMockClient();
     mockGet = mg;
     mockPost = mp;
     mockPatch = mpa;
+    mockPut = mpu;
     mockDelete = md;
 
     mockedAxios.create.mockReturnValue(client as any);
@@ -329,17 +339,24 @@ describe('SikkaPmsService', () => {
     it('getPatient fetches and transforms patient', async () => {
       mockGet.mockResolvedValue({
         data: {
-          patient_id: 'pat-1',
-          firstname: 'Jane',
-          lastname: 'Doe',
-          birthdate: '1990-01-15',
-          email: 'jane@example.com',
+          items: [
+            {
+              patient_id: 'pat-1',
+              firstname: 'Jane',
+              lastname: 'Doe',
+              birthdate: '1990-01-15',
+              email: 'jane@example.com',
+            },
+          ],
+          total_count: '1',
         },
       });
 
       const result = await service.getPatient('pat-1');
 
-      expect(mockGet).toHaveBeenCalledWith('/patients/pat-1', expect.anything());
+      expect(mockGet).toHaveBeenCalledWith('/patients', {
+        params: { patient_id: 'pat-1', limit: 1 },
+      });
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({
         id: 'pat-1',
@@ -515,7 +532,9 @@ describe('SikkaPmsService', () => {
 
       const result = await service.getPatientInsurance('pat-1');
 
-      expect(mockGet).toHaveBeenCalledWith('/patients/pat-1/insurance', expect.anything());
+      expect(mockGet).toHaveBeenCalledWith('/insurance_plan_coverage', {
+        params: { patient_id: 'pat-1' },
+      });
       expect(result.success).toBe(true);
       expect(result.data![0]).toMatchObject({
         id: 'ins-1',
@@ -773,17 +792,21 @@ describe('SikkaPmsService', () => {
     });
 
     it('updates appointment and returns result', async () => {
-      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockPut.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
       mockGet.mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
         .mockResolvedValueOnce({
           data: {
-            appointment_sr_no: 'apt-1',
-            patient_id: 'pat-1',
-            provider_id: 'prov-1',
-            date: '2025-03-16',
-            time: '14:00',
-            length: '45',
-            status: 'scheduled',
+            items: [
+              {
+                appointment_sr_no: 'apt-1',
+                patient_id: 'pat-1',
+                provider_id: 'prov-1',
+                date: '2025-03-16',
+                time: '14:00',
+                length: '45',
+                status: 'scheduled',
+              },
+            ],
           },
         });
 
@@ -792,11 +815,13 @@ describe('SikkaPmsService', () => {
         duration: 45,
       });
 
-      expect(mockPatch).toHaveBeenCalledWith(
+      expect(mockPut).toHaveBeenCalledWith(
         '/appointments/apt-1',
         expect.objectContaining({
-          start_time: '2025-03-16T14:00:00.000Z',
-          duration: 45,
+          date: '2025-03-16',
+          time: '14:00',
+          length: '45',
+          practice_id: '1',
         }),
         expect.anything()
       );
@@ -810,14 +835,23 @@ describe('SikkaPmsService', () => {
     });
 
     it('cancels appointment with reason', async () => {
-      mockDelete.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
       mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Cancelled' }] } });
 
       const result = await service.cancelAppointment('apt-1', { reason: 'Patient request' });
 
-      expect(mockDelete).toHaveBeenCalledWith('/appointments/apt-1', {
-        data: { reason: 'Patient request' },
-      });
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/appointments/apt-1',
+        expect.objectContaining({
+          appointment_sr_no: 'apt-1',
+          op: 'replace',
+          path: '/status',
+          value: 'Cancelled',
+          practice_id: '1',
+          cancellation_note: 'Patient request',
+        }),
+        expect.anything()
+      );
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({ cancelled: true });
     });
@@ -833,10 +867,14 @@ describe('SikkaPmsService', () => {
       mockGet.mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
         .mockResolvedValueOnce({
           data: {
-            patient_id: 'pat-1',
-            firstname: 'Jane',
-            lastname: 'Doe',
-            email: 'jane.updated@example.com',
+            items: [
+              {
+                patient_id: 'pat-1',
+                firstname: 'Jane',
+                lastname: 'Doe',
+                email: 'jane.updated@example.com',
+              },
+            ],
           },
         });
 
@@ -877,7 +915,9 @@ describe('SikkaPmsService', () => {
 
       const result = await service.getPatientNotes('pat-1');
 
-      expect(mockGet).toHaveBeenCalledWith('/patients/pat-1/notes', expect.anything());
+      expect(mockGet).toHaveBeenCalledWith('/medical_notes', {
+        params: { patient_id: 'pat-1' },
+      });
       expect(result.success).toBe(true);
       expect(result.data![0]).toMatchObject({
         id: 'note-1',
@@ -921,34 +961,16 @@ describe('SikkaPmsService', () => {
       service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
     });
 
-    it('adds insurance record', async () => {
-      mockPost.mockResolvedValue({
-        data: {
-          id: 'ins-1',
-          patient_id: 'pat-1',
-          provider: 'Aetna',
-          policy_number: 'POL789',
-          is_primary: true,
-        },
-      });
-
+    it('returns NOT_SUPPORTED since Sikka does not support direct insurance creation', async () => {
       const result = await service.addPatientInsurance('pat-1', {
         provider: 'Aetna',
         policyNumber: 'POL789',
         isPrimary: true,
       });
 
-      expect(mockPost).toHaveBeenCalledWith(
-        '/patients/pat-1/insurance',
-        expect.objectContaining({
-          provider: 'Aetna',
-          policyNumber: 'POL789',
-          isPrimary: true,
-        }),
-        expect.anything()
-      );
-      expect(result.success).toBe(true);
-      expect(result.data?.provider).toBe('Aetna');
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('NOT_SUPPORTED');
     });
   });
 
@@ -995,16 +1017,22 @@ describe('SikkaPmsService', () => {
     it('fetches single provider', async () => {
       mockGet.mockResolvedValue({
         data: {
-          id: 'prov-1',
-          first_name: 'John',
-          last_name: 'Smith',
-          title: 'DDS',
+          items: [
+            {
+              id: 'prov-1',
+              first_name: 'John',
+              last_name: 'Smith',
+              title: 'DDS',
+            },
+          ],
         },
       });
 
       const result = await service.getProvider('prov-1');
 
-      expect(mockGet).toHaveBeenCalledWith('/providers/prov-1', expect.anything());
+      expect(mockGet).toHaveBeenCalledWith('/providers', {
+        params: { provider_id: 'prov-1', limit: 1 },
+      });
       expect(result.success).toBe(true);
       expect(result.data?.id).toBe('prov-1');
     });
@@ -1052,28 +1080,14 @@ describe('SikkaPmsService', () => {
       service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
     });
 
-    it('patches insurance', async () => {
-      mockPatch.mockResolvedValue({
-        data: {
-          id: 'ins-1',
-          patient_id: 'pat-1',
-          provider: 'Aetna',
-          policy_number: 'POL-UPDATED',
-          is_primary: true,
-        },
-      });
-
+    it('returns NOT_SUPPORTED since Sikka does not support direct insurance updates', async () => {
       const result = await service.updatePatientInsurance('pat-1', 'ins-1', {
         policyNumber: 'POL-UPDATED',
       });
 
-      expect(mockPatch).toHaveBeenCalledWith(
-        '/patients/pat-1/insurance/ins-1',
-        { policyNumber: 'POL-UPDATED' },
-        expect.anything()
-      );
-      expect(result.success).toBe(true);
-      expect(result.data?.policyNumber).toBe('POL-UPDATED');
+      expect(mockPatch).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('NOT_SUPPORTED');
     });
   });
 });

@@ -598,25 +598,28 @@ export class SikkaPmsService extends BasePmsService {
     updates: AppointmentUpdateInput
   ): Promise<PmsApiResponse<Appointment>> {
     try {
-      const payload: any = {};
+      const payload: Record<string, any> = {
+        practice_id: this.practiceId,
+      };
       
       if (updates.startTime) {
-        payload.start_time = updates.startTime.toISOString();
+        payload.date = updates.startTime.toISOString().split('T')[0];
+        payload.time = updates.startTime.toISOString().split('T')[1].slice(0, 5);
       }
       if (updates.duration !== undefined) {
-        payload.duration = updates.duration;
+        payload.length = String(updates.duration);
       }
       if (updates.providerId) {
         payload.provider_id = updates.providerId;
       }
       if (updates.appointmentType) {
-        payload.appointment_type = updates.appointmentType;
+        payload.type = updates.appointmentType;
       }
       if (updates.notes) {
-        payload.notes = updates.notes;
+        payload.description = updates.notes;
       }
       
-      const response = await this.client.patch(`/appointments/${appointmentId}`, payload);
+      const response = await this.client.put(`/appointments/${appointmentId}`, payload);
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -653,12 +656,18 @@ export class SikkaPmsService extends BasePmsService {
     input: AppointmentCancelInput
   ): Promise<PmsApiResponse<{ cancelled: boolean; message?: string }>> {
     try {
-      // Submit writeback
-      const response = await this.client.delete(`/appointments/${appointmentId}`, {
-        data: {
-          reason: input.reason,
-        },
-      });
+      const payload: Record<string, any> = {
+        appointment_sr_no: appointmentId,
+        op: 'replace',
+        path: '/status',
+        value: 'Cancelled',
+        practice_id: this.practiceId,
+      };
+      if (input.reason) {
+        payload.cancellation_note = input.reason;
+      }
+
+      const response = await this.client.patch(`/appointments/${appointmentId}`, payload);
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -764,8 +773,14 @@ export class SikkaPmsService extends BasePmsService {
   
   async getPatient(patientId: string): Promise<PmsApiResponse<Patient>> {
     try {
-      const response = await this.client.get(`/patients/${patientId}`);
-      const patient = this.mapSikkaPatient(response.data);
+      const response = await this.client.get('/patients', {
+        params: { patient_id: patientId, limit: 1 },
+      });
+      const items = response.data.items || [];
+      if (items.length === 0) {
+        return this.createErrorResponse('NOT_FOUND', `Patient ${patientId} not found`, new Error('Patient not found'));
+      }
+      const patient = this.mapSikkaPatient(items[0]);
       return this.createSuccessResponse(patient);
     } catch (error) {
       return this.handleError(error, 'getPatient');
@@ -878,8 +893,10 @@ export class SikkaPmsService extends BasePmsService {
   
   async getPatientNotes(patientId: string): Promise<PmsListResponse<PatientNote>> {
     try {
-      const response = await this.client.get(`/patients/${patientId}/notes`);
-      const notes = (response.data.items || response.data.notes || []).map(this.mapSikkaNote);
+      const response = await this.client.get('/medical_notes', {
+        params: { patient_id: patientId },
+      });
+      const notes = (response.data.items || []).map(this.mapSikkaNote);
       return this.createListResponse(notes, {
         total: parseInt(response.data.total_count || notes.length.toString()),
       });
@@ -935,8 +952,10 @@ export class SikkaPmsService extends BasePmsService {
   
   async getPatientInsurance(patientId: string): Promise<PmsListResponse<Insurance>> {
     try {
-      const response = await this.client.get(`/patients/${patientId}/insurance`);
-      const insurance = (response.data.items || response.data.insurance || []).map(this.mapSikkaInsurance);
+      const response = await this.client.get('/insurance_plan_coverage', {
+        params: { patient_id: patientId },
+      });
+      const insurance = (response.data.items || []).map(this.mapSikkaInsurance);
       return this.createListResponse(insurance, {
         total: parseInt(response.data.total_count || insurance.length.toString()),
       });
@@ -946,33 +965,26 @@ export class SikkaPmsService extends BasePmsService {
   }
   
   async addPatientInsurance(
-    patientId: string,
-    insurance: InsuranceCreateInput
+    _patientId: string,
+    _insurance: InsuranceCreateInput
   ): Promise<PmsApiResponse<Insurance>> {
-    try {
-      const response = await this.client.post(`/patients/${patientId}/insurance`, insurance);
-      const createdInsurance = this.mapSikkaInsurance(response.data);
-      return this.createSuccessResponse(createdInsurance);
-    } catch (error) {
-      return this.handleError(error, 'addPatientInsurance');
-    }
+    return this.createErrorResponse(
+      'NOT_SUPPORTED',
+      'Sikka API does not support direct insurance creation. Insurance must be managed through the PMS.',
+      new Error('Operation not supported'),
+    );
   }
   
   async updatePatientInsurance(
-    patientId: string,
-    insuranceId: string,
-    updates: Partial<InsuranceCreateInput>
+    _patientId: string,
+    _insuranceId: string,
+    _updates: Partial<InsuranceCreateInput>
   ): Promise<PmsApiResponse<Insurance>> {
-    try {
-      const response = await this.client.patch(
-        `/patients/${patientId}/insurance/${insuranceId}`,
-        updates
-      );
-      const updatedInsurance = this.mapSikkaInsurance(response.data);
-      return this.createSuccessResponse(updatedInsurance);
-    } catch (error) {
-      return this.handleError(error, 'updatePatientInsurance');
-    }
+    return this.createErrorResponse(
+      'NOT_SUPPORTED',
+      'Sikka API does not support direct insurance updates. Insurance must be managed through the PMS.',
+      new Error('Operation not supported'),
+    );
   }
   
   // ============================================================================
@@ -1067,8 +1079,14 @@ export class SikkaPmsService extends BasePmsService {
   
   async getProvider(providerId: string): Promise<PmsApiResponse<Provider>> {
     try {
-      const response = await this.client.get(`/providers/${providerId}`);
-      const provider = this.mapSikkaProvider(response.data);
+      const response = await this.client.get('/providers', {
+        params: { provider_id: providerId, limit: 1 },
+      });
+      const items = response.data.items || [];
+      if (items.length === 0) {
+        return this.createErrorResponse('NOT_FOUND', `Provider ${providerId} not found`, new Error('Provider not found'));
+      }
+      const provider = this.mapSikkaProvider(items[0]);
       return this.createSuccessResponse(provider);
     } catch (error) {
       return this.handleError(error, 'getProvider');

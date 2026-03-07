@@ -60,7 +60,9 @@ describe('SikkaWritebackService', () => {
           items: [
             {
               id: 'wb-1',
-              result: 'completed',
+              is_completed: 'True',
+              has_error: 'False',
+              result: 'Patient created successfully',
               error_message: null,
               completed_time: '2025-03-03T12:00:00Z',
               duration_in_second: '5',
@@ -79,10 +81,10 @@ describe('SikkaWritebackService', () => {
         durationInSeconds: '5',
       });
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://api.sikkasoft.com/v4/writebacks',
+        'https://api.sikkasoft.com/v4/writeback_status',
         expect.objectContaining({
           params: { id: 'wb-1' },
-          headers: { 'App-Id': 'app-1', 'App-Key': 'key-1' },
+          headers: { 'Request-Key': 'key-1' },
           timeout: 10000,
         })
       );
@@ -118,7 +120,9 @@ describe('SikkaWritebackService', () => {
           items: [
             {
               id: 'wb-1',
-              result: 'failed',
+              is_completed: 'True',
+              has_error: 'True',
+              result: 'Booking conflict',
               error_message: 'Booking conflict',
               completed_time: null,
               duration_in_second: null,
@@ -224,7 +228,7 @@ describe('SikkaWritebackService', () => {
       mockedAxios.get.mockResolvedValue({
         data: {
           items: [
-            { id: 'wb-1', result: 'completed', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' },
+            { id: 'wb-1', is_completed: 'True', has_error: 'False', result: 'Success', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' },
           ],
         },
       });
@@ -272,7 +276,7 @@ describe('SikkaWritebackService', () => {
       mockedAxios.get.mockResolvedValue({
         data: {
           items: [
-            { id: 'wb-1', result: 'pending', error_message: null, completed_time: null, duration_in_second: null },
+            { id: 'wb-1', is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null },
           ],
         },
       });
@@ -299,7 +303,7 @@ describe('SikkaWritebackService', () => {
       (service as any).getWritebacksReadyForCheck = jest.fn().mockResolvedValue(writebacks);
 
       mockedAxios.get.mockResolvedValue({
-        data: { items: [{ id: 'wb-0', result: 'pending', error_message: null, completed_time: null, duration_in_second: null }] },
+        data: { items: [{ id: 'wb-0', is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null }] },
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);
       prisma.pmsWriteback.count.mockResolvedValue(20);
@@ -346,7 +350,7 @@ describe('SikkaWritebackService', () => {
       (service as any).getWritebacksReadyForCheck = jest.fn().mockResolvedValue([writeback]);
 
       mockedAxios.get.mockResolvedValue({
-        data: { items: [{ id: 'wb-1', result: 'pending', error_message: null, completed_time: null, duration_in_second: null }] },
+        data: { items: [{ id: 'wb-1', is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null }] },
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);
       prisma.pmsWriteback.count.mockResolvedValue(1);
@@ -419,7 +423,7 @@ describe('SikkaWritebackService', () => {
       mockedAxios.get.mockResolvedValue({
         data: {
           items: [
-            { id: 'wb-failed', result: 'completed', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' },
+            { id: 'wb-failed', is_completed: 'True', has_error: 'False', result: 'Success', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' },
           ],
         },
       });
@@ -469,7 +473,7 @@ describe('SikkaWritebackService', () => {
       const writeback = createMockWriteback();
       (service as any).getWritebacksReadyForCheck = jest.fn().mockResolvedValue([writeback]);
       mockedAxios.get.mockResolvedValue({
-        data: { items: [{ id: 'wb-1', result: 'pending', error_message: null, completed_time: null, duration_in_second: null }] },
+        data: { items: [{ id: 'wb-1', is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null }] },
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);
       prisma.pmsWriteback.count.mockResolvedValue(1);
@@ -498,7 +502,7 @@ describe('SikkaWritebackService', () => {
       (service as any).getWritebacksReadyForCheck = jest.fn().mockResolvedValue([writeback]);
 
       mockedAxios.get.mockResolvedValue({
-        data: { items: [{ id: 'wb-1', result: 'completed', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' }] },
+        data: { items: [{ id: 'wb-1', is_completed: 'True', has_error: 'False', result: 'Success', error_message: null, completed_time: '2025-03-03T12:00:00Z', duration_in_second: '5' }] },
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);
       prisma.pmsWriteback.count.mockResolvedValue(0);
@@ -514,7 +518,7 @@ describe('SikkaWritebackService', () => {
       (service as any).getWritebacksReadyForCheck = jest.fn().mockResolvedValue([writeback]);
 
       mockedAxios.get.mockResolvedValue({
-        data: { items: [{ id: 'wb-1', result: 'pending', error_message: null, completed_time: null, duration_in_second: null }] },
+        data: { items: [{ id: 'wb-1', is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null }] },
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);
       prisma.pmsWriteback.count.mockResolvedValue(1);
@@ -537,7 +541,7 @@ describe('SikkaWritebackService', () => {
       mockedAxios.get.mockImplementation((url: string, config?: { params?: { id?: string } }) => {
         const id = config?.params?.id ?? 'wb-a';
         return Promise.resolve({
-          data: { items: [{ id, result: 'pending', error_message: null, completed_time: null, duration_in_second: null }] },
+          data: { items: [{ id, is_completed: 'False', has_error: 'False', result: null, error_message: null, completed_time: null, duration_in_second: null }] },
         });
       });
       prisma.pmsWriteback.update.mockResolvedValue({} as any);

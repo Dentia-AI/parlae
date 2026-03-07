@@ -130,12 +130,11 @@ export class SikkaWritebackService {
   async checkWritebackStatus(writebackId: string, appId: string, appKey: string): Promise<WritebackStatus | null> {
     try {
       const response = await axios.get(
-        `${this.baseUrl}/writebacks`,
+        `${this.baseUrl}/writeback_status`,
         {
           params: { id: writebackId },
           headers: {
-            'App-Id': appId,
-            'App-Key': appKey,
+            'Request-Key': appKey,
           },
           timeout: 10000,
         }
@@ -148,10 +147,13 @@ export class SikkaWritebackService {
       
       const writeback = writebacks[0];
       
+      const isCompleted = writeback.is_completed === 'True';
+      const hasError = writeback.has_error === 'True';
+
       return {
         id: writeback.id,
-        result: writeback.result,
-        errorMessage: writeback.error_message,
+        result: isCompleted ? (hasError ? 'failed' : 'completed') : 'pending',
+        errorMessage: hasError ? (writeback.result || writeback.error_message || 'Writeback failed') : writeback.error_message,
         completedTime: writeback.completed_time,
         durationInSeconds: writeback.duration_in_second,
       };
