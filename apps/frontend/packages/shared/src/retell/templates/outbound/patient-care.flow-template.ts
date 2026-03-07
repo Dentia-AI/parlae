@@ -363,7 +363,7 @@ Once booked, confirm the details and return to wrapping up the call.`,
           type: 'warm_transfer' as const,
           show_transferee_as_caller: false,
         },
-        edge: promptEdge('Transfer complete or failed.', 'end_call'),
+        edge: promptEdge('Transfer failed', 'end_call'),
         instruction: {
           type: 'prompt',
           text: `Let the patient know you're connecting them to the clinic now. Say: "I'm going to connect you with our clinic staff right away so they can help you."`,

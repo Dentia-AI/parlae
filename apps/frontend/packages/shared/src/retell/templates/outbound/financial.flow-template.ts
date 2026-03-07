@@ -272,7 +272,7 @@ Use scheduling tools to find available times and book. Be efficient.`,
           type: 'warm_transfer' as const,
           show_transferee_as_caller: false,
         },
-        edge: promptEdge('Transfer complete or failed.', 'end_call'),
+        edge: promptEdge('Transfer failed', 'end_call'),
         instruction: {
           type: 'prompt',
           text: `Let the patient know you're connecting them to the billing department. Say: "I'll connect you with our billing team now so they can assist you further."`,
