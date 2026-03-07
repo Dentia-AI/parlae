@@ -45,6 +45,7 @@ export function GHLTracking() {
         id="ghl-tracking-script"
         src={`https://${trackingDomain}/js/external-tracking.js`}
         data-tracking-id={trackingId}
+        data-debug="true"
         strategy="afterInteractive"
       />
       <GHLIdentify />
@@ -113,7 +114,10 @@ function GHLIdentify() {
       form.method = 'POST';
       form.target = 'ghl-id-frame';
       form.action = 'about:blank';
-      form.style.display = 'none';
+      // GHL tracking ignores fields with display:none. Position off-screen
+      // so the inputs are technically "visible" to the tracking script.
+      form.style.cssText =
+        'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
 
       const input = document.createElement('input');
       input.type = 'email';
@@ -142,6 +146,8 @@ function GHLIdentify() {
       } catch {
         // localStorage unavailable — next visit will re-identify (harmless)
       }
+
+      console.log('[GHL Identify] Submitted identify form for:', email);
 
       setTimeout(() => {
         form.remove();
