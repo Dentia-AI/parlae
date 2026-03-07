@@ -1132,7 +1132,7 @@ export class AgentToolsService {
         pmsResult: {
           success: result.success,
           count: result.data?.length ?? 0,
-          total: result.pagination?.total ?? 0,
+          total: result.meta?.total ?? 0,
           error: result.error,
           firstPatient: result.data?.[0] ? { id: result.data[0].id, phone: result.data[0].phone } : null,
         },

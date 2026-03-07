@@ -543,8 +543,8 @@ export class SikkaPmsService extends BasePmsService {
       };
       if (data.appointmentType) payload.type = data.appointmentType;
       if (data.notes) payload.note = data.notes;
-      if (data.operatory) payload.operatory = data.operatory;
-      if (data.description) payload.description = data.description;
+      if (data.metadata?.operatory) payload.operatory = data.metadata.operatory;
+      if (data.metadata?.description) payload.description = data.metadata.description;
 
       const response = await this.client.post('/appointment', payload);
       
