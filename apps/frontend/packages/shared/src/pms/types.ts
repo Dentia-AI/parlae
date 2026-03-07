@@ -140,7 +140,8 @@ export interface AppointmentCancelInput {
 }
 
 export interface AppointmentAvailabilityQuery {
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD  (start of range when endDate is set)
+  endDate?: string; // YYYY-MM-DD  (optional end of range for multi-day queries)
   providerId?: string;
   appointmentType?: string;
   duration?: number; // minutes

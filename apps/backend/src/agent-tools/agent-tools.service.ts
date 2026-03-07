@@ -920,36 +920,80 @@ export class AgentToolsService {
         };
       }
 
-      // No slots on the requested date — try the next several days via PMS
+      // No slots on the requested date — query the next 14 days via a range call
       this.logger.log({
         date: params.date,
-        msg: '[PMS] No slots on requested date, scanning next days',
+        msg: '[PMS] No slots on requested date, checking next 14 days',
       });
 
-      const nearestSlots: Array<{ date: string; time: string; provider?: string }> = [];
+      const scanStart = new Date(`${params.date}T00:00:00`);
+      scanStart.setDate(scanStart.getDate() + 1);
+      const scanEnd = new Date(`${params.date}T00:00:00`);
+      scanEnd.setDate(scanEnd.getDate() + 14);
+      const startStr = scanStart.toISOString().slice(0, 10);
+      const endStr = scanEnd.toISOString().slice(0, 10);
 
-      for (let dayOffset = 1; dayOffset <= 14 && nearestSlots.length < 3; dayOffset++) {
-        const nextDate = new Date(`${params.date}T00:00:00`);
-        nextDate.setDate(nextDate.getDate() + dayOffset);
-        const nextDateStr = nextDate.toISOString().slice(0, 10);
+      let nearestSlots: Array<{ date: string; time: string; provider?: string }> = [];
 
-        try {
-          const nextResult = await sikkaService.checkAvailability({
-            date: nextDateStr,
-            appointmentType: params.appointmentType || params.type,
-            duration: params.duration || 30,
-            providerId: params.providerId,
-          });
+      // Try a single range query first (1 API call instead of 14)
+      try {
+        const rangeResult = await sikkaService.checkAvailability({
+          date: startStr,
+          endDate: endStr,
+          appointmentType: params.appointmentType || params.type,
+          duration: params.duration || 30,
+          providerId: params.providerId,
+        });
 
-          if (nextResult.success && nextResult.data && nextResult.data.length > 0) {
-            nearestSlots.push({
-              date: nextDateStr,
-              time: nextResult.data[0].startTime.toISOString(),
-              provider: nextResult.data[0].providerName,
-            });
+        if (rangeResult.success && rangeResult.data && rangeResult.data.length > 0) {
+          const seen = new Set<string>();
+          for (const slot of rangeResult.data) {
+            const slotDate = slot.startTime.toISOString().slice(0, 10);
+            if (!seen.has(slotDate)) {
+              seen.add(slotDate);
+              nearestSlots.push({
+                date: slotDate,
+                time: slot.startTime.toISOString(),
+                provider: slot.providerName,
+              });
+              if (nearestSlots.length >= 3) break;
+            }
           }
-        } catch {
-          // Skip failed day and continue
+        }
+      } catch {
+        // Range query not supported — fall back to per-day scan with rate protection
+        this.logger.warn({ msg: '[PMS] Range availability query failed, falling back to per-day scan' });
+        for (let dayOffset = 1; dayOffset <= 7 && nearestSlots.length < 3; dayOffset++) {
+          const nextDate = new Date(`${params.date}T00:00:00`);
+          nextDate.setDate(nextDate.getDate() + dayOffset);
+          const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+          try {
+            const nextResult = await sikkaService.checkAvailability({
+              date: nextDateStr,
+              appointmentType: params.appointmentType || params.type,
+              duration: params.duration || 30,
+              providerId: params.providerId,
+            });
+
+            if (nextResult.success && nextResult.data && nextResult.data.length > 0) {
+              nearestSlots.push({
+                date: nextDateStr,
+                time: nextResult.data[0].startTime.toISOString(),
+                provider: nextResult.data[0].providerName,
+              });
+            }
+          } catch (dayErr: any) {
+            if (dayErr?.response?.status === 429) {
+              this.logger.warn({ msg: '[PMS] Rate limited during day scan, stopping' });
+              break;
+            }
+          }
+
+          // Brief delay between per-day calls to avoid rate bursts
+          if (dayOffset < 7 && nearestSlots.length < 3) {
+            await new Promise((r) => setTimeout(r, 250));
+          }
         }
       }
 

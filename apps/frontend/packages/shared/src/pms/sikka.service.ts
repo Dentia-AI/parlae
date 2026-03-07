@@ -476,7 +476,10 @@ export class SikkaPmsService extends BasePmsService {
         date: query.date,
         duration: query.duration || this.config.defaultAppointmentDuration || 30,
       };
-      
+
+      if (query.endDate) {
+        params.end_date = query.endDate;
+      }
       if (query.providerId) {
         params.providerId = query.providerId;
       }
