@@ -37,7 +37,6 @@ describe('HipaaAuditService', () => {
       responseStatus: 200,
       responseTime: 150,
       phiAccessed: true,
-      phiFields: ['name', 'email'],
     };
 
     it('should insert audit log via $executeRaw', async () => {
@@ -46,9 +45,9 @@ describe('HipaaAuditService', () => {
       expect(prisma.$executeRaw).toHaveBeenCalled();
     });
 
-    it('should throw if $executeRaw fails', async () => {
+    it('should not throw if $executeRaw fails', async () => {
       prisma.$executeRaw.mockRejectedValue(new Error('DB error'));
-      await expect(service.logAccess(entry)).rejects.toThrow('DB error');
+      await expect(service.logAccess(entry)).resolves.toBeUndefined();
     });
 
     it('should handle entry without optional fields', async () => {

@@ -1182,7 +1182,6 @@ export class AgentToolsService {
           responseStatus: 200,
           responseTime,
           phiAccessed: true,
-          phiFields: ['firstName'],
         });
 
         return {
@@ -1227,7 +1226,6 @@ export class AgentToolsService {
           responseStatus: 200,
           responseTime,
           phiAccessed: true,
-          phiFields: ['name', 'email', 'dateOfBirth', 'lastVisit', 'balance'],
         });
 
         const verifiedResult: Record<string, any> = {
@@ -1272,7 +1270,6 @@ export class AgentToolsService {
           responseStatus: 200,
           responseTime,
           phiAccessed: true,
-          phiFields: ['name', 'patientId'],
         });
 
         return {
@@ -1445,7 +1442,6 @@ export class AgentToolsService {
         responseStatus: 201,
         responseTime,
         phiAccessed: true,
-        phiFields: ['name', 'phone', 'email', 'dateOfBirth', 'address'],
       });
 
       this.logAiAction({
@@ -1542,7 +1538,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: true,
-        phiFields: Object.keys(updateData),
       });
 
       this.logAiAction({
@@ -1648,7 +1643,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: true,
-        phiFields: ['appointmentId', 'patientId', 'dateTime'],
       });
 
       this.logAiAction({
@@ -1728,7 +1722,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: appointments.length > 0,
-        phiFields: appointments.length > 0 ? ['appointmentId', 'date', 'time', 'type', 'provider'] : [],
       });
 
       return {
@@ -1825,7 +1818,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: true,
-        phiFields: ['appointmentId', 'startTime', 'duration', 'providerId'],
       });
 
       this.logAiAction({
@@ -1948,7 +1940,6 @@ export class AgentToolsService {
         responseStatus: 201,
         responseTime,
         phiAccessed: true,
-        phiFields: ['patientId', 'noteContent'],
       });
 
       this.logAiAction({
@@ -2013,7 +2004,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: insuranceRecords.length > 0,
-        phiFields: insuranceRecords.length > 0 ? ['insuranceProvider', 'policyNumber', 'groupNumber'] : [],
       });
 
       return {
@@ -2074,7 +2064,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: true,
-        phiFields: ['patientId', 'balance'],
       });
 
       return {
@@ -2134,7 +2123,6 @@ export class AgentToolsService {
         responseStatus: 200,
         responseTime,
         phiAccessed: false,
-        phiFields: [],
       });
 
       return {
