@@ -92,6 +92,7 @@ describe('SikkaTokenRefreshService', () => {
           status: 'ACTIVE',
           lastError: null,
         }),
+        select: { accountId: true },
       });
     });
 

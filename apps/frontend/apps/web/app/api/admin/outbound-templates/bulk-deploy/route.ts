@@ -213,10 +213,24 @@ export async function POST(request: NextRequest) {
         if (!fromPhoneNumberId) {
           const inboundPhone = await prisma.retellPhoneNumber.findFirst({
             where: { accountId, isActive: true },
-            select: { id: true },
+            select: { id: true, phoneNumber: true },
           });
           if (inboundPhone) {
             fromPhoneNumberId = inboundPhone.id;
+
+            // Register outbound agent on the Retell phone number
+            if (inboundPhone.phoneNumber) {
+              try {
+                await retell.updatePhoneNumber(inboundPhone.phoneNumber, {
+                  outbound_agent_id: agent.agent_id,
+                });
+              } catch (err) {
+                logger.warn(
+                  { accountId, error: err instanceof Error ? err.message : err },
+                  '[Outbound] Failed to set outbound_agent_id on Retell phone number',
+                );
+              }
+            }
           }
         }
 

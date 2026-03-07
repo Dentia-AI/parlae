@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.0';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.1';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -160,8 +160,8 @@ export function buildPatientCareOutboundFlow(
     'cancelAppointment',
   ];
 
-  // Common edges shared by most call-type nodes
-  const commonExitEdges = [
+  // Generate fresh edges per node so every edge ID is globally unique
+  const commonExitEdges = () => [
     promptEdge(
       'Patient asks to stop calling, remove from list, or says "do not call".',
       'end_dnc',
@@ -206,7 +206,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_RECALL_PROMPT, cn, cp) },
     tool_ids: schedulingToolIds,
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   const reminderNode: ConversationFlowConversationNode = {
@@ -214,7 +214,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_REMINDER_PROMPT, cn, cp) },
     tool_ids: ['lookupPatient', 'getAppointments', 'rescheduleAppointment', 'cancelAppointment'],
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   const followupNode: ConversationFlowConversationNode = {
@@ -228,7 +228,7 @@ export function buildPatientCareOutboundFlow(
         'urgent_transfer',
         'Urgent symptoms',
       ),
-      ...commonExitEdges,
+      ...commonExitEdges(),
     ],
   };
 
@@ -237,7 +237,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_NOSHOW_PROMPT, cn, cp) },
     tool_ids: schedulingToolIds,
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   const treatmentPlanNode: ConversationFlowConversationNode = {
@@ -245,7 +245,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_TREATMENT_PLAN_PROMPT, cn, cp) },
     tool_ids: [...schedulingToolIds, 'verifyInsuranceCoverage'],
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   const postopNode: ConversationFlowConversationNode = {
@@ -259,7 +259,7 @@ export function buildPatientCareOutboundFlow(
         'urgent_transfer',
         'Urgent symptoms',
       ),
-      ...commonExitEdges,
+      ...commonExitEdges(),
     ],
   };
 
@@ -268,7 +268,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_REACTIVATION_PROMPT, cn, cp) },
     tool_ids: schedulingToolIds,
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   const surveyNode: ConversationFlowConversationNode = {
@@ -282,7 +282,7 @@ export function buildPatientCareOutboundFlow(
         'urgent_transfer',
         'Escalation',
       ),
-      ...commonExitEdges,
+      ...commonExitEdges(),
     ],
   };
 
@@ -291,7 +291,7 @@ export function buildPatientCareOutboundFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_WELCOME_PROMPT, cn, cp) },
     tool_ids: schedulingToolIds,
-    edges: [...commonExitEdges],
+    edges: commonExitEdges(),
   };
 
   // ── Booking Sub-Node ─────────────────────────────────────────────────

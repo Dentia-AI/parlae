@@ -36,7 +36,7 @@ import {
   retellGetInsuranceTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.0';
+export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.1';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -144,7 +144,7 @@ export function buildFinancialOutboundFlow(
     retellGetInsuranceTool,
   ].map(toFlowTool).map(hydrateTool);
 
-  const commonExitEdges = [
+  const commonExitEdges = () => [
     promptEdge(
       'Patient asks to stop calling, remove from list, or says "do not call".',
       'end_dnc',
@@ -183,7 +183,7 @@ export function buildFinancialOutboundFlow(
         'transfer_billing',
         'Billing transfer',
       ),
-      ...commonExitEdges,
+      ...commonExitEdges(),
     ],
   };
 
@@ -206,7 +206,7 @@ export function buildFinancialOutboundFlow(
         'booking_node',
         'Schedule appointment',
       ),
-      ...commonExitEdges,
+      ...commonExitEdges(),
     ],
   };
 
