@@ -214,15 +214,51 @@ export class PmsService {
 
   /**
    * Get PMS service instance for an account
-   * Credentials from AWS Secrets Manager + system env vars
+   * Credentials from AWS Secrets Manager + system env vars, with DB fallback
    */
   async getPmsService(accountId: string, provider: string = 'SIKKA', config: any = {}) {
     if (provider !== 'SIKKA') {
       throw new BadRequestException('Only Sikka is currently supported');
     }
     
-    // Get practice-specific credentials from Secrets Manager
-    const practiceCredentials = await this.secrets.getPracticeCredentials(accountId);
+    // Try Secrets Manager first
+    let practiceCredentials = await this.secrets.getPracticeCredentials(accountId);
+    
+    // Fallback: read credentials from the DB pmsIntegration record
+    if (!practiceCredentials) {
+      this.logger.warn(`No SM secret for account ${accountId}, checking DB fallback`);
+      const integration = await this.prisma.pmsIntegration.findFirst({
+        where: { accountId, provider: 'SIKKA', status: 'ACTIVE' },
+        select: {
+          officeId: true,
+          secretKey: true,
+          requestKey: true,
+          refreshKey: true,
+          tokenExpiry: true,
+          metadata: true,
+        },
+      });
+
+      if (integration?.officeId && integration?.secretKey) {
+        const meta = (integration.metadata as any) ?? {};
+        practiceCredentials = {
+          officeId: integration.officeId,
+          secretKey: integration.secretKey,
+          requestKey: integration.requestKey ?? undefined,
+          refreshKey: integration.refreshKey ?? undefined,
+          tokenExpiry: integration.tokenExpiry?.toISOString(),
+          practiceName: meta.practiceName,
+          practiceId: meta.practiceId,
+          pmsType: meta.actualPmsType,
+        };
+
+        // Re-sync to Secrets Manager so future calls use the fast path
+        this.secrets
+          .storePracticeCredentials(accountId, practiceCredentials)
+          .then(() => this.logger.log(`Re-synced SM secret for account ${accountId}`))
+          .catch((err) => this.logger.warn(`Failed to re-sync SM secret: ${err.message}`));
+      }
+    }
     
     if (!practiceCredentials) {
       throw new BadRequestException(`No practice credentials found for account ${accountId}`);
