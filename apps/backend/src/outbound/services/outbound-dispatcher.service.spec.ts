@@ -118,6 +118,7 @@ describe('OutboundDispatcherService', () => {
         .mockResolvedValueOnce([]); // scheduled campaigns
       prisma.campaignContact.count.mockResolvedValue(0);
       prisma.account.findUnique.mockResolvedValue({ featureSettings: {} });
+      jest.spyOn(service as any, 'isWithinCallingWindow').mockReturnValue(true);
       if (contacts.length) {
         campaignService.getQueuedContacts.mockResolvedValue(contacts);
       }
@@ -288,6 +289,7 @@ describe('OutboundDispatcherService', () => {
       prisma.account.findUnique.mockResolvedValue({
         featureSettings: { 'ai-receptionist': true },
       });
+      jest.spyOn(service as any, 'isWithinCallingWindow').mockReturnValue(true);
       campaignService.getQueuedContacts.mockResolvedValue([
         { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
       ]);
@@ -305,6 +307,7 @@ describe('OutboundDispatcherService', () => {
         .mockResolvedValueOnce([]);
       prisma.campaignContact.count.mockResolvedValue(0);
       prisma.account.findUnique.mockResolvedValue({ featureSettings: {} });
+      jest.spyOn(service as any, 'isWithinCallingWindow').mockReturnValue(true);
       campaignService.getQueuedContacts.mockResolvedValue([
         { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
       ]);
