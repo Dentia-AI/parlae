@@ -36,6 +36,27 @@ jest.mock('../../../../home/(user)/agent/setup/_lib/actions', () => ({
   executeDeployment: jest.fn().mockResolvedValue({ success: true }),
 }));
 
+const mockScrapeWebsite = jest.fn();
+const mockCategorizeContent = jest.fn();
+const mockGetAccountProvider = jest.fn().mockResolvedValue('RETELL');
+const mockCreateRetellService = jest.fn();
+
+jest.mock('@kit/shared/scraper/website-scraper', () => ({
+  scrapeWebsite: (...args: any[]) => mockScrapeWebsite(...args),
+}));
+
+jest.mock('@kit/shared/scraper/categorize-content', () => ({
+  categorizeContent: (...args: any[]) => mockCategorizeContent(...args),
+}));
+
+jest.mock('@kit/shared/voice-provider', () => ({
+  getAccountProvider: (...args: any[]) => mockGetAccountProvider(...args),
+}));
+
+jest.mock('@kit/shared/retell/retell.service', () => ({
+  createRetellService: (...args: any[]) => mockCreateRetellService(...args),
+}));
+
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/agent/deploy', {
     method: 'POST',
@@ -114,5 +135,150 @@ describe('POST /api/agent/deploy', () => {
     const lastUpdateData = updateCalls[updateCalls.length - 1]?.[0]?.data;
 
     expect(lastUpdateData.featureSettings).toBeUndefined();
+  });
+
+  describe('website KB auto-scrape', () => {
+    beforeEach(() => {
+      mockScrapeWebsite.mockReset();
+      mockCategorizeContent.mockReset();
+      mockCreateRetellService.mockReset();
+      mockGetAccountProvider.mockReset().mockResolvedValue('RETELL');
+    });
+
+    it('scrapes website when brandingWebsite is set and no existing KB', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {},
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      mockScrapeWebsite.mockResolvedValue({
+        pages: [{ url: 'https://testdental.com', content: 'We are a dental clinic.' }],
+        scrapedCount: 1,
+      });
+      mockCategorizeContent.mockResolvedValue({
+        documents: [{ categoryId: 'about', content: 'We are a dental clinic.' }],
+      });
+      mockCreateRetellService.mockReturnValue({
+        isEnabled: () => true,
+        createKnowledgeBase: jest.fn().mockResolvedValue({ knowledge_base_id: 'kb-123' }),
+        waitForKnowledgeBase: jest.fn().mockResolvedValue(undefined),
+      });
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockScrapeWebsite).toHaveBeenCalledWith('https://testdental.com');
+    });
+
+    it('scrapes even when websiteScrapedAt is set but no KB ID exists', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {
+          websiteScrapedAt: '2026-01-01T00:00:00Z',
+        },
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      mockScrapeWebsite.mockResolvedValue({ pages: [], scrapedCount: 0 });
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockScrapeWebsite).toHaveBeenCalledWith('https://testdental.com');
+    });
+
+    it('skips scrape when retellKnowledgeBaseId already exists', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {
+          retellKnowledgeBaseId: 'kb-existing',
+          websiteScrapedAt: '2026-01-01T00:00:00Z',
+        },
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockScrapeWebsite).not.toHaveBeenCalled();
+    });
+
+    it('skips scrape when knowledgeBaseFileIds already exist (Vapi)', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {
+          knowledgeBaseFileIds: ['file-1', 'file-2'],
+        },
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockScrapeWebsite).not.toHaveBeenCalled();
+    });
+
+    it('skips scrape when body includes knowledgeBaseConfig with file IDs', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {},
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      const res = await POST(
+        makeRequest({
+          voice: { voiceId: 'v1', name: 'Test Voice' },
+          knowledgeBaseConfig: { about: ['file-1'] },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockScrapeWebsite).not.toHaveBeenCalled();
+    });
+
+    it('continues deployment when scrape fails', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {},
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      mockScrapeWebsite.mockRejectedValue(new Error('Network error'));
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
   });
 });

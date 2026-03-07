@@ -116,8 +116,8 @@ export default async function ReceptionistDashboardPage({
   const isDeploying = integrationSettings?.deploymentStatus === 'in_progress';
   const deploymentFailed = integrationSettings?.deploymentStatus === 'failed';
 
-  // Show deploying animation while setup is in progress
-  if (!hasReceptionist && (isDeploying || params.deploying === 'true')) {
+  // Show deploying animation while setup is in progress (including re-deploys)
+  if (isDeploying || params.deploying === 'true') {
     return (
       <DeployingAnimation
         startedAt={integrationSettings?.deploymentStartedAt}
@@ -126,7 +126,7 @@ export default async function ReceptionistDashboardPage({
     );
   }
 
-  // Show failed state if deployment failed
+  // Show failed state if deployment failed and no working agent to fall back to
   if (!hasReceptionist && deploymentFailed) {
     return (
       <DeployingAnimation

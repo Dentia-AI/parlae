@@ -42,7 +42,6 @@ export function GHLTracking() {
         id="ghl-tracking-script"
         src={`https://${trackingDomain}/js/external-tracking.js`}
         data-tracking-id={trackingId}
-        data-debug="true"
         strategy="afterInteractive"
       />
       <GHLIdentify />
@@ -127,7 +126,6 @@ function GHLIdentify() {
         // localStorage unavailable — next visit will re-identify (harmless)
       }
 
-      console.log('[GHL Identify] Submitted identify form for:', email);
     };
 
     // Wait for the GHL tracking script to load and attach its listeners

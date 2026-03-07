@@ -88,8 +88,10 @@ export async function POST(request: NextRequest) {
     // Auto-scrape website KB (non-blocking — failures don't stop deployment)
     const settings = (account.phoneIntegrationSettings as Record<string, unknown>) || {};
     const hasExistingKB = body.knowledgeBaseConfig && Object.values(body.knowledgeBaseConfig).some((ids: any) => ids?.length > 0);
+    const hasRetellKB = !!settings.retellKnowledgeBaseId;
+    const hasVapiKB = Array.isArray(settings.knowledgeBaseFileIds) && (settings.knowledgeBaseFileIds as string[]).length > 0;
 
-    if (account.brandingWebsite && !hasExistingKB && !settings.websiteScrapedAt) {
+    if (account.brandingWebsite && !hasExistingKB && !hasRetellKB && !hasVapiKB) {
       logger.info(
         { accountId: account.id, websiteUrl: account.brandingWebsite },
         '[Deploy API] Auto-scraping website for knowledge base',
