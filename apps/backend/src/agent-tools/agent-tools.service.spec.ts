@@ -1968,9 +1968,8 @@ describe('AgentToolsService', () => {
 
       it('should scan next days when no slots on requested date', async () => {
         mockSikka.checkAvailability
-          .mockResolvedValueOnce({ success: true, data: [] })
-          .mockResolvedValueOnce({ success: true, data: [] })
-          .mockResolvedValueOnce({
+          .mockResolvedValueOnce({ success: true, data: [] }) // requested date
+          .mockResolvedValueOnce({                            // range query
             success: true,
             data: [{ startTime: new Date('2026-04-03T09:00:00Z'), providerName: 'Dr. Smith' }],
           });
