@@ -73,13 +73,9 @@ export class ActionItemService {
         actionItem.id,
       );
 
-      this.logger.log({
-        actionItemId: actionItem.id,
-        callId: params.callId,
-        reason,
-        direction: params.direction,
-        msg: '[ActionItem] Created action item',
-      });
+      this.logger.log(
+        `[ActionItem] Created action item | id=${actionItem.id} | callId=${params.callId} | reason=${reason} | direction=${params.direction}`,
+      );
 
       return actionItem;
     } catch (err) {

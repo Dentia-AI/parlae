@@ -12,8 +12,8 @@ jest.mock('@kit/prisma', () => ({
     },
   },
 }));
-jest.mock('@kit/shared/auth/nextauth', () => ({
-  auth: jest.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+jest.mock('~/lib/auth/get-session', () => ({
+  getEffectiveUserId: jest.fn().mockResolvedValue('user-1'),
 }));
 jest.mock('@kit/shared/logger', () => ({
   getLogger: jest.fn().mockReturnValue({
@@ -38,8 +38,8 @@ describe('GET /api/stripe/check-payment-method', () => {
   });
 
   it('should return 401 when not authenticated', async () => {
-    const { auth } = require('@kit/shared/auth/nextauth');
-    auth.mockResolvedValueOnce(null);
+    const { getEffectiveUserId } = require('~/lib/auth/get-session');
+    getEffectiveUserId.mockResolvedValueOnce(null);
     const request = new NextRequest(
       'http://localhost/api/stripe/check-payment-method?accountId=acc-1',
     );

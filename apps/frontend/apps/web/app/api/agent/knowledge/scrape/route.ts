@@ -143,6 +143,17 @@ export async function POST(request: NextRequest) {
     // 2. Categorize via AI
     const categorizationResult = await categorizeContent(scrapeResult.pages);
 
+    logger.info(
+      {
+        funcName,
+        accountId,
+        documentsGenerated: categorizationResult.documents.length,
+        totalSections: categorizationResult.totalSections,
+        categorizedSections: categorizationResult.categorizedSections,
+      },
+      '[KB Scrape] Categorization finished',
+    );
+
     if (categorizationResult.documents.length === 0) {
       return NextResponse.json(
         { error: 'Content was scraped but could not be categorized into useful documents.' },
@@ -214,17 +225,35 @@ export async function POST(request: NextRequest) {
         '[KB Scrape] Uploading categorized documents as files to Retell',
       );
 
-      const kb = await retellService.createKnowledgeBase({
-        name: `kb-${accountId.slice(0, 8)}`,
-        files: docFiles,
-      });
+      let kb: Awaited<ReturnType<typeof retellService.createKnowledgeBase>>;
+      try {
+        kb = await retellService.createKnowledgeBase({
+          name: `kb-${accountId.slice(0, 8)}`,
+          files: docFiles,
+        });
+      } catch (createErr: any) {
+        logger.error(
+          { error: createErr?.message, accountId },
+          '[KB Scrape] Retell createKnowledgeBase threw an error',
+        );
+        return NextResponse.json(
+          { error: `Failed to create Retell knowledge base: ${createErr?.message}` },
+          { status: 500 },
+        );
+      }
 
       if (!kb) {
+        logger.error({ accountId }, '[KB Scrape] createKnowledgeBase returned null');
         return NextResponse.json(
           { error: 'Failed to create Retell knowledge base' },
           { status: 500 },
         );
       }
+
+      logger.info(
+        { kbId: kb.knowledge_base_id, accountId },
+        '[KB Scrape] Retell KB created, waiting for processing',
+      );
 
       // Wait for processing
       const finalKb = await retellService.waitForKnowledgeBase(
@@ -487,7 +516,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     logger.error(
-      { error: error?.message },
+      {
+        error: error?.message,
+        stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
+        name: error?.name,
+      },
       '[KB Scrape] Failed to scrape website',
     );
     return NextResponse.json(

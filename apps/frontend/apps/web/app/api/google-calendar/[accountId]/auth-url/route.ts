@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { auth } from '@kit/shared/auth/nextauth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -14,9 +14,8 @@ export async function GET(
   { params }: { params: Promise<{ accountId: string }> }
 ) {
   try {
-    // Verify user is authenticated
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

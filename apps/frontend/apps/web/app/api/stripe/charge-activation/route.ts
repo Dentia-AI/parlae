@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { auth } from '@kit/shared/auth/nextauth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 /**
  * Charges the activation fee when the user deploys their AI receptionist.
@@ -11,9 +11,9 @@ import { auth } from '@kit/shared/auth/nextauth';
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const userId = await getEffectiveUserId();
 
-    if (!session?.user?.id) {
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const account = await prisma.account.findFirst({
       where: {
-        primaryOwnerId: session.user.id,
+        primaryOwnerId: userId,
       },
     });
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       description: 'Parlae AI Receptionist - Activation Fee',
       metadata: {
         accountId: account.id,
-        userId: session.user.id,
+        userId,
         type: 'activation_fee',
       },
     });

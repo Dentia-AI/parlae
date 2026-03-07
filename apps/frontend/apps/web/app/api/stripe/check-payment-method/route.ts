@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@kit/shared/auth/nextauth';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 /**
  * GET /api/stripe/check-payment-method
@@ -12,9 +12,8 @@ export async function GET(request: NextRequest) {
   const logger = await getLogger();
 
   try {
-    // Authenticate user
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -31,11 +30,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get account payment verification status
     const account = await prisma.account.findFirst({
       where: {
         id: accountId,
-        primaryOwnerId: session.user.id,
+        primaryOwnerId: userId,
       },
       select: {
         paymentMethodVerified: true,
@@ -45,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     if (!account) {
       logger.error(
-        { userId: session.user.id, accountId },
+        { userId, accountId },
         '[Payment] Account not found or unauthorized'
       );
       return NextResponse.json(

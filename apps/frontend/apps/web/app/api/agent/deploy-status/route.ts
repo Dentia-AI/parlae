@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@kit/shared/auth/nextauth';
 import { prisma } from '@kit/prisma';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 /**
  * GET /api/agent/deploy-status
@@ -9,13 +9,13 @@ import { prisma } from '@kit/prisma';
  * Used by the deploying animation component to poll for completion.
  */
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getEffectiveUserId();
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const account = await prisma.account.findFirst({
-    where: { primaryOwnerId: session.user.id },
+    where: { primaryOwnerId: userId },
     select: {
       phoneIntegrationSettings: true,
       phoneIntegrationMethod: true,

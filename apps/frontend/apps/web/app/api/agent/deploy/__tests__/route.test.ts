@@ -1,8 +1,8 @@
 import { POST } from '../route';
 import { NextRequest } from 'next/server';
 
-jest.mock('@kit/shared/auth/nextauth', () => ({
-  auth: jest.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+jest.mock('~/lib/auth/get-session', () => ({
+  getEffectiveUserId: jest.fn().mockResolvedValue('user-1'),
 }));
 
 jest.mock('@kit/prisma', () => ({
@@ -84,8 +84,8 @@ describe('POST /api/agent/deploy', () => {
   });
 
   it('returns 401 when no session', async () => {
-    const { auth } = require('@kit/shared/auth/nextauth');
-    auth.mockResolvedValueOnce(null);
+    const { getEffectiveUserId } = require('~/lib/auth/get-session');
+    getEffectiveUserId.mockResolvedValueOnce(null);
 
     const res = await POST(makeRequest({ voice: { voiceId: 'v1' } }));
     expect(res.status).toBe(401);

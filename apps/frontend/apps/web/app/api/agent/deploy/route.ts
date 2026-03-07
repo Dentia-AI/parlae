@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@kit/shared/auth/nextauth';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
 import { executeDeployment } from '../../../home/(user)/agent/setup/_lib/actions';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -23,13 +23,12 @@ export async function POST(request: NextRequest) {
 
   logger.info('[Deploy API] ▶ Request received');
 
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getEffectiveUserId();
+  if (!userId) {
     logger.warn('[Deploy API] Unauthorized — no session');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.id;
   logger.info({ userId }, '[Deploy API] Authenticated user');
 
   let body: { voice: any; files?: any[]; knowledgeBaseConfig?: Record<string, string[]> };

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { prisma } from '@kit/prisma';
-import { auth } from '@kit/shared/auth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 const updateSchema = z.object({
   name: z.string().min(2).max(100).optional(),
@@ -18,9 +18,7 @@ function mapAccount(account: { id: string; name: string | null; pictureUrl: stri
 }
 
 export async function GET() {
-  const session = await auth();
-
-  const userId = session?.user?.id;
+  const userId = await getEffectiveUserId();
 
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,8 +45,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await getEffectiveUserId();
 
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

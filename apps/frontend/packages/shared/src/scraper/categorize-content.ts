@@ -111,19 +111,33 @@ Respond with ONLY a JSON object mapping section index (as string) to category id
 If a section doesn't clearly fit, use "clinic-info" as default.`;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        response_format: { type: 'json_object' },
-      }),
-    });
+    logger.info(
+      { sectionCount: sections.length },
+      '[Categorizer] Calling OpenAI for classification',
+    );
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+    let res: Response;
+    try {
+      res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -169,9 +183,11 @@ If a section doesn't clearly fit, use "clinic-info" as default.`;
 
     return result;
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const isTimeout = err instanceof Error && err.name === 'AbortError';
     logger.error(
-      { error: err instanceof Error ? err.message : err },
-      '[Categorizer] LLM classification failed, using fallback',
+      { error: errMsg, isTimeout },
+      `[Categorizer] LLM classification failed${isTimeout ? ' (timeout after 30s)' : ''}, using fallback`,
     );
     return fallbackClassify(sections);
   }

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { auth } from '@kit/shared/auth/nextauth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ accountId: string }> }
 ) {
   try {
-    // Verify user is authenticated
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

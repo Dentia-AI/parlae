@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@kit/prisma';
-import { auth } from '@kit/shared/auth/nextauth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 export async function POST() {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const account = await prisma.account.findFirst({
-      where: { primaryOwnerId: session.user.id },
+      where: { primaryOwnerId: userId },
       select: { id: true },
     });
 

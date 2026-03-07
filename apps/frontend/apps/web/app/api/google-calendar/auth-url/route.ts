@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { prisma } from '@kit/prisma';
-import { auth } from '@kit/shared/auth/nextauth';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -12,13 +12,13 @@ const oauth2Client = new google.auth.OAuth2(
 
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const account = await prisma.account.findFirst({
-      where: { primaryOwnerId: session.user.id },
+      where: { primaryOwnerId: userId },
       select: { id: true },
     });
 

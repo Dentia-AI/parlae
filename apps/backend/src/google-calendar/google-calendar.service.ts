@@ -456,6 +456,7 @@ export class GoogleCalendarService {
       description?: string;
       start?: Date;
       end?: Date;
+      attendees?: Array<{ email: string }>;
     }
   ) {
     try {
@@ -483,6 +484,9 @@ export class GoogleCalendarService {
           dateTime: this.toNaiveIso(updates.end),
           timeZone: tz,
         };
+      }
+      if (updates.attendees) {
+        updateData.attendees = updates.attendees;
       }
 
       const response = await calendar.events.patch({

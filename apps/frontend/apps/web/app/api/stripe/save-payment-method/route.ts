@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@kit/shared/auth/nextauth';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
+import { getEffectiveUserId } from '~/lib/auth/get-session';
 
 /**
  * POST /api/stripe/save-payment-method
@@ -12,9 +12,8 @@ export async function POST(request: NextRequest) {
   const logger = await getLogger();
 
   try {
-    // Authenticate user
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getEffectiveUserId();
+    if (!userId) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -31,17 +30,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the user's personal account
     const account = await prisma.account.findFirst({
       where: {
-        primaryOwnerId: session.user.id,
+        primaryOwnerId: userId,
         isPersonalAccount: true,
       },
     });
 
     if (!account) {
       logger.error(
-        { userId: session.user.id },
+        { userId },
         '[Payment] Personal account not found'
       );
       return NextResponse.json(

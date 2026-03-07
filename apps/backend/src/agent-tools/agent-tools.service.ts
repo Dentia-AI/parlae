@@ -1487,10 +1487,7 @@ export class AgentToolsService {
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
       if (!phoneRecord?.pmsIntegration) {
-        return {
-          error: 'PMS not configured',
-          message: "Let me take your updated information manually.",
-        };
+        return this.updatePatientViaGoogleCalendar(phoneRecord, params, call);
       }
 
       const { PmsService } = await import('../pms/pms.service');
@@ -3132,6 +3129,124 @@ export class AgentToolsService {
       return {
         error: 'Availability check failed',
         message: "Let me transfer you to our scheduling team.",
+      };
+    }
+  }
+
+  /**
+   * Fallback: Update patient info on Google Calendar events.
+   * Finds matching events by caller phone and patches the description/attendees.
+   */
+  private async updatePatientViaGoogleCalendar(
+    phoneRecord: any,
+    params: any,
+    call: any,
+  ) {
+    const accountId = phoneRecord?.accountId;
+    const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
+
+    if (!gcAvailable) {
+      return {
+        error: 'No system configured',
+        message: "Let me take your updated information manually.",
+      };
+    }
+
+    const callerPhone = call?.customer?.number || call?.from_number;
+    if (!callerPhone && !params.patientId) {
+      return {
+        error: 'No patient identifier',
+        message: "Let me take your updated information manually.",
+      };
+    }
+
+    try {
+      const { events } = await this.googleCalendar.findEventsByPatient(
+        accountId,
+        { patientPhone: callerPhone },
+        new Date(),
+        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      );
+
+      if (!events || events.length === 0) {
+        this.logger.warn(`[GCal Fallback] updatePatient: no upcoming events found for caller phone`);
+        return {
+          error: 'No matching events',
+          message: "Let me take your updated information manually.",
+        };
+      }
+
+      let updatedCount = 0;
+      for (const event of events) {
+        const eventId = event.id;
+        if (!eventId) continue;
+
+        let description = event.description || '';
+        if (params.email) {
+          const emailRegex = /^Email:.*$/m;
+          if (emailRegex.test(description)) {
+            description = description.replace(emailRegex, `Email: ${params.email}`);
+          } else {
+            const phoneLineIdx = description.indexOf('Phone:');
+            if (phoneLineIdx !== -1) {
+              const lineEnd = description.indexOf('\n', phoneLineIdx);
+              if (lineEnd !== -1) {
+                description = description.slice(0, lineEnd + 1) + `Email: ${params.email}\n` + description.slice(lineEnd + 1);
+              } else {
+                description += `\nEmail: ${params.email}`;
+              }
+            } else {
+              description += `\nEmail: ${params.email}`;
+            }
+          }
+        }
+        if (params.phone) {
+          const phoneRegex = /^Phone:.*$/m;
+          if (phoneRegex.test(description)) {
+            description = description.replace(phoneRegex, `Phone: ${params.phone}`);
+          }
+        }
+
+        const attendees: Array<{ email: string }> | undefined = params.email
+          ? [{ email: params.email }]
+          : undefined;
+
+        await this.googleCalendar.updateEvent(accountId, eventId, {
+          description,
+          attendees,
+        });
+        updatedCount++;
+      }
+
+      this.logger.log(
+        `[GCal Fallback] updatePatient: updated ${updatedCount} event(s) for account=${accountId}`,
+      );
+
+      this.logAiAction({
+        accountId,
+        source: 'gcal',
+        action: 'update_patient',
+        category: 'patient',
+        callId: call?.id,
+        externalResourceId: events[0]?.id,
+        externalResourceType: 'event',
+        summary: `Updated patient info on ${updatedCount} calendar event(s) (fields: ${Object.keys(params).filter(k => k !== 'patientId').join(', ')})`,
+        calendarEventId: events[0]?.id,
+      }).catch(() => {});
+
+      return {
+        result: {
+          success: true,
+          integrationType: 'google_calendar',
+          eventsUpdated: updatedCount,
+          message: "I've updated your information successfully.",
+        },
+      };
+    } catch (error: any) {
+      this.logger.error({ accountId, error: error?.message, msg: '[GCal Fallback] Failed to update patient on calendar events' });
+      return {
+        error: 'Patient update failed',
+        message: "I'm having trouble updating your information. Let me take your updated details manually.",
       };
     }
   }
