@@ -10,11 +10,13 @@ export interface AuditLogEntry {
   userId?: string;
   callId?: string;
   ipAddress?: string;
+  userAgent?: string;
   requestSummary?: string;
   responseStatus: number;
   responseTime: number;
   phiAccessed: boolean;
-  phiFields?: string[];
+  patientId?: string;
+  success?: boolean;
   errorMessage?: string;
 }
 
@@ -34,7 +36,6 @@ export class HipaaAuditService {
    */
   async logAccess(entry: AuditLogEntry): Promise<void> {
     try {
-      // DON'T log PHI content - only log that it was accessed
       await this.prisma.$executeRaw`
         INSERT INTO "pms_audit_logs" (
           "id",
@@ -45,11 +46,13 @@ export class HipaaAuditService {
           "user_id",
           "call_id",
           "ip_address",
+          "user_agent",
           "request_summary",
           "response_status",
           "response_time",
           "phi_accessed",
-          "phi_fields",
+          "patient_id",
+          "success",
           "error_message",
           "created_at"
         ) VALUES (
@@ -61,30 +64,27 @@ export class HipaaAuditService {
           ${entry.userId || null},
           ${entry.callId || null},
           ${entry.ipAddress || null},
+          ${entry.userAgent || null},
           ${entry.requestSummary || null},
           ${entry.responseStatus},
           ${entry.responseTime},
           ${entry.phiAccessed},
-          ${entry.phiFields || []},
+          ${entry.patientId || null},
+          ${entry.success !== false},
           ${entry.errorMessage || null},
           NOW()
         )
       `;
 
-      // Log to application logs (NO PHI!)
       this.logger.log({
         message: 'PHI access logged',
         pmsIntegrationId: entry.pmsIntegrationId,
         action: entry.action,
         phiAccessed: entry.phiAccessed,
-        phiFieldsCount: entry.phiFields?.length || 0,
-        // NEVER log patient data here!
       });
     } catch (error: any) {
-      // CRITICAL: If audit logging fails, we MUST know about it
+      // Audit failure must not break patient-facing workflows
       this.logger.error(`HIPAA audit logging failed: ${error.message}`, error.stack);
-      // In production, this should trigger an alert
-      throw error;
     }
   }
 

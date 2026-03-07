@@ -5,6 +5,7 @@ import { getLogger } from '@kit/shared/logger';
 const MAX_PAGES = 50;
 const FETCH_DELAY_MS = 2000;
 const FETCH_TIMEOUT_MS = 10_000;
+const RENDER_FETCH_TIMEOUT_MS = 30_000;
 const USER_AGENT =
   'Mozilla/5.0 (compatible; ParlaeBot/1.0; +https://parlae.com)';
 
@@ -101,6 +102,7 @@ export interface ScrapedPage {
   url: string;
   title: string;
   sections: PageSection[];
+  skipReason?: string;
 }
 
 export interface ScrapeResult {
@@ -108,6 +110,7 @@ export interface ScrapeResult {
   totalDiscovered: number;
   scrapedCount: number;
   capped: boolean;
+  skippedPages: { url: string; reason: string }[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -132,7 +135,13 @@ async function safeFetch(url: string): Promise<string | null> {
     });
     clearTimeout(timer);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn(
+        { url, status: res.status },
+        '[Scraper] Fetch returned non-OK status',
+      );
+      return null;
+    }
 
     // Many sites don't declare charset — read as bytes and decode as UTF-8
     const buffer = await res.arrayBuffer();
@@ -154,6 +163,216 @@ export function normalizeUrl(href: string, baseUrl: string): string | null {
     resolved.search = '';
     return resolved.href;
   } catch {
+    return null;
+  }
+}
+
+// ── Blog URL Detection ──────────────────────────────────────────────────
+
+const BLOG_URL_SEGMENTS = new Set([
+  'blog', 'blogs', 'news', 'article', 'articles', 'post', 'posts',
+  'press', 'press-release', 'press-releases', 'media',
+]);
+
+export function isLikelyBlogUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    const segments = pathname.toLowerCase().split('/').filter(Boolean);
+    if (segments.some((s) => BLOG_URL_SEGMENTS.has(s))) return true;
+    if (/\/\d{4}\/\d{2}(\/|$)/.test(pathname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// ── JS-Rendered Detection ───────────────────────────────────────────────
+
+export function isLikelyJsRendered(html: string): boolean {
+  const $ = cheerio.load(html);
+
+  const frameworkRoots = [
+    '#__next', '#root', '#app', 'app-root', '[data-reactroot]',
+    '[ng-app]', '[data-n-head]',
+  ];
+  const hasFrameworkRoot = frameworkRoots.some((sel) => $(sel).length > 0);
+
+  $('script, style, noscript, link, meta, svg').remove();
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+
+  if (hasFrameworkRoot && bodyText.length < 200) return true;
+  if (bodyText.length < 50) return true;
+
+  return false;
+}
+
+// ── Contact Extraction from Noise Elements ──────────────────────────────
+
+const CONTACT_PHONE_RE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+const CONTACT_EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+export function extractContactFromNoise(
+  $: ReturnType<typeof cheerio.load>,
+  noiseSelector: string,
+): PageSection[] {
+  const contactLines: string[] = [];
+  const seen = new Set<string>();
+
+  $(noiseSelector).each((_, el) => {
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+
+    const phones = text.match(CONTACT_PHONE_RE);
+    if (phones) {
+      for (const p of phones) {
+        const normalized = p.replace(/\D/g, '');
+        if (!seen.has(normalized) && normalized.length >= 10) {
+          seen.add(normalized);
+          contactLines.push(`Phone: ${p.trim()}`);
+        }
+      }
+    }
+
+    const emails = text.match(CONTACT_EMAIL_RE);
+    if (emails) {
+      for (const e of emails) {
+        const lower = e.toLowerCase();
+        if (
+          !seen.has(lower) &&
+          !lower.includes('noreply') &&
+          !lower.includes('no-reply')
+        ) {
+          seen.add(lower);
+          contactLines.push(`Email: ${e}`);
+        }
+      }
+    }
+  });
+
+  if (contactLines.length > 0) {
+    return [{ heading: 'Contact Information', content: contactLines.join('\n') }];
+  }
+  return [];
+}
+
+// ── JSON-LD Extraction ──────────────────────────────────────────────────
+
+function isBusinessSchema(item: any): boolean {
+  if (!item || !item['@type']) return false;
+  const type = typeof item['@type'] === 'string' ? item['@type'] : '';
+  const businessTypes = [
+    'LocalBusiness', 'Dentist', 'MedicalBusiness', 'HealthAndBeautyBusiness',
+    'MedicalClinic', 'Physician', 'DentalClinic', 'ProfessionalService',
+    'Organization',
+  ];
+  return businessTypes.some((t) => type.includes(t));
+}
+
+function formatSchemaAddress(addr: any): string {
+  if (!addr) return '';
+  if (typeof addr === 'string') return addr;
+  const parts = [
+    addr.streetAddress,
+    addr.addressLocality,
+    addr.addressRegion,
+    addr.postalCode,
+    addr.addressCountry,
+  ].filter(Boolean);
+  return parts.join(', ');
+}
+
+export function extractJsonLd(
+  $: ReturnType<typeof cheerio.load>,
+): PageSection[] {
+  const sections: PageSection[] = [];
+
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const raw = $(el).text().trim();
+      if (!raw) return;
+
+      const data = JSON.parse(raw);
+      const items = Array.isArray(data) ? data : [data];
+
+      for (const item of items) {
+        if (!isBusinessSchema(item)) continue;
+
+        const lines: string[] = [];
+        if (item.name) lines.push(`Business Name: ${item.name}`);
+        if (item.telephone) lines.push(`Phone: ${item.telephone}`);
+        if (item.email) lines.push(`Email: ${item.email}`);
+
+        const addr = formatSchemaAddress(item.address);
+        if (addr) lines.push(`Address: ${addr}`);
+
+        if (item.openingHours) {
+          const hours = Array.isArray(item.openingHours)
+            ? item.openingHours.join(', ')
+            : item.openingHours;
+          lines.push(`Hours: ${hours}`);
+        }
+
+        if (item.openingHoursSpecification) {
+          const specs = Array.isArray(item.openingHoursSpecification)
+            ? item.openingHoursSpecification
+            : [item.openingHoursSpecification];
+          for (const spec of specs) {
+            const days = Array.isArray(spec.dayOfWeek)
+              ? spec.dayOfWeek.join(', ')
+              : spec.dayOfWeek;
+            if (days && spec.opens && spec.closes) {
+              lines.push(`${days}: ${spec.opens} - ${spec.closes}`);
+            }
+          }
+        }
+
+        if (item.description) {
+          lines.push('');
+          lines.push(item.description);
+        }
+
+        if (lines.length > 0) {
+          sections.push({
+            heading: item.name || 'Business Information',
+            content: lines.join('\n'),
+          });
+        }
+      }
+    } catch {
+      // Invalid JSON-LD — skip silently
+    }
+  });
+
+  return sections;
+}
+
+// ── Render-Service Fallback ─────────────────────────────────────────────
+
+async function safeFetchRendered(url: string): Promise<string | null> {
+  const renderUrl = process.env.SCRAPER_RENDER_URL;
+  if (!renderUrl) return null;
+
+  const logger = await getLogger();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RENDER_FETCH_TIMEOUT_MS);
+
+    const res = await fetch(
+      `${renderUrl}?url=${encodeURIComponent(url)}`,
+      { headers: { 'User-Agent': USER_AGENT }, signal: controller.signal },
+    );
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      logger.warn({ url, status: res.status }, '[Scraper] Render service error');
+      return null;
+    }
+
+    return await res.text();
+  } catch (err) {
+    logger.warn(
+      { url, error: err instanceof Error ? err.message : err },
+      '[Scraper] Render service fetch failed',
+    );
     return null;
   }
 }
@@ -293,16 +512,34 @@ const NOISE_SELECTORS = [
 export function extractPageContent(html: string, url: string): ScrapedPage {
   const $ = cheerio.load(html);
 
-  // Check meta/structured-data BEFORE stripping tags (STRIP_SELECTORS removes <meta>).
+  // ── 1. Extract JSON-LD structured data (available even on thin pages) ──
+  const jsonLdSections = extractJsonLd($);
+
+  // ── 2. Blog detection: og:type + URL heuristic ──
+  // Only skip when og:type says article/blog AND the URL also looks blog-like.
+  // Many WordPress themes set og:type=article on every page, so og:type alone
+  // is insufficient.
   const ogType = $('meta[property="og:type"]').attr('content')?.toLowerCase();
-  if (ogType === 'article' || ogType === 'blog') {
-    return { url, title: '', sections: [] };
-  }
-  const schemaType = $('[itemtype*="BlogPosting"], [itemtype*="NewsArticle"], [itemtype*="Article"]');
-  if (schemaType.length > 0) {
-    return { url, title: '', sections: [] };
+  const hasArticleOgType = ogType === 'article' || ogType === 'blog';
+
+  if (hasArticleOgType && isLikelyBlogUrl(url)) {
+    return { url, title: '', sections: [], skipReason: 'og-type-with-blog-url' };
   }
 
+  // BlogPosting / NewsArticle schema are specific enough to always skip.
+  // Generic "Article" schema is NOT checked — too many CMS themes use it
+  // on service pages.
+  const blogSchema = $(
+    '[itemtype*="BlogPosting"], [itemtype*="NewsArticle"]',
+  );
+  if (blogSchema.length > 0) {
+    return { url, title: '', sections: [], skipReason: 'schema-blog-posting' };
+  }
+
+  // ── 3. Extract contact info from noise elements BEFORE removing them ──
+  const contactSections = extractContactFromNoise($, NOISE_SELECTORS);
+
+  // ── 4. Strip non-content and noise ──
   $(STRIP_SELECTORS).remove();
   $(NOISE_SELECTORS).remove();
 
@@ -332,7 +569,6 @@ export function extractPageContent(html: string, url: string): ScrapedPage {
 
     if (!text || text.length < 3) return;
 
-    // Skip duplicate lines within the same page (responsive layout dupes)
     const fingerprint = text.toLowerCase().replace(/\s+/g, '');
     if (seenLines.has(fingerprint)) return;
     seenLines.add(fingerprint);
@@ -360,7 +596,14 @@ export function extractPageContent(html: string, url: string): ScrapedPage {
     }
   });
 
-  return { url, title, sections };
+  // ── 5. Merge all content sources ──
+  const allSections = [...sections, ...contactSections, ...jsonLdSections];
+
+  if (allSections.length === 0) {
+    return { url, title, sections: [], skipReason: 'no-extractable-content' };
+  }
+
+  return { url, title, sections: allSections };
 }
 
 // ── Main Scraper ───────────────────────────────────────────────────────
@@ -383,20 +626,45 @@ export async function scrapeWebsite(
   );
 
   const pages: ScrapedPage[] = [];
+  const skippedPages: { url: string; reason: string }[] = [];
 
   for (let i = 0; i < allUrls.length; i++) {
     const url = allUrls[i]!;
     onProgress?.(i + 1, allUrls.length);
 
-    const html = await safeFetch(url);
+    let html = await safeFetch(url);
     if (!html) {
-      logger.warn({ url }, '[Scraper] Skipping page (fetch failed)');
+      logger.warn({ url, index: i }, '[Scraper] Skipping page (fetch failed)');
+      skippedPages.push({ url, reason: 'fetch-failed' });
       continue;
     }
 
+    // Detect JS-rendered pages and retry with render service if available
+    if (isLikelyJsRendered(html)) {
+      logger.info({ url }, '[Scraper] Page appears JS-rendered, attempting render service');
+      const rendered = await safeFetchRendered(url);
+      if (rendered) {
+        html = rendered;
+        logger.info({ url }, '[Scraper] Got rendered HTML from render service');
+      } else {
+        logger.warn(
+          { url, renderConfigured: !!process.env.SCRAPER_RENDER_URL },
+          '[Scraper] JS-rendered page — no rendered HTML available',
+        );
+      }
+    }
+
     const page = extractPageContent(html, url);
+
     if (page.sections.length > 0) {
       pages.push(page);
+    } else {
+      const reason = page.skipReason || 'empty-after-extraction';
+      logger.warn(
+        { url, reason, index: i },
+        '[Scraper] Page produced no content',
+      );
+      skippedPages.push({ url, reason });
     }
 
     if (i < allUrls.length - 1) {
@@ -404,8 +672,21 @@ export async function scrapeWebsite(
     }
   }
 
+  if (skippedPages.length > 0) {
+    logger.info(
+      {
+        skippedCount: skippedPages.length,
+        reasons: skippedPages.reduce<Record<string, number>>((acc, s) => {
+          acc[s.reason] = (acc[s.reason] || 0) + 1;
+          return acc;
+        }, {}),
+      },
+      '[Scraper] Pages skipped summary',
+    );
+  }
+
   logger.info(
-    { scrapedCount: pages.length, totalDiscovered },
+    { scrapedCount: pages.length, totalDiscovered, skipped: skippedPages.length },
     '[Scraper] Scraping complete',
   );
 
@@ -414,5 +695,6 @@ export async function scrapeWebsite(
     totalDiscovered,
     scrapedCount: pages.length,
     capped,
+    skippedPages,
   };
 }

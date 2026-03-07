@@ -13,7 +13,12 @@ import {
   urlPriority,
   extractPageContent,
   normalizeUrl,
+  isLikelyBlogUrl,
+  isLikelyJsRendered,
+  extractContactFromNoise,
+  extractJsonLd,
 } from './website-scraper';
+import * as cheerio from 'cheerio';
 
 // ── isExcludedUrl ────────────────────────────────────────────────────
 
@@ -150,6 +155,288 @@ describe('normalizeUrl', () => {
   });
 });
 
+// ── isLikelyBlogUrl ─────────────────────────────────────────────────
+
+describe('isLikelyBlogUrl', () => {
+  it.each([
+    'https://clinic.com/blog/dental-tips',
+    'https://clinic.com/news/new-office',
+    'https://clinic.com/article/whitening',
+    'https://clinic.com/posts/my-post',
+    'https://clinic.com/2024/01/my-post',
+    'https://clinic.com/press/announcement',
+    'https://clinic.com/media/video',
+  ])('should detect blog URL %s', (url) => {
+    expect(isLikelyBlogUrl(url)).toBe(true);
+  });
+
+  it.each([
+    'https://clinic.com/',
+    'https://clinic.com/about',
+    'https://clinic.com/services',
+    'https://clinic.com/services/cleanings',
+    'https://clinic.com/contact',
+    'https://clinic.com/our-team',
+    'https://clinic.com/insurance',
+  ])('should NOT flag clinic page %s as blog', (url) => {
+    expect(isLikelyBlogUrl(url)).toBe(false);
+  });
+
+  it('should handle invalid URLs', () => {
+    expect(isLikelyBlogUrl('not-a-url')).toBe(false);
+  });
+});
+
+// ── isLikelyJsRendered ──────────────────────────────────────────────
+
+describe('isLikelyJsRendered', () => {
+  it('should detect a React SPA shell', () => {
+    const html = `
+      <html><head><title>App</title></head>
+      <body><div id="root"></div><script src="/bundle.js"></script></body>
+      </html>`;
+    expect(isLikelyJsRendered(html)).toBe(true);
+  });
+
+  it('should detect a Next.js shell with minimal content', () => {
+    const html = `
+      <html><head></head>
+      <body><div id="__next"></div></body>
+      </html>`;
+    expect(isLikelyJsRendered(html)).toBe(true);
+  });
+
+  it('should detect a page with almost no text content', () => {
+    const html = `<html><body>Loading...</body></html>`;
+    expect(isLikelyJsRendered(html)).toBe(true);
+  });
+
+  it('should NOT flag a well-populated server-rendered page', () => {
+    const html = `
+      <html><head><title>Clinic</title></head>
+      <body>
+        <h1>Welcome to Downtown Dental Clinic</h1>
+        <p>We provide quality dental care in downtown Montreal for over 20 years.
+           Our team of experienced dentists offers comprehensive dental services.</p>
+        <p>Services include cleanings, whitening, implants, crowns, and more.</p>
+        <p>Contact us today to schedule your appointment at our convenient location.</p>
+      </body>
+      </html>`;
+    expect(isLikelyJsRendered(html)).toBe(false);
+  });
+
+  it('should NOT flag a Next.js page with sufficient server-rendered content', () => {
+    const html = `
+      <html><head></head>
+      <body>
+        <div id="__next">
+          <h1>Our Dental Services</h1>
+          <p>We offer comprehensive dental care for the whole family. Our services
+             include preventive care, restorative treatments, and cosmetic dentistry.
+             We accept most insurance plans and offer flexible payment options.</p>
+        </div>
+      </body>
+      </html>`;
+    expect(isLikelyJsRendered(html)).toBe(false);
+  });
+});
+
+// ── extractContactFromNoise ─────────────────────────────────────────
+
+describe('extractContactFromNoise', () => {
+  const NOISE = 'nav, footer, header';
+
+  it('should extract phone numbers from header/footer', () => {
+    const $ = cheerio.load(`
+      <html><body>
+        <header><p>Call us: (514) 555-1234</p></header>
+        <main><p>Main content here with enough characters to be meaningful.</p></main>
+        <footer><p>Phone: 1-800-555-6789</p></footer>
+      </body></html>
+    `);
+    const sections = extractContactFromNoise($, NOISE);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.heading).toBe('Contact Information');
+    expect(sections[0]!.content).toContain('(514) 555-1234');
+    expect(sections[0]!.content).toContain('1-800-555-6789');
+  });
+
+  it('should extract email addresses from noise elements', () => {
+    const $ = cheerio.load(`
+      <html><body>
+        <nav><a href="mailto:info@clinic.com">info@clinic.com</a></nav>
+        <main><p>Some page content about dental services and patient care.</p></main>
+      </body></html>
+    `);
+    const sections = extractContactFromNoise($, NOISE);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).toContain('Email: info@clinic.com');
+  });
+
+  it('should deduplicate identical phone numbers', () => {
+    const $ = cheerio.load(`
+      <html><body>
+        <header><p>(514) 555-1234</p></header>
+        <footer><p>514-555-1234</p></footer>
+      </body></html>
+    `);
+    const sections = extractContactFromNoise($, NOISE);
+    expect(sections).toHaveLength(1);
+    const phoneLines = sections[0]!.content
+      .split('\n')
+      .filter((l) => l.startsWith('Phone:'));
+    expect(phoneLines).toHaveLength(1);
+  });
+
+  it('should filter out noreply email addresses', () => {
+    const $ = cheerio.load(`
+      <html><body>
+        <footer>
+          <p>noreply@clinic.com</p>
+          <p>info@clinic.com</p>
+        </footer>
+      </body></html>
+    `);
+    const sections = extractContactFromNoise($, NOISE);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).not.toContain('noreply');
+    expect(sections[0]!.content).toContain('info@clinic.com');
+  });
+
+  it('should return empty array when no contact info in noise', () => {
+    const $ = cheerio.load(`
+      <html><body>
+        <nav><a href="/">Home</a><a href="/about">About</a></nav>
+        <main><p>Content</p></main>
+      </body></html>
+    `);
+    const sections = extractContactFromNoise($, NOISE);
+    expect(sections).toHaveLength(0);
+  });
+});
+
+// ── extractJsonLd ───────────────────────────────────────────────────
+
+describe('extractJsonLd', () => {
+  it('should extract business info from LocalBusiness JSON-LD', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{
+          "@context": "https://schema.org",
+          "@type": "Dentist",
+          "name": "Pearl Dental",
+          "telephone": "+15145551234",
+          "email": "info@pearldental.com",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "123 Main St",
+            "addressLocality": "Montreal",
+            "addressRegion": "QC",
+            "postalCode": "H2X 1A1"
+          },
+          "openingHours": ["Mo-Fr 09:00-17:00", "Sa 10:00-14:00"]
+        }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.heading).toBe('Pearl Dental');
+    expect(sections[0]!.content).toContain('Business Name: Pearl Dental');
+    expect(sections[0]!.content).toContain('Phone: +15145551234');
+    expect(sections[0]!.content).toContain('Email: info@pearldental.com');
+    expect(sections[0]!.content).toContain('123 Main St');
+    expect(sections[0]!.content).toContain('Mo-Fr 09:00-17:00');
+  });
+
+  it('should extract from MedicalClinic schema', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{
+          "@type": "MedicalClinic",
+          "name": "Downtown Medical",
+          "telephone": "(416) 555-9999"
+        }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).toContain('Downtown Medical');
+    expect(sections[0]!.content).toContain('(416) 555-9999');
+  });
+
+  it('should handle openingHoursSpecification', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{
+          "@type": "Dentist",
+          "name": "Test Clinic",
+          "openingHoursSpecification": [
+            { "dayOfWeek": ["Monday", "Tuesday"], "opens": "09:00", "closes": "17:00" },
+            { "dayOfWeek": "Saturday", "opens": "10:00", "closes": "14:00" }
+          ]
+        }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).toContain('Monday, Tuesday: 09:00 - 17:00');
+    expect(sections[0]!.content).toContain('Saturday: 10:00 - 14:00');
+  });
+
+  it('should skip non-business schemas like BlogPosting', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{
+          "@type": "BlogPosting",
+          "headline": "Dental Tips",
+          "author": "Dr. Smith"
+        }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(0);
+  });
+
+  it('should handle malformed JSON-LD gracefully', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{ invalid json }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(0);
+  });
+
+  it('should handle JSON-LD arrays with mixed types', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">[
+          { "@type": "BlogPosting", "headline": "Tips" },
+          { "@type": "Dentist", "name": "Smile Clinic", "telephone": "555-1234" }
+        ]</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).toContain('Smile Clinic');
+  });
+
+  it('should handle string addresses', () => {
+    const $ = cheerio.load(`
+      <html><head>
+        <script type="application/ld+json">{
+          "@type": "LocalBusiness",
+          "name": "City Dental",
+          "address": "456 Queen St W, Toronto, ON"
+        }</script>
+      </head><body></body></html>
+    `);
+    const sections = extractJsonLd($);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]!.content).toContain('456 Queen St W, Toronto, ON');
+  });
+});
+
 // ── extractPageContent ───────────────────────────────────────────────
 
 describe('extractPageContent', () => {
@@ -173,7 +460,7 @@ describe('extractPageContent', () => {
     );
   });
 
-  it('should skip pages with og:type=article', () => {
+  it('should skip pages with og:type=article AND blog URL', () => {
     const html = `
       <html>
       <head>
@@ -186,9 +473,28 @@ describe('extractPageContent', () => {
     const result = extractPageContent(html, 'https://clinic.com/blog/post');
     expect(result.sections).toHaveLength(0);
     expect(result.title).toBe('');
+    expect(result.skipReason).toBe('og-type-with-blog-url');
   });
 
-  it('should skip pages with og:type=blog', () => {
+  it('should NOT skip pages with og:type=article but non-blog URL', () => {
+    const html = `
+      <html>
+      <head>
+        <meta property="og:type" content="article" />
+        <title>Our Services</title>
+      </head>
+      <body>
+        <h1>Dental Services</h1>
+        <p>We offer comprehensive dental services including cleanings, fillings, and crowns for all ages.</p>
+      </body>
+      </html>
+    `;
+    const result = extractPageContent(html, 'https://clinic.com/services');
+    expect(result.sections.length).toBeGreaterThan(0);
+    expect(result.skipReason).toBeUndefined();
+  });
+
+  it('should skip pages with og:type=blog AND blog URL', () => {
     const html = `
       <html>
       <head>
@@ -200,6 +506,7 @@ describe('extractPageContent', () => {
     `;
     const result = extractPageContent(html, 'https://clinic.com/blog');
     expect(result.sections).toHaveLength(0);
+    expect(result.skipReason).toBe('og-type-with-blog-url');
   });
 
   it('should skip pages with BlogPosting schema markup', () => {
@@ -215,6 +522,7 @@ describe('extractPageContent', () => {
     `;
     const result = extractPageContent(html, 'https://clinic.com/blog/1');
     expect(result.sections).toHaveLength(0);
+    expect(result.skipReason).toBe('schema-blog-posting');
   });
 
   it('should skip pages with NewsArticle schema markup', () => {
@@ -230,9 +538,48 @@ describe('extractPageContent', () => {
     `;
     const result = extractPageContent(html, 'https://clinic.com/news/1');
     expect(result.sections).toHaveLength(0);
+    expect(result.skipReason).toBe('schema-blog-posting');
   });
 
-  it('should remove nav, footer, header noise selectors', () => {
+  it('should NOT skip pages with generic Article schema', () => {
+    const html = `
+      <html>
+      <head><title>Services</title></head>
+      <body>
+        <article itemtype="https://schema.org/Article">
+          <h1>Our Dental Services</h1>
+          <p>We offer a wide range of dental services including cleanings, fillings, and crowns for patients.</p>
+        </article>
+      </body>
+      </html>
+    `;
+    const result = extractPageContent(html, 'https://clinic.com/services');
+    expect(result.sections.length).toBeGreaterThan(0);
+    expect(result.skipReason).toBeUndefined();
+  });
+
+  it('should extract contact info from header/footer before stripping', () => {
+    const html = `
+      <html>
+      <head><title>Clinic</title></head>
+      <body>
+        <header><p>Call us: (514) 555-1234 | info@clinic.com</p></header>
+        <h1>Main Content</h1>
+        <p>This is the actual clinic description with important information about services.</p>
+        <footer><p>Copyright 2024 All rights reserved to downtown dental clinic.</p></footer>
+      </body>
+      </html>
+    `;
+    const result = extractPageContent(html, 'https://clinic.com/');
+    const contactSection = result.sections.find(
+      (s) => s.heading === 'Contact Information',
+    );
+    expect(contactSection).toBeDefined();
+    expect(contactSection!.content).toContain('(514) 555-1234');
+    expect(contactSection!.content).toContain('info@clinic.com');
+  });
+
+  it('should still remove nav/footer text from main content extraction', () => {
     const html = `
       <html>
       <head><title>Clinic</title></head>
@@ -245,9 +592,55 @@ describe('extractPageContent', () => {
       </html>
     `;
     const result = extractPageContent(html, 'https://clinic.com/');
-    const allText = result.sections.map((s) => s.content).join(' ');
+    const mainSections = result.sections.filter(
+      (s) => s.heading !== 'Contact Information',
+    );
+    const allText = mainSections.map((s) => s.content).join(' ');
     expect(allText).toContain('actual clinic description');
     expect(allText).not.toContain('Copyright 2024');
+  });
+
+  it('should extract JSON-LD business data', () => {
+    const html = `
+      <html>
+      <head>
+        <title>Clinic</title>
+        <script type="application/ld+json">{
+          "@type": "Dentist",
+          "name": "Downtown Dental",
+          "telephone": "+15145551234",
+          "address": {
+            "streetAddress": "100 University",
+            "addressLocality": "Montreal",
+            "addressRegion": "QC"
+          }
+        }</script>
+      </head>
+      <body>
+        <h1>Welcome</h1>
+        <p>Quality dental care for the entire family in downtown Montreal.</p>
+      </body>
+      </html>
+    `;
+    const result = extractPageContent(html, 'https://clinic.com/');
+    const jsonLdSection = result.sections.find(
+      (s) => s.heading === 'Downtown Dental',
+    );
+    expect(jsonLdSection).toBeDefined();
+    expect(jsonLdSection!.content).toContain('+15145551234');
+    expect(jsonLdSection!.content).toContain('100 University');
+  });
+
+  it('should set skipReason when page has no extractable content', () => {
+    const html = `
+      <html>
+      <head><title>Empty</title></head>
+      <body><p>Hi</p></body>
+      </html>
+    `;
+    const result = extractPageContent(html, 'https://clinic.com/empty');
+    expect(result.sections).toHaveLength(0);
+    expect(result.skipReason).toBe('no-extractable-content');
   });
 
   it('should deduplicate identical text blocks', () => {

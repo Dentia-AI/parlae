@@ -158,6 +158,7 @@ describe('POST /api/agent/deploy', () => {
       mockScrapeWebsite.mockResolvedValue({
         pages: [{ url: 'https://testdental.com', content: 'We are a dental clinic.' }],
         scrapedCount: 1,
+        skippedPages: [],
       });
       mockCategorizeContent.mockResolvedValue({
         documents: [{ categoryId: 'about', content: 'We are a dental clinic.' }],
@@ -188,7 +189,7 @@ describe('POST /api/agent/deploy', () => {
         name: 'Test Dental',
       });
 
-      mockScrapeWebsite.mockResolvedValue({ pages: [], scrapedCount: 0 });
+      mockScrapeWebsite.mockResolvedValue({ pages: [], scrapedCount: 0, skippedPages: [] });
 
       const res = await POST(
         makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
