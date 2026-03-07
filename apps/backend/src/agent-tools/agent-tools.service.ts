@@ -3228,10 +3228,10 @@ export class AgentToolsService {
         action: 'update_patient',
         category: 'patient',
         callId: call?.id,
-        externalResourceId: events[0]?.id,
+        externalResourceId: events[0]?.id || undefined,
         externalResourceType: 'event',
         summary: `Updated patient info on ${updatedCount} calendar event(s) (fields: ${Object.keys(params).filter(k => k !== 'patientId').join(', ')})`,
-        calendarEventId: events[0]?.id,
+        calendarEventId: events[0]?.id || undefined,
       }).catch(() => {});
 
       return {

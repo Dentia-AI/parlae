@@ -7,10 +7,8 @@ jest.mock('@kit/prisma', () => ({
   },
 }));
 
-jest.mock('@kit/shared/auth', () => ({
-  auth: jest.fn().mockResolvedValue({
-    user: { id: 'user-1', email: 'test@example.com' },
-  }),
+jest.mock('~/lib/auth/get-session', () => ({
+  getEffectiveUserId: jest.fn().mockResolvedValue('user-1'),
 }));
 
 import { GET, PATCH } from '../route';
@@ -25,8 +23,8 @@ describe('/api/account/personal', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      const { auth } = require('@kit/shared/auth');
-      auth.mockResolvedValueOnce(null);
+      const { getEffectiveUserId } = require('~/lib/auth/get-session');
+      getEffectiveUserId.mockResolvedValueOnce(null);
       const response = await GET();
       expect(response.status).toBe(401);
     });
