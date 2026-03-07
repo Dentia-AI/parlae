@@ -2,9 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { PmsService } from './pms.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SecretsService } from '../common/services/secrets.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
-import { createMockSecretsService } from '../test/mocks/secrets.mock';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -20,15 +18,14 @@ jest.mock('./providers/sikka.service', () => ({
 describe('PmsService', () => {
   let service: PmsService;
   let prisma: any;
-  let secrets: any;
 
-  const mockPracticeCredentials = {
+  const mockIntegrationWithCreds = {
     officeId: 'office-1',
     secretKey: 'secret-1',
     requestKey: 'req-1',
     refreshKey: 'refresh-1',
-    practiceName: 'Test Dental',
-    pmsType: 'Dentrix',
+    tokenExpiry: new Date('2026-12-31'),
+    metadata: { practiceName: 'Test Dental', actualPmsType: 'Dentrix' },
   };
 
   const mockUserWithAccount = {
@@ -38,23 +35,23 @@ describe('PmsService', () => {
 
   beforeEach(async () => {
     const mockPrisma = createMockPrismaService();
-    const mockSecrets = createMockSecretsService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PmsService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: SecretsService, useValue: mockSecrets },
       ],
     }).compile();
 
     service = module.get<PmsService>(PmsService);
     prisma = module.get(PrismaService);
-    secrets = module.get(SecretsService);
 
     process.env.SIKKA_APP_ID = 'test-app-id';
     process.env.SIKKA_APP_KEY = 'test-app-key';
     process.env.AWS_REGION = 'us-east-1';
+
+    // Clear the in-memory cache between tests
+    service.invalidateCredentialsCache('acc-1');
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -172,7 +169,7 @@ describe('PmsService', () => {
 
     it('should throw when no practice credentials exist', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(null);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
 
       await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
         .rejects.toThrow('Practice not authorized');
@@ -180,7 +177,7 @@ describe('PmsService', () => {
 
     it('should throw when PMS connection test fails', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
 
       const { SikkaPmsService } = require('./providers/sikka.service');
       SikkaPmsService.mockImplementationOnce(() => ({
@@ -194,7 +191,7 @@ describe('PmsService', () => {
 
     it('should throw when system credentials are missing', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
       delete process.env.SIKKA_APP_ID;
 
       await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
@@ -203,7 +200,7 @@ describe('PmsService', () => {
 
     it('should successfully set up PMS integration', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
       prisma.pmsIntegration.upsert.mockResolvedValue({});
 
       const result = await service.setupPmsIntegration('u-1', {
@@ -220,7 +217,7 @@ describe('PmsService', () => {
 
     it('should handle features fetch failure gracefully', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
       prisma.pmsIntegration.upsert.mockResolvedValue({});
 
       const { SikkaPmsService } = require('./providers/sikka.service');
@@ -241,13 +238,13 @@ describe('PmsService', () => {
     });
 
     it('should throw when no credentials found', async () => {
-      secrets.getPracticeCredentials.mockResolvedValue(null);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
       await expect(service.getPmsService('acc-1'))
         .rejects.toThrow('No practice credentials found');
     });
 
     it('should return a SikkaPmsService instance when credentials exist', async () => {
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
 
       const pms = await service.getPmsService('acc-1');
       expect(pms).toBeDefined();
@@ -255,7 +252,7 @@ describe('PmsService', () => {
     });
 
     it('should throw when system credentials are missing', async () => {
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
       delete process.env.SIKKA_APP_ID;
 
       await expect(service.getPmsService('acc-1'))
@@ -263,17 +260,37 @@ describe('PmsService', () => {
     });
 
     it('should use default provider SIKKA when not specified', async () => {
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
 
       const pms = await service.getPmsService('acc-1');
       expect(pms).toBeDefined();
+    });
+
+    it('should cache credentials and not re-query DB within TTL', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
+
+      await service.getPmsService('acc-1');
+      await service.getPmsService('acc-1');
+
+      // Only one DB query due to caching
+      expect(prisma.pmsIntegration.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('should re-query DB after cache invalidation', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
+
+      await service.getPmsService('acc-1');
+      service.invalidateCredentialsCache('acc-1');
+      await service.getPmsService('acc-1');
+
+      expect(prisma.pmsIntegration.findFirst).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('getSikkaSystemCredentials (via setupPmsIntegration)', () => {
     it('should throw when SIKKA_APP_KEY is missing', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUserWithAccount);
-      secrets.getPracticeCredentials.mockResolvedValue(mockPracticeCredentials);
+      prisma.pmsIntegration.findFirst.mockResolvedValue(mockIntegrationWithCreds);
       delete process.env.SIKKA_APP_KEY;
 
       await expect(service.setupPmsIntegration('u-1', { provider: 'SIKKA' } as any))
@@ -307,7 +324,6 @@ describe('PmsService', () => {
     it('should successfully process OAuth callback', async () => {
       mockedAxios.post.mockResolvedValue(mockTokenResponse);
       mockedAxios.get.mockResolvedValue(mockPracticesResponse);
-      secrets.storePracticeCredentials.mockResolvedValue('arn:aws:secretsmanager:test:secret');
       prisma.pmsIntegration.upsert.mockResolvedValue({});
 
       const result = await service.handleSikkaOAuthCallback('auth-code-123', 'acc-1');
@@ -321,10 +337,6 @@ describe('PmsService', () => {
           grant_type: 'authorization_code',
           code: 'auth-code-123',
         }),
-      );
-      expect(secrets.storePracticeCredentials).toHaveBeenCalledWith(
-        'acc-1',
-        expect.objectContaining({ officeId: 'office-new' }),
       );
       expect(prisma.pmsIntegration.upsert).toHaveBeenCalled();
     });

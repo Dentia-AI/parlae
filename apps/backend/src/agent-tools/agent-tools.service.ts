@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HipaaAuditService } from '../common/services/hipaa-audit.service';
-import { SecretsService } from '../common/services/secrets.service';
 import { StructuredLogger } from '../common/structured-logger';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -128,7 +127,6 @@ export class AgentToolsService {
   constructor(
     private prisma: PrismaService,
     private hipaaAudit: HipaaAuditService,
-    private secretsService: SecretsService,
     private googleCalendar: GoogleCalendarService,
     private notifications: NotificationsService,
   ) {}
@@ -347,7 +345,7 @@ export class AgentToolsService {
     tz: string,
   ): Promise<void> {
     const { PmsService } = await import('../pms/pms.service');
-    const pmsService = new PmsService(this.prisma, this.secretsService);
+    const pmsService = new PmsService(this.prisma);
     const sikkaService = await pmsService.getPmsService(
       accountId,
       pmsIntegration.provider,
@@ -727,7 +725,7 @@ export class AgentToolsService {
 
       // Get PMS service (credentials from env, never DB)
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -870,7 +868,7 @@ export class AgentToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -1048,7 +1046,7 @@ export class AgentToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -1333,7 +1331,7 @@ export class AgentToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -1456,7 +1454,7 @@ export class AgentToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -1549,7 +1547,7 @@ export class AgentToolsService {
       }
 
       const { PmsService } = await import('../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
         phoneRecord.accountId,
         phoneRecord.pmsIntegration.provider,
@@ -2374,7 +2372,7 @@ export class AgentToolsService {
         });
         if (phoneRecord?.pmsIntegration) {
           const { PmsService } = await import('../pms/pms.service');
-          const pmsService = new PmsService(this.prisma, this.secretsService);
+          const pmsService = new PmsService(this.prisma);
           const service = await pmsService.getPmsService(
             phoneRecord.accountId,
             phoneRecord.pmsIntegration.provider,
@@ -2401,7 +2399,7 @@ export class AgentToolsService {
         const pmsIntegration = await this.resolvePmsForAccount(accountId);
         if (pmsIntegration) {
           const { PmsService } = await import('../pms/pms.service');
-          const pmsService = new PmsService(this.prisma, this.secretsService);
+          const pmsService = new PmsService(this.prisma);
           const service = await pmsService.getPmsService(
             accountId,
             pmsIntegration.provider,

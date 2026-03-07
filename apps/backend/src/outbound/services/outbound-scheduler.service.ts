@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredLogger } from '../../common/structured-logger';
-import { SecretsService } from '../../common/services/secrets.service';
 import { OutboundCampaignService, type CreateContactInput } from './outbound-campaign.service';
 import { OutboundSettingsService } from './outbound-settings.service';
 import type { OutboundSettings } from '@kit/prisma';
@@ -27,7 +26,6 @@ export class OutboundSchedulerService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly secretsService: SecretsService,
     private readonly campaignService: OutboundCampaignService,
     private readonly settingsService: OutboundSettingsService,
   ) {}
@@ -237,7 +235,7 @@ export class OutboundSchedulerService {
 
     try {
       const { PmsService } = await import('../../pms/pms.service');
-      const pmsService = new PmsService(this.prisma, this.secretsService);
+      const pmsService = new PmsService(this.prisma);
       return pmsService.getPmsService(
         accountId,
         pmsIntegration.provider,

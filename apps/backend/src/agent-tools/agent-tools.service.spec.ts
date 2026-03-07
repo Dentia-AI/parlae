@@ -5,12 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HipaaAuditService } from '../common/services/hipaa-audit.service';
-import { SecretsService } from '../common/services/secrets.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
 import { createMockGoogleCalendarService } from '../test/mocks/google-calendar.mock';
 import { createMockNotificationsService } from '../test/mocks/notifications.mock';
 import { createMockHipaaAuditService } from '../test/mocks/hipaa-audit.mock';
-import { createMockSecretsService } from '../test/mocks/secrets.mock';
 
 describe('AgentToolsService', () => {
   let service: AgentToolsService;
@@ -23,7 +21,6 @@ describe('AgentToolsService', () => {
     const mockGcal = createMockGoogleCalendarService();
     const mockNotifications = createMockNotificationsService();
     const mockHipaa = createMockHipaaAuditService();
-    const mockSecrets = createMockSecretsService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -32,7 +29,6 @@ describe('AgentToolsService', () => {
         { provide: GoogleCalendarService, useValue: mockGcal },
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: HipaaAuditService, useValue: mockHipaa },
-        { provide: SecretsService, useValue: mockSecrets },
         {
           provide: ConfigService,
           useValue: { get: jest.fn() },

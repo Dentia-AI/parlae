@@ -1,18 +1,83 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SecretsService } from '../common/services/secrets.service';
 import { SetupPmsDto } from './dto/setup-pms.dto';
 import { SikkaPmsService } from './providers/sikka.service';
 import axios from 'axios';
+
+export interface SikkaPracticeCredentials {
+  officeId: string;
+  secretKey: string;
+  requestKey?: string;
+  refreshKey?: string;
+  tokenExpiry?: string;
+  practiceName?: string;
+  practiceId?: string;
+  pmsType?: string;
+}
+
+interface CacheEntry {
+  value: SikkaPracticeCredentials;
+  expiresAt: number;
+}
 
 @Injectable()
 export class PmsService {
   private readonly logger = new Logger(PmsService.name);
 
-  constructor(
-    private prisma: PrismaService,
-    private secrets: SecretsService,
-  ) {}
+  private readonly credentialsCache = new Map<string, CacheEntry>();
+  private readonly cacheTtlMs = 5 * 60 * 1000; // 5 minutes
+
+  constructor(private prisma: PrismaService) {}
+
+  /**
+   * Invalidate cached credentials for a specific account.
+   * Called by SikkaTokenRefreshService after token refresh.
+   */
+  invalidateCredentialsCache(accountId: string): void {
+    this.credentialsCache.delete(accountId);
+  }
+
+  private async loadPracticeCredentials(accountId: string): Promise<SikkaPracticeCredentials | null> {
+    const cached = this.credentialsCache.get(accountId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.value;
+    }
+
+    const integration = await this.prisma.pmsIntegration.findFirst({
+      where: { accountId, provider: 'SIKKA', status: 'ACTIVE' },
+      select: {
+        officeId: true,
+        secretKey: true,
+        requestKey: true,
+        refreshKey: true,
+        tokenExpiry: true,
+        metadata: true,
+      },
+    });
+
+    if (!integration?.officeId || !integration?.secretKey) {
+      return null;
+    }
+
+    const meta = (integration.metadata as any) ?? {};
+    const creds: SikkaPracticeCredentials = {
+      officeId: integration.officeId,
+      secretKey: integration.secretKey,
+      requestKey: integration.requestKey ?? undefined,
+      refreshKey: integration.refreshKey ?? undefined,
+      tokenExpiry: integration.tokenExpiry?.toISOString(),
+      practiceName: meta.practiceName,
+      practiceId: meta.practiceId,
+      pmsType: meta.actualPmsType,
+    };
+
+    this.credentialsCache.set(accountId, {
+      value: creds,
+      expiresAt: Date.now() + this.cacheTtlMs,
+    });
+
+    return creds;
+  }
 
   async setupPmsIntegration(userId: string, dto: SetupPmsDto) {
     this.logger.log(`Setting up ${dto.provider} PMS for user ${userId}`);
@@ -21,7 +86,6 @@ export class PmsService {
       throw new BadRequestException('Only Sikka is currently supported. Use Sikka marketplace to connect your PMS.');
     }
     
-    // 1. Get user's account
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { memberships: { include: { account: true } } },
@@ -33,21 +97,17 @@ export class PmsService {
     
     const account = user.memberships[0].account;
     
-    // 2. Check if practice credentials already exist in Secrets Manager
-    let practiceCredentials = await this.secrets.getPracticeCredentials(account.id);
+    const practiceCredentials = await this.loadPracticeCredentials(account.id);
     
     if (!practiceCredentials) {
-      // No credentials yet - practice hasn't authorized via Sikka marketplace
       this.logger.warn(`No practice credentials found for account ${account.id}`);
       throw new BadRequestException(
         'Practice not authorized. Please complete Sikka marketplace authorization first.'
       );
     }
     
-    // 3. Get system-level Sikka credentials from environment
     const systemCredentials = this.getSikkaSystemCredentials();
     
-    // 4. Create Sikka service and test connection
     const sikkaCredentials = {
       appId: systemCredentials.appId,
       appKey: systemCredentials.appKey,
@@ -65,14 +125,9 @@ export class PmsService {
       throw new BadRequestException(`Failed to connect to Sikka: ${connectionTest.error}`);
     }
     
-    // 5. Get features from PMS
     const featuresResult = await pmsService.getFeatures();
     const features = featuresResult.success ? featuresResult.data : {};
     
-    // 6. Get secret ARN for storage
-    const secretArn = `arn:aws:secretsmanager:${process.env.AWS_REGION}:*:secret:parlae/pms/sikka/${account.id}`;
-    
-    // 7. Save integration config (NO credentials, only secret reference!)
     await this.prisma.pmsIntegration.upsert({
       where: {
         accountId_provider: {
@@ -89,7 +144,6 @@ export class PmsService {
         status: 'ACTIVE',
         lastSyncAt: new Date(),
         metadata: {
-          secretArn,
           practiceName: practiceCredentials.practiceName,
           actualPmsType: practiceCredentials.pmsType || 'Unknown',
         },
@@ -101,7 +155,6 @@ export class PmsService {
         lastSyncAt: new Date(),
         lastError: null,
         metadata: {
-          secretArn,
           practiceName: practiceCredentials.practiceName,
           actualPmsType: practiceCredentials.pmsType || 'Unknown',
         },
@@ -120,13 +173,8 @@ export class PmsService {
     };
   }
 
-  /**
-   * Get connection status for frontend polling
-   * Used during OAuth flow to detect when connection is complete
-   */
   async getConnectionStatus(accountId: string) {
     try {
-      // Check if integration exists and is active
       const integration = await this.prisma.pmsIntegration.findFirst({
         where: {
           accountId: accountId,
@@ -142,7 +190,6 @@ export class PmsService {
         };
       }
       
-      // Check if connection is active
       if (integration.status === 'ACTIVE') {
         const metadata = integration.metadata as any;
         return {
@@ -155,7 +202,6 @@ export class PmsService {
         };
       }
       
-      // Connection failed
       if (integration.status === 'INACTIVE' || integration.status === 'ERROR') {
         return {
           isConnected: false,
@@ -166,7 +212,6 @@ export class PmsService {
         };
       }
       
-      // Still connecting
       return {
         isConnected: false,
         status: 'connecting',
@@ -213,61 +258,22 @@ export class PmsService {
   }
 
   /**
-   * Get PMS service instance for an account
-   * Credentials from AWS Secrets Manager + system env vars, with DB fallback
+   * Get PMS service instance for an account.
+   * Reads credentials from the DB with in-memory caching (5 min TTL).
    */
   async getPmsService(accountId: string, provider: string = 'SIKKA', config: any = {}) {
     if (provider !== 'SIKKA') {
       throw new BadRequestException('Only Sikka is currently supported');
     }
     
-    // Try Secrets Manager first
-    let practiceCredentials = await this.secrets.getPracticeCredentials(accountId);
-    
-    // Fallback: read credentials from the DB pmsIntegration record
-    if (!practiceCredentials) {
-      this.logger.warn(`No SM secret for account ${accountId}, checking DB fallback`);
-      const integration = await this.prisma.pmsIntegration.findFirst({
-        where: { accountId, provider: 'SIKKA', status: 'ACTIVE' },
-        select: {
-          officeId: true,
-          secretKey: true,
-          requestKey: true,
-          refreshKey: true,
-          tokenExpiry: true,
-          metadata: true,
-        },
-      });
-
-      if (integration?.officeId && integration?.secretKey) {
-        const meta = (integration.metadata as any) ?? {};
-        practiceCredentials = {
-          officeId: integration.officeId,
-          secretKey: integration.secretKey,
-          requestKey: integration.requestKey ?? undefined,
-          refreshKey: integration.refreshKey ?? undefined,
-          tokenExpiry: integration.tokenExpiry?.toISOString(),
-          practiceName: meta.practiceName,
-          practiceId: meta.practiceId,
-          pmsType: meta.actualPmsType,
-        };
-
-        // Re-sync to Secrets Manager so future calls use the fast path
-        this.secrets
-          .storePracticeCredentials(accountId, practiceCredentials)
-          .then(() => this.logger.log(`Re-synced SM secret for account ${accountId}`))
-          .catch((err) => this.logger.warn(`Failed to re-sync SM secret: ${err.message}`));
-      }
-    }
+    const practiceCredentials = await this.loadPracticeCredentials(accountId);
     
     if (!practiceCredentials) {
       throw new BadRequestException(`No practice credentials found for account ${accountId}`);
     }
     
-    // Get system-level credentials from environment
     const systemCredentials = this.getSikkaSystemCredentials();
     
-    // Combine credentials
     const fullCredentials = {
       appId: systemCredentials.appId,
       appKey: systemCredentials.appKey,
@@ -280,9 +286,6 @@ export class PmsService {
     return new SikkaPmsService(accountId, fullCredentials, config);
   }
 
-  /**
-   * Get Sikka system-level credentials (shared across all practices)
-   */
   private getSikkaSystemCredentials() {
     const appId = process.env.SIKKA_APP_ID;
     const appKey = process.env.SIKKA_APP_KEY;
@@ -294,18 +297,12 @@ export class PmsService {
     return { appId, appKey };
   }
 
-  /**
-   * Handle Sikka OAuth callback - exchange code for credentials
-   * This is the NEW OAuth 2.0 flow
-   */
   async handleSikkaOAuthCallback(code: string, accountId: string) {
     this.logger.log(`Processing Sikka OAuth callback for account ${accountId}`);
     
     try {
-      // Get system credentials
       const systemCredentials = this.getSikkaSystemCredentials();
       
-      // Step 1: Exchange authorization code for request_key
       this.logger.log('Exchanging authorization code for request_key');
       const tokenResponse = await axios.post(
         'https://api.sikkasoft.com/v4/request_key',
@@ -323,8 +320,6 @@ export class PmsService {
       
       this.logger.log(`Received request_key, expires in ${expiresIn} seconds`);
       
-      // Step 2: Get authorized practices (contains office_id and secret_key)
-      // Note: authorized_practices requires App-Id/App-Key headers, not Request-Key
       this.logger.log('Fetching authorized practices');
       const practicesResponse = await axios.get(
         'https://api.sikkasoft.com/v4/authorized_practices',
@@ -342,29 +337,12 @@ export class PmsService {
         throw new Error('No authorized practices found');
       }
       
-      // Use first practice (most cases will have only one)
       const practice = practices[0];
       
       this.logger.log(`Found practice: ${practice.practice_name} (${practice.practice_management_system})`);
       
-      // Calculate token expiry
       const tokenExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
       
-      // Step 3: Store in AWS Secrets Manager
-      const secretArn = await this.secrets.storePracticeCredentials(accountId, {
-        officeId: practice.office_id,
-        secretKey: practice.secret_key,
-        requestKey: requestKey,
-        refreshKey: refreshKey,
-        tokenExpiry: tokenExpiry,
-        practiceName: practice.practice_name,
-        practiceId: practice.practice_id,
-        pmsType: practice.practice_management_system || 'Unknown',
-      });
-      
-      this.logger.log(`Stored credentials in Secrets Manager: ${secretArn}`);
-      
-      // Step 4: Save integration record in database
       await this.prisma.pmsIntegration.upsert({
         where: {
           accountId_provider: {
@@ -381,7 +359,6 @@ export class PmsService {
           status: 'ACTIVE',
           lastSyncAt: new Date(),
           metadata: {
-            secretArn,
             practiceName: practice.practice_name,
             actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
@@ -396,7 +373,6 @@ export class PmsService {
           status: 'ACTIVE',
           lastSyncAt: new Date(),
           metadata: {
-            secretArn,
             practiceName: practice.practice_name,
             actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
@@ -409,6 +385,8 @@ export class PmsService {
           updatedAt: new Date(),
         },
       });
+
+      this.invalidateCredentialsCache(accountId);
       
       this.logger.log(`PMS integration saved for account ${accountId}`);
       
@@ -416,12 +394,10 @@ export class PmsService {
         success: true,
         practiceName: practice.practice_name,
         pmsType: practice.practice_management_system,
-        secretArn,
       };
     } catch (error: any) {
       this.logger.error(`Sikka OAuth callback failed: ${error.message}`, error.stack);
       
-      // Save error to database so frontend can retrieve it
       try {
         await this.prisma.pmsIntegration.upsert({
           where: {
@@ -456,9 +432,6 @@ export class PmsService {
     }
   }
 
-  /**
-   * Generate Sikka request_key and refresh_key
-   */
   private async generateRequestKey(
     officeId: string,
     secretKey: string,

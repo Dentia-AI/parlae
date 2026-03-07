@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StructuredLogger } from '../../common/structured-logger';
+import type { PmsService } from '../pms.service';
 import axios from 'axios';
 
 /**
@@ -25,7 +26,14 @@ export class SikkaTokenRefreshService {
   private readonly logger = new StructuredLogger('SikkaTokenService');
   private readonly baseUrl = 'https://api.sikkasoft.com/v4';
   
+  private pmsService?: PmsService;
+
   constructor(private prisma: PrismaService) {}
+
+  /** Allow PmsService to be set after construction (avoids circular DI). */
+  setPmsService(pms: PmsService): void {
+    this.pmsService = pms;
+  }
   
   /**
    * Refresh a single PMS integration's token
@@ -249,7 +257,7 @@ export class SikkaTokenRefreshService {
    * Save tokens to database
    */
   private async saveTokens(pmsIntegrationId: string, tokens: TokenRefreshResult): Promise<void> {
-    await this.prisma.pmsIntegration.update({
+    const updated = await this.prisma.pmsIntegration.update({
       where: { id: pmsIntegrationId },
       data: {
         requestKey: tokens.requestKey,
@@ -259,7 +267,10 @@ export class SikkaTokenRefreshService {
         lastError: null,
         updatedAt: new Date(),
       },
+      select: { accountId: true },
     });
+
+    this.pmsService?.invalidateCredentialsCache(updated.accountId);
   }
 }
 

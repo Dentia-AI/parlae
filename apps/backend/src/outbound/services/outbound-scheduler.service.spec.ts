@@ -1,11 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OutboundSchedulerService } from './outbound-scheduler.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SecretsService } from '../../common/services/secrets.service';
 import { OutboundCampaignService } from './outbound-campaign.service';
 import { OutboundSettingsService } from './outbound-settings.service';
 import { createMockPrismaService } from '../../test/mocks/prisma.mock';
-import { createMockSecretsService } from '../../test/mocks/secrets.mock';
 
 describe('OutboundSchedulerService', () => {
   let service: OutboundSchedulerService;
@@ -34,7 +32,6 @@ describe('OutboundSchedulerService', () => {
       providers: [
         OutboundSchedulerService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: SecretsService, useValue: createMockSecretsService() },
         {
           provide: OutboundCampaignService,
           useValue: {
