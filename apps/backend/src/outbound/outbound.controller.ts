@@ -222,7 +222,7 @@ export class OutboundController {
       accountIds?: string[];
     },
   ) {
-    const { scanTypes, accountIds } = body;
+    const { scanTypes, accountIds: rawAccountIds } = body;
 
     if (!scanTypes?.length) {
       throw new HttpException(
@@ -231,9 +231,13 @@ export class OutboundController {
       );
     }
 
+    const accountIds = (rawAccountIds || []).filter(
+      (id: unknown): id is string => typeof id === 'string' && id.length > 0,
+    );
+
     let accounts: Array<{ id: string; settings: any }>;
 
-    if (accountIds?.length) {
+    if (accountIds.length) {
       const settingsList = await this.prisma.outboundSettings.findMany({
         where: { accountId: { in: accountIds } },
       });
