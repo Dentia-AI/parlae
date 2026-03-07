@@ -48,10 +48,10 @@ function AdminOutboundCampaignsPage() {
       .then((data) => {
         if (data?.accounts) {
           const mapped = data.accounts
-            .filter((a: any) => a.id && (a.patientCareEnabled || a.financialEnabled))
+            .filter((a: any) => a.accountId && (a.patientCareEnabled || a.financialEnabled))
             .map((a: any) => ({
-              id: a.id as string,
-              name: a.name || a.brandingBusinessName || a.id,
+              id: a.accountId as string,
+              name: a.accountName || a.accountEmail || a.accountId,
               patientCareEnabled: a.patientCareEnabled,
               financialEnabled: a.financialEnabled,
               outboundTemplateVersion: a.outboundTemplateVersion,
