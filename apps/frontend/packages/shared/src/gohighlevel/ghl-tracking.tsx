@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import Script from 'next/script';
 
@@ -59,9 +59,12 @@ export function GHLTracking() {
  * This component renders a real <form> with an email <input> in the JSX
  * so it exists in the DOM before the GHL script runs its scan. Once the
  * user's session is available, the effect fills in the email value and
- * submits the form via requestSubmit(). The GHL script's pre-attached
+ * dispatches a synthetic submit event. The GHL script's pre-attached
  * listener captures the email and links the browser session to the
  * contact in the CRM.
+ *
+ * We use dispatchEvent (not requestSubmit) to fire the submit event
+ * without triggering an actual form submission / POST request.
  *
  * The form is positioned off-screen (not display:none) because the GHL
  * script ignores hidden fields.
@@ -72,12 +75,6 @@ function GHLIdentify() {
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const firedRef = useRef(false);
-
-  const handleSubmit = useCallback((e: React.FormEvent) => {
-    // Prevent the form from actually navigating. The GHL tracking
-    // script's listener has already captured the field values by now.
-    e.preventDefault();
-  }, []);
 
   useEffect(() => {
     if (firedRef.current) return;
@@ -109,75 +106,50 @@ function GHLIdentify() {
       firedRef.current = true;
       inputRef.current.value = email;
 
-      // requestSubmit() fires the 'submit' event which the GHL tracking
-      // script's pre-attached listener intercepts. form.submit() does NOT
-      // fire the event.
-      try {
-        formRef.current.requestSubmit();
-      } catch {
-        formRef.current.dispatchEvent(
-          new Event('submit', { bubbles: true, cancelable: true }),
-        );
-      }
+      // Dispatch a synthetic submit event so the GHL tracking script's
+      // pre-attached listener fires and captures the email. Unlike
+      // requestSubmit(), dispatchEvent does NOT trigger an actual form
+      // submission / POST request — no server-side errors.
+      formRef.current.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      );
 
       try {
         localStorage.setItem(GHL_IDENTIFY_STORAGE_KEY, email);
       } catch {
         // localStorage unavailable — next visit will re-identify (harmless)
       }
-
     };
 
     // Wait for the GHL tracking script to load and attach its listeners
-    // to this form before we fill in the email and submit.
+    // to this form before we fill in the email and dispatch the event.
     const timer = setTimeout(identify, 4000);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <>
-      {/* Hidden iframe to absorb the form submission without navigation */}
-      <iframe
-        name="ghl-id-frame"
-        aria-hidden="true"
-        tabIndex={-1}
-        style={{
-          position: 'absolute',
-          width: 0,
-          height: 0,
-          border: 'none',
-          opacity: 0,
-          pointerEvents: 'none',
-        }}
-      />
-      {/*
-       * The form MUST exist in the DOM before the GHL tracking script
-       * initialises so the script finds it during its form scan and
-       * attaches a submit listener. Off-screen (not display:none)
-       * because GHL ignores hidden fields.
-       */}
-      <form
-        ref={formRef}
-        name="ghl-identify"
-        method="POST"
-        target="ghl-id-frame"
-        action="about:blank"
-        onSubmit={handleSubmit}
-        aria-hidden="true"
-        style={{
-          position: 'fixed',
-          left: -9999,
-          top: -9999,
-          width: 1,
-          height: 1,
-          overflow: 'hidden',
-          opacity: 0,
-          pointerEvents: 'none',
-        }}
-      >
-        <input ref={inputRef} type="email" name="email" defaultValue="" />
-        <button type="submit" />
-      </form>
-    </>
+    /*
+     * The form MUST exist in the DOM before the GHL tracking script
+     * initialises so the script finds it during its form scan and
+     * attaches a submit listener. Off-screen (not display:none)
+     * because GHL ignores hidden fields.
+     */
+    <form
+      ref={formRef}
+      name="ghl-identify"
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        left: -9999,
+        top: -9999,
+        width: 1,
+        height: 1,
+        overflow: 'hidden',
+        opacity: 0,
+        pointerEvents: 'none',
+      }}
+    >
+      <input ref={inputRef} type="email" name="email" defaultValue="" />
+    </form>
   );
 }
