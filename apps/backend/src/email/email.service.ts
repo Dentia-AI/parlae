@@ -14,8 +14,12 @@ export class EmailService {
 
   private initializeSES() {
     const region = this.configService.get<string>('AWS_REGION');
-    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const accessKeyId =
+      this.configService.get<string>('SES_ACCESS_KEY_ID') ||
+      this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const secretAccessKey =
+      this.configService.get<string>('SES_SECRET_ACCESS_KEY') ||
+      this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
 
     if (!region || !accessKeyId || !secretAccessKey) {
       this.logger.warn('AWS SES credentials not configured');
