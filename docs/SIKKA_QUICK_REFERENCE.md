@@ -1,22 +1,22 @@
 # Sikka API - Quick Reference Card
 
-**Last Updated**: February 7, 2026
+**Last Updated**: March 2, 2026
 
 ---
 
-## 🔐 Authentication
+## Authentication
 
 ### Initial Setup (One Time):
 ```bash
-App-Id: b0cac8c638d52c92f9c0312159fc4518
-App-Key: 7beec2a9e62bd692eab2e0840b8bb2db
+App-Id: <your-app-id>
+App-Key: <your-app-key>
 ```
 
 ### Authorization Flow:
 ```
 1. GET /authorized_practices
    Headers: App-Id, App-Key
-   → office_id, secret_key
+   → office_id, secret_key, practice_id
 
 2. POST /request_key
    Body: { grant_type: "request_key", office_id, secret_key, app_id, app_key }
@@ -34,100 +34,148 @@ curl -H "Request-Key: YOUR_REQUEST_KEY" https://api.sikkasoft.com/v4/appointment
 
 ---
 
-## 📊 Common Endpoints
+## Common Endpoints
+
+### Patients (READ):
+```bash
+GET /patients                          # List/search patients
+GET /patients?firstname=John&lastname=Doe
+GET /patients?cell=555-123-4567
+GET /patients?email=john@example.com
+GET /patients?patient_id=12345
+GET /patient_extended_info             # Extended demographics
+GET /patient_balance?patient_id=123
+```
+
+### Patients (WRITE - Async Writeback):
+```bash
+POST /patient                          # Singular! Creates new patient
+PATCH /patient/{patient_id}            # Update patient
+```
+
+**POST /patient body fields:**
+- `firstname` (Required), `lastname` (Required), `practice_id` (Required)
+- `provider_id` (Required for some PMS)
+- `birthdate` (Optional, format: yyyy-MM-dd)
+- `email`, `cell`, `homephone`, `workphone`, `other_phone` (Optional)
+- `gender` (male/female/unknown), `guarantor_id`, `is_guarantor_exist`
+- `address_line1`, `address_line2`, `city`, `state`, `zipcode`, `country`
 
 ### Appointments (READ):
 ```bash
 GET /appointments?limit=50
-GET /appointments/{id}
-GET /appointments_available_slots?date=2026-02-15
+GET /appointments?patient_id=123&practice_id=1
+GET /appointments?startdate=2026-03-01&enddate=2026-03-31
+GET /appointments_available_slots?practice_id=1&startdate=2026-03-01
 ```
 
-### Patients (READ):
+### Appointments (WRITE - Async Writeback):
 ```bash
-GET /patients/search?query=John
-GET /patients/{id}
-GET /patient_balance?patient_id=123
-```
-
-### Appointments (WRITE - Async):
-```bash
-POST /appointment          # Singular!
+POST /appointment                      # Singular! Book appointment
 PATCH /appointments/{appointment_sr_no}
-DELETE /appointments/{id}
+DELETE /appointments/{appointment_sr_no}
 ```
 
-### Patients (WRITE - Async):
-```bash
-POST /patient             # Singular!
-PATCH /patient/{patient_id}
-```
+**POST /appointment body fields:**
+- `patient_id` (Required), `provider_id` (Required), `practice_id` (Required)
+- `date` (Required, format: yyyy-mm-dd), `time` (Required), `length` (duration in minutes)
+- `type`, `description`, `note`, `operatory`
+- `guarantor_id`, `staff`, `is_new_patient`
+- New patient fields: `firstname`, `lastname`, `birthdate`, `email`, `phone`
 
-### Check Writeback Status:
+### Writeback Status:
 ```bash
-GET /writebacks?id={writeback_id}
+GET /writeback_status?id={writeback_id}
 ```
 
 ---
 
-## 🔄 Response Format
+## Response Formats
 
 ### List Response:
 ```json
 {
-  "items": [...],
+  "offset": "0",
+  "limit": "50",
   "total_count": "87",
+  "execution_time": "47",
   "pagination": {
-    "next": "https://...",
-    "previous": ""
-  }
+    "first": "https://api.sikkasoft.com/v4/patients?offset=0&limit=50",
+    "previous": "",
+    "current": "https://api.sikkasoft.com/v4/patients?offset=0&limit=50",
+    "next": "https://api.sikkasoft.com/v4/patients?offset=50&limit=50",
+    "last": "https://api.sikkasoft.com/v4/patients?offset=50&limit=50"
+  },
+  "items": [...]
 }
 ```
 
-### Writeback Response:
+### Patient Item (default fields):
 ```json
 {
-  "id": "12345",
-  "result": "pending",
-  "api_name": "/appointment",
-  "method": "POST"
+  "patient_id": "799601",
+  "guarantor_id": "799600",
+  "firstname": "Carlene",
+  "middlename": "",
+  "lastname": "Victoria",
+  "preferred_name": "Caeene",
+  "salutation": "",
+  "birthdate": "1984-12-10T00:00:00",
+  "status": "active"
+}
+```
+Note: Phone fields (`cell`, `homephone`, `workphone`) are available via `fields=get_all` or `patient_extended_info`.
+
+### Appointment Item (fields=get_all):
+```json
+{
+  "appointment_sr_no": "12345",
+  "patient_id": "799601",
+  "provider_id": "101",
+  "practice_id": "1",
+  "date": "2026-03-15",
+  "time": "10:00",
+  "length": "30",
+  "status": "scheduled",
+  "type": "Checkup",
+  "description": "Regular checkup",
+  "note": "Patient notes",
+  "operatory": "Op 1",
+  "patient_name": "Carlene Victoria"
 }
 ```
 
-### Writeback Status:
+### Writeback Response (POST/PATCH/DELETE):
+```json
+{
+  "http_code": "201",
+  "http_code_desc": "Created",
+  "error_code": "API2016",
+  "short_message": "New resource created successfully",
+  "long_message": "Id:275495",
+  "more_information": "https://api.sikkasoft.com/v4/writeback_status?id=275495"
+}
+```
+
+### Writeback Status Response:
 ```json
 {
   "items": [{
-    "id": "12345",
-    "result": "completed",  // or "failed"
-    "error_message": null,
-    "completed_time": "2026-02-07 15:30:00"
+    "id": "275495",
+    "office_id": "D37509",
+    "method": "POST",
+    "api": "patients",
+    "is_completed": "True",
+    "has_error": "False",
+    "completed_time": "2026-02-07 15:30:00",
+    "result": "New Patient inserted successfully"
   }]
 }
 ```
 
 ---
 
-## 🛠️ Background Jobs
-
-### Token Refresh (Every 23 hours):
-```bash
-node -e "require('./dist/pms/sikka-token-refresh.service').refreshAllSikkaTokens()"
-```
-
-### Writeback Polling (Every 10 seconds - rate-limited):
-```bash
-node dist/pms/sikka-writeback-poll-worker.js
-```
-
-### Low-Traffic Retry (2 AM daily):
-```bash
-node -e "require('./dist/pms/sikka-writeback.service').retrySikkaWritebacks()"
-```
-
----
-
-## 🚦 Rate Limiting
+## Rate Limiting
 
 **Limit**: 200 API requests per practice per **MINUTE** (12,000/hour)
 
@@ -136,64 +184,32 @@ node -e "require('./dist/pms/sikka-writeback.service').retrySikkaWritebacks()"
 - 150 requests for status checks
 - 10-second initial delay before first check
 - Exponential backoff: 10s, 10s, 20s, 30s, 1m, 2m, 5m, 10m, 30m
-- Polling every 10 seconds
-- Average confirmation: **20-30 seconds** 🚀
+- Average confirmation: **20-30 seconds**
 
 ---
 
-## 🧪 Testing Commands
+## Field Name Reference (Sikka uses snake_case, NO underscores in names)
 
-### Test Authorization Flow:
-```bash
-node scripts/test-sikka-auth-flow.js
-```
-
-### Test Writeback Operations:
-```bash
-node scripts/test-sikka-writebacks.js
-```
-
-### Fetch Current State:
-```bash
-node scripts/fetch-sikka-current-state.js
-```
-
----
-
-## 💾 Database Queries
-
-### Check Token Status:
-```sql
-SELECT id, office_id, token_expiry, 
-       EXTRACT(EPOCH FROM (token_expiry - NOW())) / 3600 AS hours_remaining
-FROM pms_integrations 
-WHERE provider = 'SIKKA' AND status = 'ACTIVE';
-```
-
-### Check Pending Writebacks:
-```sql
-SELECT id, operation, result, check_count,
-       NOW() - submitted_at AS pending_duration
-FROM pms_writebacks 
-WHERE result = 'pending';
-```
-
-### Writeback Stats:
-```sql
-SELECT 
-  operation,
-  COUNT(*) as total,
-  SUM(CASE WHEN result = 'completed' THEN 1 ELSE 0 END) as completed,
-  SUM(CASE WHEN result = 'failed' THEN 1 ELSE 0 END) as failed,
-  ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - submitted_at))), 2) as avg_duration_sec
-FROM pms_writebacks 
-WHERE submitted_at > NOW() - INTERVAL '24 hours'
-GROUP BY operation;
-```
+| Sikka Field | Our Field | Notes |
+|---|---|---|
+| `firstname` | `firstName` | No underscore! |
+| `lastname` | `lastName` | No underscore! |
+| `birthdate` | `dateOfBirth` | Not `date_of_birth` |
+| `cell` | `phone` | Mobile phone |
+| `homephone` | - | Home phone |
+| `workphone` | - | Work phone |
+| `patient_id` | `id` | Uses underscore |
+| `appointment_sr_no` | `id` | Appointment serial number |
+| `practice_id` | `practiceId` | Query param, not path |
+| `provider_id` | `providerId` | Uses underscore |
+| `startdate` | - | Appointment query param |
+| `enddate` | - | Appointment query param |
+| `is_completed` | - | Writeback: "True"/"False" string |
+| `has_error` | - | Writeback: "True"/"False" string |
 
 ---
 
-## 🚨 Common Issues
+## Common Issues
 
 ### 401 Unauthorized:
 ```
@@ -201,55 +217,23 @@ Cause: Token expired
 Fix: Run token refresh job
 ```
 
-### 400 Bad Request:
+### Writeback ID Not Found:
 ```
-Cause: Invalid payload or endpoint
-Fix: Check API docs for correct format
-```
-
-### Writeback Stuck in Pending:
-```
-Cause: SPU offline, PMS locked, or rate limit reached
-Fix: Automatic retry with exponential backoff
-Timeline: First check at 10s, then 10s, 20s, 30s, 1m... up to 6h
-Average: Confirmed within 20-30 seconds
+Cause: Sikka does NOT return a plain "id" field in writeback responses
+Fix: Parse ID from "long_message" (e.g. "Id:275495") or "more_information" URL
 ```
 
-### Rate Limit Exceeded:
+### Patient Search Returns Empty:
 ```
-Cause: >150 status checks in 1 minute
-Fix: Automatic - skips checks until next minute
-Note: Actual API operations (bookings) use separate quota (50)
-Recovery: <1 minute (window resets)
+Cause: Using wrong field names (first_name vs firstname) or wrong endpoint (/patients/search vs /patients)
+Fix: Use GET /patients with params: firstname, lastname, cell, email
 ```
 
 ---
 
-## 📞 Support
-
-**Sikka API Support**: support@sikkasoft.com  
-**API Docs**: https://apidocs.sikkasoft.com  
-**Internal Docs**: /docs/SIKKA_*.md
-
----
-
-## ⚡ Quick Start Checklist
-
-- [ ] Set SIKKA_APP_ID and SIKKA_APP_KEY env vars
-- [ ] Run `npx prisma migrate deploy`
-- [ ] Run token refresh job to verify connection
-- [ ] Start writeback polling service
-- [ ] Test with `node scripts/test-sikka-auth-flow.js`
-- [ ] Set up monitoring and alerts
-
----
-
-**Rate Limit**: 200 req/**minute** per practice (12,000/hour)  
-**Safe Limit**: 150 req/minute (reserves 50 for operations)  
-**Tokens expire in**: 24 hours  
-**Refresh interval**: Every 23 hours  
-**Writeback polling**: Every 10 seconds 🚀  
-**Initial check delay**: 10 seconds  
-**Average confirmation**: 20-30 seconds ⚡  
-**Max check attempts**: 30 over ~6 hours  
-**Stuck timeout**: 6 hours
+**Rate Limit**: 200 req/**minute** per practice (12,000/hour)
+**Tokens expire in**: 24 hours
+**Refresh interval**: Every 23 hours
+**Writeback polling**: Every 2 seconds
+**Average confirmation**: 20-30 seconds
+**Max check attempts**: 10

@@ -37,6 +37,7 @@ export interface SikkaCredentials extends PmsCredentials {
   // Practice identifiers (from authorized_practices)
   officeId?: string;           // Office ID
   secretKey?: string;          // Secret key for token generation
+  practiceId?: string;         // Sikka practice_id (used in API paths)
   practiceKey?: string;        // Practice identifier (alias for officeId)
   masterCustomerId?: string;   // Customer identifier
   spuInstallationKey?: string; // SPU key (alias for secretKey)
@@ -215,7 +216,11 @@ export interface PatientUpdateInput {
 }
 
 export interface PatientSearchQuery {
-  query: string; // Name, phone, or email
+  query?: string;
+  cell?: string;
+  firstname?: string;
+  lastname?: string;
+  email?: string;
   limit?: number;
   offset?: number;
 }

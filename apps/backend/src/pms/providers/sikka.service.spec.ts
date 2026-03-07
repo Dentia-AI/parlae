@@ -12,6 +12,7 @@ const VALID_CREDENTIALS: SikkaCredentials = {
   refreshKey: 'refresh-key-456',
   officeId: 'office-1',
   secretKey: 'secret-1',
+  practiceId: '1',
 };
 
 const TOKEN_RESPONSE = {
@@ -99,9 +100,6 @@ describe('SikkaPmsService', () => {
     mockedAxios.get.mockImplementation(async (url: string, config?: any) => {
       if (url.includes('authorized_practices')) {
         return { data: AUTHORIZED_PRACTICES_RESPONSE };
-      }
-      if (url.includes('writebacks')) {
-        return { data: { items: [{ result: 'completed', error_message: null }] } };
       }
       throw new Error(`Unexpected axios.get: ${url}`);
     });
@@ -224,9 +222,10 @@ describe('SikkaPmsService', () => {
 
       expect(mockGet).toHaveBeenCalledWith('/appointments', {
         params: expect.objectContaining({
-          startDate: '2025-03-01',
-          endDate: '2025-03-31',
+          startdate: '2025-03-01',
+          enddate: '2025-03-31',
           status: 'scheduled',
+          practice_id: '1',
           limit: 20,
           offset: 0,
         }),
@@ -238,15 +237,17 @@ describe('SikkaPmsService', () => {
         data: {
           items: [
             {
-              appointment_id: 'apt-1',
+              appointment_sr_no: 'apt-1',
               patient_id: 'pat-1',
               patient_name: 'John Doe',
               provider_id: 'prov-1',
               provider_name: 'Dr Smith',
-              appointment_type: 'Checkup',
-              appointment_date: '2025-03-15T10:00:00Z',
-              duration: 30,
+              type: 'Checkup',
+              date: '2025-03-15',
+              time: '10:00',
+              length: '30',
               status: 'scheduled',
+              note: 'Regular visit',
             },
           ],
           total_count: '1',
@@ -291,10 +292,10 @@ describe('SikkaPmsService', () => {
           items: [
             {
               patient_id: 'pat-1',
-              first_name: 'Jane',
-              last_name: 'Doe',
+              firstname: 'Jane',
+              lastname: 'Doe',
               email: 'jane@example.com',
-              mobile_phone: '555-1234',
+              cell: '555-1234',
             },
           ],
           total_count: '1',
@@ -304,8 +305,8 @@ describe('SikkaPmsService', () => {
 
       const result = await service.searchPatients({ query: 'Jane Doe', limit: 10, offset: 0 });
 
-      expect(mockGet).toHaveBeenCalledWith('/patients/search', {
-        params: { query: 'Jane Doe', limit: 10, offset: 0 },
+      expect(mockGet).toHaveBeenCalledWith('/patients', {
+        params: { firstname: 'Jane', lastname: 'Doe', limit: 10, offset: 0 },
       });
       expect(result.success).toBe(true);
       expect(result.data![0]).toMatchObject({
@@ -329,9 +330,9 @@ describe('SikkaPmsService', () => {
       mockGet.mockResolvedValue({
         data: {
           patient_id: 'pat-1',
-          first_name: 'Jane',
-          last_name: 'Doe',
-          date_of_birth: '1990-01-15',
+          firstname: 'Jane',
+          lastname: 'Doe',
+          birthdate: '1990-01-15',
           email: 'jane@example.com',
         },
       });
@@ -356,7 +357,8 @@ describe('SikkaPmsService', () => {
     });
 
     it('sends correct payload to API', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-1' } });
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1', more_information: 'https://api.sikkasoft.com/v4/writeback_status?id=wb-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Patient created' }] } });
 
       await service.createPatient({
         firstName: 'John',
@@ -370,20 +372,24 @@ describe('SikkaPmsService', () => {
       expect(mockPost).toHaveBeenCalledWith(
         '/patient',
         expect.objectContaining({
-          first_name: 'John',
-          last_name: 'Smith',
-          date_of_birth: '1985-05-20',
-          phone: '555-9999',
-          mobile_phone: '555-9999',
+          firstname: 'John',
+          lastname: 'Smith',
+          birthdate: '1985-05-20',
+          cell: '555-9999',
           email: 'john@example.com',
-          address: { street: '123 Main St', city: 'Boston', state: 'MA', zip: '02101' },
+          practice_id: '1',
+          address_line1: '123 Main St',
+          city: 'Boston',
+          state: 'MA',
+          zipcode: '02101',
         }),
         expect.anything()
       );
     });
 
     it('returns patient on writeback completed', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-1' } });
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Patient created' }] } });
 
       const result = await service.createPatient({
         firstName: 'John',
@@ -399,9 +405,9 @@ describe('SikkaPmsService', () => {
     });
 
     it('returns error when writeback fails', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-1' } });
-      mockedAxios.get.mockResolvedValue({
-        data: { items: [{ result: 'failed', error_message: 'Duplicate patient' }] },
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValue({
+        data: { items: [{ is_completed: 'True', has_error: 'True', result: 'Duplicate patient' }] },
       });
 
       const result = await service.createPatient({
@@ -421,7 +427,8 @@ describe('SikkaPmsService', () => {
     });
 
     it('creates appointment with correct payload', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-apt-1' } });
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-apt-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Appointment created' }] } });
       const startTime = new Date('2025-03-15T14:00:00Z');
 
       const result = await service.bookAppointment({
@@ -438,10 +445,11 @@ describe('SikkaPmsService', () => {
         expect.objectContaining({
           patient_id: 'pat-1',
           provider_id: 'prov-1',
-          appointment_type: 'Checkup',
-          start_time: '2025-03-15T14:00:00.000Z',
-          duration: 30,
-          notes: 'Annual checkup',
+          date: '2025-03-15',
+          length: '30',
+          note: 'Annual checkup',
+          type: 'Checkup',
+          practice_id: '1',
         }),
         expect.anything()
       );
@@ -526,7 +534,8 @@ describe('SikkaPmsService', () => {
     });
 
     it('sends payment data and returns on completion', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-pay-1' } });
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-pay-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Payment completed' }] } });
 
       const result = await service.processPayment({
         patientId: 'pat-1',
@@ -702,11 +711,12 @@ describe('SikkaPmsService', () => {
     it('fetches single appointment', async () => {
       mockGet.mockResolvedValue({
         data: {
-          appointment_id: 'apt-1',
+          appointment_sr_no: 'apt-1',
           patient_id: 'pat-1',
           provider_id: 'prov-1',
-          appointment_date: '2025-03-15T10:00:00Z',
-          duration: 30,
+          date: '2025-03-15',
+          time: '10:00',
+          length: '30',
           status: 'confirmed',
         },
       });
@@ -729,10 +739,11 @@ describe('SikkaPmsService', () => {
         data: {
           items: [
             {
-              start_time: '2025-03-15T09:00:00Z',
-              end_time: '2025-03-15T09:30:00Z',
+              date: '2025-03-15',
+              time: '09:00',
+              length: '30',
               provider_id: 'prov-1',
-              available: true,
+              practice_id: '1',
             },
           ],
         },
@@ -746,9 +757,9 @@ describe('SikkaPmsService', () => {
 
       expect(mockGet).toHaveBeenCalledWith('/appointments_available_slots', {
         params: expect.objectContaining({
-          date: '2025-03-15',
-          duration: 30,
-          providerId: 'prov-1',
+          startdate: '2025-03-15',
+          provider_id: 'prov-1',
+          practice_id: '1',
         }),
       });
       expect(result.success).toBe(true);
@@ -762,17 +773,19 @@ describe('SikkaPmsService', () => {
     });
 
     it('updates appointment and returns result', async () => {
-      mockPatch.mockResolvedValue({ data: { id: 'wb-1' } });
-      mockGet.mockResolvedValue({
-        data: {
-          appointment_id: 'apt-1',
-          patient_id: 'pat-1',
-          provider_id: 'prov-1',
-          appointment_date: '2025-03-16T14:00:00Z',
-          duration: 45,
-          status: 'scheduled',
-        },
-      });
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: {
+            appointment_sr_no: 'apt-1',
+            patient_id: 'pat-1',
+            provider_id: 'prov-1',
+            date: '2025-03-16',
+            time: '14:00',
+            length: '45',
+            status: 'scheduled',
+          },
+        });
 
       const result = await service.rescheduleAppointment('apt-1', {
         startTime: new Date('2025-03-16T14:00:00Z'),
@@ -797,7 +810,8 @@ describe('SikkaPmsService', () => {
     });
 
     it('cancels appointment with reason', async () => {
-      mockDelete.mockResolvedValue({ data: { id: 'wb-1' } });
+      mockDelete.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Cancelled' }] } });
 
       const result = await service.cancelAppointment('apt-1', { reason: 'Patient request' });
 
@@ -815,15 +829,16 @@ describe('SikkaPmsService', () => {
     });
 
     it('patches patient and returns updated', async () => {
-      mockPatch.mockResolvedValue({ data: { id: 'wb-1' } });
-      mockGet.mockResolvedValue({
-        data: {
-          patient_id: 'pat-1',
-          first_name: 'Jane',
-          last_name: 'Doe',
-          email: 'jane.updated@example.com',
-        },
-      });
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: {
+            patient_id: 'pat-1',
+            firstname: 'Jane',
+            lastname: 'Doe',
+            email: 'jane.updated@example.com',
+          },
+        });
 
       const result = await service.updatePatient('pat-1', {
         email: 'jane.updated@example.com',
@@ -879,7 +894,8 @@ describe('SikkaPmsService', () => {
     });
 
     it('creates note via writeback', async () => {
-      mockPost.mockResolvedValue({ data: { id: 'wb-1' } });
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Note created' }] } });
 
       const result = await service.addPatientNote('pat-1', {
         content: 'Follow-up needed',

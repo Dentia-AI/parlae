@@ -882,7 +882,7 @@ export class AgentToolsService {
         providerId: params.providerId,
       };
 
-      this.logger.verbose({
+      this.logger.log({
         accountId: phoneRecord.accountId,
         tool: 'checkAvailability',
         pmsInput: availInput,
@@ -891,7 +891,7 @@ export class AgentToolsService {
 
       const result = await sikkaService.checkAvailability(availInput);
 
-      this.logger.verbose({
+      this.logger.log({
         accountId: phoneRecord.accountId,
         tool: 'checkAvailability',
         pmsResult: { success: result.success, slotCount: result.data?.length ?? 0, error: result.error },
@@ -1054,9 +1054,29 @@ export class AgentToolsService {
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
       const callerPhone = this.normalizePhone(call?.customer?.number || '');
-      const query = params.query || params.phone || params.email || params.name
-        || `${params.firstName || ''} ${params.lastName || ''}`.trim()
-        || callerPhone;
+
+      const searchQuery: Record<string, any> = { limit: 10 };
+
+      const rawPhone = params.query || params.phone || '';
+      const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(rawPhone.trim());
+      if (isPhone) {
+        searchQuery.cell = rawPhone.trim();
+      } else if (params.email) {
+        searchQuery.email = params.email;
+      } else if (params.firstName || params.lastName || params.name) {
+        if (params.name) {
+          const parts = params.name.trim().split(/\s+/);
+          searchQuery.firstname = parts[0];
+          if (parts.length > 1) searchQuery.lastname = parts.slice(1).join(' ');
+        } else {
+          if (params.firstName) searchQuery.firstname = params.firstName;
+          if (params.lastName) searchQuery.lastname = params.lastName;
+        }
+      } else if (rawPhone.trim()) {
+        searchQuery.query = rawPhone.trim();
+      } else if (callerPhone) {
+        searchQuery.cell = callerPhone;
+      }
 
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
@@ -1097,22 +1117,25 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
-      this.logger.verbose({
+      this.logger.log({
         accountId: phoneRecord.accountId,
         tool: 'lookupPatient',
-        pmsInput: { query, limit: 10 },
+        pmsInput: searchQuery,
         msg: '[PMS Call] searchPatients request',
       });
 
-      const result = await sikkaService.searchPatients({
-        query,
-        limit: 10,
-      });
+      const result = await sikkaService.searchPatients(searchQuery as any);
 
-      this.logger.verbose({
+      this.logger.log({
         accountId: phoneRecord.accountId,
         tool: 'lookupPatient',
-        pmsResult: { success: result.success, count: result.data?.length ?? 0, error: result.error },
+        pmsResult: {
+          success: result.success,
+          count: result.data?.length ?? 0,
+          total: result.pagination?.total ?? 0,
+          error: result.error,
+          firstPatient: result.data?.[0] ? { id: result.data[0].id, phone: result.data[0].phone } : null,
+        },
         msg: '[PMS Call] searchPatients response',
       });
 
@@ -1121,13 +1144,14 @@ export class AgentToolsService {
       if (!result.success) {
         const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
         this.logger.error({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] searchPatients failed' });
+        const searchDesc = JSON.stringify(searchQuery);
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
-          endpoint: '/patients/search',
+          endpoint: '/patients',
           method: 'GET',
           callId: call.id,
-          requestSummary: `lookupPatient query: ${query}`,
+          requestSummary: `lookupPatient params: ${searchDesc}`,
           responseStatus: 500,
           responseTime,
           phiAccessed: false,
@@ -1139,13 +1163,14 @@ export class AgentToolsService {
       const patients = result.data || [];
 
       if (patients.length === 0) {
+        const searchDesc = JSON.stringify(searchQuery);
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
-          endpoint: '/patients/search',
+          endpoint: '/patients',
           method: 'GET',
           callId: call.id,
-          requestSummary: `lookupPatient: no results for "${query}"`,
+          requestSummary: `lookupPatient: no results for ${searchDesc}`,
           responseStatus: 200,
           responseTime,
           phiAccessed: false,
@@ -1162,7 +1187,7 @@ export class AgentToolsService {
         };
       }
 
-      const isPhoneQuery = /^\+?\d[\d\s\-()]{6,}$/.test(query.trim());
+      const isPhoneQuery = !!searchQuery.cell;
       const phoneMatchedPatients = callerPhone
         ? patients.filter((p: any) => this.normalizePhone(p.phone) === callerPhone)
         : [];
@@ -1175,7 +1200,7 @@ export class AgentToolsService {
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
-          endpoint: '/patients/search',
+          endpoint: '/patients',
           method: 'GET',
           callId: call.id,
           requestSummary: `lookupPatient: family account — ${matchedSet.length} patients on caller phone`,
@@ -1219,7 +1244,7 @@ export class AgentToolsService {
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
-          endpoint: '/patients/search',
+          endpoint: '/patients',
           method: 'GET',
           callId: call.id,
           requestSummary: 'lookupPatient: caller verified via phone match',
@@ -1263,7 +1288,7 @@ export class AgentToolsService {
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
-          endpoint: '/patients/search',
+          endpoint: '/patients',
           method: 'GET',
           callId: call.id,
           requestSummary: 'lookupPatient: phone search — caller NOT verified (phone mismatch)',
@@ -1290,7 +1315,7 @@ export class AgentToolsService {
       await this.hipaaAudit.logAccess({
         pmsIntegrationId: phoneRecord.pmsIntegration.id,
         action: 'lookupPatient',
-        endpoint: '/patients/search',
+        endpoint: '/patients',
         method: 'GET',
         callId: call.id,
         requestSummary: `lookupPatient: name search — ${patients.length} results, caller NOT verified`,

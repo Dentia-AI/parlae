@@ -281,6 +281,7 @@ export class PmsService {
       secretKey: practiceCredentials.secretKey,
       requestKey: practiceCredentials.requestKey,
       refreshKey: practiceCredentials.refreshKey,
+      practiceId: practiceCredentials.practiceId,
     };
     
     return new SikkaPmsService(accountId, fullCredentials, config);
@@ -362,6 +363,7 @@ export class PmsService {
             practiceName: practice.practice_name,
             actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
+            practiceId: practice.practice_id,
           },
           officeId: practice.office_id,
           secretKey: practice.secret_key,
@@ -376,6 +378,7 @@ export class PmsService {
             practiceName: practice.practice_name,
             actualPmsType: practice.practice_management_system || 'Unknown',
             officeId: practice.office_id,
+            practiceId: practice.practice_id,
           },
           officeId: practice.office_id,
           secretKey: practice.secret_key,

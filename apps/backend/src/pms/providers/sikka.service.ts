@@ -38,7 +38,7 @@ import type {
  * 
  * Writeback Flow (POST/PATCH/DELETE operations):
  * 1. Submit operation → Get writeback_id
- * 2. Poll GET /writebacks?id={id} → Check status (pending/completed/failed)
+ * 2. Poll GET /writeback_status?id={id} → Check status (is_completed/has_error)
  * 3. Return result when completed
  */
 @Injectable()
@@ -57,6 +57,7 @@ export class SikkaPmsService extends BasePmsService {
   private tokenExpiry?: Date;
   private officeId?: string;
   private secretKey?: string;
+  private practiceId?: string;
   
   constructor(
     accountId: string,
@@ -75,11 +76,11 @@ export class SikkaPmsService extends BasePmsService {
     this.appId = creds.appId;
     this.appKey = creds.appKey;
     
-    // Load token state (will be loaded from database)
     this.requestKey = creds.requestKey;
     this.refreshKey = creds.refreshKey;
     this.officeId = creds.officeId;
     this.secretKey = creds.secretKey;
+    this.practiceId = creds.practiceId;
     
     // Initialize HTTP client
     this.client = axios.create({
@@ -100,17 +101,16 @@ export class SikkaPmsService extends BasePmsService {
       return config;
     });
 
-    // Add response interceptor for verbose logging of every API call
     this.client.interceptors.response.use(
       (response: AxiosResponse) => {
-        this.logger.verbose({
+        this.logger.log({
           accountId,
           method: response.config.method?.toUpperCase(),
           url: response.config.url,
           params: response.config.params,
           requestBody: this.safeSlice(response.config.data),
           status: response.status,
-          responseBody: this.safeSlice(JSON.stringify(response.data), 1000),
+          responseBody: this.safeSlice(JSON.stringify(response.data), 2000),
           msg: '[Sikka API] Response',
         });
         return response;
@@ -125,7 +125,7 @@ export class SikkaPmsService extends BasePmsService {
           params: error.config?.params,
           requestBody: this.safeSlice(error.config?.data),
           status,
-          responseBody: this.safeSlice(JSON.stringify(data), 1000),
+          responseBody: this.safeSlice(JSON.stringify(data), 2000),
           errorMessage: error.message,
           msg: '[Sikka API] Error',
         });
@@ -173,7 +173,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async fetchAuthorizedPractices(): Promise<void> {
     try {
-      this.logger.verbose({ msg: '[Sikka] Fetching authorized practices' });
+      this.logger.log({ msg: '[Sikka] Fetching authorized practices' });
       
       const response = await axios.get(`${this.baseUrl}/authorized_practices`, {
         headers: {
@@ -188,12 +188,12 @@ export class SikkaPmsService extends BasePmsService {
         throw new Error('No authorized practices found');
       }
       
-      // Use first practice (or find matching practice_id if specified in config)
       const practice = practices[0];
       this.officeId = practice.office_id;
       this.secretKey = practice.secret_key;
+      this.practiceId = practice.practice_id;
       
-      this.logger.verbose({ officeId: this.officeId, msg: '[Sikka] Found office_id' });
+      this.logger.log({ officeId: this.officeId, practiceId: this.practiceId, msg: '[Sikka] Found practice' });
       
       // TODO: Save to database
       
@@ -208,7 +208,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async getInitialToken(): Promise<void> {
     try {
-      this.logger.verbose({ msg: '[Sikka] Getting initial token with request_key grant' });
+      this.logger.log({ msg: '[Sikka] Getting initial token with request_key grant' });
       
       const response = await axios.post(
         `${this.baseUrl}/request_key`,
@@ -240,7 +240,7 @@ export class SikkaPmsService extends BasePmsService {
       const expiresInSeconds = parseInt(data.expires_in) || 86400; // Default 24 hours
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
       
-      this.logger.verbose({ expiresInSeconds, msg: '[Sikka] Token obtained successfully' });
+      this.logger.log({ expiresInSeconds, msg: '[Sikka] Token obtained successfully' });
       
       // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
       
@@ -262,7 +262,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async refreshToken(): Promise<void> {
     try {
-      this.logger.verbose({ msg: '[Sikka] Refreshing token with refresh_key grant' });
+      this.logger.log({ msg: '[Sikka] Refreshing token with refresh_key grant' });
       
       const response = await axios.post(
         `${this.baseUrl}/request_key`,
@@ -293,7 +293,7 @@ export class SikkaPmsService extends BasePmsService {
       const expiresInSeconds = parseInt(data.expires_in) || 86400;
       this.tokenExpiry = new Date(Date.now() + expiresInSeconds * 1000);
       
-      this.logger.verbose({ expiresInSeconds, msg: '[Sikka] Token refreshed successfully' });
+      this.logger.log({ expiresInSeconds, msg: '[Sikka] Token refreshed successfully' });
       
       // TODO: Save to database (requestKey, refreshKey, tokenExpiry)
       
@@ -315,7 +315,27 @@ export class SikkaPmsService extends BasePmsService {
   // ============================================================================
   
   /**
-   * Poll writeback status until completed or failed
+   * Extract writeback ID from Sikka writeback response.
+   * Sikka returns: { long_message: "Id:275495", more_information: "https://api.sikkasoft.com/v4/writeback_status?id=275495" }
+   */
+  private extractWritebackId(responseData: any): string | undefined {
+    if (responseData.id) return String(responseData.id);
+
+    const longMsg = responseData.long_message || '';
+    const idMatch = longMsg.match(/Id[:\s]*(\S+)/i);
+    if (idMatch) return idMatch[1];
+
+    const moreInfo = responseData.more_information || '';
+    const urlMatch = moreInfo.match(/[?&]id=([^&\s]+)/);
+    if (urlMatch) return urlMatch[1];
+
+    return undefined;
+  }
+
+  /**
+   * Poll writeback status until completed or failed.
+   * Endpoint: GET /writeback_status?id={id}
+   * Response: { items: [{ is_completed: "True"/"False", has_error: "True"/"False", result: "message" }] }
    */
   private async pollWritebackStatus(writebackId: string, maxAttempts = 10): Promise<{
     result: string;
@@ -323,34 +343,26 @@ export class SikkaPmsService extends BasePmsService {
   }> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await axios.get(
-          `${this.baseUrl}/writebacks`,
-          {
-            params: { id: writebackId },
-            headers: {
-              'App-Id': this.appId,
-              'App-Key': this.appKey,
-            },
-            timeout: 10000,
-          }
-        );
+        const response = await this.client.get('/writeback_status', {
+          params: { id: writebackId },
+          timeout: 10000,
+        });
         
-        const writebacks = response.data.items || [];
-        if (writebacks.length === 0) {
+        const items = response.data.items || [];
+        if (items.length === 0) {
           throw new Error(`Writeback ${writebackId} not found`);
         }
         
-        const writeback = writebacks[0];
-        const result = writeback.result;
+        const writeback = items[0];
+        const isCompleted = writeback.is_completed === 'True' || writeback.is_completed === true;
+        const hasError = writeback.has_error === 'True' || writeback.has_error === true;
         
-        this.logger.verbose({ writebackId, result, attempt, maxAttempts, msg: '[Sikka] Writeback poll' });
+        this.logger.log({ writebackId, isCompleted, hasError, result: writeback.result, attempt, maxAttempts, msg: '[Sikka] Writeback poll' });
         
-        // TODO: Update database with status
-        
-        if (result === 'completed' || result === 'failed') {
+        if (isCompleted) {
           return {
-            result,
-            errorMessage: writeback.error_message,
+            result: hasError ? 'failed' : 'completed',
+            errorMessage: hasError ? writeback.result : undefined,
           };
         }
         
@@ -430,17 +442,20 @@ export class SikkaPmsService extends BasePmsService {
         offset: filters?.offset || 0,
       };
       
+      if (this.practiceId) {
+        params.practice_id = this.practiceId;
+      }
       if (filters?.startDate) {
-        params.startDate = filters.startDate.toISOString().split('T')[0];
+        params.startdate = filters.startDate.toISOString().split('T')[0];
       }
       if (filters?.endDate) {
-        params.endDate = filters.endDate.toISOString().split('T')[0];
+        params.enddate = filters.endDate.toISOString().split('T')[0];
       }
       if (filters?.patientId) {
-        params.patientId = filters.patientId;
+        params.patient_id = filters.patientId;
       }
       if (filters?.providerId) {
-        params.providerId = filters.providerId;
+        params.provider_id = filters.providerId;
       }
       if (filters?.status) {
         params.status = filters.status;
@@ -449,7 +464,7 @@ export class SikkaPmsService extends BasePmsService {
       const response = await this.client.get('/appointments', { params });
       
       // Sikka v4 API returns { items: [], total_count: 0, pagination: {...} }
-      const appointments = (response.data.items || []).map(this.mapSikkaAppointment);
+      const appointments = (response.data.items || []).map((item: any) => this.mapSikkaAppointment(item));
       
       return this.createListResponse(appointments, {
         total: parseInt(response.data.total_count || '0'),
@@ -475,23 +490,37 @@ export class SikkaPmsService extends BasePmsService {
   async checkAvailability(query: AppointmentAvailabilityQuery): Promise<PmsApiResponse<TimeSlot[]>> {
     try {
       const params: any = {
-        date: query.date,
-        duration: query.duration || this.config.defaultAppointmentDuration || 30,
+        startdate: query.date,
       };
 
+      if (this.practiceId) {
+        params.practice_id = this.practiceId;
+      }
       if (query.endDate) {
-        params.end_date = query.endDate;
+        params.enddate = query.endDate;
       }
       if (query.providerId) {
-        params.providerId = query.providerId;
+        params.provider_id = query.providerId;
       }
-      if (query.appointmentType) {
-        params.appointmentType = query.appointmentType;
-      }
-      
+
+      this.logger.log({
+        accountId: this.accountId,
+        endpoint: '/appointments_available_slots',
+        params,
+        msg: '[Sikka] checkAvailability request',
+      });
+
       const response = await this.client.get('/appointments_available_slots', { params });
-      
-      const slots = (response.data.items || []).map(this.mapSikkaTimeSlot);
+
+      this.logger.log({
+        accountId: this.accountId,
+        status: response.status,
+        itemCount: response.data.items?.length ?? 0,
+        rawResponse: this.safeSlice(JSON.stringify(response.data), 2000),
+        msg: '[Sikka] checkAvailability raw response',
+      });
+
+      const slots = (response.data.items || []).map((item: any) => this.mapSikkaTimeSlot(item));
       
       return this.createSuccessResponse(slots);
     } catch (error) {
@@ -504,21 +533,28 @@ export class SikkaPmsService extends BasePmsService {
    */
   async bookAppointment(data: AppointmentCreateInput): Promise<PmsApiResponse<Appointment>> {
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         patient_id: data.patientId,
         provider_id: data.providerId,
-        appointment_type: data.appointmentType,
-        start_time: data.startTime.toISOString(),
-        duration: data.duration,
-        notes: data.notes,
+        date: data.startTime.toISOString().split('T')[0],
+        time: data.startTime.toTimeString().slice(0, 5),
+        length: String(data.duration || 30),
+        practice_id: this.practiceId,
       };
-      
-      // Submit writeback (note: singular '/appointment' not '/appointments')
+      if (data.appointmentType) payload.type = data.appointmentType;
+      if (data.notes) payload.note = data.notes;
+      if (data.operatory) payload.operatory = data.operatory;
+      if (data.description) payload.description = data.description;
+
       const response = await this.client.post('/appointment', payload);
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        this.logger.error({ responseData: JSON.stringify(response.data).slice(0, 500), msg: '[Sikka] Could not extract writeback ID from appointment booking response' });
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment booking submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment booking submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -580,12 +616,14 @@ export class SikkaPmsService extends BasePmsService {
         payload.notes = updates.notes;
       }
       
-      // Submit writeback
       const response = await this.client.patch(`/appointments/${appointmentId}`, payload);
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment update submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment update submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -622,9 +660,12 @@ export class SikkaPmsService extends BasePmsService {
         },
       });
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Appointment cancellation submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment cancellation submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -654,15 +695,60 @@ export class SikkaPmsService extends BasePmsService {
   
   async searchPatients(query: PatientSearchQuery): Promise<PmsListResponse<Patient>> {
     try {
-      const params = {
-        query: query.query,
+      const params: Record<string, any> = {
         limit: query.limit || 10,
         offset: query.offset || 0,
       };
-      
-      const response = await this.client.get('/patients/search', { params });
-      
-      // Sikka v4 API returns { items: [], total_count: 0, pagination: {...} }
+
+      if (query.cell) {
+        params.cell = query.cell;
+      }
+      if (query.firstname) {
+        params.firstname = query.firstname;
+      }
+      if (query.lastname) {
+        params.lastname = query.lastname;
+      }
+      if (query.email) {
+        params.email = query.email;
+      }
+
+      if (!params.cell && !params.firstname && !params.lastname && !params.email && query.query) {
+        const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(query.query.trim());
+        if (isPhone) {
+          params.cell = query.query.trim();
+        } else if (query.query.includes('@')) {
+          params.email = query.query.trim();
+        } else {
+          const parts = query.query.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            params.firstname = parts[0];
+            params.lastname = parts.slice(1).join(' ');
+          } else {
+            params.lastname = parts[0];
+          }
+        }
+      }
+
+      this.logger.log({
+        accountId: this.accountId,
+        endpoint: '/patients',
+        params,
+        msg: '[Sikka] searchPatients request',
+      });
+
+      const response = await this.client.get('/patients', { params });
+
+      this.logger.log({
+        accountId: this.accountId,
+        status: response.status,
+        totalCount: response.data.total_count,
+        itemCount: response.data.items?.length ?? 0,
+        rawItems: this.safeSlice(JSON.stringify(response.data.items), 2000),
+        pagination: response.data.pagination,
+        msg: '[Sikka] searchPatients raw response',
+      });
+
       const patients = (response.data.items || []).map(this.mapSikkaPatient);
       
       return this.createListResponse(patients, {
@@ -691,22 +777,32 @@ export class SikkaPmsService extends BasePmsService {
    */
   async createPatient(data: PatientCreateInput): Promise<PmsApiResponse<Patient>> {
     try {
-      const payload = {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        date_of_birth: data.dateOfBirth,
-        phone: data.phone,
-        mobile_phone: data.phone,
-        email: data.email,
-        address: data.address,
+      const payload: Record<string, any> = {
+        firstname: data.firstName,
+        lastname: data.lastName,
+        practice_id: this.practiceId,
       };
-      
-      // Submit writeback (note: singular '/patient' not '/patients')
+      if (data.dateOfBirth) payload.birthdate = data.dateOfBirth;
+      if (data.phone) payload.cell = data.phone;
+      if (data.email) payload.email = data.email;
+      if (data.address) {
+        if (data.address.street) payload.address_line1 = data.address.street;
+        if (data.address.street2) payload.address_line2 = data.address.street2;
+        if (data.address.city) payload.city = data.address.city;
+        if (data.address.state) payload.state = data.address.state;
+        if (data.address.zip) payload.zipcode = data.address.zip;
+        if (data.address.country) payload.country = data.address.country;
+      }
+
       const response = await this.client.post('/patient', payload);
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        this.logger.error({ responseData: JSON.stringify(response.data).slice(0, 500), msg: '[Sikka] Could not extract writeback ID from patient creation response' });
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Patient creation submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Patient creation submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -748,9 +844,13 @@ export class SikkaPmsService extends BasePmsService {
     try {
       const response = await this.client.patch(`/patient/${patientId}`, updates);
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        this.logger.error({ responseData: JSON.stringify(response.data).slice(0, 500), msg: '[Sikka] Could not extract writeback ID from patient update response' });
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Patient update submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Patient update submitted' });
       
       // TODO: Save to PmsWriteback table
       
@@ -798,9 +898,12 @@ export class SikkaPmsService extends BasePmsService {
         ...note,
       });
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Note creation submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Note creation submitted' });
       
       // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
@@ -900,9 +1003,12 @@ export class SikkaPmsService extends BasePmsService {
       
       const response = await this.client.post('/transaction', payload);
       
-      const writebackId = response.data.id;
+      const writebackId = this.extractWritebackId(response.data);
+      if (!writebackId) {
+        return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
+      }
       
-      this.logger.verbose({ writebackId, msg: '[Sikka] Payment submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Payment submitted' });
       
       // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
@@ -974,35 +1080,53 @@ export class SikkaPmsService extends BasePmsService {
   // ============================================================================
   
   private mapSikkaAppointment(sikkaData: any): Appointment {
+    const startTime = this.parseSikkaDateTime(sikkaData.date, sikkaData.time) ||
+      new Date(sikkaData.appointment_date || sikkaData.start_time || sikkaData.startTime);
+    const length = parseInt(sikkaData.length) || sikkaData.duration || this.config.defaultAppointmentDuration || 30;
+    const endTime = new Date(startTime.getTime() + length * 60000);
+
     return {
-      id: sikkaData.appointment_id || sikkaData.id,
+      id: sikkaData.appointment_sr_no || sikkaData.appointment_id || sikkaData.id,
       patientId: sikkaData.patient_id,
-      patientName: sikkaData.patient_name || `${sikkaData.patient_first_name || ''} ${sikkaData.patient_last_name || ''}`.trim(),
+      patientName: sikkaData.patient_name || '',
       providerId: sikkaData.provider_id,
-      providerName: sikkaData.provider_name || sikkaData.providerId,
-      appointmentType: sikkaData.appointment_type || sikkaData.type || 'General',
-      startTime: new Date(sikkaData.appointment_date || sikkaData.start_time || sikkaData.startTime),
-      endTime: (() => {
-        if (sikkaData.end_time) return new Date(sikkaData.end_time);
-        const start = new Date(sikkaData.appointment_date || sikkaData.start_time || sikkaData.startTime);
-        const duration = sikkaData.duration || this.config.defaultAppointmentDuration || 30;
-        return new Date(start.getTime() + duration * 60000);
-      })(),
-      duration: sikkaData.duration || this.config.defaultAppointmentDuration || 30,
-      status: sikkaData.status || sikkaData.appointment_status || 'scheduled',
-      notes: sikkaData.notes || sikkaData.appointment_notes,
-      confirmationNumber: sikkaData.confirmation_number || sikkaData.confirmationCode,
-      reminderSent: sikkaData.reminder_sent || false,
-      metadata: sikkaData.metadata || {},
+      providerName: sikkaData.provider_name || '',
+      appointmentType: sikkaData.type || sikkaData.description || 'General',
+      startTime,
+      endTime,
+      duration: length,
+      status: sikkaData.status || 'scheduled',
+      notes: sikkaData.note || sikkaData.notes,
+      confirmationNumber: sikkaData.appointment_sr_no || sikkaData.confirmation_number,
+      reminderSent: sikkaData.is_confirmed === 'True' || false,
+      metadata: {
+        operatory: sikkaData.operatory,
+        hygienist: sikkaData.hygienist,
+        practiceId: sikkaData.practice_id,
+        guarantorId: sikkaData.guarantor_id,
+        ...(sikkaData.metadata || {}),
+      },
     };
+  }
+
+  private parseSikkaDateTime(date?: string, time?: string): Date | null {
+    if (!date) return null;
+    const dateStr = time ? `${date}T${time}` : date;
+    const parsed = new Date(dateStr);
+    return isNaN(parsed.getTime()) ? null : parsed;
   }
   
   private mapSikkaTimeSlot(sikkaData: any): TimeSlot {
+    const startTime = this.parseSikkaDateTime(sikkaData.date, sikkaData.time) ||
+      new Date(sikkaData.start_time || sikkaData.startTime || Date.now());
+    const length = parseInt(sikkaData.length) || 30;
+    const endTime = new Date(startTime.getTime() + length * 60000);
+
     return {
-      startTime: new Date(sikkaData.start_time || sikkaData.startTime),
-      endTime: new Date(sikkaData.end_time || sikkaData.endTime),
-      providerId: sikkaData.provider_id || sikkaData.providerId,
-      providerName: sikkaData.provider_name || sikkaData.providerName,
+      startTime,
+      endTime,
+      providerId: sikkaData.provider_id,
+      providerName: sikkaData.provider_name || '',
       available: sikkaData.available !== false,
       reason: sikkaData.reason,
     };
@@ -1011,24 +1135,30 @@ export class SikkaPmsService extends BasePmsService {
   private mapSikkaPatient(sikkaData: any): Patient {
     return {
       id: sikkaData.patient_id || sikkaData.id,
-      firstName: sikkaData.first_name || sikkaData.firstName,
-      lastName: sikkaData.last_name || sikkaData.lastName,
-      dateOfBirth: sikkaData.date_of_birth || sikkaData.dateOfBirth || sikkaData.dob,
-      phone: sikkaData.mobile_phone || sikkaData.phone || sikkaData.phoneNumber,
+      firstName: sikkaData.firstname || sikkaData.first_name || sikkaData.firstName,
+      lastName: sikkaData.lastname || sikkaData.last_name || sikkaData.lastName,
+      dateOfBirth: sikkaData.birthdate || sikkaData.date_of_birth || sikkaData.dateOfBirth,
+      phone: sikkaData.cell || sikkaData.homephone || sikkaData.workphone || sikkaData.mobile_phone || sikkaData.phone,
       email: sikkaData.email,
-      address: (sikkaData.address || sikkaData.street) ? {
-        street: sikkaData.street || sikkaData.address?.street || sikkaData.address?.line1,
-        street2: sikkaData.address?.street2 || sikkaData.address?.line2,
+      address: (sikkaData.address_line1 || sikkaData.street || sikkaData.address) ? {
+        street: sikkaData.address_line1 || sikkaData.street || sikkaData.address?.street,
+        street2: sikkaData.address_line2 || sikkaData.address?.street2,
         city: sikkaData.city || sikkaData.address?.city,
         state: sikkaData.state || sikkaData.address?.state,
-        zip: sikkaData.zip || sikkaData.zipcode || sikkaData.address?.zip || sikkaData.address?.zipCode,
+        zip: sikkaData.zipcode || sikkaData.zip || sikkaData.address?.zip,
         country: sikkaData.country || sikkaData.address?.country || 'USA',
       } : undefined,
-      emergencyContact: sikkaData.emergency_contact || sikkaData.emergencyContact,
+      emergencyContact: sikkaData.emergency_contact,
       balance: sikkaData.balance || sikkaData.account_balance,
       lastVisit: sikkaData.last_visit ? new Date(sikkaData.last_visit) : undefined,
       notes: sikkaData.notes,
-      metadata: sikkaData.metadata || {},
+      metadata: {
+        guarantorId: sikkaData.guarantor_id,
+        preferredName: sikkaData.preferred_name,
+        salutation: sikkaData.salutation,
+        status: sikkaData.status,
+        ...(sikkaData.metadata || {}),
+      },
     };
   }
   

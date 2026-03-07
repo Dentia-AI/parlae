@@ -30,7 +30,7 @@ describe('HipaaAuditService', () => {
     const entry: AuditLogEntry = {
       pmsIntegrationId: 'pms-123',
       action: 'lookupPatient',
-      endpoint: '/patients/search',
+      endpoint: '/patients',
       method: 'GET',
       callId: 'call-123',
       requestSummary: 'Patient lookup',
