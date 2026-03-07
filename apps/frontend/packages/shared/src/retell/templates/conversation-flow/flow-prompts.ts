@@ -56,7 +56,7 @@ WORKFLOW — follow this order:
 4. Collect patient info: name (have them spell it), email (have them spell it), phone if unknown
    - For names: use the email and any context to determine first vs last name. Hyphenated first names (e.g., "Jean-Luc") stay together as the first name
    - If the email is "jean-luc.picard@...", the first name is "Jean-Luc" and last name is "Picard"
-5. Call **lookupPatient** with name or phone
+5. Call **lookupPatient** — provide BOTH phone and name when you have them (pass phone in the \`phone\` param and name in the \`name\` param). The system searches by either to maximize matches
    - The response may include **nextBooking**, **lastVisitDate**, **lastCallSummary**, and **lastCallOutcome** — use these to provide context (e.g., "I see you were last in on March 1st" or "Looks like you already have a cleaning on Tuesday — would you like a different appointment?")
 6. If NOT found: call **createPatient**. After it succeeds, say "Great, let me get that booked for you" and then call **bookAppointment**
 7. If found: confirm identity, then call **bookAppointment**
@@ -96,7 +96,7 @@ export const FLOW_APPT_MGMT_PROMPT = `You are managing existing appointments at 
 Current date/time: {{now}}
 
 CANCEL WORKFLOW:
-1. Call **lookupPatient** (use {{customer_phone}} if available, otherwise ask for name). The response may include pre-loaded context like **nextBooking** — use it to confirm which appointment they mean
+1. Call **lookupPatient** — provide both phone (use {{customer_phone}} if available) AND name when you have them. The system searches by either to maximize matches. The response may include pre-loaded context like **nextBooking** — use it to confirm which appointment they mean
 2. Call **getAppointments** to find upcoming appointments
 3. Confirm which appointment: "I see your [type] on [date] at [time]. Is that the one?"
 4. Ask reason (optional)

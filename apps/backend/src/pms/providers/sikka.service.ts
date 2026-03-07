@@ -710,7 +710,8 @@ export class SikkaPmsService extends BasePmsService {
       };
 
       if (query.cell) {
-        params.cell = query.cell;
+        const digits = query.cell.replace(/\D/g, '');
+        params.cell = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
       }
       if (query.firstname) {
         params.firstname = query.firstname;
@@ -725,7 +726,8 @@ export class SikkaPmsService extends BasePmsService {
       if (!params.cell && !params.firstname && !params.lastname && !params.email && query.query) {
         const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(query.query.trim());
         if (isPhone) {
-          params.cell = query.query.trim();
+          const qDigits = query.query.replace(/\D/g, '');
+          params.cell = qDigits.length === 11 && qDigits.startsWith('1') ? qDigits.slice(1) : qDigits;
         } else if (query.query.includes('@')) {
           params.email = query.query.trim();
         } else {

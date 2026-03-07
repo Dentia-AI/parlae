@@ -60,14 +60,24 @@ function toRetellTool(
 const lookupPatientFn: VapiToolFunction = {
   name: 'lookupPatient',
   description:
-    "Look up the caller's patient record. Use the caller's phone number ({{customer_phone}}) as the query — this is the most reliable identifier and verifies the caller's identity.",
+    "Look up the caller's patient record. Always provide BOTH phone and name when known — the system will search by each and return the best match. When the caller provides a phone number, read it back digit by digit to confirm before searching.",
   parameters: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
         description:
-          "Search term: caller's phone number (strongly preferred), patient name, or email.",
+          "Primary search term: caller's phone number ({{customer_phone}}), patient name, or email.",
+      },
+      phone: {
+        type: 'string',
+        description:
+          "Patient's phone number, if known. Provide alongside name for best results.",
+      },
+      name: {
+        type: 'string',
+        description:
+          "Patient's full name (first and last), if known. Provide alongside phone for best results.",
       },
     },
     required: ['query'],

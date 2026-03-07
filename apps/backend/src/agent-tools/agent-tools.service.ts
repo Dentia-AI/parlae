@@ -1057,10 +1057,15 @@ export class AgentToolsService {
 
       const searchQuery: Record<string, any> = { limit: 10 };
 
-      const rawPhone = params.query || params.phone || '';
+      const rawPhone = params.phone || params.query || '';
       const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(rawPhone.trim());
       if (isPhone) {
-        searchQuery.cell = rawPhone.trim();
+        const digits = rawPhone.replace(/\D/g, '');
+        const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+        searchQuery.cell = normalized;
+        if (rawPhone.trim() !== normalized) {
+          this.logger.log(`[lookupPatient] Phone normalized: "${rawPhone.trim()}" → "${normalized}"`);
+        }
       } else if (params.email) {
         searchQuery.email = params.email;
       } else if (params.firstName || params.lastName || params.name) {
@@ -1076,6 +1081,11 @@ export class AgentToolsService {
         searchQuery.query = rawPhone.trim();
       } else if (callerPhone) {
         searchQuery.cell = callerPhone;
+      }
+
+      const nameForFallback = this.extractNameQuery(params);
+      if (nameForFallback) {
+        this.logger.log(`[lookupPatient] Name available for OR fallback: "${nameForFallback.firstname} ${nameForFallback.lastname || ''}".trim()`);
       }
 
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
@@ -1160,7 +1170,33 @@ export class AgentToolsService {
         throw new Error(errorMsg || 'Patient search failed');
       }
 
-      const patients = result.data || [];
+      let patients = result.data || [];
+
+      if (patients.length === 0 && searchQuery.cell && nameForFallback) {
+        this.logger.log({
+          accountId: phoneRecord.accountId,
+          tool: 'lookupPatient',
+          msg: '[lookupPatient] Phone search returned 0 results — retrying with name',
+          phoneCriteria: searchQuery.cell,
+          nameCriteria: nameForFallback,
+        });
+
+        const nameQuery: Record<string, any> = {
+          limit: 10,
+          firstname: nameForFallback.firstname,
+        };
+        if (nameForFallback.lastname) nameQuery.lastname = nameForFallback.lastname;
+
+        const nameResult = await sikkaService.searchPatients(nameQuery as any);
+        if (nameResult.success && nameResult.data?.length) {
+          patients = nameResult.data;
+          this.logger.log({
+            accountId: phoneRecord.accountId,
+            tool: 'lookupPatient',
+            msg: `[lookupPatient] Name fallback found ${patients.length} patient(s)`,
+          });
+        }
+      }
 
       if (patients.length === 0) {
         const searchDesc = JSON.stringify(searchQuery);
@@ -1175,6 +1211,7 @@ export class AgentToolsService {
           responseTime,
           phiAccessed: false,
         });
+
         return {
           result: {
             success: true,
@@ -1348,6 +1385,18 @@ export class AgentToolsService {
     if (!phone) return '';
     const digits = phone.replace(/\D/g, '');
     return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  }
+
+  private extractNameQuery(params: any): { firstname: string; lastname?: string } | null {
+    const nameRaw = params.name || '';
+    if (nameRaw.trim()) {
+      const parts = nameRaw.trim().split(/\s+/);
+      return { firstname: parts[0], lastname: parts.length > 1 ? parts.slice(1).join(' ') : undefined };
+    }
+    if (params.firstName || params.lastName) {
+      return { firstname: params.firstName, lastname: params.lastName };
+    }
+    return null;
   }
 
   /**
