@@ -7,6 +7,7 @@ import type {
   AppointmentAvailabilityQuery,
   AppointmentCancelInput,
   AppointmentCreateInput,
+  AppointmentStatus,
   AppointmentUpdateInput,
   Insurance,
   InsuranceCreateInput,
@@ -546,14 +547,14 @@ export class SikkaPmsService extends BasePmsService {
    * Sikka returns statuses from the underlying PMS (Dentrix, Open Dental, etc.)
    * which vary by vendor. This maps them to: scheduled, completed, cancelled, no_show.
    */
-  private normalizeSikkaStatus(raw: string): string {
+  private normalizeSikkaStatus(raw: string): AppointmentStatus {
     const s = (raw || '').toLowerCase().trim();
     if (s === 'complete' || s === 'completed') return 'completed';
     if (s === 'broken' || s === 'no_show' || s === 'no-show' || s === 'missed' || s === 'no show') return 'no_show';
     if (s === 'cancelled' || s === 'canceled' || s === 'deleted') return 'cancelled';
-    if (s === 'scheduled' || s === 'confirmed' || s === 'unconfirmed' || s === 'left message'
-      || s === 'none' || s === 'unscheduled' || s === 'open') return 'scheduled';
-    return s;
+    if (s === 'confirmed') return 'confirmed';
+    if (s === 'rescheduled') return 'rescheduled';
+    return 'scheduled';
   }
   
   async getAppointment(appointmentId: string): Promise<PmsApiResponse<Appointment>> {
