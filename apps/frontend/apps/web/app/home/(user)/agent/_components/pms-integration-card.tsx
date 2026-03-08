@@ -139,7 +139,7 @@ export function PmsIntegrationCard({
                 {t('pmsCard.check')}
               </Button>
             )}
-            <Link href="/home/agent/setup/integrations">
+            <Link href="/home/agent/integrations">
               <Button variant="outline" size="sm">
                 {hasIntegration ? t('pmsCard.manage') : t('pmsCard.connect')}
               </Button>

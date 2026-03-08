@@ -324,7 +324,7 @@ export default async function ReceptionistDashboardPage({
                     )}
                   </div>
                 </div>
-                <Link href="/home/agent/setup/integrations">
+                <Link href="/home/agent/integrations">
                   <Button variant="outline" size="sm">
                     {account?.googleCalendarConnected ? <Trans i18nKey="common:agentOverview.manage" /> : <Trans i18nKey="common:agentOverview.connect" />}
                   </Button>

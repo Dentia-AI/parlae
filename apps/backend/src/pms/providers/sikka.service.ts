@@ -515,24 +515,45 @@ export class SikkaPmsService extends BasePmsService {
       if (filters?.providerId) {
         params.provider_id = filters.providerId;
       }
-      if (filters?.status) {
-        params.status = filters.status;
-      }
+      // NOTE: Do NOT send `status` as a Sikka query param — Sikka uses
+      // PMS-native values (e.g. "Complete", "Broken") that vary by vendor.
+      // We filter by normalized status in code after fetching.
       
       const response = await this.client.get('/appointments', { params });
       
-      // Sikka v4 API returns { items: [], total_count: 0, pagination: {...} }
-      const appointments = (response.data.items || []).map((item: any) => this.mapSikkaAppointment(item));
-      
+      let appointments = (response.data?.items || []).map((item: any) => this.mapSikkaAppointment(item));
+
+      if (filters?.status) {
+        const target = this.normalizeSikkaStatus(filters.status);
+        appointments = appointments.filter(
+          (a: Appointment) => this.normalizeSikkaStatus(a.status) === target,
+        );
+      }
+
       return this.createListResponse(appointments, {
-        total: parseInt(response.data.total_count || '0'),
+        total: appointments.length,
         limit: params.limit,
         offset: params.offset,
-        hasMore: response.data.pagination?.next !== '',
+        hasMore: response.data?.pagination?.next !== '',
       });
     } catch (error) {
       return this.handleError(error, 'getAppointments') as PmsListResponse<Appointment>;
     }
+  }
+
+  /**
+   * Normalize PMS-native appointment statuses to a standard set.
+   * Sikka returns statuses from the underlying PMS (Dentrix, Open Dental, etc.)
+   * which vary by vendor. This maps them to: scheduled, completed, cancelled, no_show.
+   */
+  private normalizeSikkaStatus(raw: string): string {
+    const s = (raw || '').toLowerCase().trim();
+    if (s === 'complete' || s === 'completed') return 'completed';
+    if (s === 'broken' || s === 'no_show' || s === 'no-show' || s === 'missed' || s === 'no show') return 'no_show';
+    if (s === 'cancelled' || s === 'canceled' || s === 'deleted') return 'cancelled';
+    if (s === 'scheduled' || s === 'confirmed' || s === 'unconfirmed' || s === 'left message'
+      || s === 'none' || s === 'unscheduled' || s === 'open') return 'scheduled';
+    return s;
   }
   
   async getAppointment(appointmentId: string): Promise<PmsApiResponse<Appointment>> {
@@ -1205,7 +1226,7 @@ export class SikkaPmsService extends BasePmsService {
       startTime,
       endTime,
       duration: length,
-      status: sikkaData.status || 'scheduled',
+      status: this.normalizeSikkaStatus(sikkaData.status || 'scheduled'),
       notes: sikkaData.note || sikkaData.notes,
       confirmationNumber: sikkaData.appointment_sr_no || sikkaData.confirmation_number,
       reminderSent: sikkaData.is_confirmed === 'True' || false,

@@ -234,7 +234,6 @@ describe('SikkaPmsService', () => {
         params: expect.objectContaining({
           startdate: '2025-03-01',
           enddate: '2025-03-31',
-          status: 'scheduled',
           practice_id: '1',
           limit: 20,
           offset: 0,

@@ -485,18 +485,33 @@ describe('OutboundSchedulerService', () => {
       expect(campaignService.createCampaign).not.toHaveBeenCalled();
     });
 
-    it('skips when PMS returns unsuccessful result', async () => {
+    it('skips when PMS returns unsuccessful result and patient map empty', async () => {
       mockPmsProvider.getAppointments.mockResolvedValue({ success: false });
+      mockPmsProvider.listPatients.mockResolvedValue({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
       expect(campaignService.createCampaign).not.toHaveBeenCalled();
     });
 
-    it('skips when PMS returns empty data', async () => {
+    it('skips when PMS returns empty data and patient map empty', async () => {
       mockPmsProvider.getAppointments.mockResolvedValue({ success: true, data: [] });
+      mockPmsProvider.listPatients.mockResolvedValue({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
       expect(campaignService.createCampaign).not.toHaveBeenCalled();
+    });
+
+    it('falls back to patient map when appointments are empty', async () => {
+      mockPmsProvider.getAppointments.mockResolvedValue({ success: true, data: [] });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      expect(campaignService.createCampaign).toHaveBeenCalledWith(
+        expect.objectContaining({ callType: 'RECALL' }),
+      );
+      expect(campaignService.addContacts).toHaveBeenCalledWith(
+        'camp-1',
+        expect.arrayContaining([expect.objectContaining({ patientId: 'p-1' })]),
+      );
     });
 
     it('handles PMS error gracefully', async () => {
