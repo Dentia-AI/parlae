@@ -24,6 +24,12 @@ import type { OutboundSettings } from '@kit/prisma';
 @Injectable()
 export class OutboundSchedulerService {
   private readonly logger = new StructuredLogger(OutboundSchedulerService.name);
+  private readonly patientMapCache = new Map<string, Map<string, any>>();
+
+  private safeISOString(d: Date | undefined | null): string {
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toISOString();
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -55,6 +61,7 @@ export class OutboundSchedulerService {
       }
     }
 
+    this.patientMapCache.clear();
     this.logger.log({ msg: '[Scheduler] Daily recall scan complete' });
   }
 
@@ -81,6 +88,7 @@ export class OutboundSchedulerService {
       }
     }
 
+    this.patientMapCache.clear();
     this.logger.log({ msg: '[Scheduler] Hourly reminder scan complete' });
   }
 
@@ -107,6 +115,7 @@ export class OutboundSchedulerService {
       }
     }
 
+    this.patientMapCache.clear();
     this.logger.log({ msg: '[Scheduler] Daily no-show scan complete' });
   }
 
@@ -133,6 +142,7 @@ export class OutboundSchedulerService {
       }
     }
 
+    this.patientMapCache.clear();
     this.logger.log({ msg: '[Scheduler] Monthly reactivation scan complete' });
   }
 
@@ -154,6 +164,8 @@ export class OutboundSchedulerService {
       await this.processRemindersForAccount(accountId, settings);
       await this.processNoShowsForAccount(accountId, settings);
     }
+
+    this.patientMapCache.delete(accountId);
   }
 
   /**
@@ -184,6 +196,8 @@ export class OutboundSchedulerService {
       await this.processReactivationForAccount(accountId, settings);
       scansRun.push('reactivation');
     }
+
+    this.patientMapCache.delete(accountId);
 
     this.logger.log({
       accountId,
@@ -283,6 +297,12 @@ export class OutboundSchedulerService {
     pmsService: any,
     accountId: string,
   ): Promise<Map<string, any>> {
+    const cached = this.patientMapCache.get(accountId);
+    if (cached) {
+      this.logger.log({ accountId, totalPatients: cached.size, msg: '[Scheduler] Patient map served from cache' });
+      return cached;
+    }
+
     const map = new Map<string, any>();
     let offset = 0;
     const limit = 500;
@@ -312,6 +332,7 @@ export class OutboundSchedulerService {
     }
 
     this.logger.log({ accountId, totalPatients: map.size, pages, msg: '[Scheduler] Patient map built' });
+    this.patientMapCache.set(accountId, map);
     return map;
   }
 
@@ -475,7 +496,7 @@ export class OutboundSchedulerService {
             phoneNumber: contactInfo.phone || undefined,
             callContext: {
               patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
-              last_visit_date: appt.startTime?.toISOString() || '',
+              last_visit_date: this.safeISOString(appt.startTime),
               email: contactInfo.email || undefined,
             },
           });
@@ -504,7 +525,7 @@ export class OutboundSchedulerService {
             phoneNumber: contactInfo.phone || undefined,
             callContext: {
               patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
-              last_visit_date: lv?.toISOString() || '',
+              last_visit_date: this.safeISOString(lv),
               email: contactInfo.email || undefined,
             },
           });
@@ -615,8 +636,8 @@ export class OutboundSchedulerService {
           phoneNumber: contactInfo.phone || undefined,
           callContext: {
             patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
-            appointment_date: (appt.startTime?.toISOString() || '').split('T')[0],
-            appointment_time: appt.startTime?.toISOString() || '',
+            appointment_date: this.safeISOString(appt.startTime).split('T')[0],
+            appointment_time: this.safeISOString(appt.startTime),
             appointment_type: appt.appointmentType || 'Dental Visit',
             provider_name: appt.providerName || '',
             email: contactInfo.email || undefined,
@@ -727,8 +748,8 @@ export class OutboundSchedulerService {
           phoneNumber: contactInfo.phone || undefined,
           callContext: {
             patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
-            appointment_date: (appt.startTime?.toISOString() || '').split('T')[0],
-            appointment_time: appt.startTime?.toISOString() || '',
+            appointment_date: this.safeISOString(appt.startTime).split('T')[0],
+            appointment_time: this.safeISOString(appt.startTime),
             appointment_type: appt.appointmentType || 'Dental Visit',
             email: contactInfo.email || undefined,
           },
@@ -867,7 +888,7 @@ export class OutboundSchedulerService {
           const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
           if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
 
-          const visitDate = appt.startTime?.toISOString() || '';
+          const visitDate = this.safeISOString(appt.startTime);
           const monthsSince = visitDate
             ? Math.round((Date.now() - new Date(visitDate).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
             : inactiveMonths;
@@ -902,7 +923,7 @@ export class OutboundSchedulerService {
           const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
           if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
 
-          const visitDate = lv?.toISOString() || '';
+          const visitDate = this.safeISOString(lv);
           const monthsSince = lv
             ? Math.round((Date.now() - lv.getTime()) / (30.44 * 24 * 60 * 60 * 1000))
             : inactiveMonths;

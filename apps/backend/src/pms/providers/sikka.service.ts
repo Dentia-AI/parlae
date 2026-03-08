@@ -1243,7 +1243,8 @@ export class SikkaPmsService extends BasePmsService {
 
   private parseSikkaDateTime(date?: string, time?: string): Date | null {
     if (!date) return null;
-    const dateStr = time ? `${date}T${time}` : date;
+    const datePart = date.includes('T') ? date.split('T')[0] : date;
+    const dateStr = time ? `${datePart}T${time}` : date;
     const parsed = new Date(dateStr);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
