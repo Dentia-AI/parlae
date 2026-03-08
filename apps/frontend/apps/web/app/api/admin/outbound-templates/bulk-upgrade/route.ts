@@ -84,9 +84,16 @@ export async function POST(request: NextRequest) {
           | string
           | undefined;
 
-        const flowConfig = {
-          ...(template.flowConfig as Record<string, unknown>),
-        };
+        const webhookSecret = process.env.RETELL_WEBHOOK_SECRET || '';
+
+        // Hydrate tool URL placeholders in the flow config
+        let flowConfigStr = JSON.stringify(template.flowConfig);
+        flowConfigStr = flowConfigStr
+          .replace(/\{\{webhookUrl\}\}/g, backendUrl)
+          .replace(/\{\{secret\}\}/g, webhookSecret)
+          .replace(/\{\{accountId\}\}/g, s.accountId);
+        const flowConfig = JSON.parse(flowConfigStr) as Record<string, unknown>;
+
         if (retellKbId) {
           flowConfig.knowledge_base_ids = [retellKbId];
         }

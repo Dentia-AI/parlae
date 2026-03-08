@@ -74,6 +74,7 @@ interface CampaignCardProps {
   campaign: Campaign;
   callTypeLabel: string;
   channelLabel: string;
+  onDeleted?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -133,7 +134,7 @@ function formatLabel(raw: string): string {
 
 const CONTACTS_PER_PAGE = 20;
 
-export function CampaignCard({ campaign, callTypeLabel, channelLabel }: CampaignCardProps) {
+export function CampaignCard({ campaign, callTypeLabel, channelLabel, onDeleted }: CampaignCardProps) {
   const { t } = useTranslation('common');
   const getCsrfToken = useCsrfToken;
   const router = useRouter();
@@ -341,6 +342,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
         throw new Error(data.error || 'Failed to delete');
       }
       toast.success(t('outbound.campaignActions.deleted', 'Campaign deleted'));
+      onDeleted?.();
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete campaign');

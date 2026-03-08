@@ -155,6 +155,7 @@ export function CampaignListClient({
                 campaign={campaign}
                 callTypeLabel={callTypeLabelFn(campaign.callType)}
                 channelLabel={channelLabelFn(campaign.channel)}
+                onDeleted={fetchCampaigns}
               />
             ))
           )}
