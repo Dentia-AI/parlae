@@ -509,6 +509,139 @@ class TwilioService {
 
   // ── Elastic SIP Trunking (for Retell integration) ────────────────────────
 
+  private static readonly RETELL_IP_BLOCKS: Array<{ ip: string; cidr: number; label: string }> = [
+    { ip: '18.98.16.120', cidr: 30, label: 'Retell All Regions' },
+    { ip: '143.223.88.0', cidr: 21, label: 'Retell US Traffic 1' },
+    { ip: '161.115.160.0', cidr: 19, label: 'Retell US Traffic 2' },
+  ];
+
+  /**
+   * Ensure an IP Access Control List exists with Retell's IP blocks and
+   * associate it with the given SIP Trunk so Twilio accepts outbound
+   * SIP INVITE requests from Retell.
+   */
+  async ensureRetellIpWhitelist(trunkSid: string): Promise<boolean> {
+    const logger = await getLogger();
+    if (!this.enabled) return false;
+
+    try {
+      const aclName = 'Retell AI Outbound';
+
+      // 1. List existing IP ACLs and look for one we already created
+      const listResp = await fetch(
+        `${this.baseUrl}/Accounts/${this.accountSid}/SIP/IpAccessControlLists.json?PageSize=50`,
+        { method: 'GET', headers: { Authorization: this.getAuthHeader() } },
+      );
+
+      let aclSid: string | null = null;
+
+      if (listResp.ok) {
+        const listData = await listResp.json();
+        const existing = (listData.ip_access_control_lists || []).find(
+          (acl: any) => acl.friendly_name === aclName,
+        );
+        if (existing) {
+          aclSid = existing.sid;
+          logger.info({ aclSid }, '[Twilio] Reusing existing Retell IP ACL');
+        }
+      }
+
+      // 2. Create ACL if it doesn't exist
+      if (!aclSid) {
+        const createBody = new URLSearchParams();
+        createBody.append('FriendlyName', aclName);
+
+        const createResp = await fetch(
+          `${this.baseUrl}/Accounts/${this.accountSid}/SIP/IpAccessControlLists.json`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: this.getAuthHeader(),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: createBody,
+          },
+        );
+
+        if (!createResp.ok) {
+          const err = await createResp.text();
+          logger.error({ status: createResp.status, error: err }, '[Twilio] Failed to create IP ACL');
+          return false;
+        }
+
+        const aclData = await createResp.json();
+        aclSid = aclData.sid;
+        logger.info({ aclSid }, '[Twilio] Created Retell IP ACL');
+
+        // 3. Add Retell IP blocks
+        for (const block of TwilioService.RETELL_IP_BLOCKS) {
+          const ipBody = new URLSearchParams();
+          ipBody.append('FriendlyName', block.label);
+          ipBody.append('IpAddress', block.ip);
+          ipBody.append('CidrPrefixLength', String(block.cidr));
+
+          const ipResp = await fetch(
+            `${this.baseUrl}/Accounts/${this.accountSid}/SIP/IpAccessControlLists/${aclSid}/IpAddresses.json`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: this.getAuthHeader(),
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: ipBody,
+            },
+          );
+
+          if (!ipResp.ok) {
+            const err = await ipResp.text();
+            if (ipResp.status === 409 || err.includes('already exists')) {
+              logger.info({ ip: block.ip, cidr: block.cidr }, '[Twilio] IP already in ACL');
+            } else {
+              logger.error({ status: ipResp.status, error: err, ip: block.ip }, '[Twilio] Failed to add IP to ACL');
+            }
+          } else {
+            logger.info({ ip: block.ip, cidr: block.cidr }, '[Twilio] Added IP to ACL');
+          }
+        }
+      }
+
+      // 4. Associate the ACL with the trunk (idempotent — Twilio returns 409 if already done)
+      const assocBody = new URLSearchParams();
+      assocBody.append('IpAccessControlListSid', aclSid!);
+
+      const assocResp = await fetch(
+        `https://trunking.twilio.com/v1/Trunks/${trunkSid}/IpAccessControlLists`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: this.getAuthHeader(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: assocBody,
+        },
+      );
+
+      if (!assocResp.ok) {
+        const err = await assocResp.text();
+        if (assocResp.status === 409 || err.includes('already associated')) {
+          logger.info({ trunkSid, aclSid }, '[Twilio] IP ACL already associated with trunk');
+          return true;
+        }
+        logger.error({ status: assocResp.status, error: err, trunkSid }, '[Twilio] Failed to associate IP ACL with trunk');
+        return false;
+      }
+
+      logger.info({ trunkSid, aclSid }, '[Twilio] IP ACL associated with SIP Trunk');
+      return true;
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : error, trunkSid },
+        '[Twilio] Exception setting up Retell IP whitelist',
+      );
+      return false;
+    }
+  }
+
   /**
    * Get or create a Twilio Elastic SIP Trunk with origination for Retell.
    * Reuses an existing trunk with matching domain name if one exists.
@@ -548,6 +681,7 @@ class TwilioService {
             { trunkSid: existing.sid, domainName: fullDomainName },
             '[Twilio] Reusing existing SIP Trunk',
           );
+          await this.ensureRetellIpWhitelist(existing.sid);
           return { trunkSid: existing.sid, terminationUri };
         }
       }
@@ -603,6 +737,8 @@ class TwilioService {
       } else {
         logger.info({ trunkSid }, '[Twilio] Retell origination URL added');
       }
+
+      await this.ensureRetellIpWhitelist(trunkSid);
 
       return { trunkSid, terminationUri };
     } catch (error) {
