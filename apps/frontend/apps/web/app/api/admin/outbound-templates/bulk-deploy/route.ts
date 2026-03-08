@@ -11,6 +11,7 @@ import {
   RETELL_POST_CALL_ANALYSIS,
   ALLOWED_OUTBOUND_COUNTRIES,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { createTwilioService } from '@kit/shared/twilio/twilio.service';
 
 function resolveVoiceModel(voiceId: string): string | undefined {
   const prefix = voiceId.split('-')[0]?.toLowerCase();
@@ -218,6 +219,20 @@ export async function POST(request: NextRequest) {
           });
           if (inboundPhone) {
             fromPhoneNumberId = inboundPhone.id;
+          }
+        }
+
+        // Ensure Retell IP whitelist is configured on the Twilio SIP trunk
+        const trunkSid = integrationSettings.twilioSipTrunkSid as string | undefined;
+        if (trunkSid) {
+          try {
+            const twilio = createTwilioService();
+            await twilio.ensureRetellIpWhitelist(trunkSid);
+          } catch (err) {
+            logger.warn(
+              { accountId, trunkSid, error: err instanceof Error ? err.message : err },
+              '[Outbound] Failed to ensure Retell IP whitelist on SIP trunk',
+            );
           }
         }
 

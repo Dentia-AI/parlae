@@ -11,6 +11,7 @@ import {
   RETELL_POST_CALL_ANALYSIS,
   ALLOWED_OUTBOUND_COUNTRIES,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { createTwilioService } from '@kit/shared/twilio/twilio.service';
 
 function resolveVoiceModel(voiceId: string): string | undefined {
   const prefix = voiceId.split('-')[0]?.toLowerCase();
@@ -132,6 +133,20 @@ export async function POST(request: NextRequest) {
           try { await retell.deleteConversationFlow(flow.conversation_flow_id); } catch {}
           results.push({ accountId: s.accountId, status: 'failed', error: 'Agent creation failed' });
           continue;
+        }
+
+        // Ensure Retell IP whitelist is configured on the Twilio SIP trunk
+        const trunkSid = integrationSettings.twilioSipTrunkSid as string | undefined;
+        if (trunkSid) {
+          try {
+            const twilio = createTwilioService();
+            await twilio.ensureRetellIpWhitelist(trunkSid);
+          } catch (err) {
+            console.warn(
+              `[Outbound] Failed to ensure Retell IP whitelist on SIP trunk ${trunkSid} for account ${s.accountId}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
         }
 
         // Update the Retell phone number to use the new outbound agent
