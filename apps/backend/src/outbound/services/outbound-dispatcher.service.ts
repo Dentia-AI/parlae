@@ -7,8 +7,6 @@ import { OutboundSettingsService } from './outbound-settings.service';
 import { RetellTemplateService } from '../../retell/retell-template.service';
 import type { CampaignContact, OutboundCampaign, OutboundSettings } from '@kit/prisma';
 
-// TEMPORARY: Route all outbound calls to test number. Set to null to disable.
-const TEST_OVERRIDE_NUMBER: string | null = '+14387931089';
 
 const CALL_TYPE_TO_AGENT_GROUP: Record<string, 'PATIENT_CARE' | 'FINANCIAL'> = {
   recall: 'PATIENT_CARE',
@@ -86,6 +84,66 @@ export class OutboundDispatcherService {
         msg: 'Activated scheduled campaign',
       });
     }
+  }
+
+  /**
+   * Admin-initiated test run. Bypasses calling window, feature flags,
+   * and agent-group checks so the campaign dispatches immediately.
+   */
+  async processTestCampaign(campaignId: string): Promise<void> {
+    const campaign = await this.prisma.outboundCampaign.findUnique({
+      where: { id: campaignId },
+    });
+    if (!campaign) {
+      this.logger.error({ campaignId, msg: 'Test campaign not found' });
+      return;
+    }
+
+    const settings = await this.settingsService.getSettings(campaign.accountId);
+    if (!settings) {
+      this.logger.error({ campaignId, msg: 'No outbound settings for test campaign account' });
+      return;
+    }
+
+    const contacts = await this.campaignService.getQueuedContacts(campaign.id, 100);
+
+    for (const contact of contacts) {
+      const fresh = await this.prisma.outboundCampaign.findUnique({
+        where: { id: campaignId },
+        select: { status: true },
+      });
+      if (fresh?.status === 'CANCELLED') {
+        this.logger.log({ campaignId, msg: 'Test campaign cancelled mid-dispatch, stopping' });
+        break;
+      }
+
+      if (!contact.phoneNumber) {
+        await this.campaignService.updateContactStatus(contact.id, {
+          status: 'FAILED' as any,
+          outcome: 'no_phone_number',
+          completedAt: new Date(),
+        });
+        await this.campaignService.incrementCampaignStats(campaign.id, true, false);
+        continue;
+      }
+
+      try {
+        await this.dispatchPhoneCall(campaign, contact, settings);
+      } catch (err) {
+        this.logger.error({
+          contactId: contact.id,
+          err,
+          msg: 'Failed to dispatch test call',
+        });
+        await this.campaignService.updateContactStatus(contact.id, {
+          status: 'FAILED',
+          attempts: contact.attempts + 1,
+          lastAttemptAt: new Date(),
+        });
+      }
+    }
+
+    await this.campaignService.checkAndCompleteCampaign(campaign.id);
   }
 
   private async processCampaign(campaign: OutboundCampaign): Promise<void> {
@@ -231,7 +289,7 @@ export class OutboundDispatcherService {
 
     const result = await this.retellService.createOutboundCall({
       fromNumber,
-      toNumber: TEST_OVERRIDE_NUMBER || contact.phoneNumber!,
+      toNumber: contact.phoneNumber!,
       overrideAgentId: agentId,
       dynamicVariables,
       metadata: {
