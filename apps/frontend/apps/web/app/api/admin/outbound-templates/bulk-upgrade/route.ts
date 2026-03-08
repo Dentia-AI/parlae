@@ -9,6 +9,7 @@ import {
 import {
   SHARED_RETELL_AGENT_CONFIG,
   RETELL_POST_CALL_ANALYSIS,
+  ALLOWED_OUTBOUND_COUNTRIES,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 
 function resolveVoiceModel(voiceId: string): string | undefined {
@@ -142,9 +143,10 @@ export async function POST(request: NextRequest) {
           try {
             await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
               outbound_agent_id: agent.agent_id,
+              allowed_outbound_country_list: ALLOWED_OUTBOUND_COUNTRIES,
             });
             console.log(
-              `[Outbound] Set outbound_agent_id=${agent.agent_id} on phone ${phoneRecord.phoneNumber} for account ${s.accountId}`,
+              `[Outbound] Set outbound_agent_id=${agent.agent_id} and allowed countries on phone ${phoneRecord.phoneNumber} for account ${s.accountId}`,
             );
           } catch (err) {
             console.warn(

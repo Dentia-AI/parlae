@@ -270,6 +270,21 @@ export const SHARED_RETELL_AGENT_CONFIG = {
   enable_voicemail_detection: true,
 };
 
+/**
+ * ISO 3166-1 alpha-2 country codes allowed for outbound calling.
+ * Applied to phone numbers when deploying outbound agents.
+ */
+export const ALLOWED_OUTBOUND_COUNTRIES: string[] = [
+  // North America
+  'US', 'CA',
+  // Europe
+  'GB', 'IE', 'FR', 'DE', 'ES', 'IT', 'NL', 'BE', 'PT', 'AT', 'CH',
+  'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'GR', 'RO', 'HU', 'HR', 'BG',
+  'SK', 'SI', 'LT', 'LV', 'EE', 'LU', 'MT', 'CY',
+  // Oceania
+  'AU', 'NZ',
+];
+
 // ---------------------------------------------------------------------------
 // Post-call analysis schema (mirrors Vapi CALL_ANALYSIS_SCHEMA)
 // ---------------------------------------------------------------------------

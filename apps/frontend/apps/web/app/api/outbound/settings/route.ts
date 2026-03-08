@@ -8,6 +8,7 @@ import {
 import {
   SHARED_RETELL_AGENT_CONFIG,
   RETELL_POST_CALL_ANALYSIS,
+  ALLOWED_OUTBOUND_COUNTRIES,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { buildPatientCareOutboundFlow } from '@kit/shared/retell/templates/outbound/patient-care.flow-template';
 import { buildFinancialOutboundFlow } from '@kit/shared/retell/templates/outbound/financial.flow-template';
@@ -368,8 +369,9 @@ export async function POST(request: NextRequest) {
           const retell = createRetellService();
           await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
             outbound_agent_id: outboundAgentId,
+            allowed_outbound_country_list: ALLOWED_OUTBOUND_COUNTRIES,
           });
-          console.log(`[Outbound] Set outbound_agent_id=${outboundAgentId} on phone ${phoneRecord.phoneNumber} for account ${accountId}`);
+          console.log(`[Outbound] Set outbound_agent_id=${outboundAgentId} and allowed countries on phone ${phoneRecord.phoneNumber} for account ${accountId}`);
         } catch (err) {
           console.warn(`[Outbound] Failed to set outbound_agent_id on phone ${phoneRecord.phoneNumber} for account ${accountId}:`, err);
         }

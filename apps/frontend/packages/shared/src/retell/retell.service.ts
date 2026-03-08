@@ -518,6 +518,7 @@ export class RetellService {
       inbound_agent_id?: string;
       outbound_agent_id?: string;
       nickname?: string;
+      allowed_outbound_country_list?: string[];
     },
   ): Promise<RetellPhoneNumberResponse | null> {
     logger.info({ phoneNumber }, '[Retell] Updating phone number');
