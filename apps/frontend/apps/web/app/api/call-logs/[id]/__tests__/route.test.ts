@@ -20,6 +20,15 @@ jest.mock('@kit/prisma', () => ({
     vapiPhoneNumber: {
       findFirst: jest.fn().mockResolvedValue(null),
     },
+    actionItem: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    outboundSettings: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
+    aiActionLog: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
   },
 }));
 
