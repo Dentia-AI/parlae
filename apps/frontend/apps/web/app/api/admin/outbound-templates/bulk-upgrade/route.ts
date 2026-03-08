@@ -133,6 +133,25 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        // Update the Retell phone number to use the new outbound agent
+        const phoneRecord = await prisma.retellPhoneNumber.findFirst({
+          where: { accountId: s.accountId, isActive: true },
+          select: { phoneNumber: true },
+        });
+        if (phoneRecord?.phoneNumber) {
+          try {
+            await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
+              outbound_agent_id: agent.agent_id,
+            });
+          } catch (err) {
+            console.warn(
+              `[Outbound] Failed to set outbound_agent_id on phone ${phoneRecord.phoneNumber} for account ${s.accountId}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+
+        const previousAgentId = (s as any)[agentIdField] as string | null;
         const prevHistory = (s.outboundUpgradeHistory as unknown[]) || [];
         await prisma.outboundSettings.update({
           where: { id: s.id },
@@ -145,7 +164,7 @@ export async function POST(request: NextRequest) {
                 version: template.version,
                 agentId: agent.agent_id,
                 conversationFlowId: flow.conversation_flow_id,
-                previousAgentId: (s as any)[agentIdField],
+                previousAgentId,
                 group: template.agentGroup,
                 action: 'bulk_upgrade',
                 timestamp: new Date().toISOString(),
@@ -153,6 +172,22 @@ export async function POST(request: NextRequest) {
             ],
           },
         });
+
+        if (previousAgentId && previousAgentId !== agent.agent_id) {
+          try {
+            const oldAgent = await retell.getAgent(previousAgentId);
+            const oldFlowId = oldAgent?.response_engine?.conversation_flow_id;
+            await retell.deleteAgent(previousAgentId);
+            if (oldFlowId) {
+              await retell.deleteConversationFlow(oldFlowId);
+            }
+          } catch (cleanupErr) {
+            console.warn(
+              `[Outbound] Failed to clean up previous agent ${previousAgentId} for account ${s.accountId}:`,
+              cleanupErr instanceof Error ? cleanupErr.message : cleanupErr,
+            );
+          }
+        }
 
         results.push({ accountId: s.accountId, status: 'success', agentId: agent.agent_id });
       } catch (err) {
