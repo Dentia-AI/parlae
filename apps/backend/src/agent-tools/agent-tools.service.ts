@@ -715,6 +715,15 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
+      // Correct past dates before any processing
+      if (params.date) {
+        const today = new Date().toISOString().slice(0, 10);
+        if (params.date < today) {
+          this.logger.warn({ requestedDate: params.date, correctedTo: today, msg: '[bookAppointment] AI sent past date — correcting to today' });
+          params.date = today;
+        }
+      }
+
       // Get phone record and PMS integration
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
 
@@ -1062,6 +1071,7 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
+      const isOutboundCampaign = !!call?.metadata?.campaignId;
       const callerPhone = this.normalizePhone(call?.customer?.number || '');
 
       const searchQuery: Record<string, any> = { limit: 10 };
@@ -1258,8 +1268,22 @@ export class AgentToolsService {
         ? patients.filter((p: any) => this.normalizePhone(p.phone) === callerPhone)
         : [];
 
-      const callerVerified = phoneMatchedPatients.length > 0;
-      const matchedSet = callerVerified ? phoneMatchedPatients : patients;
+      let callerVerified = phoneMatchedPatients.length > 0;
+
+      // Outbound campaign calls: we initiated the call and already know the patient
+      // from the campaign data. Phone verification is meaningless here because
+      // customer.number is the dialed number (may be an admin test phone).
+      if (!callerVerified && isOutboundCampaign && patients.length === 1) {
+        callerVerified = true;
+        this.logger.log({
+          callId: call?.id,
+          campaignId: call?.metadata?.campaignId,
+          patientId: patients[0].id,
+          msg: '[lookupPatient] Outbound campaign call — auto-verifying single patient match',
+        });
+      }
+
+      const matchedSet = callerVerified ? (phoneMatchedPatients.length > 0 ? phoneMatchedPatients : patients) : patients;
 
       // Family account: multiple patients on the same phone
       if (callerVerified && matchedSet.length > 1) {
@@ -1351,6 +1375,19 @@ export class AgentToolsService {
       // Return minimal info only (no PHI beyond name + id)
       if (isPhoneQuery) {
         const patient = patients[0];
+
+        // Cache patient data even when not verified so booking fallback can use the name
+        if (call?.id) {
+          this.cachePatient(call.id, {
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            phone: patient.phone,
+            email: patient.email,
+            patientId: patient.id,
+            cachedAt: Date.now(),
+          });
+        }
+
         await this.hipaaAudit.logAccess({
           pmsIntegrationId: phoneRecord.pmsIntegration.id,
           action: 'lookupPatient',
@@ -2678,8 +2715,24 @@ export class AgentToolsService {
     const appointmentType = params.appointmentType || params.type || 'General';
 
     if (startTime < now) {
-      this.logger.warn({ startTime: startTime.toISOString(), msg: '[PMS Fallback] AI sent past startTime — adjusting to now + 1hr' });
-      startTime = new Date(now.getTime() + 60 * 60 * 1000);
+      const originalTime = startTime.toISOString();
+      const hours = startTime.getUTCHours();
+      const minutes = startTime.getUTCMinutes();
+      const hasIntendedTime = hours !== 0 || minutes !== 0;
+
+      if (hasIntendedTime) {
+        // Preserve the intended time, move to today or tomorrow
+        const corrected = new Date(now);
+        corrected.setUTCHours(hours, minutes, 0, 0);
+        if (corrected <= now) {
+          corrected.setUTCDate(corrected.getUTCDate() + 1);
+        }
+        startTime = corrected;
+        this.logger.warn({ originalTime, correctedTo: startTime.toISOString(), msg: '[PMS Fallback] AI sent past date — preserving intended time, moved to next occurrence' });
+      } else {
+        startTime = new Date(now.getTime() + 60 * 60 * 1000);
+        this.logger.warn({ originalTime, correctedTo: startTime.toISOString(), msg: '[PMS Fallback] AI sent past startTime with no time component — adjusting to now + 1hr' });
+      }
     }
 
     const callId = call?.id;
@@ -2858,8 +2911,23 @@ export class AgentToolsService {
     const appointmentType = params.appointmentType || params.type || 'Reschedule';
 
     if (newStartTime < now) {
-      this.logger.warn({ startTime: newStartTime.toISOString(), msg: '[PMS Reschedule Fallback] AI sent past startTime — adjusting to now + 1hr' });
-      newStartTime = new Date(now.getTime() + 60 * 60 * 1000);
+      const originalTime = newStartTime.toISOString();
+      const hours = newStartTime.getUTCHours();
+      const minutes = newStartTime.getUTCMinutes();
+      const hasIntendedTime = hours !== 0 || minutes !== 0;
+
+      if (hasIntendedTime) {
+        const corrected = new Date(now);
+        corrected.setUTCHours(hours, minutes, 0, 0);
+        if (corrected <= now) {
+          corrected.setUTCDate(corrected.getUTCDate() + 1);
+        }
+        newStartTime = corrected;
+        this.logger.warn({ originalTime, correctedTo: newStartTime.toISOString(), msg: '[PMS Reschedule Fallback] AI sent past date — preserving intended time, moved to next occurrence' });
+      } else {
+        newStartTime = new Date(now.getTime() + 60 * 60 * 1000);
+        this.logger.warn({ originalTime, correctedTo: newStartTime.toISOString(), msg: '[PMS Reschedule Fallback] AI sent past startTime with no time component — adjusting to now + 1hr' });
+      }
     }
 
     const callId = call?.id;

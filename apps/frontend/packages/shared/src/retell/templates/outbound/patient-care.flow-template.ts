@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.6';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.7';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -306,8 +306,8 @@ export function buildPatientCareOutboundFlow(
 
 You MUST follow these steps in order:
 1. If you don't already have the patient record, call lookupPatient.
-2. Call checkAvailability with the date the patient requested to see open slots.
-3. Call bookAppointment with the patientId, date, startTime, and appointmentType.
+2. Call checkAvailability with the date THE PATIENT VERBALLY REQUESTED (e.g. "tomorrow", "next Monday", "March 10th"). IMPORTANT: Do NOT use last_visit_date or any historical date from context — those are past visit records, not appointment requests.
+3. Call bookAppointment with the patientId, the patient's requested date, startTime, and appointmentType.
 4. ONLY after bookAppointment returns a success response, read back the confirmed date and time.
 
 CRITICAL: The appointment does NOT exist until the bookAppointment tool returns success. Saying "I'll book that for you" without calling the tool means NO appointment is created. You MUST invoke the tools.
