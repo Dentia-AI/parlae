@@ -355,8 +355,15 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const someSelected = selectedIds.size > 0;
   const cPag = detail?.contactsPagination;
 
+  const cardDim =
+    currentStatus === 'CANCELLED'
+      ? 'opacity-50'
+      : currentStatus === 'COMPLETED'
+        ? 'opacity-70'
+        : '';
+
   return (
-    <Card className={expanded ? 'ring-1 ring-primary/20' : 'transition-shadow'}>
+    <Card className={`${expanded ? 'ring-1 ring-primary/20' : 'transition-shadow'} ${cardDim}`}>
       <CardContent className="pt-0 pb-0">
         <button
           type="button"

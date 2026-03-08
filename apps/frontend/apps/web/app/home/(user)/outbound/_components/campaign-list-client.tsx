@@ -32,6 +32,24 @@ interface CampaignListClientProps {
   summaryGridCols?: string;
 }
 
+const STATUS_SORT_ORDER: Record<string, number> = {
+  ACTIVE: 0,
+  DRAFT: 1,
+  SCHEDULED: 2,
+  PAUSED: 3,
+  COMPLETED: 4,
+  CANCELLED: 5,
+};
+
+function sortCampaigns(campaigns: any[]) {
+  return [...campaigns].sort((a, b) => {
+    const orderA = STATUS_SORT_ORDER[a.status] ?? 3;
+    const orderB = STATUS_SORT_ORDER[b.status] ?? 3;
+    if (orderA !== orderB) return orderA - orderB;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}
+
 export function CampaignListClient({
   group,
   callTypes,
@@ -131,7 +149,7 @@ export function CampaignListClient({
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            campaigns.map((campaign) => (
+            sortCampaigns(campaigns).map((campaign) => (
               <CampaignCard
                 key={campaign.id}
                 campaign={campaign}
