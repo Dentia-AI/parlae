@@ -20,12 +20,19 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+interface ServiceCacheEntry {
+  instance: SikkaPmsService;
+  expiresAt: number;
+}
+
 @Injectable()
 export class PmsService {
   private readonly logger = new Logger(PmsService.name);
 
   private readonly credentialsCache = new Map<string, CacheEntry>();
+  private readonly serviceCache = new Map<string, ServiceCacheEntry>();
   private readonly cacheTtlMs = 5 * 60 * 1000; // 5 minutes
+  private readonly serviceCacheTtlMs = 10 * 60 * 1000; // 10 minutes
 
   constructor(private prisma: PrismaService) {}
 
@@ -35,6 +42,7 @@ export class PmsService {
    */
   invalidateCredentialsCache(accountId: string): void {
     this.credentialsCache.delete(accountId);
+    this.serviceCache.delete(accountId);
   }
 
   private async loadPracticeCredentials(accountId: string): Promise<SikkaPracticeCredentials | null> {
@@ -80,7 +88,7 @@ export class PmsService {
   }
 
   async setupPmsIntegration(userId: string, dto: SetupPmsDto) {
-    this.logger.log(`Setting up ${dto.provider} PMS for user ${userId}`);
+    this.logger.log({ provider: dto.provider, userId, msg: '[PMS] Setting up integration' });
     
     if (dto.provider !== 'SIKKA') {
       throw new BadRequestException('Only Sikka is currently supported. Use Sikka marketplace to connect your PMS.');
@@ -100,7 +108,7 @@ export class PmsService {
     const practiceCredentials = await this.loadPracticeCredentials(account.id);
     
     if (!practiceCredentials) {
-      this.logger.warn(`No practice credentials found for account ${account.id}`);
+      this.logger.warn({ accountId: account.id, msg: '[PMS] No practice credentials found' });
       throw new BadRequestException(
         'Practice not authorized. Please complete Sikka marketplace authorization first.'
       );
@@ -121,7 +129,7 @@ export class PmsService {
     const connectionTest = await pmsService.testConnection();
     
     if (!connectionTest.success) {
-      this.logger.error(`PMS connection failed: ${connectionTest.error}`);
+      this.logger.error({ error: connectionTest.error, msg: '[PMS] Connection failed' });
       throw new BadRequestException(`Failed to connect to Sikka: ${connectionTest.error}`);
     }
     
@@ -162,7 +170,7 @@ export class PmsService {
       },
     });
     
-    this.logger.log(`PMS connected successfully for account ${account.id}`);
+    this.logger.log({ accountId: account.id, msg: '[PMS] Connected successfully' });
     return { 
       success: true, 
       provider: dto.provider,
@@ -219,7 +227,7 @@ export class PmsService {
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
-      this.logger.error(`Failed to get connection status: ${error.message}`);
+      this.logger.error({ error: error.message, msg: '[PMS] Failed to get connection status' });
       return {
         isConnected: false,
         status: 'failed',
@@ -259,11 +267,17 @@ export class PmsService {
 
   /**
    * Get PMS service instance for an account.
-   * Reads credentials from the DB with in-memory caching (5 min TTL).
+   * Instances are cached for 10 min to avoid redundant token refreshes and
+   * practice-ID verification calls against rate-limited Sikka APIs.
    */
   async getPmsService(accountId: string, provider: string = 'SIKKA', config: any = {}) {
     if (provider !== 'SIKKA') {
       throw new BadRequestException('Only Sikka is currently supported');
+    }
+
+    const cached = this.serviceCache.get(accountId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.instance;
     }
     
     const practiceCredentials = await this.loadPracticeCredentials(accountId);
@@ -284,7 +298,35 @@ export class PmsService {
       practiceId: practiceCredentials.practiceId,
     };
     
-    return new SikkaPmsService(accountId, fullCredentials, config);
+    const instance = new SikkaPmsService(accountId, fullCredentials, {
+      ...config,
+      onPracticeIdCorrected: async (correctedPracticeId: string) => {
+        try {
+          const integration = await this.prisma.pmsIntegration.findFirst({
+            where: { accountId, provider: 'SIKKA', status: 'ACTIVE' },
+            select: { id: true, metadata: true },
+          });
+          if (integration) {
+            const meta = (integration.metadata as Record<string, any>) ?? {};
+            await this.prisma.pmsIntegration.update({
+              where: { id: integration.id },
+              data: { metadata: { ...meta, practiceId: correctedPracticeId } },
+            });
+            this.invalidateCredentialsCache(accountId);
+            this.logger.log({ accountId, correctedPracticeId, msg: '[PMS] Persisted corrected practice_id to DB' });
+          }
+        } catch (err) {
+          this.logger.warn({ accountId, error: err instanceof Error ? err.message : err, msg: '[PMS] Failed to persist corrected practice_id' });
+        }
+      },
+    });
+
+    this.serviceCache.set(accountId, {
+      instance,
+      expiresAt: Date.now() + this.serviceCacheTtlMs,
+    });
+
+    return instance;
   }
 
   private getSikkaSystemCredentials() {
@@ -299,7 +341,7 @@ export class PmsService {
   }
 
   async handleSikkaOAuthCallback(code: string, accountId: string) {
-    this.logger.log(`Processing Sikka OAuth callback for account ${accountId}`);
+    this.logger.log({ accountId, msg: '[PMS] Processing Sikka OAuth callback' });
     
     try {
       const systemCredentials = this.getSikkaSystemCredentials();
@@ -319,7 +361,7 @@ export class PmsService {
       const refreshKey = tokenResponse.data.refresh_key;
       const expiresIn = tokenResponse.data.expires_in;
       
-      this.logger.log(`Received request_key, expires in ${expiresIn} seconds`);
+      this.logger.log({ expiresIn, msg: '[PMS] Received request_key' });
       
       this.logger.log('Fetching authorized practices');
       const practicesResponse = await axios.get(
@@ -340,7 +382,7 @@ export class PmsService {
       
       const practice = practices[0];
       
-      this.logger.log(`Found practice: ${practice.practice_name} (${practice.practice_management_system})`);
+      this.logger.log({ practiceName: practice.practice_name, pmsType: practice.practice_management_system, msg: '[PMS] Found practice' });
       
       const tokenExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
       
@@ -391,7 +433,7 @@ export class PmsService {
 
       this.invalidateCredentialsCache(accountId);
       
-      this.logger.log(`PMS integration saved for account ${accountId}`);
+      this.logger.log({ accountId, msg: '[PMS] Integration saved' });
       
       return {
         success: true,
@@ -399,7 +441,7 @@ export class PmsService {
         pmsType: practice.practice_management_system,
       };
     } catch (error: any) {
-      this.logger.error(`Sikka OAuth callback failed: ${error.message}`, error.stack);
+      this.logger.error({ error: error.message, msg: '[PMS] Sikka OAuth callback failed' });
       
       try {
         await this.prisma.pmsIntegration.upsert({

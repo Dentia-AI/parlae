@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PmsService } from '../../pms/pms.service';
 import { StructuredLogger } from '../../common/structured-logger';
 import { OutboundCampaignService, type CreateContactInput } from './outbound-campaign.service';
 import { OutboundSettingsService } from './outbound-settings.service';
@@ -26,6 +27,7 @@ export class OutboundSchedulerService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly pmsService: PmsService,
     private readonly campaignService: OutboundCampaignService,
     private readonly settingsService: OutboundSettingsService,
   ) {}
@@ -234,9 +236,7 @@ export class OutboundSchedulerService {
     if (!pmsIntegration) return null;
 
     try {
-      const { PmsService } = await import('../../pms/pms.service');
-      const pmsService = new PmsService(this.prisma);
-      return pmsService.getPmsService(
+      return await this.pmsService.getPmsService(
         accountId,
         pmsIntegration.provider,
         pmsIntegration.config,
@@ -251,6 +251,56 @@ export class OutboundSchedulerService {
     }
   }
 
+  /**
+   * Enrich appointments with patient phone numbers by looking up each
+   * unique patient via the PMS patient endpoint. Sikka appointments
+   * don't include patient phone — only patient_id and patient_name.
+   */
+  private async enrichWithPatientPhones(
+    appointments: any[],
+    pmsService: any,
+    accountId: string,
+  ): Promise<Array<{ patientId: string; patientName: string; patientPhone: string; date: string }>> {
+    const enriched: Array<{ patientId: string; patientName: string; patientPhone: string; date: string }> = [];
+    const phoneCache = new Map<string, string | null>();
+
+    for (const appt of appointments) {
+      const patientId = appt.patientId || appt.patient_id;
+      if (!patientId) continue;
+
+      if (!phoneCache.has(patientId)) {
+        try {
+          const patientResult = await pmsService.getPatient(patientId);
+          const phone = patientResult?.data?.phone || patientResult?.data?.cell || null;
+          phoneCache.set(patientId, phone);
+        } catch {
+          phoneCache.set(patientId, null);
+        }
+      }
+
+      const phone = phoneCache.get(patientId);
+      if (!phone) continue;
+
+      enriched.push({
+        patientId,
+        patientName: appt.patientName || appt.patient_name || 'Patient',
+        patientPhone: phone,
+        date: appt.startTime?.toISOString?.() || appt.date || '',
+      });
+    }
+
+    this.logger.log({
+      accountId,
+      totalAppts: appointments.length,
+      uniquePatients: phoneCache.size,
+      withPhone: enriched.length,
+      withoutPhone: phoneCache.size - enriched.length,
+      msg: '[Scheduler] Patient phone enrichment completed',
+    });
+
+    return enriched;
+  }
+
   private async processRecallForAccount(
     accountId: string,
     settings: OutboundSettings,
@@ -260,6 +310,8 @@ export class OutboundSchedulerService {
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
     const channel = this.settingsService.getChannelForCallType(settings, 'recall');
     if (channel === 'none') return;
@@ -275,37 +327,47 @@ export class OutboundSchedulerService {
     if (existingActive) return;
 
     try {
+      this.logger.log({
+        accountId,
+        startDate: twoYearsAgo.toISOString().split('T')[0],
+        endDate: sixMonthsAgo.toISOString().split('T')[0],
+        msg: '[Scheduler] Recall: querying completed appointments',
+      });
+
       const result = await pmsService.getAppointments({
+        startDate: twoYearsAgo,
         endDate: sixMonthsAgo,
         status: 'completed',
         limit: 200,
       });
 
-      if (!result.success || !result.data?.length) return;
+      if (!result.success || !result.data?.length) {
+        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Recall: no appointments found in range' });
+        return;
+      }
 
-      const contacts: CreateContactInput[] = [];
+      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const seenPatients = new Set<string>();
+      const contacts: CreateContactInput[] = [];
 
-      for (const appt of result.data) {
-        const patientId = (appt as any).patientId || (appt as any).patient_id;
-        if (!patientId || seenPatients.has(patientId)) continue;
-        seenPatients.add(patientId);
-
-        const phone = (appt as any).patientPhone || (appt as any).patient_phone;
-        const name = (appt as any).patientName || (appt as any).patient_name || 'Patient';
-        if (!phone) continue;
+      for (const entry of enriched) {
+        if (seenPatients.has(entry.patientId)) continue;
+        seenPatients.add(entry.patientId);
 
         contacts.push({
-          patientId,
-          phoneNumber: phone,
+          patientId: entry.patientId,
+          phoneNumber: entry.patientPhone,
           callContext: {
-            patient_name: name,
-            last_visit_date: (appt as any).date || (appt as any).start_time,
+            patient_name: entry.patientName,
+            last_visit_date: entry.date,
           },
         });
       }
 
-      if (contacts.length === 0) return;
+      if (contacts.length === 0) {
+        this.logger.log({ accountId, msg: '[Scheduler] Recall: no contacts with phone numbers' });
+        return;
+      }
 
       const autoApprove = (settings as any).autoApproveCampaigns === true;
 
@@ -362,9 +424,16 @@ export class OutboundSchedulerService {
 
     const now = new Date();
     const windowStart = new Date(now.getTime() + hoursBeforeAppt * 60 * 60 * 1000);
-    const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
+    const windowEnd = new Date(windowStart.getTime() + hoursBeforeAppt * 60 * 60 * 1000);
 
     try {
+      this.logger.log({
+        accountId,
+        windowStart: windowStart.toISOString(),
+        windowEnd: windowEnd.toISOString(),
+        msg: '[Scheduler] Reminder: querying scheduled appointments',
+      });
+
       const result = await pmsService.getAppointments({
         startDate: windowStart,
         endDate: windowEnd,
@@ -372,29 +441,33 @@ export class OutboundSchedulerService {
         limit: 100,
       });
 
-      if (!result.success || !result.data?.length) return;
+      if (!result.success || !result.data?.length) {
+        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Reminder: no appointments in window' });
+        return;
+      }
 
+      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const contacts: CreateContactInput[] = [];
 
-      for (const appt of result.data) {
-        const phone = (appt as any).patientPhone || (appt as any).patient_phone;
-        const name = (appt as any).patientName || (appt as any).patient_name || 'Patient';
-        if (!phone) continue;
-
+      for (const entry of enriched) {
+        const appt = result.data.find((a: any) => (a.patientId || a.patient_id) === entry.patientId);
         contacts.push({
-          patientId: (appt as any).patientId || (appt as any).patient_id,
-          phoneNumber: phone,
+          patientId: entry.patientId,
+          phoneNumber: entry.patientPhone,
           callContext: {
-            patient_name: name,
-            appointment_date: (appt as any).date,
-            appointment_time: (appt as any).startTime || (appt as any).start_time,
-            appointment_type: (appt as any).type || (appt as any).appointment_type || 'Dental Visit',
-            provider_name: (appt as any).providerName || (appt as any).provider_name || '',
+            patient_name: entry.patientName,
+            appointment_date: entry.date?.split('T')[0] || '',
+            appointment_time: entry.date,
+            appointment_type: (appt as any)?.appointmentType || 'Dental Visit',
+            provider_name: (appt as any)?.providerName || '',
           },
         });
       }
 
-      if (contacts.length === 0) return;
+      if (contacts.length === 0) {
+        this.logger.log({ accountId, msg: '[Scheduler] Reminder: no contacts with phone numbers' });
+        return;
+      }
 
       const autoApprove = (settings as any).autoApproveCampaigns === true;
 
@@ -453,6 +526,13 @@ export class OutboundSchedulerService {
     endOfYesterday.setHours(23, 59, 59, 999);
 
     try {
+      this.logger.log({
+        accountId,
+        startDate: yesterday.toISOString().split('T')[0],
+        endDate: endOfYesterday.toISOString().split('T')[0],
+        msg: '[Scheduler] No-show: querying missed appointments',
+      });
+
       const result = await pmsService.getAppointments({
         startDate: yesterday,
         endDate: endOfYesterday,
@@ -460,28 +540,32 @@ export class OutboundSchedulerService {
         limit: 50,
       });
 
-      if (!result.success || !result.data?.length) return;
+      if (!result.success || !result.data?.length) {
+        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] No-show: no appointments found' });
+        return;
+      }
 
+      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const contacts: CreateContactInput[] = [];
 
-      for (const appt of result.data) {
-        const phone = (appt as any).patientPhone || (appt as any).patient_phone;
-        const name = (appt as any).patientName || (appt as any).patient_name || 'Patient';
-        if (!phone) continue;
-
+      for (const entry of enriched) {
+        const appt = result.data.find((a: any) => (a.patientId || a.patient_id) === entry.patientId);
         contacts.push({
-          patientId: (appt as any).patientId || (appt as any).patient_id,
-          phoneNumber: phone,
+          patientId: entry.patientId,
+          phoneNumber: entry.patientPhone,
           callContext: {
-            patient_name: name,
-            appointment_date: (appt as any).date,
-            appointment_time: (appt as any).startTime || (appt as any).start_time,
-            appointment_type: (appt as any).type || (appt as any).appointment_type || 'Dental Visit',
+            patient_name: entry.patientName,
+            appointment_date: entry.date?.split('T')[0] || '',
+            appointment_time: entry.date,
+            appointment_type: (appt as any)?.appointmentType || 'Dental Visit',
           },
         });
       }
 
-      if (contacts.length === 0) return;
+      if (contacts.length === 0) {
+        this.logger.log({ accountId, msg: '[Scheduler] No-show: no contacts with phone numbers' });
+        return;
+      }
 
       const autoApprove = (settings as any).autoApproveCampaigns === true;
 
@@ -537,6 +621,8 @@ export class OutboundSchedulerService {
 
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - inactiveMonths);
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
 
     const existingActive = await this.prisma.outboundCampaign.findFirst({
       where: {
@@ -549,43 +635,53 @@ export class OutboundSchedulerService {
     if (existingActive) return;
 
     try {
+      this.logger.log({
+        accountId,
+        startDate: threeYearsAgo.toISOString().split('T')[0],
+        endDate: cutoffDate.toISOString().split('T')[0],
+        inactiveMonths,
+        msg: '[Scheduler] Reactivation: querying completed appointments',
+      });
+
       const result = await pmsService.getAppointments({
+        startDate: threeYearsAgo,
         endDate: cutoffDate,
         status: 'completed',
         limit: 200,
       });
 
-      if (!result.success || !result.data?.length) return;
+      if (!result.success || !result.data?.length) {
+        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Reactivation: no appointments found in range' });
+        return;
+      }
 
-      const contacts: CreateContactInput[] = [];
+      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const seenPatients = new Set<string>();
+      const contacts: CreateContactInput[] = [];
 
-      for (const appt of result.data) {
-        const patientId = (appt as any).patientId || (appt as any).patient_id;
-        if (!patientId || seenPatients.has(patientId)) continue;
-        seenPatients.add(patientId);
+      for (const entry of enriched) {
+        if (seenPatients.has(entry.patientId)) continue;
+        seenPatients.add(entry.patientId);
 
-        const phone = (appt as any).patientPhone || (appt as any).patient_phone;
-        const name = (appt as any).patientName || (appt as any).patient_name || 'Patient';
-        if (!phone) continue;
-
-        const lastDate = (appt as any).date || (appt as any).start_time || '';
-        const monthsSince = lastDate
-          ? Math.round((Date.now() - new Date(lastDate).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
+        const monthsSince = entry.date
+          ? Math.round((Date.now() - new Date(entry.date).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
           : inactiveMonths;
 
         contacts.push({
-          patientId,
-          phoneNumber: phone,
+          patientId: entry.patientId,
+          phoneNumber: entry.patientPhone,
           callContext: {
-            patient_name: name,
-            last_visit_date: lastDate,
+            patient_name: entry.patientName,
+            last_visit_date: entry.date,
             months_since_visit: String(monthsSince),
           },
         });
       }
 
-      if (contacts.length === 0) return;
+      if (contacts.length === 0) {
+        this.logger.log({ accountId, msg: '[Scheduler] Reactivation: no contacts with phone numbers' });
+        return;
+      }
 
       const autoApprove = (settings as any).autoApproveCampaigns === true;
 

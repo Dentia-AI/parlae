@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '../prisma/prisma.module';
+import { PmsModule } from '../pms/pms.module';
 import { RetellModule } from '../retell/retell.module';
 import { OutboundController } from './outbound.controller';
 import { OutboundCampaignService } from './services/outbound-campaign.service';
@@ -9,7 +10,7 @@ import { OutboundDispatcherService } from './services/outbound-dispatcher.servic
 import { OutboundSchedulerService } from './services/outbound-scheduler.service';
 
 @Module({
-  imports: [PrismaModule, RetellModule, ScheduleModule.forRoot()],
+  imports: [PrismaModule, PmsModule, RetellModule, ScheduleModule.forRoot()],
   controllers: [OutboundController],
   providers: [
     OutboundCampaignService,

@@ -99,6 +99,23 @@ export class SikkaPmsService extends BasePmsService {
       if (this.requestKey) {
         config.headers['Request-Key'] = this.requestKey;
       }
+      if (this.practiceId) {
+        if (config.params?.practice_id) {
+          config.params.practice_id = this.practiceId;
+        }
+        if (config.data && typeof config.data === 'object' && 'practice_id' in config.data) {
+          config.data.practice_id = this.practiceId;
+        }
+        if (typeof config.data === 'string') {
+          try {
+            const parsed = JSON.parse(config.data);
+            if ('practice_id' in parsed) {
+              parsed.practice_id = this.practiceId;
+              config.data = JSON.stringify(parsed);
+            }
+          } catch { /* not JSON, skip */ }
+        }
+      }
       return config;
     });
 
@@ -333,8 +350,10 @@ export class SikkaPmsService extends BasePmsService {
             msg: '[Sikka] Practice ID mismatch — auto-correcting to authorized value',
           });
           this.practiceId = authorizedId;
+          this.config?.onPracticeIdCorrected?.(authorizedId);
         } else if (!this.practiceId) {
           this.practiceId = authorizedId;
+          this.config?.onPracticeIdCorrected?.(authorizedId);
         }
         if (!this.officeId) this.officeId = practices[0].office_id;
         if (!this.secretKey) this.secretKey = practices[0].secret_key;
