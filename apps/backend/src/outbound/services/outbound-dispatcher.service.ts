@@ -253,7 +253,7 @@ export class OutboundDispatcherService {
       return;
     }
 
-    const agentGroup = CALL_TYPE_TO_AGENT_GROUP[campaign.callType] || 'PATIENT_CARE';
+    const agentGroup = CALL_TYPE_TO_AGENT_GROUP[campaign.callType.toLowerCase()] || 'PATIENT_CARE';
 
     const perAccountAgentId =
       agentGroup === 'PATIENT_CARE'
@@ -274,9 +274,10 @@ export class OutboundDispatcherService {
     }
 
     const contextVars = (contact.callContext as Record<string, string>) || {};
+    const callTypeLower = campaign.callType.toLowerCase();
     const dynamicVariables: Record<string, string> = {
       ...contextVars,
-      call_type: campaign.callType,
+      call_type: callTypeLower,
       patient_name: contextVars.patient_name || '',
       patient_id: contact.patientId,
       customer_phone: contact.phoneNumber || '',
@@ -285,7 +286,7 @@ export class OutboundDispatcherService {
     let voicemailMessage: string | undefined;
     if (settings.leaveVoicemail) {
       const voicemailMessages = (template?.voicemailMessages as Record<string, string>) || {};
-      const rawMsg = voicemailMessages[campaign.callType];
+      const rawMsg = voicemailMessages[callTypeLower];
       if (rawMsg) {
         const account = await this.prisma.account.findUnique({
           where: { id: campaign.accountId },
@@ -409,7 +410,7 @@ export class OutboundDispatcherService {
     accountId: string,
     callType: string,
   ): Promise<boolean> {
-    const group = CALL_TYPE_TO_AGENT_GROUP[callType];
+    const group = CALL_TYPE_TO_AGENT_GROUP[callType.toLowerCase()];
     if (!group) return false;
     return this.settingsService.isGroupEnabled(accountId, group);
   }
