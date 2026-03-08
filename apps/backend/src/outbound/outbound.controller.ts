@@ -339,6 +339,26 @@ export class OutboundController {
       );
     }
 
+    // Pull real contact data from an existing campaign of the same type
+    const existingCampaign = await this.prisma.outboundCampaign.findFirst({
+      where: { accountId, callType },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    let realContacts: Array<{
+      patientId: string;
+      callContext: Record<string, unknown> | null;
+    }> = [];
+
+    if (existingCampaign) {
+      realContacts = await this.prisma.campaignContact.findMany({
+        where: { campaignId: existingCampaign.id },
+        select: { patientId: true, callContext: true },
+        take: phoneNumbers.length,
+      });
+    }
+
     const campaign = await this.campaignService.createCampaign({
       accountId,
       name: `Admin Test Run - ${new Date().toISOString().slice(0, 16)}`,
@@ -351,11 +371,18 @@ export class OutboundController {
 
     await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
 
-    const contacts = phoneNumbers.map((phone, i) => ({
-      patientId: `test-${i}`,
-      phoneNumber: phone.startsWith('+') ? phone : `+${phone}`,
-      callContext: { patient_name: `Test Contact ${i + 1}` },
-    }));
+    const contacts = phoneNumbers.map((phone, i) => {
+      const real = realContacts[i];
+      const ctx = (real?.callContext as Record<string, unknown>) ?? {};
+      return {
+        patientId: real?.patientId || `test-${i}`,
+        phoneNumber: phone.startsWith('+') ? phone : `+${phone}`,
+        callContext: {
+          ...ctx,
+          patient_name: (ctx.patient_name as string) || `Test Contact ${i + 1}`,
+        },
+      };
+    });
 
     const { added } = await this.campaignService.addContacts(campaign.id, contacts);
 

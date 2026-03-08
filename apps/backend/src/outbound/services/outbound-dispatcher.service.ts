@@ -275,12 +275,21 @@ export class OutboundDispatcherService {
 
     const contextVars = (contact.callContext as Record<string, string>) || {};
     const callTypeLower = campaign.callType.toLowerCase();
+
+    const account = await this.prisma.account.findUnique({
+      where: { id: campaign.accountId },
+      select: { name: true, brandingBusinessName: true },
+    });
+    const clinicName = account?.brandingBusinessName || account?.name || '';
+
     const dynamicVariables: Record<string, string> = {
       ...contextVars,
       call_type: callTypeLower,
       patient_name: contextVars.patient_name || '',
       patient_id: contact.patientId,
       customer_phone: contact.phoneNumber || '',
+      clinic_name: clinicName,
+      clinic_phone: fromNumber,
     };
 
     let voicemailMessage: string | undefined;
@@ -288,11 +297,6 @@ export class OutboundDispatcherService {
       const voicemailMessages = (template?.voicemailMessages as Record<string, string>) || {};
       const rawMsg = voicemailMessages[callTypeLower];
       if (rawMsg) {
-        const account = await this.prisma.account.findUnique({
-          where: { id: campaign.accountId },
-          select: { name: true, brandingBusinessName: true },
-        });
-        const clinicName = account?.brandingBusinessName || account?.name || '';
         voicemailMessage = this.resolveVoicemailMessage(rawMsg, {
           patient_name: contextVars.patient_name || '',
           clinic_name: clinicName,
