@@ -195,10 +195,24 @@ export async function POST(request: NextRequest) {
     const userId = session.user?.id;
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const accountId = await getAccountId(userId);
-    if (!accountId) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
-
     const body = await request.json();
+
+    let accountId: string | null = null;
+    if (body.accountId) {
+      const { isAdminUser } = await import('~/lib/auth/admin');
+      if (!(await isAdminUser(userId))) {
+        return NextResponse.json({ error: 'Only admins can specify accountId' }, { status: 403 });
+      }
+      const target = await prisma.account.findUnique({
+        where: { id: body.accountId },
+        select: { id: true },
+      });
+      if (!target) return NextResponse.json({ error: 'Target account not found' }, { status: 404 });
+      accountId = target.id;
+    } else {
+      accountId = await getAccountId(userId);
+    }
+    if (!accountId) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     const { action, group } = body;
 
     if (action === 'setAutoApprove') {
@@ -355,9 +369,12 @@ export async function POST(request: NextRequest) {
           await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
             outbound_agent_id: outboundAgentId,
           });
+          console.log(`[Outbound] Set outbound_agent_id=${outboundAgentId} on phone ${phoneRecord.phoneNumber} for account ${accountId}`);
         } catch (err) {
-          console.warn('[Outbound] Failed to set outbound_agent_id on Retell phone number:', err);
+          console.warn(`[Outbound] Failed to set outbound_agent_id on phone ${phoneRecord.phoneNumber} for account ${accountId}:`, err);
         }
+      } else {
+        console.warn(`[Outbound] No active retellPhoneNumber found for account ${accountId} — outbound agent not attached to any phone`);
       }
     }
 

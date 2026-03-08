@@ -143,12 +143,19 @@ export async function POST(request: NextRequest) {
             await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
               outbound_agent_id: agent.agent_id,
             });
+            console.log(
+              `[Outbound] Set outbound_agent_id=${agent.agent_id} on phone ${phoneRecord.phoneNumber} for account ${s.accountId}`,
+            );
           } catch (err) {
             console.warn(
               `[Outbound] Failed to set outbound_agent_id on phone ${phoneRecord.phoneNumber} for account ${s.accountId}:`,
               err instanceof Error ? err.message : err,
             );
           }
+        } else {
+          console.warn(
+            `[Outbound] No active retellPhoneNumber found for account ${s.accountId} — outbound agent not attached to any phone`,
+          );
         }
 
         const previousAgentId = (s as any)[agentIdField] as string | null;

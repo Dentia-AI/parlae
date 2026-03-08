@@ -230,12 +230,21 @@ export async function POST(request: NextRequest) {
             await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
               outbound_agent_id: agent.agent_id,
             });
+            logger.info(
+              { accountId, phoneNumber: phoneRecord.phoneNumber, agentId: agent.agent_id },
+              '[Outbound] Set outbound_agent_id on Retell phone number',
+            );
           } catch (err) {
             logger.warn(
-              { accountId, error: err instanceof Error ? err.message : err },
+              { accountId, phoneNumber: phoneRecord.phoneNumber, error: err instanceof Error ? err.message : err },
               '[Outbound] Failed to set outbound_agent_id on Retell phone number',
             );
           }
+        } else {
+          logger.warn(
+            { accountId },
+            '[Outbound] No active retellPhoneNumber found for account — outbound agent not attached to any phone number',
+          );
         }
 
         // Persist new agent to DB first, then clean up old one
