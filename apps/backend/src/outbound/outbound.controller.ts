@@ -348,7 +348,7 @@ export class OutboundController {
 
     let realContacts: Array<{
       patientId: string;
-      callContext: Record<string, unknown> | null;
+      callContext: unknown;
     }> = [];
 
     if (existingCampaign) {
