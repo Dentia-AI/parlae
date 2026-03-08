@@ -267,6 +267,7 @@ export const SHARED_RETELL_AGENT_CONFIG = {
   normalize_for_speech: true,
   end_call_after_silence_ms: 600_000,
   max_call_duration_ms: 3_600_000,
+  enable_voicemail_detection: true,
 };
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -396,6 +397,36 @@ export class OutboundController {
       campaignId,
       cancelledContacts: count,
     };
+  }
+
+  // ── Admin: Delete Campaign ──────────────────────────────────────────────
+
+  @Delete('admin/campaigns/:campaignId')
+  async deleteCampaign(@Param('campaignId') campaignId: string) {
+    const campaign = await this.campaignService.getCampaign(campaignId);
+    if (!campaign) {
+      throw new HttpException('Campaign not found', HttpStatus.NOT_FOUND);
+    }
+
+    const activeStatuses = ['ACTIVE', 'SCHEDULED'];
+    if (activeStatuses.includes(campaign.status)) {
+      throw new HttpException(
+        'Cannot delete an active or scheduled campaign. Cancel it first.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.prisma.outboundCampaign.delete({
+      where: { id: campaignId },
+    });
+
+    this.logger.log({
+      campaignId,
+      accountId: campaign.accountId,
+      msg: '[Admin] Campaign deleted',
+    });
+
+    return { success: true, campaignId };
   }
 
   // ── Do Not Call ─────────────────────────────────────────────────────────

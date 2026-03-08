@@ -17,7 +17,18 @@ import {
   SelectValue,
 } from '@kit/ui/select';
 import {
-  Play, Loader2, CheckCircle2, XCircle, Square, Phone, PhoneOff,
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@kit/ui/alert-dialog';
+import {
+  Play, Loader2, CheckCircle2, XCircle, Square, Phone, PhoneOff, Trash2,
 } from 'lucide-react';
 
 interface AccountInfo {
@@ -101,6 +112,7 @@ function AdminOutboundCampaignsPage() {
   const [testRun, setTestRun] = useState<TestRunState | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [aborting, setAborting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -317,6 +329,30 @@ function AdminOutboundCampaignsPage() {
     }
   }
 
+  async function handleDeleteCampaign() {
+    if (!testRun) return;
+    setDeleting(true);
+    setTestError(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/outbound/campaigns/${testRun.campaignId}`,
+        { method: 'DELETE' },
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+
+      setTestRun(null);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : 'Failed to delete campaign');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const allSelected = accounts.length > 0 && selectedAccountIds.size === accounts.length;
   const canTrigger = selectedScans.size > 0;
 
@@ -421,6 +457,42 @@ function AdminOutboundCampaignsPage() {
                 )}
                 Stop Test Run
               </Button>
+            )}
+            {testRun && !testRunning && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    disabled={deleting}
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                  >
+                    {deleting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete Campaign
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this campaign?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete the campaign and all its contact
+                      records. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteCampaign}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
 

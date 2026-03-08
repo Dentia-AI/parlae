@@ -273,11 +273,6 @@ export class OutboundDispatcherService {
       return;
     }
 
-    const voicemailMessages = (template?.voicemailMessages as Record<string, string>) || {};
-    const voicemailMsg = settings.leaveVoicemail
-      ? voicemailMessages[campaign.callType]
-      : '';
-
     const contextVars = (contact.callContext as Record<string, string>) || {};
     const dynamicVariables: Record<string, string> = {
       ...contextVars,
@@ -286,6 +281,25 @@ export class OutboundDispatcherService {
       patient_id: contact.patientId,
       customer_phone: contact.phoneNumber || '',
     };
+
+    let voicemailMessage: string | undefined;
+    if (settings.leaveVoicemail) {
+      const voicemailMessages = (template?.voicemailMessages as Record<string, string>) || {};
+      const rawMsg = voicemailMessages[campaign.callType];
+      if (rawMsg) {
+        const account = await this.prisma.account.findUnique({
+          where: { id: campaign.accountId },
+          select: { name: true, brandingBusinessName: true },
+        });
+        const clinicName = account?.brandingBusinessName || account?.name || '';
+        voicemailMessage = this.resolveVoicemailMessage(rawMsg, {
+          patient_name: contextVars.patient_name || '',
+          clinic_name: clinicName,
+          clinic_phone: fromNumber,
+          ...contextVars,
+        });
+      }
+    }
 
     const result = await this.retellService.createOutboundCall({
       fromNumber,
@@ -298,8 +312,8 @@ export class OutboundDispatcherService {
         accountId: campaign.accountId,
         callType: campaign.callType,
       },
-      voicemailMessage: voicemailMsg,
-      maxCallDurationMs: 300_000, // 5 minutes max for outbound
+      voicemailMessage,
+      maxCallDurationMs: 300_000,
     });
 
     if (result) {
@@ -372,6 +386,13 @@ export class OutboundDispatcherService {
       where: { accountId, isActive: true },
     });
     return phone?.phoneNumber || null;
+  }
+
+  private resolveVoicemailMessage(
+    template: string,
+    vars: Record<string, string>,
+  ): string {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || '');
   }
 
   private async isOnDncList(

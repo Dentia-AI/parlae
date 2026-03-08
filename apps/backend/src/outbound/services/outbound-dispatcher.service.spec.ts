@@ -168,6 +168,59 @@ describe('OutboundDispatcherService', () => {
       }));
     });
 
+    it('passes resolved voicemail message when leaveVoicemail is true', async () => {
+      const vmSettings = {
+        ...mockSettings,
+        leaveVoicemail: true,
+      };
+      settingsService.getSettings.mockResolvedValue(vmSettings);
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({ phoneNumber: '+19995551234' });
+      prisma.outboundAgentTemplate.findUnique.mockResolvedValue({
+        retellAgentId: 'agent-1',
+        voicemailMessages: {
+          recall: 'Hi {{patient_name}}, this is {{clinic_name}} calling. Please call us at {{clinic_phone}}.',
+        },
+      });
+      prisma.account.findUnique
+        .mockResolvedValueOnce({ featureSettings: {} })
+        .mockResolvedValueOnce({ name: 'Test Dental', brandingBusinessName: 'Smile Dental' });
+      prisma.outboundCampaign.findMany
+        .mockResolvedValueOnce([mockCampaign])
+        .mockResolvedValueOnce([]);
+      prisma.campaignContact.count.mockResolvedValue(0);
+      jest.spyOn(service as any, 'isWithinCallingWindow').mockReturnValue(true);
+      campaignService.getQueuedContacts.mockResolvedValue([
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: { patient_name: 'John' } },
+      ]);
+
+      await service.processQueue();
+
+      expect(retellService.createOutboundCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          voicemailMessage: 'Hi John, this is Smile Dental calling. Please call us at +19995551234.',
+        }),
+      );
+    });
+
+    it('passes undefined voicemailMessage when leaveVoicemail is false', async () => {
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({ phoneNumber: '+19995551234' });
+      prisma.outboundAgentTemplate.findUnique.mockResolvedValue({
+        retellAgentId: 'agent-1',
+        voicemailMessages: { recall: 'Hi {{patient_name}}' },
+      });
+      setupCampaignTest(mockCampaign, [
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      expect(retellService.createOutboundCall).toHaveBeenCalledWith(
+        expect.objectContaining({ voicemailMessage: undefined }),
+      );
+    });
+
     it('skips when agent group is not enabled', async () => {
       settingsService.isGroupEnabled.mockResolvedValue(false);
       setupCampaignTest(mockCampaign);

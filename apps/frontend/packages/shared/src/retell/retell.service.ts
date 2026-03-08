@@ -252,6 +252,8 @@ export interface RetellAgentConfig {
   boosted_keywords?: string[];
   end_call_after_silence_ms?: number;
   max_call_duration_ms?: number;
+  enable_voicemail_detection?: boolean;
+  voicemail_message?: string;
   post_call_analysis_data?: Array<{
     name: string;
     type: 'string' | 'enum' | 'boolean' | 'number';
