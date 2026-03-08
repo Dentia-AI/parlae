@@ -334,4 +334,16 @@ describe('GET /api/call-logs/[id]', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('returns 404 with direction hint when ActionItem is OUTBOUND', async () => {
+    const { prisma } = require('@kit/prisma');
+    prisma.actionItem.findFirst.mockResolvedValueOnce({ direction: 'OUTBOUND' });
+
+    const [req, ctx] = makeRequest('outbound-call-1');
+    const res = await GET(req, ctx);
+    const body = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(body.direction).toBe('OUTBOUND');
+  });
 });

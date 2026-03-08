@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.5';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.6';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -168,12 +168,12 @@ export function buildPatientCareOutboundFlow(
       'DNC request',
     ),
     promptEdge(
-      'Patient wants to schedule, reschedule, or cancel an appointment.',
+      'Patient wants to schedule, reschedule, or cancel an appointment and no booking tool has been successfully called yet.',
       'booking_node',
       'Scheduling request',
     ),
     promptEdge(
-      'Conversation is complete, patient says goodbye, or patient is unavailable.',
+      'Conversation is fully complete: either the patient explicitly said goodbye or declined to book, the patient is unavailable, OR the bookAppointment tool has already returned a success result. Do NOT trigger this if the patient agreed to book but the booking tools have not been called yet.',
       'end_call',
       'End call',
     ),
@@ -303,9 +303,16 @@ export function buildPatientCareOutboundFlow(
       type: 'prompt',
       text: hydratePrompt(
         `You are helping {{patient_name}} schedule an appointment at {{clinic_name}}.
-Use the scheduling tools to find available times and book the appointment.
-Be efficient — the patient didn't call you, so respect their time.
-Once booked, confirm the details and return to wrapping up the call.`,
+
+You MUST follow these steps in order:
+1. If you don't already have the patient record, call lookupPatient.
+2. Call checkAvailability with the date the patient requested to see open slots.
+3. Call bookAppointment with the patientId, date, startTime, and appointmentType.
+4. ONLY after bookAppointment returns a success response, read back the confirmed date and time.
+
+CRITICAL: The appointment does NOT exist until the bookAppointment tool returns success. Saying "I'll book that for you" without calling the tool means NO appointment is created. You MUST invoke the tools.
+
+Be efficient — the patient didn't call you, so respect their time.`,
         cn,
         cp,
       ),
@@ -313,12 +320,12 @@ Once booked, confirm the details and return to wrapping up the call.`,
     tool_ids: schedulingToolIds,
     edges: [
       promptEdge(
-        'Appointment has been booked, rescheduled, or cancelled successfully.',
+        'The bookAppointment, rescheduleAppointment, or cancelAppointment tool has returned a successful result and the patient has been told the confirmed details.',
         'end_call',
         'Booking complete',
       ),
       promptEdge(
-        'Patient changed their mind or wants to call back later.',
+        'Patient explicitly says they don\'t want to book right now, changed their mind, or wants to call back later.',
         'end_call',
         'Patient defers',
       ),
