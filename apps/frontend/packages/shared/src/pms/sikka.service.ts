@@ -104,6 +104,7 @@ export class SikkaPmsService extends BasePmsService {
   private tokenExpiry?: Date;
   private officeId?: string;
   private secretKey?: string;
+  private practiceId?: string;
   
   constructor(
     accountId: string,
@@ -127,6 +128,7 @@ export class SikkaPmsService extends BasePmsService {
     this.refreshKey = creds.refreshKey;
     this.officeId = creds.officeId;
     this.secretKey = creds.secretKey;
+    this.practiceId = (creds as any).practiceId || creds.practiceKey;
     
     this.client = new HttpClient({
       baseURL: this.baseUrl,
@@ -196,8 +198,9 @@ export class SikkaPmsService extends BasePmsService {
       const practice = practices[0];
       this.officeId = practice.office_id;
       this.secretKey = practice.secret_key;
+      this.practiceId = practice.practice_id || this.practiceId;
       
-      console.log(`[Sikka] Found office_id: ${this.officeId}`);
+      console.log(`[Sikka] Found office_id: ${this.officeId}, practice_id: ${this.practiceId}`);
       
       // TODO: Save to database
       
@@ -676,8 +679,16 @@ export class SikkaPmsService extends BasePmsService {
   
   async getPatient(patientId: string): Promise<PmsApiResponse<Patient>> {
     try {
-      const response = await this.client.get(`/patients/${patientId}`);
-      const patient = this.mapSikkaPatient(response.data);
+      const params: Record<string, any> = { patient_id: patientId, limit: 1 };
+      if (this.practiceId) {
+        params.practice_id = this.practiceId;
+      }
+      const response = await this.client.get('/patients', { params });
+      const items = response.data?.items || [];
+      if (items.length === 0) {
+        return this.createErrorResponse('NOT_FOUND', `Patient ${patientId} not found`, new Error('Patient not found'));
+      }
+      const patient = this.mapSikkaPatient(items[0]);
       return this.createSuccessResponse(patient);
     } catch (error) {
       return this.handleError(error, 'getPatient');
@@ -1001,27 +1012,43 @@ export class SikkaPmsService extends BasePmsService {
     };
   }
   
+  private static normalizePhone(raw: string | undefined | null): string | undefined {
+    if (!raw) return undefined;
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 0) return undefined;
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    if (digits.length === 10) return `+1${digits}`;
+    return `+${digits}`;
+  }
+
   private mapSikkaPatient(sikkaData: any): Patient {
+    const rawPhone = sikkaData.cell || sikkaData.homephone || sikkaData.workphone || sikkaData.mobile_phone || sikkaData.phone;
     return {
       id: sikkaData.patient_id || sikkaData.id,
-      firstName: sikkaData.first_name || sikkaData.firstName,
-      lastName: sikkaData.last_name || sikkaData.lastName,
-      dateOfBirth: sikkaData.date_of_birth || sikkaData.dateOfBirth || sikkaData.dob,
-      phone: sikkaData.mobile_phone || sikkaData.phone || sikkaData.phoneNumber,
+      firstName: sikkaData.firstname || sikkaData.first_name || sikkaData.firstName,
+      lastName: sikkaData.lastname || sikkaData.last_name || sikkaData.lastName,
+      dateOfBirth: sikkaData.birthdate || sikkaData.date_of_birth || sikkaData.dateOfBirth || sikkaData.dob,
+      phone: SikkaPmsService.normalizePhone(rawPhone),
       email: sikkaData.email,
-      address: (sikkaData.address || sikkaData.street) ? {
-        street: sikkaData.street || sikkaData.address?.street || sikkaData.address?.line1,
-        street2: sikkaData.address?.street2 || sikkaData.address?.line2,
+      address: (sikkaData.address_line1 || sikkaData.street || sikkaData.address) ? {
+        street: sikkaData.address_line1 || sikkaData.street || sikkaData.address?.street,
+        street2: sikkaData.address_line2 || sikkaData.address?.street2,
         city: sikkaData.city || sikkaData.address?.city,
         state: sikkaData.state || sikkaData.address?.state,
-        zip: sikkaData.zip || sikkaData.zipcode || sikkaData.address?.zip || sikkaData.address?.zipCode,
+        zip: sikkaData.zipcode || sikkaData.zip || sikkaData.address?.zip,
         country: sikkaData.country || sikkaData.address?.country || 'USA',
       } : undefined,
       emergencyContact: sikkaData.emergency_contact || sikkaData.emergencyContact,
       balance: sikkaData.balance || sikkaData.account_balance,
       lastVisit: sikkaData.last_visit ? new Date(sikkaData.last_visit) : undefined,
       notes: sikkaData.notes,
-      metadata: sikkaData.metadata || {},
+      metadata: {
+        guarantorId: sikkaData.guarantor_id,
+        preferredName: sikkaData.preferred_name,
+        salutation: sikkaData.salutation,
+        status: sikkaData.status,
+        ...(sikkaData.metadata || {}),
+      },
     };
   }
   

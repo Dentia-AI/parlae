@@ -74,10 +74,13 @@ export async function POST(request: NextRequest) {
           const res = await pmsService!.getPatient(id);
           if (res.success && res.data) {
             const p = res.data;
-            return {
-              id,
-              name: `${p.firstName.charAt(0)}. ${p.lastName}`,
-            };
+            const first = p.firstName?.trim();
+            const last = p.lastName?.trim();
+            if (first && last) {
+              return { id, name: `${first.charAt(0)}. ${last}` };
+            }
+            if (last) return { id, name: last };
+            if (first) return { id, name: first };
           }
           return { id, name: null };
         }),
@@ -87,6 +90,26 @@ export async function POST(request: NextRequest) {
         if (r.status === 'fulfilled' && r.value.name) {
           names[r.value.id] = r.value.name;
         }
+      }
+    }
+
+    const unresolvedIds = ids.filter((id: string) => !names[id]);
+    if (unresolvedIds.length > 0) {
+      try {
+        const contacts = await prisma.campaignContact.findMany({
+          where: { patientId: { in: unresolvedIds } },
+          select: { patientId: true, callContext: true },
+          distinct: ['patientId'],
+        });
+        for (const c of contacts) {
+          const ctx = c.callContext as Record<string, any> | null;
+          const ctxName = ctx?.patient_name;
+          if (ctxName && typeof ctxName === 'string' && ctxName !== 'Patient') {
+            names[c.patientId] = ctxName;
+          }
+        }
+      } catch {
+        // callContext fallback is best-effort
       }
     }
 

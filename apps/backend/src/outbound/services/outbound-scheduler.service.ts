@@ -470,7 +470,7 @@ export class OutboundSchedulerService {
 
       const seenPatients = new Set<string>();
       const contacts: CreateContactInput[] = [];
-      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, added: 0 };
+      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, notInMap: 0, noPhone: 0, added: 0 };
 
       const hasAppointments = result.success && (result.data?.length ?? 0) > 0;
 
@@ -485,10 +485,20 @@ export class OutboundSchedulerService {
           if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
 
           const patient = patientMap.get(patientId);
-          if (!patient) { stats.noContact++; continue; }
+          if (!patient) {
+            stats.noContact++; stats.notInMap++;
+            this.logger.log({ accountId, patientId, patientName: appt.patientName, reason: 'not_in_patient_map', msg: '[Scheduler] Recall: patient skipped' });
+            continue;
+          }
 
           const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
-          if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
+          if (!contactInfo) {
+            if (dncPhones.has(patient?.phone)) { stats.dnc++; } else {
+              stats.noContact++; stats.noPhone++;
+              this.logger.log({ accountId, patientId, patientName: `${patient.firstName} ${patient.lastName}`, phone: patient.phone || null, email: patient.email || null, channel, reason: 'no_valid_contact', msg: '[Scheduler] Recall: patient skipped' });
+            }
+            continue;
+          }
 
           stats.added++;
           contacts.push({
@@ -517,7 +527,13 @@ export class OutboundSchedulerService {
           if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
 
           const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
-          if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
+          if (!contactInfo) {
+            if (dncPhones.has(patient?.phone)) { stats.dnc++; } else {
+              stats.noContact++; stats.noPhone++;
+              this.logger.log({ accountId, patientId, patientName: `${patient.firstName} ${patient.lastName}`, phone: patient.phone || null, email: patient.email || null, channel, reason: 'no_valid_contact', msg: '[Scheduler] Recall: patient skipped' });
+            }
+            continue;
+          }
 
           stats.added++;
           contacts.push({
@@ -868,10 +884,11 @@ export class OutboundSchedulerService {
 
       const seenPatients = new Set<string>();
       const contacts: CreateContactInput[] = [];
-      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, added: 0 };
+      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, notInMap: 0, noPhone: 0, added: 0, fromAppointments: 0, fromPatientMap: 0 };
 
       const hasAppointments = result.success && (result.data?.length ?? 0) > 0;
 
+      // Pass 1: patients from completed appointments in the reactivation window
       if (hasAppointments) {
         for (const appt of result.data!) {
           const patientId = appt.patientId;
@@ -883,17 +900,27 @@ export class OutboundSchedulerService {
           if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
 
           const patient = patientMap.get(patientId);
-          if (!patient) { stats.noContact++; continue; }
+          if (!patient) {
+            stats.noContact++; stats.notInMap++;
+            this.logger.log({ accountId, patientId, patientName: appt.patientName, reason: 'not_in_patient_map', msg: '[Scheduler] Reactivation: patient skipped' });
+            continue;
+          }
 
           const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
-          if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
+          if (!contactInfo) {
+            if (dncPhones.has(patient?.phone)) { stats.dnc++; } else {
+              stats.noContact++; stats.noPhone++;
+              this.logger.log({ accountId, patientId, patientName: `${patient.firstName} ${patient.lastName}`, phone: patient.phone || null, email: patient.email || null, channel, reason: 'no_valid_contact', msg: '[Scheduler] Reactivation: patient skipped' });
+            }
+            continue;
+          }
 
           const visitDate = this.safeISOString(appt.startTime);
           const monthsSince = visitDate
             ? Math.round((Date.now() - new Date(visitDate).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
             : inactiveMonths;
 
-          stats.added++;
+          stats.added++; stats.fromAppointments++;
           contacts.push({
             patientId,
             phoneNumber: contactInfo.phone || undefined,
@@ -905,44 +932,51 @@ export class OutboundSchedulerService {
             },
           });
         }
-      } else {
-        this.logger.log({ accountId, msg: '[Scheduler] Reactivation: no appointments found — falling back to patient lastVisit data' });
-        for (const [patientId, patient] of patientMap) {
-          if (seenPatients.has(patientId)) continue;
-
-          const lv = patient.lastVisit instanceof Date ? patient.lastVisit : null;
-          const isInactive = !lv || lv.getTime() < cutoffDate.getTime();
-          if (!isInactive) continue;
-
-          seenPatients.add(patientId);
-          stats.total++;
-
-          if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
-          if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
-
-          const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
-          if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
-
-          const visitDate = this.safeISOString(lv);
-          const monthsSince = lv
-            ? Math.round((Date.now() - lv.getTime()) / (30.44 * 24 * 60 * 60 * 1000))
-            : inactiveMonths;
-
-          stats.added++;
-          contacts.push({
-            patientId,
-            phoneNumber: contactInfo.phone || undefined,
-            callContext: {
-              patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
-              last_visit_date: visitDate,
-              months_since_visit: String(monthsSince),
-              email: contactInfo.email || undefined,
-            },
-          });
-        }
       }
 
-      this.logger.log({ accountId, source: hasAppointments ? 'appointments' : 'patientMap', ...stats, msg: '[Scheduler] Reactivation: filtering complete' });
+      // Pass 2: remaining patients from the patient map who are inactive
+      // (no lastVisit, lastVisit before cutoff, or never had an appointment)
+      for (const [patientId, patient] of patientMap) {
+        if (seenPatients.has(patientId)) continue;
+
+        const lv = patient.lastVisit instanceof Date ? patient.lastVisit : null;
+        const isInactive = !lv || lv.getTime() < cutoffDate.getTime();
+        if (!isInactive) continue;
+
+        seenPatients.add(patientId);
+        stats.total++;
+
+        if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
+        if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
+
+        const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
+        if (!contactInfo) {
+          if (dncPhones.has(patient?.phone)) { stats.dnc++; } else {
+            stats.noContact++; stats.noPhone++;
+            this.logger.log({ accountId, patientId, patientName: `${patient.firstName} ${patient.lastName}`, phone: patient.phone || null, email: patient.email || null, channel, reason: 'no_valid_contact', msg: '[Scheduler] Reactivation: patient skipped' });
+          }
+          continue;
+        }
+
+        const visitDate = this.safeISOString(lv);
+        const monthsSince = lv
+          ? Math.round((Date.now() - lv.getTime()) / (30.44 * 24 * 60 * 60 * 1000))
+          : inactiveMonths;
+
+        stats.added++; stats.fromPatientMap++;
+        contacts.push({
+          patientId,
+          phoneNumber: contactInfo.phone || undefined,
+          callContext: {
+            patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
+            last_visit_date: visitDate,
+            months_since_visit: String(monthsSince),
+            email: contactInfo.email || undefined,
+          },
+        });
+      }
+
+      this.logger.log({ accountId, ...stats, msg: '[Scheduler] Reactivation: filtering complete' });
 
       if (contacts.length === 0) {
         this.logger.log({ accountId, msg: '[Scheduler] Reactivation: no eligible contacts after filtering' });

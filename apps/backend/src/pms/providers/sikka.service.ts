@@ -887,9 +887,11 @@ export class SikkaPmsService extends BasePmsService {
   
   async getPatient(patientId: string): Promise<PmsApiResponse<Patient>> {
     try {
-      const response = await this.client.get('/patients', {
-        params: { patient_id: patientId, limit: 1 },
-      });
+      const params: Record<string, any> = { patient_id: patientId, limit: 1 };
+      if (this.practiceId) {
+        params.practice_id = this.practiceId;
+      }
+      const response = await this.client.get('/patients', { params });
       const items = response.data.items || [];
       if (items.length === 0) {
         return this.createErrorResponse('NOT_FOUND', `Patient ${patientId} not found`, new Error('Patient not found'));
@@ -1265,13 +1267,23 @@ export class SikkaPmsService extends BasePmsService {
     };
   }
   
+  private normalizePhone(raw: string | undefined | null): string | undefined {
+    if (!raw) return undefined;
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 0) return undefined;
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    if (digits.length === 10) return `+1${digits}`;
+    return `+${digits}`;
+  }
+
   private mapSikkaPatient(sikkaData: any): Patient {
+    const rawPhone = sikkaData.cell || sikkaData.homephone || sikkaData.workphone || sikkaData.mobile_phone || sikkaData.phone;
     return {
       id: sikkaData.patient_id || sikkaData.id,
       firstName: sikkaData.firstname || sikkaData.first_name || sikkaData.firstName,
       lastName: sikkaData.lastname || sikkaData.last_name || sikkaData.lastName,
       dateOfBirth: sikkaData.birthdate || sikkaData.date_of_birth || sikkaData.dateOfBirth,
-      phone: sikkaData.cell || sikkaData.homephone || sikkaData.workphone || sikkaData.mobile_phone || sikkaData.phone,
+      phone: this.normalizePhone(rawPhone),
       email: sikkaData.email,
       address: (sikkaData.address_line1 || sikkaData.street || sikkaData.address) ? {
         street: sikkaData.address_line1 || sikkaData.street || sikkaData.address?.street,
