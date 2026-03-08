@@ -736,7 +736,7 @@ export class AgentToolsService {
         patientId: params.patientId,
         providerId: params.providerId,
         appointmentType: params.appointmentType || params.type || 'General',
-        startTime: new Date(params.startTime || params.datetime),
+        startTime: this.parseBookingStartTime(params),
         duration: params.duration || 30,
         notes: params.notes,
       };
@@ -2663,13 +2663,45 @@ export class AgentToolsService {
   ) {
     const accountId = phoneRecord?.accountId;
     const callerPhone = call?.customer?.number;
-    const startTime = new Date(params.startTime || params.datetime);
+    let startTime = this.parseBookingStartTime(params);
+    const now = new Date();
     const duration = params.duration || 30;
+    const appointmentType = params.appointmentType || params.type || 'General';
+
+    if (startTime < now) {
+      this.logger.warn({ startTime: startTime.toISOString(), msg: '[PMS Fallback] AI sent past startTime — adjusting to now + 1hr' });
+      startTime = new Date(now.getTime() + 60 * 60 * 1000);
+    }
+
+    const callId = call?.id;
+    const cached = callId ? this.getCachedPatient(callId) : undefined;
+
+    let patientFirstName = params.firstName || '';
+    let patientLastName = params.lastName || '';
+
+    if (!patientFirstName && params.patientName) {
+      const parts = params.patientName.trim().split(/\s+/);
+      patientFirstName = parts[0] || '';
+      patientLastName = parts.slice(1).join(' ') || '';
+    }
+    if (!patientFirstName && params.name) {
+      const parts = params.name.trim().split(/\s+/);
+      patientFirstName = parts[0] || '';
+      patientLastName = parts.slice(1).join(' ') || '';
+    }
+    if (!patientFirstName && cached) {
+      patientFirstName = cached.firstName || '';
+      patientLastName = cached.lastName || '';
+    }
+    if (!patientFirstName) patientFirstName = 'Patient';
+
+    const patientPhone = params.phone || cached?.phone || callerPhone;
+    const patientEmail = params.email || params.patientEmail || cached?.email;
 
     let gcalBackupCreated = false;
     let gcalEventLink: string | undefined;
+    let gcalEventId: string | undefined;
 
-    // Step 1: Try creating a backup Google Calendar event
     const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
     if (gcAvailable) {
       try {
@@ -2677,12 +2709,12 @@ export class AgentToolsService {
           accountId,
           {
             patient: {
-              firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
-              lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
-              phone: params.phone || callerPhone,
-              email: params.email,
+              firstName: patientFirstName,
+              lastName: patientLastName,
+              phone: patientPhone,
+              email: patientEmail,
             },
-            appointmentType: params.appointmentType || params.type || 'General',
+            appointmentType,
             startTime,
             duration,
             notes: `[PMS BACKUP] Original PMS writeback failed. ${params.notes || ''}`.trim(),
@@ -2691,23 +2723,39 @@ export class AgentToolsService {
         );
         gcalBackupCreated = true;
         gcalEventLink = gcalResult.htmlLink || undefined;
+        gcalEventId = gcalResult.eventId ?? undefined;
         this.logger.log({ accountId, eventId: gcalResult.eventId, msg: '[PMS Fallback] Backup GCal event created' });
+
+        this.logAiAction({
+          accountId,
+          source: 'gcal',
+          action: 'book_appointment',
+          category: 'appointment',
+          callId,
+          externalResourceId: gcalResult.eventId ?? undefined,
+          externalResourceType: 'event',
+          appointmentTime: startTime.toISOString(),
+          appointmentType,
+          duration,
+          summary: `Booked ${appointmentType} appointment via GCal (PMS writeback failed)`,
+          calendarEventId: gcalResult.eventId ?? undefined,
+          pmsProvider: phoneRecord.pmsIntegration?.provider,
+        }).catch(() => {});
       } catch (gcalError: any) {
         this.logger.error({ accountId, error: gcalError?.message, msg: '[PMS Fallback] Failed to create backup GCal event' });
       }
     }
 
-    // Step 2: Send notification email to the clinic (fire-and-forget)
     this.notifications.sendPmsFailureNotification({
       accountId,
       patient: {
-        firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
-        lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
-        phone: params.phone || callerPhone,
-        email: params.email,
+        firstName: patientFirstName,
+        lastName: patientLastName,
+        phone: patientPhone,
+        email: patientEmail,
       },
       appointment: {
-        appointmentType: params.appointmentType || params.type || 'General',
+        appointmentType,
         startTime,
         duration,
         notes: params.notes,
@@ -2719,13 +2767,47 @@ export class AgentToolsService {
       this.logger.error({ error: err?.message, msg: '[PMS Fallback] Email notification also failed' });
     });
 
+    if (gcalBackupCreated) {
+      this.notifications.sendAppointmentConfirmation({
+        accountId,
+        patient: {
+          firstName: patientFirstName,
+          lastName: patientLastName,
+          phone: patientPhone,
+          email: patientEmail,
+        },
+        appointment: {
+          appointmentType,
+          startTime,
+          duration,
+          notes: params.notes,
+          externalEventLink: gcalEventLink,
+        },
+        integrationType: 'google_calendar',
+      }).then(({ emailSent, smsSent }) => {
+        this.logger.log({ accountId, emailSent, smsSent, msg: '[PMS Fallback] Patient confirmation sent' });
+      }).catch((err) => {
+        this.logger.error({ error: err?.message, msg: '[PMS Fallback] Patient confirmation failed (non-fatal)' });
+      });
+    }
+
+    const confirmationParts: string[] = [];
+    if (gcalBackupCreated) {
+      if (patientEmail) confirmationParts.push('email confirmation');
+      if (patientPhone) confirmationParts.push('text confirmation');
+    }
+    const confirmationMsg = confirmationParts.length > 0
+      ? ` You'll receive a ${confirmationParts.join(' and ')}.`
+      : '';
+
     const fallbackResponse = {
       result: {
         success: true,
+        appointmentId: gcalEventId,
         integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
         message: gcalBackupCreated
-          ? `Your appointment has been confirmed for ${startTime.toLocaleString()}. A calendar event has been created. Do NOT say "with [patient name]" — the caller already knows who they are.`
-          : `Your appointment has been noted for ${startTime.toLocaleString()}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
+          ? `[SUCCESS] Appointment confirmed for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}.${confirmationMsg} [NEXT STEP] Confirm the appointment type, date, and time. Do NOT say "with [patient name]" — the caller already knows who they are. Then ask "Is there anything else I can help you with?"`
+          : `Your appointment has been noted for ${formatDateForSpeech(startTime)} at ${formatTimeForSpeech(startTime)}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
       },
     };
 
@@ -2756,11 +2838,49 @@ export class AgentToolsService {
   ) {
     const accountId = phoneRecord?.accountId;
     const callerPhone = call?.customer?.number;
-    const newStartTime = new Date(params.startTime || params.newStartTime || params.newDate);
+    const rescheduleParams = {
+      startTime: params.startTime || params.newStartTime,
+      date: params.date || params.newDate,
+      datetime: params.datetime,
+    };
+    let newStartTime = this.parseBookingStartTime(rescheduleParams);
+    const now = new Date();
     const duration = params.duration || 30;
+    const appointmentType = params.appointmentType || params.type || 'Reschedule';
+
+    if (newStartTime < now) {
+      this.logger.warn({ startTime: newStartTime.toISOString(), msg: '[PMS Reschedule Fallback] AI sent past startTime — adjusting to now + 1hr' });
+      newStartTime = new Date(now.getTime() + 60 * 60 * 1000);
+    }
+
+    const callId = call?.id;
+    const cached = callId ? this.getCachedPatient(callId) : undefined;
+
+    let patientFirstName = params.firstName || '';
+    let patientLastName = params.lastName || '';
+
+    if (!patientFirstName && params.patientName) {
+      const parts = params.patientName.trim().split(/\s+/);
+      patientFirstName = parts[0] || '';
+      patientLastName = parts.slice(1).join(' ') || '';
+    }
+    if (!patientFirstName && params.name) {
+      const parts = params.name.trim().split(/\s+/);
+      patientFirstName = parts[0] || '';
+      patientLastName = parts.slice(1).join(' ') || '';
+    }
+    if (!patientFirstName && cached) {
+      patientFirstName = cached.firstName || '';
+      patientLastName = cached.lastName || '';
+    }
+    if (!patientFirstName) patientFirstName = 'Patient';
+
+    const patientPhone = params.phone || cached?.phone || callerPhone;
+    const patientEmail = params.email || params.patientEmail || cached?.email;
 
     let gcalBackupCreated = false;
     let gcalEventLink: string | undefined;
+    let gcalEventId: string | undefined;
 
     const gcAvailable = await this.isGoogleCalendarAvailable(accountId);
     if (gcAvailable) {
@@ -2769,12 +2889,12 @@ export class AgentToolsService {
           accountId,
           {
             patient: {
-              firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
-              lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
-              phone: params.phone || callerPhone,
-              email: params.email,
+              firstName: patientFirstName,
+              lastName: patientLastName,
+              phone: patientPhone,
+              email: patientEmail,
             },
-            appointmentType: params.appointmentType || params.type || 'General',
+            appointmentType,
             startTime: newStartTime,
             duration,
             notes: `[PMS RESCHEDULE BACKUP] Original PMS reschedule failed. Old appointment ID: ${params.appointmentId || 'unknown'}. ${params.reason || ''}`.trim(),
@@ -2783,7 +2903,24 @@ export class AgentToolsService {
         );
         gcalBackupCreated = true;
         gcalEventLink = gcalResult.htmlLink || undefined;
+        gcalEventId = gcalResult.eventId ?? undefined;
         this.logger.log({ accountId, eventId: gcalResult.eventId, msg: '[PMS Reschedule Fallback] Backup GCal event created' });
+
+        this.logAiAction({
+          accountId,
+          source: 'gcal',
+          action: 'reschedule_appointment',
+          category: 'appointment',
+          callId,
+          externalResourceId: gcalResult.eventId ?? undefined,
+          externalResourceType: 'event',
+          appointmentTime: newStartTime.toISOString(),
+          appointmentType,
+          duration,
+          summary: `Rescheduled to ${appointmentType} appointment via GCal (PMS writeback failed). Old ID: ${params.appointmentId || 'unknown'}`,
+          calendarEventId: gcalResult.eventId ?? undefined,
+          pmsProvider: phoneRecord.pmsIntegration?.provider,
+        }).catch(() => {});
       } catch (gcalError: any) {
         this.logger.error({ accountId, error: gcalError?.message, msg: '[PMS Reschedule Fallback] Failed to create backup GCal event' });
       }
@@ -2792,13 +2929,13 @@ export class AgentToolsService {
     this.notifications.sendPmsFailureNotification({
       accountId,
       patient: {
-        firstName: params.firstName || params.patientName?.split(' ')[0] || 'Patient',
-        lastName: params.lastName || params.patientName?.split(' ').slice(1).join(' ') || '',
-        phone: params.phone || callerPhone,
-        email: params.email,
+        firstName: patientFirstName,
+        lastName: patientLastName,
+        phone: patientPhone,
+        email: patientEmail,
       },
       appointment: {
-        appointmentType: params.appointmentType || params.type || 'Reschedule',
+        appointmentType,
         startTime: newStartTime,
         duration,
         notes: `Reschedule requested. Old appointment ID: ${params.appointmentId || 'unknown'}. ${params.reason || ''}`.trim(),
@@ -2810,13 +2947,38 @@ export class AgentToolsService {
       this.logger.error({ error: err?.message, msg: '[PMS Reschedule Fallback] Email notification also failed' });
     });
 
+    if (gcalBackupCreated) {
+      this.notifications.sendAppointmentConfirmation({
+        accountId,
+        patient: {
+          firstName: patientFirstName,
+          lastName: patientLastName,
+          phone: patientPhone,
+          email: patientEmail,
+        },
+        appointment: {
+          appointmentType,
+          startTime: newStartTime,
+          duration,
+          notes: params.notes,
+          externalEventLink: gcalEventLink,
+        },
+        integrationType: 'google_calendar',
+      }).then(({ emailSent, smsSent }) => {
+        this.logger.log({ accountId, emailSent, smsSent, msg: '[PMS Reschedule Fallback] Patient confirmation sent' });
+      }).catch((err) => {
+        this.logger.error({ error: err?.message, msg: '[PMS Reschedule Fallback] Patient confirmation failed (non-fatal)' });
+      });
+    }
+
     const fallbackResponse = {
       result: {
         success: true,
+        appointmentId: gcalEventId,
         integrationType: gcalBackupCreated ? 'google_calendar_backup' : 'manual_followup',
         message: gcalBackupCreated
-          ? `Your appointment has been rescheduled to ${newStartTime.toLocaleString()}. A calendar event has been created. Do NOT say "with [patient name]" — the caller already knows who they are.`
-          : `Your reschedule request has been noted for ${newStartTime.toLocaleString()}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
+          ? `[SUCCESS] Appointment rescheduled to ${formatDateForSpeech(newStartTime)} at ${formatTimeForSpeech(newStartTime)}. Do NOT say "with [patient name]" — the caller already knows who they are. Then ask "Is there anything else I can help you with?"`
+          : `Your reschedule request has been noted for ${formatDateForSpeech(newStartTime)} at ${formatTimeForSpeech(newStartTime)}. Our team will confirm the details shortly. Do NOT say "with [patient name]" — the caller already knows who they are.`,
       },
     };
 
