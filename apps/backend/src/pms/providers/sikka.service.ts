@@ -759,7 +759,31 @@ export class SikkaPmsService extends BasePmsService {
   // ============================================================================
   // Patient Management
   // ============================================================================
-  
+
+  async listPatients(options?: { limit?: number; offset?: number }): Promise<PmsListResponse<Patient>> {
+    try {
+      const params: Record<string, any> = {
+        limit: options?.limit || 500,
+        offset: options?.offset || 0,
+      };
+      if (this.practiceId) {
+        params.practice_id = this.practiceId;
+      }
+
+      const response = await this.client.get('/patients', { params });
+      const patients = (response.data?.items || []).map((item: any) => this.mapSikkaPatient(item));
+
+      return this.createListResponse(patients, {
+        total: parseInt(response.data?.total_count || '0'),
+        limit: params.limit,
+        offset: params.offset,
+        hasMore: (response.data?.pagination?.next || '') !== '',
+      });
+    } catch (error) {
+      return this.handleError(error, 'listPatients') as PmsListResponse<Patient>;
+    }
+  }
+
   async searchPatients(query: PatientSearchQuery): Promise<PmsListResponse<Patient>> {
     try {
       const params: Record<string, any> = {

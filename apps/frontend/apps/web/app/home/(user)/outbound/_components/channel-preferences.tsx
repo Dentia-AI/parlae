@@ -9,13 +9,8 @@ import { Phone, MessageSquare, Mail, Ban } from 'lucide-react';
 const PATIENT_CARE_TYPES = [
   'recall',
   'reminder',
-  'followup',
   'noshow',
-  'postop',
   'reactivation',
-  'welcome',
-  'survey',
-  'treatment_plan',
 ] as const;
 
 const FINANCIAL_TYPES = ['payment', 'benefits'] as const;

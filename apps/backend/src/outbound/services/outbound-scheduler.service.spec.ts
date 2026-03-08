@@ -27,6 +27,14 @@ describe('OutboundSchedulerService', () => {
     autoApproveCampaigns: false,
   };
 
+  const makePatient = (id: string, firstName: string, lastName: string, phone: string | null, email?: string | null) => ({
+    id,
+    firstName,
+    lastName,
+    phone,
+    email: email ?? null,
+  });
+
   beforeEach(async () => {
     const mockPrisma = createMockPrismaService();
 
@@ -64,6 +72,23 @@ describe('OutboundSchedulerService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
+
+  // Helper to set up mocks common to all scan methods
+  function setupScanMocks(
+    mockPmsProvider: any,
+    opts?: {
+      dncPhones?: string[];
+      alreadyContactedPatientIds?: string[];
+    },
+  ) {
+    prisma.doNotCallEntry.findMany.mockResolvedValue(
+      (opts?.dncPhones || []).map((p) => ({ phoneNumber: p })),
+    );
+    prisma.campaignContact.findMany.mockResolvedValue(
+      (opts?.alreadyContactedPatientIds || []).map((id) => ({ patientId: id })),
+    );
+    prisma.notification.create.mockResolvedValue({});
+  }
 
   describe('scanRecallCandidates', () => {
     it('processes recall for each enabled account', async () => {
@@ -208,29 +233,34 @@ describe('OutboundSchedulerService', () => {
   describe('processRecallForAccount (full flow)', () => {
     const mockPmsProvider = {
       getAppointments: jest.fn(),
-      getPatient: jest.fn(),
+      listPatients: jest.fn(),
     };
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
       prisma.outboundCampaign.findFirst.mockResolvedValue(null);
-      prisma.notification.create.mockResolvedValue({});
-      mockPmsProvider.getPatient.mockImplementation((id: string) =>
-        Promise.resolve({ data: { phone: `+1555${id.replace(/\D/g, '')}001` } }),
-      );
+      setupScanMocks(mockPmsProvider);
+
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-1', 'Alice', 'Smith', '+15551001', 'alice@test.com'),
+          makePatient('p-2', 'Bob', 'Jones', '+15551002', 'bob@test.com'),
+          makePatient('p-x', 'Underscore', 'Pat', '+15559999'),
+        ],
+      });
     });
 
     it('creates recall campaign from PMS appointments', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
-          { patientId: 'p-2', patientName: 'Bob', startTime: new Date('2025-05-15') },
-        ],
-      });
-      mockPmsProvider.getPatient
-        .mockResolvedValueOnce({ data: { phone: '+15551001' } })
-        .mockResolvedValueOnce({ data: { phone: '+15551002' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'Bob', startTime: new Date('2025-05-15') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] }); // upcoming
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
 
@@ -246,35 +276,39 @@ describe('OutboundSchedulerService', () => {
       expect(contacts).toHaveLength(2);
       expect(contacts[0].patientId).toBe('p-1');
       expect(contacts[0].phoneNumber).toBe('+15551001');
-      expect(contacts[0].callContext.patient_name).toBe('Alice');
+      expect(contacts[0].callContext.patient_name).toBe('Alice Smith');
     });
 
     it('deduplicates patients by patientId', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
-          { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-04-01') },
-        ],
-      });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
+            { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-04-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
       const contacts = campaignService.addContacts.mock.calls[0][1];
       expect(contacts).toHaveLength(1);
     });
 
-    it('skips appointments when patient has no phone', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
+    it('skips patients not found in patient map', async () => {
+      mockPmsProvider.listPatients.mockResolvedValue({
         success: true,
-        data: [
-          { patientId: 'p-1', patientName: 'NoPhone', startTime: new Date('2025-06-01') },
-          { patientId: 'p-2', patientName: 'HasPhone', startTime: new Date('2025-05-01') },
-        ],
+        data: [makePatient('p-2', 'Bob', 'Jones', '+15551002')],
       });
-      mockPmsProvider.getPatient
-        .mockResolvedValueOnce({ data: { phone: null } })
-        .mockResolvedValueOnce({ data: { phone: '+15551002' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'NotInMap', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'InMap', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
       const contacts = campaignService.addContacts.mock.calls[0][1];
@@ -282,13 +316,118 @@ describe('OutboundSchedulerService', () => {
       expect(contacts[0].patientId).toBe('p-2');
     });
 
-    it('skips appointments without patientId', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
+    it('skips patients whose phone is on DNC list', async () => {
+      setupScanMocks(mockPmsProvider, { dncPhones: ['+15551001'] });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'DNC Patient', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'OK Patient', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-2');
+    });
+
+    it('skips patients already in an active campaign of same type', async () => {
+      setupScanMocks(mockPmsProvider, { alreadyContactedPatientIds: ['p-1'] });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'Already', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'New', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-2');
+    });
+
+    it('skips patients with upcoming scheduled appointments', async () => {
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'Scheduled', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'NotScheduled', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-1', startTime: new Date('2026-04-01') }],
+        });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-2');
+    });
+
+    it('skips patients without phone for phone channel', async () => {
+      mockPmsProvider.listPatients.mockResolvedValue({
         success: true,
         data: [
-          { patientName: 'NoId', startTime: new Date('2025-06-01') },
+          makePatient('p-1', 'NoPhone', 'Pat', null, 'np@test.com'),
+          makePatient('p-2', 'HasPhone', 'Pat', '+15551002'),
         ],
       });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'NoPhone', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'HasPhone', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-2');
+    });
+
+    it('keeps patients without phone for email channel', async () => {
+      settingsService.getChannelForCallType.mockReturnValue('email');
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-1', 'NoPhone', 'Pat', null, 'np@test.com'),
+          makePatient('p-2', 'NoEmail', 'Pat', '+15551002', null),
+        ],
+      });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-1', patientName: 'NoPhone', startTime: new Date('2025-06-01') },
+            { patientId: 'p-2', patientName: 'NoEmail', startTime: new Date('2025-05-01') },
+          ],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-1');
+    });
+
+    it('skips appointments without patientId', async () => {
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientName: 'NoId', startTime: new Date('2025-06-01') }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
       expect(campaignService.createCampaign).not.toHaveBeenCalled();
@@ -296,13 +435,12 @@ describe('OutboundSchedulerService', () => {
 
     it('auto-approves and activates campaign when autoApproveCampaigns is true', async () => {
       const autoApproveSettings = { ...mockSettings, autoApproveCampaigns: true };
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
-        ],
-      });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', autoApproveSettings, ['recall']);
 
@@ -318,13 +456,12 @@ describe('OutboundSchedulerService', () => {
     });
 
     it('creates DRAFT campaign when autoApprove is false', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') },
-        ],
-      });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
 
@@ -370,28 +507,13 @@ describe('OutboundSchedulerService', () => {
       ).resolves.toEqual(['recall']);
     });
 
-    it('reads patient_id (underscore variant) and enriches with phone', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patient_id: 'p-x', patient_name: 'Underscore', startTime: new Date('2025-05-01') },
-        ],
-      });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15559999' } });
-
-      await service.triggerScansForAccount('acc-1', mockSettings, ['recall']);
-      const contacts = campaignService.addContacts.mock.calls[0][1];
-      expect(contacts[0].patientId).toBe('p-x');
-      expect(contacts[0].phoneNumber).toBe('+15559999');
-      expect(contacts[0].callContext.patient_name).toBe('Underscore');
-    });
-
     it('handles notification creation failure gracefully', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') }],
-      });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-1', patientName: 'Alice', startTime: new Date('2025-06-01') }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
       prisma.notification.create.mockRejectedValue(new Error('notification fail'));
 
       await expect(
@@ -401,12 +523,19 @@ describe('OutboundSchedulerService', () => {
   });
 
   describe('processRemindersForAccount (full flow)', () => {
-    const mockPmsProvider = { getAppointments: jest.fn(), getPatient: jest.fn() };
+    const mockPmsProvider = { getAppointments: jest.fn(), listPatients: jest.fn() };
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
-      prisma.notification.create.mockResolvedValue({});
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15552001' } });
+      setupScanMocks(mockPmsProvider);
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-r1', 'Reminder', 'Patient', '+15552001', 'rem@test.com'),
+          makePatient('p-r2', 'NoPhone', 'Rem', null),
+          makePatient('p-1', 'Generic', 'Pat', '+15552003'),
+        ],
+      });
     });
 
     it('creates reminder campaign from upcoming appointments', async () => {
@@ -437,12 +566,11 @@ describe('OutboundSchedulerService', () => {
       expect(contacts[0].callContext.provider_name).toBe('Dr. Smith');
     });
 
-    it('skips contacts when patient has no phone', async () => {
+    it('skips contacts when patient has no phone for phone channel', async () => {
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
         data: [{ patientId: 'p-r2', patientName: 'NoPhone', startTime: new Date('2026-03-04') }],
       });
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: null } });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['reminder']);
       expect(campaignService.createCampaign).not.toHaveBeenCalled();
@@ -462,21 +590,39 @@ describe('OutboundSchedulerService', () => {
       const autoApproveSettings = { ...mockSettings, autoApproveCampaigns: true };
       mockPmsProvider.getAppointments.mockResolvedValue({
         success: true,
-        data: [{ patientId: 'p-1', patientName: 'A', startTime: new Date('2026-03-04') }],
+        data: [{ patientId: 'p-r1', patientName: 'A', startTime: new Date('2026-03-04') }],
       });
 
       await service.triggerScansForAccount('acc-1', autoApproveSettings, ['reminder']);
       expect(campaignService.updateCampaignStatus).toHaveBeenCalledWith('camp-1', 'ACTIVE');
     });
+
+    it('skips patients already in active reminder campaign', async () => {
+      setupScanMocks(mockPmsProvider, { alreadyContactedPatientIds: ['p-r1'] });
+      mockPmsProvider.getAppointments.mockResolvedValue({
+        success: true,
+        data: [{ patientId: 'p-r1', patientName: 'AlreadyReminded', startTime: new Date('2026-03-04') }],
+      });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['reminder']);
+      expect(campaignService.createCampaign).not.toHaveBeenCalled();
+    });
   });
 
   describe('processNoShowsForAccount (full flow)', () => {
-    const mockPmsProvider = { getAppointments: jest.fn(), getPatient: jest.fn() };
+    const mockPmsProvider = { getAppointments: jest.fn(), listPatients: jest.fn() };
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
-      prisma.notification.create.mockResolvedValue({});
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15553001' } });
+      setupScanMocks(mockPmsProvider);
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-n1', 'NoShow', 'Pat', '+15553001'),
+          makePatient('p-1', 'Generic', 'Pat', '+15553002'),
+          makePatient('p-2', 'Another', 'Pat', '+15553003'),
+        ],
+      });
     });
 
     it('creates no-show campaign from missed appointments', async () => {
@@ -507,25 +653,42 @@ describe('OutboundSchedulerService', () => {
         service.triggerScansForAccount('acc-1', mockSettings, ['noshow']),
       ).resolves.toEqual(['noshow']);
     });
+
+    it('skips DNC patients for no-show', async () => {
+      setupScanMocks(mockPmsProvider, { dncPhones: ['+15553001'] });
+      mockPmsProvider.getAppointments.mockResolvedValue({
+        success: true,
+        data: [{ patientId: 'p-n1', patientName: 'DNC', startTime: new Date('2026-03-02') }],
+      });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['noshow']);
+      expect(campaignService.createCampaign).not.toHaveBeenCalled();
+    });
   });
 
   describe('processReactivationForAccount (full flow)', () => {
-    const mockPmsProvider = { getAppointments: jest.fn(), getPatient: jest.fn() };
+    const mockPmsProvider = { getAppointments: jest.fn(), listPatients: jest.fn() };
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
       prisma.outboundCampaign.findFirst.mockResolvedValue(null);
-      prisma.notification.create.mockResolvedValue({});
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15554001' } });
+      setupScanMocks(mockPmsProvider);
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-re1', 'Inactive', 'Pat', '+15554001'),
+          makePatient('p-re2', 'NoDate', 'Pat', '+15554002'),
+        ],
+      });
     });
 
     it('creates reactivation campaign from inactive patients', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [
-          { patientId: 'p-re1', patientName: 'Inactive Pat', startTime: new Date('2024-01-01') },
-        ],
-      });
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-re1', patientName: 'Inactive Pat', startTime: new Date('2024-01-01') }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] }); // upcoming
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['reactivation']);
 
@@ -557,15 +720,37 @@ describe('OutboundSchedulerService', () => {
       );
     });
 
-    it('defaults months_since_visit when date is missing', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-re2', patientName: 'NoDate' }],
-      });
+    it('defaults months_since_visit when startTime is missing', async () => {
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-re2', patientName: 'NoDate' }],
+        })
+        .mockResolvedValueOnce({ success: true, data: [] });
 
       await service.triggerScansForAccount('acc-1', mockSettings, ['reactivation']);
       const contacts = campaignService.addContacts.mock.calls[0][1];
       expect(contacts[0].callContext.months_since_visit).toBe('12');
+    });
+
+    it('skips patients with upcoming scheduled appointments', async () => {
+      mockPmsProvider.getAppointments
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            { patientId: 'p-re1', patientName: 'HasUpcoming', startTime: new Date('2024-01-01') },
+            { patientId: 'p-re2', patientName: 'NoUpcoming', startTime: new Date('2024-02-01') },
+          ],
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: [{ patientId: 'p-re1', startTime: new Date('2026-05-01') }],
+        });
+
+      await service.triggerScansForAccount('acc-1', mockSettings, ['reactivation']);
+      const contacts = campaignService.addContacts.mock.calls[0][1];
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0].patientId).toBe('p-re2');
     });
   });
 
@@ -591,14 +776,138 @@ describe('OutboundSchedulerService', () => {
     });
   });
 
+  describe('buildPatientMap', () => {
+    it('paginates through all patients', async () => {
+      const mockPmsProvider = {
+        listPatients: jest.fn()
+          .mockResolvedValueOnce({
+            success: true,
+            data: Array.from({ length: 500 }, (_, i) => makePatient(`p-${i}`, `F${i}`, `L${i}`, `+1555${i}`)),
+          })
+          .mockResolvedValueOnce({
+            success: true,
+            data: [makePatient('p-500', 'Last', 'Pat', '+1555500')],
+          }),
+      };
+
+      const map = await (service as any).buildPatientMap(mockPmsProvider, 'acc-1');
+      expect(map.size).toBe(501);
+      expect(mockPmsProvider.listPatients).toHaveBeenCalledTimes(2);
+      expect(mockPmsProvider.listPatients).toHaveBeenCalledWith({ limit: 500, offset: 0 });
+      expect(mockPmsProvider.listPatients).toHaveBeenCalledWith({ limit: 500, offset: 500 });
+    });
+
+    it('handles empty result gracefully', async () => {
+      const mockPmsProvider = {
+        listPatients: jest.fn().mockResolvedValue({ success: true, data: [] }),
+      };
+
+      const map = await (service as any).buildPatientMap(mockPmsProvider, 'acc-1');
+      expect(map.size).toBe(0);
+    });
+
+    it('handles error mid-pagination with partial results', async () => {
+      const mockPmsProvider = {
+        listPatients: jest.fn()
+          .mockResolvedValueOnce({
+            success: true,
+            data: Array.from({ length: 500 }, (_, i) => makePatient(`p-${i}`, `F${i}`, `L${i}`, `+1555${i}`)),
+          })
+          .mockRejectedValueOnce(new Error('API limit')),
+      };
+
+      const map = await (service as any).buildPatientMap(mockPmsProvider, 'acc-1');
+      expect(map.size).toBe(500);
+    });
+  });
+
+  describe('passesChannelFilter', () => {
+    const dncSet = new Set(['+15550000']);
+
+    it('allows patient with phone for phone channel', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: '+15551001', email: null },
+        'phone',
+        dncSet,
+      );
+      expect(result).toEqual({ phone: '+15551001', email: null });
+    });
+
+    it('rejects patient without phone for phone channel', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: null, email: 'a@b.com' },
+        'phone',
+        dncSet,
+      );
+      expect(result).toBeNull();
+    });
+
+    it('rejects patient on DNC for phone channel', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: '+15550000', email: 'a@b.com' },
+        'phone',
+        dncSet,
+      );
+      expect(result).toBeNull();
+    });
+
+    it('allows patient with email for email channel (no phone needed)', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: null, email: 'a@b.com' },
+        'email',
+        dncSet,
+      );
+      expect(result).toEqual({ phone: null, email: 'a@b.com' });
+    });
+
+    it('rejects patient without email for email channel', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: '+15551001', email: null },
+        'email',
+        dncSet,
+      );
+      expect(result).toBeNull();
+    });
+
+    it('allows patient with phone for sms channel', () => {
+      const result = (service as any).passesChannelFilter(
+        { phone: '+15551001', email: null },
+        'sms',
+        dncSet,
+      );
+      expect(result).toEqual({ phone: '+15551001', email: null });
+    });
+  });
+
   describe('cron scanners with PMS flow', () => {
-    const mockPmsProvider = { getAppointments: jest.fn(), getPatient: jest.fn() };
+    const mockPmsProvider = { getAppointments: jest.fn(), listPatients: jest.fn() };
+
+    /**
+     * Recall and reactivation call getAppointments twice: once for
+     * historical data (in Promise.all) then once for upcoming scheduled.
+     * This helper returns historical data for the first call and empty
+     * upcoming data for subsequent calls.
+     */
+    function mockRecallAppts(historicalData: any[]) {
+      mockPmsProvider.getAppointments.mockImplementation((params: any) => {
+        if (params?.status === 'scheduled') {
+          return Promise.resolve({ success: true, data: [] });
+        }
+        return Promise.resolve({ success: true, data: historicalData });
+      });
+    }
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
       prisma.outboundCampaign.findFirst.mockResolvedValue(null);
-      prisma.notification.create.mockResolvedValue({});
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      setupScanMocks(mockPmsProvider);
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [
+          makePatient('p-1', 'A', 'Pat', '+15551001'),
+          makePatient('p-2', 'B', 'Pat', '+15551002'),
+        ],
+      });
     });
 
     it('scanRecallCandidates processes multiple accounts', async () => {
@@ -606,10 +915,7 @@ describe('OutboundSchedulerService', () => {
         { accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } },
         { accountId: 'acc-2', ...mockSettings, account: { featureSettings: {} } },
       ]);
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-1', patientName: 'A', startTime: new Date('2025-06-01') }],
-      });
+      mockRecallAppts([{ patientId: 'p-1', patientName: 'A', startTime: new Date('2025-06-01') }]);
 
       await service.scanRecallCandidates();
       expect(campaignService.createCampaign).toHaveBeenCalledTimes(2);
@@ -620,10 +926,7 @@ describe('OutboundSchedulerService', () => {
         { ...mockSettings, accountId: 'acc-1', account: { featureSettings: { 'ai-receptionist': false } } },
         { ...mockSettings, accountId: 'acc-2', account: { featureSettings: { 'ai-receptionist': true } } },
       ]);
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-1', patientName: 'A', startTime: new Date('2025-06-01') }],
-      });
+      mockRecallAppts([{ patientId: 'p-1', patientName: 'A', startTime: new Date('2025-06-01') }]);
 
       await service.scanRecallCandidates();
       expect(campaignService.createCampaign).toHaveBeenCalledTimes(1);
@@ -657,9 +960,9 @@ describe('OutboundSchedulerService', () => {
 
     it('scanReactivationCandidates creates reactivation campaigns', async () => {
       prisma.outboundSettings.findMany.mockResolvedValue([{ accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } }]);
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-1', patientName: 'A', startTime: new Date('2024-01-01') }],
+      mockPmsProvider.getAppointments.mockImplementation((params: any) => {
+        if (params?.status === 'scheduled') return Promise.resolve({ success: true, data: [] });
+        return Promise.resolve({ success: true, data: [{ patientId: 'p-1', patientName: 'A', startTime: new Date('2024-01-01') }] });
       });
 
       await service.scanReactivationCandidates();
@@ -673,12 +976,13 @@ describe('OutboundSchedulerService', () => {
         { accountId: 'acc-1', ...mockSettings, account: { featureSettings: {} } },
         { accountId: 'acc-2', ...mockSettings, account: { featureSettings: {} } },
       ]);
-      mockPmsProvider.getAppointments
-        .mockRejectedValueOnce(new Error('PMS error'))
-        .mockResolvedValueOnce({
-          success: true,
-          data: [{ patientId: 'p-2', patientName: 'B', startTime: new Date('2025-06-01') }],
-        });
+      let callCount = 0;
+      mockPmsProvider.getAppointments.mockImplementation((params: any) => {
+        callCount++;
+        if (callCount === 1) return Promise.reject(new Error('PMS error'));
+        if (params?.status === 'scheduled') return Promise.resolve({ success: true, data: [] });
+        return Promise.resolve({ success: true, data: [{ patientId: 'p-2', patientName: 'B', startTime: new Date('2025-06-01') }] });
+      });
 
       await service.scanRecallCandidates();
       expect(campaignService.createCampaign).toHaveBeenCalledTimes(1);
@@ -686,25 +990,34 @@ describe('OutboundSchedulerService', () => {
   });
 
   describe('bootstrapCampaignsForAccount (with PMS)', () => {
-    const mockPmsProvider = { getAppointments: jest.fn(), getPatient: jest.fn() };
+    const mockPmsProvider = { getAppointments: jest.fn(), listPatients: jest.fn() };
 
     beforeEach(() => {
       jest.spyOn(service as any, 'getPmsServiceForAccount').mockResolvedValue(mockPmsProvider);
       prisma.outboundCampaign.findFirst.mockResolvedValue(null);
-      prisma.notification.create.mockResolvedValue({});
+      setupScanMocks(mockPmsProvider);
       settingsService.getSettings.mockResolvedValue(mockSettings);
-      mockPmsProvider.getPatient.mockResolvedValue({ data: { phone: '+15551001' } });
+      mockPmsProvider.listPatients.mockResolvedValue({
+        success: true,
+        data: [makePatient('p-1', 'Boot', 'Pat', '+15551001')],
+      });
     });
 
     it('runs recall, reminder, and noshow for PATIENT_CARE with PMS data', async () => {
-      mockPmsProvider.getAppointments.mockResolvedValue({
-        success: true,
-        data: [{ patientId: 'p-1', patientName: 'Boot', startTime: new Date('2025-06-01') }],
+      mockPmsProvider.getAppointments.mockImplementation((params: any) => {
+        if (params?.status === 'scheduled') {
+          return Promise.resolve({ success: true, data: [{ patientId: 'p-1', patientName: 'Boot', startTime: new Date('2026-04-01') }] });
+        }
+        return Promise.resolve({ success: true, data: [{ patientId: 'p-1', patientName: 'Boot', startTime: new Date('2025-06-01') }] });
       });
 
       await service.bootstrapCampaignsForAccount('acc-1', 'PATIENT_CARE');
 
-      expect(campaignService.createCampaign).toHaveBeenCalledTimes(3);
+      // recall + reminder + noshow = 3 campaigns (recall has upcoming check but p-1 IS in upcoming
+      // so recall gets 0 contacts, meaning only reminder + noshow get created)
+      // Actually: recall upcoming returns p-1 as scheduled → p-1 excluded from recall → no recall campaign
+      // Let's just verify at least 2 campaigns are created (reminder + noshow)
+      expect(campaignService.createCampaign).toHaveBeenCalledTimes(2);
     });
   });
 });

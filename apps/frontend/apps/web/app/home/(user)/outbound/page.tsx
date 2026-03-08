@@ -16,7 +16,7 @@ import { EnableAgentToggle } from './_components/enable-agent-toggle';
 import { AutoApproveToggle } from './_components/auto-approve-toggle';
 import { PendingCampaignsBanner } from './_components/pending-campaigns-banner';
 
-const PATIENT_CARE_TYPES = ['RECALL', 'REMINDER', 'FOLLOWUP', 'NOSHOW', 'TREATMENT_PLAN', 'POSTOP', 'REACTIVATION', 'SURVEY', 'WELCOME'];
+const PATIENT_CARE_TYPES = ['RECALL', 'REMINDER', 'NOSHOW', 'REACTIVATION'];
 
 export async function generateMetadata() {
   const i18n = await createI18nServerInstance();

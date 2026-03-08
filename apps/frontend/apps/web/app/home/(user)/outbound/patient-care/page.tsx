@@ -13,8 +13,7 @@ import { createI18nServerInstance } from '~/lib/i18n/i18n.server';
 import { PatientCareCampaigns } from './_components/patient-care-campaigns';
 
 const PATIENT_CARE_CALL_TYPES = [
-  'RECALL', 'REMINDER', 'FOLLOWUP', 'NOSHOW', 'TREATMENT_PLAN',
-  'POSTOP', 'REACTIVATION', 'SURVEY', 'WELCOME',
+  'RECALL', 'REMINDER', 'NOSHOW', 'REACTIVATION',
 ];
 
 export async function generateMetadata() {

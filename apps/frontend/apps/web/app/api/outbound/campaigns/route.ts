@@ -3,8 +3,7 @@ import { prisma } from '@kit/prisma';
 import { requireSession } from '~/lib/auth/get-session';
 
 const PATIENT_CARE_CALL_TYPES = [
-  'RECALL', 'REMINDER', 'FOLLOWUP', 'NOSHOW', 'TREATMENT_PLAN',
-  'POSTOP', 'REACTIVATION', 'SURVEY', 'WELCOME',
+  'RECALL', 'REMINDER', 'NOSHOW', 'REACTIVATION',
 ];
 
 const FINANCIAL_CALL_TYPES = ['PAYMENT', 'BENEFITS'];

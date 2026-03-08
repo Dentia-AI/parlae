@@ -121,6 +121,12 @@ export interface IPmsService {
   // ============================================================================
   
   /**
+   * List all patients with pagination (no search filter).
+   * Useful for batch operations that need the full patient roster.
+   */
+  listPatients(options?: { limit?: number; offset?: number }): Promise<PmsListResponse<Patient>>;
+
+  /**
    * Search for patients by name, phone, or email
    * @param query Search query
    */
@@ -269,6 +275,7 @@ export abstract class BasePmsService implements IPmsService {
   abstract bookAppointment(data: AppointmentCreateInput): Promise<PmsApiResponse<Appointment>>;
   abstract rescheduleAppointment(appointmentId: string, updates: AppointmentUpdateInput): Promise<PmsApiResponse<Appointment>>;
   abstract cancelAppointment(appointmentId: string, input: AppointmentCancelInput): Promise<PmsApiResponse<{ cancelled: boolean; message?: string }>>;
+  abstract listPatients(options?: { limit?: number; offset?: number }): Promise<PmsListResponse<Patient>>;
   abstract searchPatients(query: PatientSearchQuery): Promise<PmsListResponse<Patient>>;
   abstract getPatient(patientId: string): Promise<PmsApiResponse<Patient>>;
   abstract createPatient(data: PatientCreateInput): Promise<PmsApiResponse<Patient>>;

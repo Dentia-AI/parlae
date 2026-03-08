@@ -41,6 +41,8 @@ export class OutboundSchedulerService {
     this.logger.log({ msg: '[Scheduler] Starting daily recall scan' });
 
     const accounts = await this.getEnabledAccounts('PATIENT_CARE');
+    this.logger.log({ accountCount: accounts.length, accountIds: accounts.map(a => a.id), msg: '[Scheduler] Recall: found enabled accounts' });
+
     for (const acct of accounts) {
       try {
         await this.processRecallForAccount(acct.id, acct.settings);
@@ -52,6 +54,8 @@ export class OutboundSchedulerService {
         });
       }
     }
+
+    this.logger.log({ msg: '[Scheduler] Daily recall scan complete' });
   }
 
   /**
@@ -63,6 +67,8 @@ export class OutboundSchedulerService {
     this.logger.log({ msg: '[Scheduler] Starting hourly reminder scan' });
 
     const accounts = await this.getEnabledAccounts('PATIENT_CARE');
+    this.logger.log({ accountCount: accounts.length, accountIds: accounts.map(a => a.id), msg: '[Scheduler] Reminder: found enabled accounts' });
+
     for (const acct of accounts) {
       try {
         await this.processRemindersForAccount(acct.id, acct.settings);
@@ -74,6 +80,8 @@ export class OutboundSchedulerService {
         });
       }
     }
+
+    this.logger.log({ msg: '[Scheduler] Hourly reminder scan complete' });
   }
 
   /**
@@ -85,6 +93,8 @@ export class OutboundSchedulerService {
     this.logger.log({ msg: '[Scheduler] Starting daily no-show scan' });
 
     const accounts = await this.getEnabledAccounts('PATIENT_CARE');
+    this.logger.log({ accountCount: accounts.length, accountIds: accounts.map(a => a.id), msg: '[Scheduler] No-show: found enabled accounts' });
+
     for (const acct of accounts) {
       try {
         await this.processNoShowsForAccount(acct.id, acct.settings);
@@ -96,6 +106,8 @@ export class OutboundSchedulerService {
         });
       }
     }
+
+    this.logger.log({ msg: '[Scheduler] Daily no-show scan complete' });
   }
 
   /**
@@ -107,6 +119,8 @@ export class OutboundSchedulerService {
     this.logger.log({ msg: '[Scheduler] Starting monthly reactivation scan' });
 
     const accounts = await this.getEnabledAccounts('PATIENT_CARE');
+    this.logger.log({ accountCount: accounts.length, accountIds: accounts.map(a => a.id), msg: '[Scheduler] Reactivation: found enabled accounts' });
+
     for (const acct of accounts) {
       try {
         await this.processReactivationForAccount(acct.id, acct.settings);
@@ -118,6 +132,8 @@ export class OutboundSchedulerService {
         });
       }
     }
+
+    this.logger.log({ msg: '[Scheduler] Monthly reactivation scan complete' });
   }
 
   /**
@@ -233,14 +249,21 @@ export class OutboundSchedulerService {
       where: { accountId, status: 'ACTIVE' },
     });
 
-    if (!pmsIntegration) return null;
+    if (!pmsIntegration) {
+      this.logger.warn({ accountId, msg: '[Scheduler] No active PMS integration found — skipping account' });
+      return null;
+    }
+
+    this.logger.log({ accountId, provider: pmsIntegration.provider, msg: '[Scheduler] Initializing PMS service' });
 
     try {
-      return await this.pmsService.getPmsService(
+      const svc = await this.pmsService.getPmsService(
         accountId,
         pmsIntegration.provider,
         pmsIntegration.config,
       );
+      this.logger.log({ accountId, msg: '[Scheduler] PMS service initialized successfully' });
+      return svc;
     } catch (err) {
       this.logger.error({
         accountId,
@@ -252,60 +275,111 @@ export class OutboundSchedulerService {
   }
 
   /**
-   * Enrich appointments with patient phone numbers by looking up each
-   * unique patient via the PMS patient endpoint. Sikka appointments
-   * don't include patient phone — only patient_id and patient_name.
+   * Paginate through all patients from the PMS and build a lookup map.
+   * Much more efficient than individual getPatient() calls when we need
+   * phone/email for many patients (5-10 paginated calls vs N individual).
    */
-  private async enrichWithPatientPhones(
-    appointments: any[],
+  private async buildPatientMap(
     pmsService: any,
     accountId: string,
-  ): Promise<Array<{ patientId: string; patientName: string; patientPhone: string; date: string }>> {
-    const enriched: Array<{ patientId: string; patientName: string; patientPhone: string; date: string }> = [];
-    const phoneCache = new Map<string, string | null>();
+  ): Promise<Map<string, any>> {
+    const map = new Map<string, any>();
+    let offset = 0;
+    const limit = 500;
 
-    for (const appt of appointments) {
-      const patientId = appt.patientId || appt.patient_id;
-      if (!patientId) continue;
-
-      if (!phoneCache.has(patientId)) {
-        try {
-          const patientResult = await pmsService.getPatient(patientId);
-          const patient = patientResult?.data;
-          const phone = patient?.phone || patient?.cell || patient?.metadata?.cell || patient?.metadata?.homephone || null;
-          phoneCache.set(patientId, phone && patientResult.success !== false ? phone : null);
-        } catch {
-          phoneCache.set(patientId, null);
+    let pages = 0;
+    try {
+      while (true) {
+        const result = await pmsService.listPatients({ limit, offset });
+        pages++;
+        const fetched = result.data?.length ?? 0;
+        this.logger.log({ accountId, page: pages, offset, fetched, success: result.success, msg: '[Scheduler] Patient map page fetched' });
+        if (!result.success || !fetched) break;
+        for (const p of result.data) {
+          map.set(p.id, p);
         }
+        if (fetched < limit) break;
+        offset += limit;
       }
-
-      const phone = phoneCache.get(patientId);
-      if (!phone) continue;
-
-      enriched.push({
-        patientId,
-        patientName: appt.patientName || appt.patient_name || 'Patient',
-        patientPhone: phone,
-        date: appt.startTime?.toISOString?.() || appt.date || '',
+    } catch (err) {
+      this.logger.warn({
+        accountId,
+        page: pages + 1,
+        offset,
+        err: err instanceof Error ? err.message : err,
+        msg: '[Scheduler] Patient map build interrupted — using partial map',
       });
     }
 
-    this.logger.log({
-      accountId,
-      totalAppts: appointments.length,
-      uniquePatients: phoneCache.size,
-      withPhone: enriched.length,
-      withoutPhone: phoneCache.size - enriched.length,
-      msg: '[Scheduler] Patient phone enrichment completed',
-    });
-
-    return enriched;
+    this.logger.log({ accountId, totalPatients: map.size, pages, msg: '[Scheduler] Patient map built' });
+    return map;
   }
+
+  /** Load all DNC phone numbers for an account into a Set. */
+  private async loadDncPhones(accountId: string): Promise<Set<string>> {
+    const entries = await this.prisma.doNotCallEntry.findMany({
+      where: { accountId },
+      select: { phoneNumber: true },
+    });
+    const dncSet = new Set(entries.map((e) => e.phoneNumber));
+    this.logger.log({ accountId, dncCount: dncSet.size, msg: '[Scheduler] DNC list loaded' });
+    return dncSet;
+  }
+
+  /** Load patient IDs already queued/in-progress for a given call type. */
+  private async loadAlreadyContactedPatients(
+    accountId: string,
+    callType: string,
+  ): Promise<Set<string>> {
+    const contacts = await this.prisma.campaignContact.findMany({
+      where: {
+        campaign: {
+          accountId,
+          callType: callType as any,
+          status: { in: ['ACTIVE', 'SCHEDULED', 'DRAFT'] },
+        },
+        status: { in: ['QUEUED', 'IN_PROGRESS'] },
+      },
+      select: { patientId: true },
+    });
+    const contactedSet = new Set(contacts.map((c) => c.patientId));
+    this.logger.log({ accountId, callType, alreadyContactedCount: contactedSet.size, msg: '[Scheduler] Already-contacted patients loaded' });
+    return contactedSet;
+  }
+
+  /**
+   * Check whether a patient passes channel-based contact filtering.
+   * Returns the reachable contact value (phone or email) or null to skip.
+   */
+  private passesChannelFilter(
+    patient: any,
+    channel: string,
+    dncPhones: Set<string>,
+  ): { phone: string | null; email: string | null } | null {
+    const phone = patient?.phone || null;
+    const email = patient?.email || null;
+
+    if (channel === 'phone' || channel === 'sms') {
+      if (!phone) return null;
+      if (dncPhones.has(phone)) return null;
+      return { phone, email };
+    }
+    if (channel === 'email') {
+      if (!email) return null;
+      return { phone, email };
+    }
+    if (!phone && !email) return null;
+    return { phone, email };
+  }
+
+  // ── Scan Processors ────────────────────────────────────────────────
 
   private async processRecallForAccount(
     accountId: string,
     settings: OutboundSettings,
   ): Promise<void> {
+    this.logger.log({ accountId, msg: '[Scheduler] Recall: starting scan' });
+
     const pmsService = await this.getPmsServiceForAccount(accountId);
     if (!pmsService) return;
 
@@ -313,9 +387,15 @@ export class OutboundSchedulerService {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const sixMonthsFromNow = new Date();
+    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
 
     const channel = this.settingsService.getChannelForCallType(settings, 'recall');
-    if (channel === 'none') return;
+    if (channel === 'none') {
+      this.logger.log({ accountId, msg: '[Scheduler] Recall: channel is "none" — skipping' });
+      return;
+    }
+    this.logger.log({ accountId, channel, msg: '[Scheduler] Recall: channel resolved' });
 
     const existingActive = await this.prisma.outboundCampaign.findFirst({
       where: {
@@ -325,7 +405,10 @@ export class OutboundSchedulerService {
         isAutoGenerated: true,
       },
     });
-    if (existingActive) return;
+    if (existingActive) {
+      this.logger.log({ accountId, existingCampaignId: existingActive.id, msg: '[Scheduler] Recall: active campaign already exists — skipping' });
+      return;
+    }
 
     try {
       this.logger.log({
@@ -335,38 +418,75 @@ export class OutboundSchedulerService {
         msg: '[Scheduler] Recall: querying completed appointments',
       });
 
-      const result = await pmsService.getAppointments({
-        startDate: twoYearsAgo,
-        endDate: sixMonthsAgo,
-        status: 'completed',
-        limit: 200,
+      const [result, patientMap, dncPhones, alreadyContacted] = await Promise.all([
+        pmsService.getAppointments({ startDate: twoYearsAgo, endDate: sixMonthsAgo, status: 'completed', limit: 200 }),
+        this.buildPatientMap(pmsService, accountId),
+        this.loadDncPhones(accountId),
+        this.loadAlreadyContactedPatients(accountId, 'RECALL'),
+      ]);
+
+      this.logger.log({
+        accountId,
+        appointmentsFound: result.data?.length ?? 0,
+        appointmentsSuccess: result.success,
+        patientMapSize: patientMap.size,
+        dncCount: dncPhones.size,
+        alreadyContactedCount: alreadyContacted.size,
+        msg: '[Scheduler] Recall: parallel data loaded',
       });
 
       if (!result.success || !result.data?.length) {
-        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Recall: no appointments found in range' });
+        this.logger.log({ accountId, count: result.data?.length ?? 0, success: result.success, msg: '[Scheduler] Recall: no appointments found in range' });
         return;
       }
 
-      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
+      this.logger.log({ accountId, msg: '[Scheduler] Recall: querying upcoming scheduled appointments' });
+      const upcoming = await pmsService.getAppointments({
+        startDate: new Date(),
+        endDate: sixMonthsFromNow,
+        status: 'scheduled',
+        limit: 500,
+      });
+      const scheduledPatients = new Set<string>(
+        (upcoming.data || []).map((a: any) => a.patientId).filter(Boolean),
+      );
+      this.logger.log({ accountId, upcomingScheduledCount: scheduledPatients.size, msg: '[Scheduler] Recall: upcoming appointments loaded' });
+
       const seenPatients = new Set<string>();
       const contacts: CreateContactInput[] = [];
+      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, added: 0 };
 
-      for (const entry of enriched) {
-        if (seenPatients.has(entry.patientId)) continue;
-        seenPatients.add(entry.patientId);
+      for (const appt of result.data) {
+        const patientId = appt.patientId;
+        if (!patientId || seenPatients.has(patientId)) continue;
+        seenPatients.add(patientId);
+        stats.total++;
 
+        if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
+        if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
+
+        const patient = patientMap.get(patientId);
+        if (!patient) { stats.noContact++; continue; }
+
+        const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
+        if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
+
+        stats.added++;
         contacts.push({
-          patientId: entry.patientId,
-          phoneNumber: entry.patientPhone,
+          patientId,
+          phoneNumber: contactInfo.phone || undefined,
           callContext: {
-            patient_name: entry.patientName,
-            last_visit_date: entry.date,
+            patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
+            last_visit_date: appt.startTime?.toISOString() || '',
+            email: contactInfo.email || undefined,
           },
         });
       }
 
+      this.logger.log({ accountId, ...stats, msg: '[Scheduler] Recall: filtering complete' });
+
       if (contacts.length === 0) {
-        this.logger.log({ accountId, msg: '[Scheduler] Recall: no contacts with phone numbers' });
+        this.logger.log({ accountId, msg: '[Scheduler] Recall: no eligible contacts after filtering' });
         return;
       }
 
@@ -386,28 +506,15 @@ export class OutboundSchedulerService {
       });
 
       await this.campaignService.addContacts(campaign.id, contacts);
-
-      if (autoApprove) {
-        await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
-      }
-
+      if (autoApprove) await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
       await this.createCampaignNotification(accountId, 'Recall/Recare', contacts.length, autoApprove);
 
       this.logger.log({
-        accountId,
-        campaignId: campaign.id,
-        contactCount: contacts.length,
-        autoApprove,
-        msg: autoApprove
-          ? '[Scheduler] Recall campaign created and activated'
-          : '[Scheduler] Recall campaign created as DRAFT (pending approval)',
+        accountId, campaignId: campaign.id, contactCount: contacts.length, autoApprove,
+        msg: autoApprove ? '[Scheduler] Recall campaign created and activated' : '[Scheduler] Recall campaign created as DRAFT',
       });
     } catch (err) {
-      this.logger.error({
-        accountId,
-        err: err instanceof Error ? err.message : err,
-        msg: '[Scheduler] Error building recall contacts from PMS',
-      });
+      this.logger.error({ accountId, err: err instanceof Error ? err.message : err, msg: '[Scheduler] Error building recall contacts from PMS' });
     }
   }
 
@@ -415,58 +522,84 @@ export class OutboundSchedulerService {
     accountId: string,
     settings: OutboundSettings,
   ): Promise<void> {
+    this.logger.log({ accountId, msg: '[Scheduler] Reminder: starting scan' });
+
     const pmsService = await this.getPmsServiceForAccount(accountId);
     if (!pmsService) return;
 
     const reminderConfig = (settings.reminderConfig as any) || {};
     const hoursBeforeAppt = reminderConfig.hoursBeforeAppointment || 24;
     const channel = this.settingsService.getChannelForCallType(settings, 'reminder');
-    if (channel === 'none') return;
+    if (channel === 'none') {
+      this.logger.log({ accountId, msg: '[Scheduler] Reminder: channel is "none" — skipping' });
+      return;
+    }
+    this.logger.log({ accountId, channel, hoursBeforeAppt, msg: '[Scheduler] Reminder: channel resolved' });
 
     const now = new Date();
     const windowStart = new Date(now.getTime() + hoursBeforeAppt * 60 * 60 * 1000);
     const windowEnd = new Date(windowStart.getTime() + hoursBeforeAppt * 60 * 60 * 1000);
 
     try {
+      this.logger.log({ accountId, windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString(), msg: '[Scheduler] Reminder: querying scheduled appointments' });
+
+      const [result, patientMap, dncPhones, alreadyContacted] = await Promise.all([
+        pmsService.getAppointments({ startDate: windowStart, endDate: windowEnd, status: 'scheduled', limit: 100 }),
+        this.buildPatientMap(pmsService, accountId),
+        this.loadDncPhones(accountId),
+        this.loadAlreadyContactedPatients(accountId, 'REMINDER'),
+      ]);
+
       this.logger.log({
         accountId,
-        windowStart: windowStart.toISOString(),
-        windowEnd: windowEnd.toISOString(),
-        msg: '[Scheduler] Reminder: querying scheduled appointments',
-      });
-
-      const result = await pmsService.getAppointments({
-        startDate: windowStart,
-        endDate: windowEnd,
-        status: 'scheduled',
-        limit: 100,
+        appointmentsFound: result.data?.length ?? 0,
+        appointmentsSuccess: result.success,
+        patientMapSize: patientMap.size,
+        dncCount: dncPhones.size,
+        alreadyContactedCount: alreadyContacted.size,
+        msg: '[Scheduler] Reminder: parallel data loaded',
       });
 
       if (!result.success || !result.data?.length) {
-        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Reminder: no appointments in window' });
+        this.logger.log({ accountId, count: result.data?.length ?? 0, success: result.success, msg: '[Scheduler] Reminder: no appointments in window' });
         return;
       }
 
-      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const contacts: CreateContactInput[] = [];
+      const stats = { total: 0, alreadyContacted: 0, notInMap: 0, channelFiltered: 0, added: 0 };
 
-      for (const entry of enriched) {
-        const appt = result.data.find((a: any) => (a.patientId || a.patient_id) === entry.patientId);
+      for (const appt of result.data) {
+        const patientId = appt.patientId;
+        if (!patientId) continue;
+        stats.total++;
+        if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
+
+        const patient = patientMap.get(patientId);
+        if (!patient) { stats.notInMap++; continue; }
+
+        const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
+        if (!contactInfo) { stats.channelFiltered++; continue; }
+
+        stats.added++;
+
         contacts.push({
-          patientId: entry.patientId,
-          phoneNumber: entry.patientPhone,
+          patientId,
+          phoneNumber: contactInfo.phone || undefined,
           callContext: {
-            patient_name: entry.patientName,
-            appointment_date: entry.date?.split('T')[0] || '',
-            appointment_time: entry.date,
-            appointment_type: (appt as any)?.appointmentType || 'Dental Visit',
-            provider_name: (appt as any)?.providerName || '',
+            patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
+            appointment_date: (appt.startTime?.toISOString() || '').split('T')[0],
+            appointment_time: appt.startTime?.toISOString() || '',
+            appointment_type: appt.appointmentType || 'Dental Visit',
+            provider_name: appt.providerName || '',
+            email: contactInfo.email || undefined,
           },
         });
       }
 
+      this.logger.log({ accountId, ...stats, msg: '[Scheduler] Reminder: filtering complete' });
+
       if (contacts.length === 0) {
-        this.logger.log({ accountId, msg: '[Scheduler] Reminder: no contacts with phone numbers' });
+        this.logger.log({ accountId, msg: '[Scheduler] Reminder: no eligible contacts after filtering' });
         return;
       }
 
@@ -485,28 +618,15 @@ export class OutboundSchedulerService {
       });
 
       await this.campaignService.addContacts(campaign.id, contacts);
-
-      if (autoApprove) {
-        await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
-      }
-
+      if (autoApprove) await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
       await this.createCampaignNotification(accountId, 'Reminder', contacts.length, autoApprove);
 
       this.logger.log({
-        accountId,
-        campaignId: campaign.id,
-        contactCount: contacts.length,
-        autoApprove,
-        msg: autoApprove
-          ? '[Scheduler] Reminder campaign created and activated'
-          : '[Scheduler] Reminder campaign created as DRAFT (pending approval)',
+        accountId, campaignId: campaign.id, contactCount: contacts.length, autoApprove,
+        msg: autoApprove ? '[Scheduler] Reminder campaign created and activated' : '[Scheduler] Reminder campaign created as DRAFT',
       });
     } catch (err) {
-      this.logger.error({
-        accountId,
-        err: err instanceof Error ? err.message : err,
-        msg: '[Scheduler] Error building reminder contacts',
-      });
+      this.logger.error({ accountId, err: err instanceof Error ? err.message : err, msg: '[Scheduler] Error building reminder contacts' });
     }
   }
 
@@ -514,11 +634,17 @@ export class OutboundSchedulerService {
     accountId: string,
     settings: OutboundSettings,
   ): Promise<void> {
+    this.logger.log({ accountId, msg: '[Scheduler] No-show: starting scan' });
+
     const pmsService = await this.getPmsServiceForAccount(accountId);
     if (!pmsService) return;
 
     const channel = this.settingsService.getChannelForCallType(settings, 'noshow');
-    if (channel === 'none') return;
+    if (channel === 'none') {
+      this.logger.log({ accountId, msg: '[Scheduler] No-show: channel is "none" — skipping' });
+      return;
+    }
+    this.logger.log({ accountId, channel, msg: '[Scheduler] No-show: channel resolved' });
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -527,44 +653,64 @@ export class OutboundSchedulerService {
     endOfYesterday.setHours(23, 59, 59, 999);
 
     try {
+      this.logger.log({ accountId, startDate: yesterday.toISOString().split('T')[0], endDate: endOfYesterday.toISOString().split('T')[0], msg: '[Scheduler] No-show: querying missed appointments' });
+
+      const [result, patientMap, dncPhones, alreadyContacted] = await Promise.all([
+        pmsService.getAppointments({ startDate: yesterday, endDate: endOfYesterday, status: 'no_show', limit: 50 }),
+        this.buildPatientMap(pmsService, accountId),
+        this.loadDncPhones(accountId),
+        this.loadAlreadyContactedPatients(accountId, 'NOSHOW'),
+      ]);
+
       this.logger.log({
         accountId,
-        startDate: yesterday.toISOString().split('T')[0],
-        endDate: endOfYesterday.toISOString().split('T')[0],
-        msg: '[Scheduler] No-show: querying missed appointments',
-      });
-
-      const result = await pmsService.getAppointments({
-        startDate: yesterday,
-        endDate: endOfYesterday,
-        status: 'no_show',
-        limit: 50,
+        appointmentsFound: result.data?.length ?? 0,
+        appointmentsSuccess: result.success,
+        patientMapSize: patientMap.size,
+        dncCount: dncPhones.size,
+        alreadyContactedCount: alreadyContacted.size,
+        msg: '[Scheduler] No-show: parallel data loaded',
       });
 
       if (!result.success || !result.data?.length) {
-        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] No-show: no appointments found' });
+        this.logger.log({ accountId, count: result.data?.length ?? 0, success: result.success, msg: '[Scheduler] No-show: no appointments found' });
         return;
       }
 
-      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
       const contacts: CreateContactInput[] = [];
+      const stats = { total: 0, alreadyContacted: 0, notInMap: 0, channelFiltered: 0, added: 0 };
 
-      for (const entry of enriched) {
-        const appt = result.data.find((a: any) => (a.patientId || a.patient_id) === entry.patientId);
+      for (const appt of result.data) {
+        const patientId = appt.patientId;
+        if (!patientId) continue;
+        stats.total++;
+        if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
+
+        const patient = patientMap.get(patientId);
+        if (!patient) { stats.notInMap++; continue; }
+
+        const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
+        if (!contactInfo) { stats.channelFiltered++; continue; }
+
+        stats.added++;
+
         contacts.push({
-          patientId: entry.patientId,
-          phoneNumber: entry.patientPhone,
+          patientId,
+          phoneNumber: contactInfo.phone || undefined,
           callContext: {
-            patient_name: entry.patientName,
-            appointment_date: entry.date?.split('T')[0] || '',
-            appointment_time: entry.date,
-            appointment_type: (appt as any)?.appointmentType || 'Dental Visit',
+            patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
+            appointment_date: (appt.startTime?.toISOString() || '').split('T')[0],
+            appointment_time: appt.startTime?.toISOString() || '',
+            appointment_type: appt.appointmentType || 'Dental Visit',
+            email: contactInfo.email || undefined,
           },
         });
       }
 
+      this.logger.log({ accountId, ...stats, msg: '[Scheduler] No-show: filtering complete' });
+
       if (contacts.length === 0) {
-        this.logger.log({ accountId, msg: '[Scheduler] No-show: no contacts with phone numbers' });
+        this.logger.log({ accountId, msg: '[Scheduler] No-show: no eligible contacts after filtering' });
         return;
       }
 
@@ -583,28 +729,15 @@ export class OutboundSchedulerService {
       });
 
       await this.campaignService.addContacts(campaign.id, contacts);
-
-      if (autoApprove) {
-        await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
-      }
-
+      if (autoApprove) await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
       await this.createCampaignNotification(accountId, 'No-Show', contacts.length, autoApprove);
 
       this.logger.log({
-        accountId,
-        campaignId: campaign.id,
-        contactCount: contacts.length,
-        autoApprove,
-        msg: autoApprove
-          ? '[Scheduler] No-show campaign created and activated'
-          : '[Scheduler] No-show campaign created as DRAFT (pending approval)',
+        accountId, campaignId: campaign.id, contactCount: contacts.length, autoApprove,
+        msg: autoApprove ? '[Scheduler] No-show campaign created and activated' : '[Scheduler] No-show campaign created as DRAFT',
       });
     } catch (err) {
-      this.logger.error({
-        accountId,
-        err: err instanceof Error ? err.message : err,
-        msg: '[Scheduler] Error building no-show contacts',
-      });
+      this.logger.error({ accountId, err: err instanceof Error ? err.message : err, msg: '[Scheduler] Error building no-show contacts' });
     }
   }
 
@@ -612,18 +745,26 @@ export class OutboundSchedulerService {
     accountId: string,
     settings: OutboundSettings,
   ): Promise<void> {
+    this.logger.log({ accountId, msg: '[Scheduler] Reactivation: starting scan' });
+
     const pmsService = await this.getPmsServiceForAccount(accountId);
     if (!pmsService) return;
 
     const reactivationConfig = (settings.reactivationConfig as any) || {};
     const inactiveMonths = reactivationConfig.inactiveMonths || 12;
     const channel = this.settingsService.getChannelForCallType(settings, 'reactivation');
-    if (channel === 'none') return;
+    if (channel === 'none') {
+      this.logger.log({ accountId, msg: '[Scheduler] Reactivation: channel is "none" — skipping' });
+      return;
+    }
+    this.logger.log({ accountId, channel, inactiveMonths, msg: '[Scheduler] Reactivation: channel resolved' });
 
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - inactiveMonths);
     const threeYearsAgo = new Date();
     threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+    const sixMonthsFromNow = new Date();
+    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
 
     const existingActive = await this.prisma.outboundCampaign.findFirst({
       where: {
@@ -633,7 +774,10 @@ export class OutboundSchedulerService {
         isAutoGenerated: true,
       },
     });
-    if (existingActive) return;
+    if (existingActive) {
+      this.logger.log({ accountId, existingCampaignId: existingActive.id, msg: '[Scheduler] Reactivation: active campaign already exists — skipping' });
+      return;
+    }
 
     try {
       this.logger.log({
@@ -644,43 +788,81 @@ export class OutboundSchedulerService {
         msg: '[Scheduler] Reactivation: querying completed appointments',
       });
 
-      const result = await pmsService.getAppointments({
-        startDate: threeYearsAgo,
-        endDate: cutoffDate,
-        status: 'completed',
-        limit: 200,
+      const [result, patientMap, dncPhones, alreadyContacted] = await Promise.all([
+        pmsService.getAppointments({ startDate: threeYearsAgo, endDate: cutoffDate, status: 'completed', limit: 200 }),
+        this.buildPatientMap(pmsService, accountId),
+        this.loadDncPhones(accountId),
+        this.loadAlreadyContactedPatients(accountId, 'REACTIVATION'),
+      ]);
+
+      this.logger.log({
+        accountId,
+        appointmentsFound: result.data?.length ?? 0,
+        appointmentsSuccess: result.success,
+        patientMapSize: patientMap.size,
+        dncCount: dncPhones.size,
+        alreadyContactedCount: alreadyContacted.size,
+        msg: '[Scheduler] Reactivation: parallel data loaded',
       });
 
       if (!result.success || !result.data?.length) {
-        this.logger.log({ accountId, count: result.data?.length ?? 0, msg: '[Scheduler] Reactivation: no appointments found in range' });
+        this.logger.log({ accountId, count: result.data?.length ?? 0, success: result.success, msg: '[Scheduler] Reactivation: no appointments found in range' });
         return;
       }
 
-      const enriched = await this.enrichWithPatientPhones(result.data, pmsService, accountId);
+      this.logger.log({ accountId, msg: '[Scheduler] Reactivation: querying upcoming scheduled appointments' });
+      const upcoming = await pmsService.getAppointments({
+        startDate: new Date(),
+        endDate: sixMonthsFromNow,
+        status: 'scheduled',
+        limit: 500,
+      });
+      const scheduledPatients = new Set<string>(
+        (upcoming.data || []).map((a: any) => a.patientId).filter(Boolean),
+      );
+      this.logger.log({ accountId, upcomingScheduledCount: scheduledPatients.size, msg: '[Scheduler] Reactivation: upcoming appointments loaded' });
+
       const seenPatients = new Set<string>();
       const contacts: CreateContactInput[] = [];
+      const stats = { total: 0, dnc: 0, alreadyContacted: 0, scheduled: 0, noContact: 0, added: 0 };
 
-      for (const entry of enriched) {
-        if (seenPatients.has(entry.patientId)) continue;
-        seenPatients.add(entry.patientId);
+      for (const appt of result.data) {
+        const patientId = appt.patientId;
+        if (!patientId || seenPatients.has(patientId)) continue;
+        seenPatients.add(patientId);
+        stats.total++;
 
-        const monthsSince = entry.date
-          ? Math.round((Date.now() - new Date(entry.date).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
+        if (alreadyContacted.has(patientId)) { stats.alreadyContacted++; continue; }
+        if (scheduledPatients.has(patientId)) { stats.scheduled++; continue; }
+
+        const patient = patientMap.get(patientId);
+        if (!patient) { stats.noContact++; continue; }
+
+        const contactInfo = this.passesChannelFilter(patient, channel, dncPhones);
+        if (!contactInfo) { if (dncPhones.has(patient?.phone)) stats.dnc++; else stats.noContact++; continue; }
+
+        const visitDate = appt.startTime?.toISOString() || '';
+        const monthsSince = visitDate
+          ? Math.round((Date.now() - new Date(visitDate).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
           : inactiveMonths;
 
+        stats.added++;
         contacts.push({
-          patientId: entry.patientId,
-          phoneNumber: entry.patientPhone,
+          patientId,
+          phoneNumber: contactInfo.phone || undefined,
           callContext: {
-            patient_name: entry.patientName,
-            last_visit_date: entry.date,
+            patient_name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || appt.patientName || 'Patient',
+            last_visit_date: visitDate,
             months_since_visit: String(monthsSince),
+            email: contactInfo.email || undefined,
           },
         });
       }
 
+      this.logger.log({ accountId, ...stats, msg: '[Scheduler] Reactivation: filtering complete' });
+
       if (contacts.length === 0) {
-        this.logger.log({ accountId, msg: '[Scheduler] Reactivation: no contacts with phone numbers' });
+        this.logger.log({ accountId, msg: '[Scheduler] Reactivation: no eligible contacts after filtering' });
         return;
       }
 
@@ -699,28 +881,15 @@ export class OutboundSchedulerService {
       });
 
       await this.campaignService.addContacts(campaign.id, contacts);
-
-      if (autoApprove) {
-        await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
-      }
-
+      if (autoApprove) await this.campaignService.updateCampaignStatus(campaign.id, 'ACTIVE');
       await this.createCampaignNotification(accountId, 'Reactivation', contacts.length, autoApprove);
 
       this.logger.log({
-        accountId,
-        campaignId: campaign.id,
-        contactCount: contacts.length,
-        autoApprove,
-        msg: autoApprove
-          ? '[Scheduler] Reactivation campaign created and activated'
-          : '[Scheduler] Reactivation campaign created as DRAFT (pending approval)',
+        accountId, campaignId: campaign.id, contactCount: contacts.length, autoApprove,
+        msg: autoApprove ? '[Scheduler] Reactivation campaign created and activated' : '[Scheduler] Reactivation campaign created as DRAFT',
       });
     } catch (err) {
-      this.logger.error({
-        accountId,
-        err: err instanceof Error ? err.message : err,
-        msg: '[Scheduler] Error building reactivation contacts',
-      });
+      this.logger.error({ accountId, err: err instanceof Error ? err.message : err, msg: '[Scheduler] Error building reactivation contacts' });
     }
   }
 }
