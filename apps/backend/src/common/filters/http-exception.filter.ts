@@ -4,13 +4,13 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { StructuredLogger } from '../structured-logger';
 
 @Catch()
 export class GlobalHttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(GlobalHttpExceptionFilter.name);
+  private readonly logger = new StructuredLogger(GlobalHttpExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -43,10 +43,9 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
-    // Log based on severity — single-line JSON for CloudWatch
     if (status >= 500) {
       const errorDetail = exception instanceof Error
-        ? { name: exception.name, message: exception.message, stack: exception.stack }
+        ? { name: exception.name, message: flatten(exception.message), stack: flatten(exception.stack) }
         : exception;
       this.logger.error(
         `[${request.method}] ${request.url} ${status} | ${JSON.stringify({ ...logContext, error: errorDetail })}`,
@@ -85,5 +84,9 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     return sanitized;
   }
+}
+
+function flatten(value: string | undefined): string | undefined {
+  return value?.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
 }
 

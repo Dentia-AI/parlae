@@ -18,6 +18,24 @@ import { OutboundDispatcherService } from './services/outbound-dispatcher.servic
 import { StructuredLogger } from '../common/structured-logger';
 import type { OutboundCallType, OutboundChannel, OutboundCampaignStatus } from '@kit/prisma';
 
+const CALL_TYPE_MAP: Record<string, OutboundCallType> = {
+  recall: 'RECALL',
+  reminder: 'REMINDER',
+  followup: 'FOLLOWUP',
+  noshow: 'NOSHOW',
+  treatment_plan: 'TREATMENT_PLAN',
+  postop: 'POSTOP',
+  reactivation: 'REACTIVATION',
+  survey: 'SURVEY',
+  welcome: 'WELCOME',
+  payment: 'PAYMENT',
+  benefits: 'BENEFITS',
+};
+
+function normalizeCallType(raw: string): OutboundCallType {
+  return CALL_TYPE_MAP[raw.toLowerCase()] || (raw as OutboundCallType);
+}
+
 @Controller('outbound')
 export class OutboundController {
   private readonly logger = new StructuredLogger(OutboundController.name);
@@ -303,9 +321,10 @@ export class OutboundController {
       phoneNumbers: string[];
     },
   ) {
-    const { accountId, callType, phoneNumbers } = body;
+    const { accountId, phoneNumbers } = body;
+    const callType = normalizeCallType(body.callType as string);
 
-    if (!accountId || !callType || !phoneNumbers?.length) {
+    if (!accountId || !body.callType || !phoneNumbers?.length) {
       throw new HttpException(
         'accountId, callType, and phoneNumbers are required',
         HttpStatus.BAD_REQUEST,

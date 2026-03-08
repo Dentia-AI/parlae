@@ -2,18 +2,18 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
-  Logger,
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request } from 'express';
+import { StructuredLogger } from '../structured-logger';
 
 const SKIP_LOGGING_PATHS = new Set(['/health', '/healthz', '/ready', '/vapi/webhook']);
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger('HTTP');
+  private readonly logger = new StructuredLogger('HTTP');
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -40,8 +40,11 @@ export class LoggingInterceptor implements NestInterceptor {
         error: (error) => {
           const duration = Date.now() - startTime;
 
+          const errMsg = (error instanceof Error ? error.message : String(error))
+            .replace(/\n/g, ' ')
+            .replace(/\s{2,}/g, ' ');
           this.logger.error(
-            `[${method}] ${url} ERROR ${duration}ms | ${JSON.stringify({ error: error instanceof Error ? error.message : String(error), ip, userAgent })}`,
+            `[${method}] ${url} ERROR ${duration}ms | ${JSON.stringify({ error: errMsg, ip, userAgent })}`,
           );
         },
       }),
