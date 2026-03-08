@@ -18,6 +18,7 @@ jest.mock('@kit/prisma', () => ({
       findFirst: jest.fn().mockResolvedValue({ id: 'acc-1' }),
       findUnique: jest.fn().mockResolvedValue(null),
     },
+    aiActionLog: { findMany: jest.fn().mockResolvedValue([]) },
   },
 }));
 jest.mock('~/lib/auth/get-session', () => ({
