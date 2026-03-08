@@ -348,13 +348,14 @@ export class OutboundController {
 
     let realContacts: Array<{
       patientId: string;
+      phoneNumber: string | null;
       callContext: unknown;
     }> = [];
 
     if (existingCampaign) {
       realContacts = await this.prisma.campaignContact.findMany({
         where: { campaignId: existingCampaign.id },
-        select: { patientId: true, callContext: true },
+        select: { patientId: true, phoneNumber: true, callContext: true },
         take: phoneNumbers.length,
       });
     }
@@ -386,6 +387,7 @@ export class OutboundController {
       const real = realContacts[i];
       const ctx = (real?.callContext as Record<string, unknown>) ?? {};
       const name = (ctx.patient_name as string) || (ctx.patientName as string) || `Test Contact ${i + 1}`;
+      const realPhone = real?.phoneNumber || '';
       return {
         patientId: real?.patientId || `test-${i}`,
         phoneNumber: phone.startsWith('+') ? phone : `+${phone}`,
@@ -393,6 +395,8 @@ export class OutboundController {
           ...ctx,
           patient_name: name,
           patientName: name,
+          patient_phone: realPhone,
+          patientPhone: realPhone,
         },
       };
     });

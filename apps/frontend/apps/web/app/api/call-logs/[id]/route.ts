@@ -41,6 +41,18 @@ export async function GET(
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
+    // Check if this is known to be an outbound call via ActionItem records
+    const actionItem = await prisma.actionItem.findFirst({
+      where: { callId, accountId: account.id },
+      select: { direction: true },
+    });
+
+    if (actionItem?.direction === 'OUTBOUND') {
+      return NextResponse.redirect(
+        new URL(`/api/outbound/call-logs/${callId}`, request.url),
+      );
+    }
+
     // Verify the call belongs to this account via CallReference
     const callRef = await prisma.callReference.findFirst({
       where: {
@@ -58,6 +70,19 @@ export async function GET(
       const retellCall = await retell.getCall(callId);
 
       if (!retellCall) {
+        // Fallback: check if this might be an outbound call
+        try {
+          const outboundSettings = await prisma.outboundSettings.findUnique({
+            where: { accountId: account.id },
+          });
+          if (outboundSettings?.patientCareRetellAgentId || outboundSettings?.financialRetellAgentId) {
+            return NextResponse.redirect(
+              new URL(`/api/outbound/call-logs/${callId}`, request.url),
+            );
+          }
+        } catch {
+          // Fallback failed, continue to 404
+        }
         return NextResponse.json({ error: 'Call not found' }, { status: 404 });
       }
 

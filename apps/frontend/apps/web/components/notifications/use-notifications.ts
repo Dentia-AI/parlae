@@ -4,9 +4,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface ActionItem {
   id: string;
-  callerName: string | null;
+  callId: string;
+  contactName: string | null;
+  contactPhone: string | null;
+  summary: string | null;
+  direction: 'INBOUND' | 'OUTBOUND';
   reason: string | null;
   status: string;
+  callType: string | null;
+  campaignId: string | null;
   createdAt: string;
 }
 

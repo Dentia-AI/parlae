@@ -37,6 +37,7 @@ interface CampaignContact {
   id: string;
   patientId: string;
   phoneNumber: string | null;
+  callContext?: Record<string, unknown> | null;
   status: string;
   outcome: string | null;
   attempts: number;
@@ -683,7 +684,9 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel, onDeleted 
                                       <span className="font-mono text-xs text-muted-foreground">{contact.patientId}</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2 text-muted-foreground">{contact.phoneNumber || '—'}</td>
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {(contact.callContext?.patient_phone as string) || (contact.callContext?.patientPhone as string) || contact.phoneNumber || '—'}
+                                  </td>
                                   <td className="px-3 py-2">
                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${CONTACT_STATUS_STYLE[contact.status] || 'bg-gray-100 text-gray-600'}`}>
                                       <StatusIcon className="h-3 w-3" />

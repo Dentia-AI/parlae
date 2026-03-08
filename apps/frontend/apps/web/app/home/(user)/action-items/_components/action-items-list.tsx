@@ -20,6 +20,8 @@ import {
   PhoneOutgoing,
   RefreshCw,
   UserCheck,
+  CheckCheck,
+  Users,
 } from 'lucide-react';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 
@@ -96,6 +98,8 @@ export function ActionItemsList() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [assignDropdownId, setAssignDropdownId] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkAssignDropdownOpen, setBulkAssignDropdownOpen] = useState(false);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -176,11 +180,82 @@ export function ActionItemsList() {
     await updateItem(itemId, { assignedToUserId: memberId, status: 'IN_PROGRESS' });
   };
 
-  const navigateToCall = (item: ActionItem) => {
-    if (item.direction === 'OUTBOUND') {
-      router.push(`/home/outbound/call-logs/${item.callId}`);
-    } else {
-      router.push(`/home/call-logs/${item.callId}`);
+  const bulkResolveAll = async () => {
+    const unresolvedIds = items
+      .filter((i) => i.status !== 'RESOLVED')
+      .map((i) => i.id);
+    if (unresolvedIds.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      const res = await fetch('/api/action-items/bulk', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': getCsrfToken(),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ ids: unresolvedIds, action: 'resolve' }),
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['action-items-notifications'] });
+        await fetchItems();
+      }
+    } catch (err) {
+      console.error('Bulk resolve failed:', err);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const bulkAssignAll = async (memberId: string) => {
+    setBulkAssignDropdownOpen(false);
+    const unresolvedIds = items
+      .filter((i) => i.status !== 'RESOLVED')
+      .map((i) => i.id);
+    if (unresolvedIds.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      const res = await fetch('/api/action-items/bulk', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': getCsrfToken(),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ ids: unresolvedIds, action: 'assign', assignedToUserId: memberId }),
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['action-items-notifications'] });
+        await fetchItems();
+      }
+    } catch (err) {
+      console.error('Bulk assign failed:', err);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const navigateToCall = async (item: ActionItem) => {
+    const primaryPath = item.direction === 'OUTBOUND'
+      ? `/home/outbound/call-logs/${item.callId}`
+      : `/home/call-logs/${item.callId}`;
+    const fallbackPath = item.direction === 'OUTBOUND'
+      ? `/home/call-logs/${item.callId}`
+      : `/home/outbound/call-logs/${item.callId}`;
+
+    const primaryApi = item.direction === 'OUTBOUND'
+      ? `/api/outbound/call-logs/${item.callId}`
+      : `/api/call-logs/${item.callId}`;
+
+    try {
+      const res = await fetch(primaryApi, { method: 'GET' });
+      if (res.ok) {
+        router.push(primaryPath);
+      } else {
+        router.push(fallbackPath);
+      }
+    } catch {
+      router.push(primaryPath);
     }
   };
 
@@ -223,10 +298,56 @@ export function ActionItemsList() {
         </Button>
       </div>
 
-      {/* Count */}
-      <p className="text-xs text-muted-foreground">
-        {total} {t('actionItems.itemsTotal')}
-      </p>
+      {/* Bulk actions + count row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">
+          {total} {t('actionItems.itemsTotal')}
+        </p>
+
+        {items.some((i) => i.status !== 'RESOLVED') && (
+          <>
+            <span className="mx-1 text-muted-foreground/30">|</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5 gap-1"
+              disabled={bulkUpdating}
+              onClick={bulkResolveAll}
+            >
+              {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCheck className="h-3 w-3" />}
+              {t('actionItems.bulkResolveAll', { defaultValue: 'Mark All Resolved' })}
+            </Button>
+
+            {teamMembers.length > 0 && (
+              <div className="relative">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2.5 gap-1"
+                  disabled={bulkUpdating}
+                  onClick={() => setBulkAssignDropdownOpen(!bulkAssignDropdownOpen)}
+                >
+                  {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Users className="h-3 w-3" />}
+                  {t('actionItems.bulkAssignAll', { defaultValue: 'Assign All To...' })}
+                </Button>
+                {bulkAssignDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
+                    {teamMembers.map((member) => (
+                      <button
+                        key={member.id}
+                        className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => bulkAssignAll(member.id)}
+                      >
+                        {member.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Loading state */}
       {loading && (
