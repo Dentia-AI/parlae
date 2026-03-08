@@ -271,8 +271,9 @@ export class OutboundSchedulerService {
       if (!phoneCache.has(patientId)) {
         try {
           const patientResult = await pmsService.getPatient(patientId);
-          const phone = patientResult?.data?.phone || patientResult?.data?.cell || null;
-          phoneCache.set(patientId, phone);
+          const patient = patientResult?.data;
+          const phone = patient?.phone || patient?.cell || patient?.metadata?.cell || patient?.metadata?.homephone || null;
+          phoneCache.set(patientId, phone && patientResult.success !== false ? phone : null);
         } catch {
           phoneCache.set(patientId, null);
         }
