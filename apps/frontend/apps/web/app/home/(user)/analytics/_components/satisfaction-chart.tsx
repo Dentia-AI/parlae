@@ -15,6 +15,7 @@ interface SatisfactionChartProps {
 
 const satisfactionColors: Record<string, string> = {
   Satisfied: '#10b981',
+  Neutral: '#f59e0b',
   'Not Satisfied': '#f43f5e',
   Unknown: '#94a3b8',
 };

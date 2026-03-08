@@ -4,12 +4,14 @@ import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
+import { StructuredConsoleLogger } from './common/structured-logger';
 
 // Trigger CI/CD build - 2026-02-14
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     bodyParser: false,
+    logger: new StructuredConsoleLogger(),
   });
 
   app.use(json({

@@ -65,7 +65,28 @@ export async function GET(
         userId, callId: callId, provider: 'RETELL', action: 'viewed_call_detail',
       }, '[Call Logs] Call detail accessed');
 
-      return NextResponse.json(mapRetellCallToDetail(retellCall));
+      const detail = mapRetellCallToDetail(retellCall);
+
+      if (detail.outcome === 'OTHER') {
+        const bookingAction = await prisma.aiActionLog.findFirst({
+          where: {
+            accountId: account.id,
+            callId,
+            action: { in: ['book_appointment', 'reschedule_appointment'] },
+            success: true,
+          },
+          select: { action: true },
+        });
+        if (bookingAction?.action === 'reschedule_appointment') {
+          detail.outcome = 'RESCHEDULED';
+          detail.appointmentSet = true;
+        } else if (bookingAction) {
+          detail.outcome = 'BOOKED';
+          detail.appointmentSet = true;
+        }
+      }
+
+      return NextResponse.json(detail);
     }
 
     // Fetch full call data from Vapi

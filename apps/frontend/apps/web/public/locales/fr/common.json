@@ -884,6 +884,7 @@
     },
     "satisfaction": {
       "Satisfied": "Satisfait",
+      "Neutral": "Neutre",
       "Not Satisfied": "Non satisfait",
       "Unknown": "Inconnu"
     },

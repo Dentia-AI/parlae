@@ -613,12 +613,40 @@ async function computeRetellAnalytics(
 
   console.log(`[Retell Analytics] clinic phones: ${clinicPhones}, raw: ${rawCalls?.length ?? 0}, filtered: ${uniqueCalls.length}`);
 
+  const callIds = uniqueCalls
+    .map((c) => c.call_id)
+    .filter((id): id is string => !!id);
+
+  const confirmedBookingCallIds = new Set<string>();
+  const confirmedRescheduleCallIds = new Set<string>();
+
+  if (callIds.length > 0) {
+    const bookingActions = await prisma.aiActionLog.findMany({
+      where: {
+        accountId,
+        callId: { in: callIds },
+        action: { in: ['book_appointment', 'reschedule_appointment'] },
+        success: true,
+      },
+      select: { callId: true, action: true },
+    });
+    for (const a of bookingActions) {
+      if (!a.callId) continue;
+      if (a.action === 'reschedule_appointment') {
+        confirmedRescheduleCallIds.add(a.callId);
+      } else {
+        confirmedBookingCallIds.add(a.callId);
+      }
+    }
+  }
+
   const totalCalls = uniqueCalls.length;
   let totalDuration = 0;
   let durationCount = 0;
   let bookedCount = 0;
   let bookingEligibleCount = 0;
   let satisfiedCount = 0;
+  let neutralCount = 0;
   let unsatisfiedCount = 0;
   let satisfactionUnknown = 0;
   const outcomeCounts = new Map<string, number>();
@@ -639,7 +667,13 @@ async function computeRetellAnalytics(
     }
     if (dur > 0) { totalDuration += dur; durationCount++; callDurations.push({ duration: dur }); }
 
-    const outcome = inferRetellOutcome(analysis);
+    let outcome = inferRetellOutcome(analysis);
+
+    if (outcome === 'OTHER' && confirmedBookingCallIds.has(call.call_id)) {
+      outcome = 'BOOKED';
+    } else if (outcome === 'OTHER' && confirmedRescheduleCallIds.has(call.call_id)) {
+      outcome = 'RESCHEDULED';
+    }
 
     outcomeCounts.set(outcome, (outcomeCounts.get(outcome) || 0) + 1);
     if (outcome === 'BOOKED' || outcome === 'RESCHEDULED') bookedCount++;
@@ -649,6 +683,7 @@ async function computeRetellAnalytics(
     const customSentiment = (custom.customer_sentiment || '').toLowerCase();
     const sentiment = customSentiment || presetSentiment || null;
     if (sentiment === 'very_positive' || sentiment === 'positive' || analysis.caller_satisfied === true) satisfiedCount++;
+    else if (sentiment === 'neutral') neutralCount++;
     else if (sentiment === 'negative' || sentiment === 'very_negative' || analysis.caller_satisfied === false) unsatisfiedCount++;
     else satisfactionUnknown++;
 
@@ -684,6 +719,7 @@ async function computeRetellAnalytics(
     })),
     satisfactionBreakdown: [
       { label: 'Satisfied', count: satisfiedCount, percentage: totalCalls > 0 ? Math.round((satisfiedCount / totalCalls) * 1000) / 10 : 0 },
+      { label: 'Neutral', count: neutralCount, percentage: totalCalls > 0 ? Math.round((neutralCount / totalCalls) * 1000) / 10 : 0 },
       { label: 'Not Satisfied', count: unsatisfiedCount, percentage: totalCalls > 0 ? Math.round((unsatisfiedCount / totalCalls) * 1000) / 10 : 0 },
       { label: 'Unknown', count: satisfactionUnknown, percentage: totalCalls > 0 ? Math.round((satisfactionUnknown / totalCalls) * 1000) / 10 : 0 },
     ],

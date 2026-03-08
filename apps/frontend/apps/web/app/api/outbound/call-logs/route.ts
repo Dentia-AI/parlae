@@ -205,6 +205,30 @@ export async function GET(request: NextRequest) {
 
     let mappedCalls = allCalls.map((call) => mapRetellCallToListItem(call, campaignContactMap));
 
+    const outboundCallIds = mappedCalls.map((c) => c.callId).filter(Boolean);
+    if (outboundCallIds.length > 0) {
+      const bookingActions = await prisma.aiActionLog.findMany({
+        where: {
+          accountId: account.id,
+          callId: { in: outboundCallIds },
+          action: { in: ['book_appointment', 'reschedule_appointment'] },
+          success: true,
+        },
+        select: { callId: true, action: true },
+      });
+      const bookedIds = new Set(bookingActions.filter((a) => a.action === 'book_appointment').map((a) => a.callId));
+      const rescheduledIds = new Set(bookingActions.filter((a) => a.action === 'reschedule_appointment').map((a) => a.callId));
+      for (const call of mappedCalls) {
+        if (call.outcome === 'OTHER' && bookedIds.has(call.callId)) {
+          call.outcome = 'BOOKED';
+          call.appointmentSet = true;
+        } else if (call.outcome === 'OTHER' && rescheduledIds.has(call.callId)) {
+          call.outcome = 'RESCHEDULED';
+          call.appointmentSet = true;
+        }
+      }
+    }
+
     if (mappedCalls.length === 0 && process.env.NODE_ENV === 'development') {
       return NextResponse.json(generateMockOutboundCallLogs(page, limit));
     }

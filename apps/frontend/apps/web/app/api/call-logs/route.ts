@@ -534,5 +534,31 @@ async function fetchRetellCalls(
     return clinicPhoneSet.has(toNum) || clinicPhoneSet.has(fromNum);
   });
 
-  return filteredCalls.map(mapRetellCallToListItem);
+  const mapped = filteredCalls.map(mapRetellCallToListItem);
+
+  const callIds = mapped.map((c) => c.callId).filter(Boolean);
+  if (callIds.length > 0) {
+    const bookingActions = await prisma.aiActionLog.findMany({
+      where: {
+        accountId,
+        callId: { in: callIds },
+        action: { in: ['book_appointment', 'reschedule_appointment'] },
+        success: true,
+      },
+      select: { callId: true, action: true },
+    });
+    const bookedIds = new Set(bookingActions.filter((a) => a.action === 'book_appointment').map((a) => a.callId));
+    const rescheduledIds = new Set(bookingActions.filter((a) => a.action === 'reschedule_appointment').map((a) => a.callId));
+    for (const call of mapped) {
+      if (call.outcome === 'OTHER' && bookedIds.has(call.callId)) {
+        call.outcome = 'BOOKED';
+        call.appointmentSet = true;
+      } else if (call.outcome === 'OTHER' && rescheduledIds.has(call.callId)) {
+        call.outcome = 'RESCHEDULED';
+        call.appointmentSet = true;
+      }
+    }
+  }
+
+  return mapped;
 }
