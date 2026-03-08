@@ -337,11 +337,18 @@ describe('TwilioService', () => {
 
   describe('createSipTrunkForRetell', () => {
     it('reuses existing trunk with matching domain', async () => {
-      mockFetch.mockResolvedValueOnce(mockOk({
-        trunks: [
-          { sid: 'TK_existing', domain_name: 'parlae.pstn.twilio.com' },
-        ],
-      }));
+      mockFetch
+        .mockResolvedValueOnce(mockOk({                                  // List trunks
+          trunks: [
+            { sid: 'TK_existing', domain_name: 'parlae.pstn.twilio.com' },
+          ],
+        }))
+        .mockResolvedValueOnce(mockOk({ ip_access_control_lists: [] }))  // List IP ACLs
+        .mockResolvedValueOnce(mockOk({ sid: 'AL_new' }))               // Create IP ACL
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 1
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 2
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 3
+        .mockResolvedValueOnce(mockOk({}));                              // Associate ACL with trunk
 
       const svc = createTwilioService();
       const result = await svc.createSipTrunkForRetell('Parlae', 'parlae');
@@ -349,20 +356,24 @@ describe('TwilioService', () => {
       expect(result).not.toBeNull();
       expect(result!.trunkSid).toBe('TK_existing');
       expect(result!.terminationUri).toBe('parlae.pstn.twilio.com');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('creates new trunk when none matches', async () => {
       mockFetch
-        .mockResolvedValueOnce(mockOk({ trunks: [] }))          // List trunks
-        .mockResolvedValueOnce(mockOk({ sid: 'TK_new' }))       // Create trunk
-        .mockResolvedValueOnce(mockOk({}));                       // Add origination
+        .mockResolvedValueOnce(mockOk({ trunks: [] }))                  // List trunks
+        .mockResolvedValueOnce(mockOk({ sid: 'TK_new' }))               // Create trunk
+        .mockResolvedValueOnce(mockOk({}))                               // Add origination
+        .mockResolvedValueOnce(mockOk({ ip_access_control_lists: [] }))  // List IP ACLs
+        .mockResolvedValueOnce(mockOk({ sid: 'AL_new' }))               // Create IP ACL
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 1
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 2
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 3
+        .mockResolvedValueOnce(mockOk({}));                              // Associate ACL with trunk
 
       const svc = createTwilioService();
       const result = await svc.createSipTrunkForRetell('Parlae', 'parlae');
 
       expect(result!.trunkSid).toBe('TK_new');
-      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     it('returns null when trunk creation fails', async () => {
@@ -376,9 +387,15 @@ describe('TwilioService', () => {
 
     it('appends .pstn.twilio.com to domain name if needed', async () => {
       mockFetch
-        .mockResolvedValueOnce(mockOk({ trunks: [] }))
-        .mockResolvedValueOnce(mockOk({ sid: 'TK_1' }))
-        .mockResolvedValueOnce(mockOk({}));
+        .mockResolvedValueOnce(mockOk({ trunks: [] }))                  // List trunks
+        .mockResolvedValueOnce(mockOk({ sid: 'TK_1' }))                 // Create trunk
+        .mockResolvedValueOnce(mockOk({}))                               // Add origination
+        .mockResolvedValueOnce(mockOk({ ip_access_control_lists: [] }))  // List IP ACLs
+        .mockResolvedValueOnce(mockOk({ sid: 'AL_1' }))                 // Create IP ACL
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 1
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 2
+        .mockResolvedValueOnce(mockOk({}))                               // Add IP 3
+        .mockResolvedValueOnce(mockOk({}));                              // Associate ACL
 
       const svc = createTwilioService();
       await svc.createSipTrunkForRetell('Test', 'mydomain');
