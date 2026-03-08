@@ -578,6 +578,14 @@ export class SikkaPmsService extends BasePmsService {
         msg: '[Sikka] checkAvailability raw response',
       });
 
+      if (response.status === 204) {
+        this.logger.warn({
+          accountId: this.accountId,
+          msg: '[Sikka] checkAvailability returned 204 No Content — PMS has no slot data',
+        });
+        return this.createSuccessResponse([] as TimeSlot[], { httpStatus: 204, noContent: true });
+      }
+
       const slots = (response.data.items || []).map((item: any) => this.mapSikkaTimeSlot(item));
       
       return this.createSuccessResponse(slots);

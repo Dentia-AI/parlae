@@ -905,6 +905,15 @@ export class AgentToolsService {
       }
       
       const slots = result.data || [];
+      const pmsNoContent = result.meta?.noContent === true;
+
+      if (pmsNoContent && slots.length === 0) {
+        this.logger.warn({
+          accountId: phoneRecord.accountId,
+          msg: '[PMS] checkAvailability returned 204 No Content — PMS cannot provide slot data, falling back to GCal',
+        });
+        return this.checkAvailabilityViaGoogleCalendar(phoneRecord, params);
+      }
 
       if (slots.length > 0) {
         return {
