@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OutboundCampaignService } from './services/outbound-campaign.service';
 import { OutboundSettingsService } from './services/outbound-settings.service';
 import { OutboundSchedulerService } from './services/outbound-scheduler.service';
+import { OutboundDispatcherService } from './services/outbound-dispatcher.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
 
 describe('OutboundController', () => {
@@ -48,6 +49,12 @@ describe('OutboundController', () => {
           useValue: {
             bootstrapCampaignsForAccount: jest.fn().mockResolvedValue(undefined),
             triggerScansForAccount: jest.fn().mockResolvedValue(['recall']),
+          },
+        },
+        {
+          provide: OutboundDispatcherService,
+          useValue: {
+            processTestCampaign: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
