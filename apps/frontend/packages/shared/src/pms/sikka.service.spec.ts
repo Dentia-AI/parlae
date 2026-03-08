@@ -357,10 +357,14 @@ describe('SikkaPmsService', () => {
     it('returns a single mapped patient', async () => {
       const svc = await createWarmedService();
       mockFetch.mockResolvedValue(mockOk({
-        patient_id: 'p1',
-        first_name: 'Jane',
-        last_name: 'Smith',
-        email: 'jane@example.com',
+        items: [{
+          patient_id: 'p1',
+          firstname: 'Jane',
+          lastname: 'Smith',
+          email: 'jane@example.com',
+        }],
+        total_count: '1',
+        pagination: { next: '' },
       }));
 
       const result = await svc.getPatient('p1');
@@ -570,9 +574,13 @@ describe('SikkaPmsService', () => {
           items: [{ id: 'wb-update-p', result: 'completed' }],
         }))
         .mockResolvedValueOnce(mockOk({
-          patient_id: 'p1',
-          first_name: 'Updated',
-          last_name: 'Name',
+          items: [{
+            patient_id: 'p1',
+            firstname: 'Updated',
+            lastname: 'Name',
+          }],
+          total_count: '1',
+          pagination: { next: '' },
         }));
 
       const result = await svc.updatePatient('p1', { phone: '+15559999999' });

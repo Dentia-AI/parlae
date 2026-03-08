@@ -323,7 +323,7 @@ describe('SikkaPmsService', () => {
         firstName: 'Jane',
         lastName: 'Doe',
         email: 'jane@example.com',
-        phone: '555-1234',
+        phone: '+5551234',
       });
     });
 
@@ -354,7 +354,7 @@ describe('SikkaPmsService', () => {
       const result = await service.getPatient('pat-1');
 
       expect(mockGet).toHaveBeenCalledWith('/patients', {
-        params: { patient_id: 'pat-1', limit: 1 },
+        params: { patient_id: 'pat-1', limit: 1, practice_id: '1' },
       });
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({

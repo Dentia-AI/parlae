@@ -872,7 +872,7 @@ export class SikkaPmsService extends BasePmsService {
         msg: '[Sikka] searchPatients raw response',
       });
 
-      const patients = (response.data.items || []).map(this.mapSikkaPatient);
+      const patients = (response.data.items || []).map((item: any) => this.mapSikkaPatient(item));
       
       return this.createListResponse(patients, {
         total: parseInt(response.data.total_count || '0'),

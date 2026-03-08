@@ -15,6 +15,7 @@ jest.mock('@kit/prisma', () => ({
     account: { findFirst: jest.fn() },
     outboundSettings: { findUnique: jest.fn() },
     campaignContact: { findMany: jest.fn() },
+    aiActionLog: { findMany: jest.fn() },
   },
 }));
 
@@ -23,6 +24,7 @@ const { prisma: mockPrisma } = jest.requireMock('@kit/prisma') as {
     account: { findFirst: jest.Mock };
     outboundSettings: { findUnique: jest.Mock };
     campaignContact: { findMany: jest.Mock };
+    aiActionLog: { findMany: jest.Mock };
   };
 };
 
@@ -56,6 +58,7 @@ beforeEach(() => {
   mockPrisma.account.findFirst.mockResolvedValue({ id: 'acc-1' });
   mockPrisma.outboundSettings.findUnique.mockResolvedValue(null);
   mockPrisma.campaignContact.findMany.mockResolvedValue([]);
+  mockPrisma.aiActionLog.findMany.mockResolvedValue([]);
   mockListCalls.mockResolvedValue([]);
 });
 
