@@ -305,6 +305,90 @@ describe('OutboundDispatcherService', () => {
       expect(campaignService.getQueuedContacts).not.toHaveBeenCalled();
     });
 
+    it('uses fromPhoneNumberId scoped by accountId to resolve the from number', async () => {
+      const settingsWithFrom = {
+        ...mockSettings,
+        fromPhoneNumberId: 'phone-rec-1',
+      };
+      settingsService.getSettings.mockResolvedValue(settingsWithFrom);
+
+      prisma.retellPhoneNumber.findFirst
+        .mockResolvedValueOnce({ phoneNumber: '+15855153460' });
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.outboundAgentTemplate.findUnique.mockResolvedValue({
+        retellAgentId: 'agent-1',
+        voicemailMessages: {},
+      });
+      setupCampaignTest(mockCampaign, [
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      expect(prisma.retellPhoneNumber.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'phone-rec-1',
+            accountId: 'acc-1',
+            isActive: true,
+          }),
+        }),
+      );
+      expect(retellService.createOutboundCall).toHaveBeenCalledWith(
+        expect.objectContaining({ fromNumber: '+15855153460' }),
+      );
+    });
+
+    it('rejects fromPhoneNumberId if accountId does not match (stale record scenario)', async () => {
+      const settingsWithFrom = {
+        ...mockSettings,
+        fromPhoneNumberId: 'phone-rec-wrong',
+      };
+      settingsService.getSettings.mockResolvedValue(settingsWithFrom);
+
+      // findFirst returns null because the where clause requires both id AND accountId
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue(null);
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.outboundAgentTemplate.findUnique.mockResolvedValue({
+        retellAgentId: 'agent-1',
+        voicemailMessages: {},
+      });
+      setupCampaignTest(mockCampaign, [
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      // Should NOT dispatch because from number could not be resolved
+      expect(retellService.createOutboundCall).not.toHaveBeenCalled();
+    });
+
+    it('falls back to accountId lookup when fromPhoneNumberId is not set', async () => {
+      prisma.doNotCallEntry.findUnique.mockResolvedValue(null);
+      prisma.retellPhoneNumber.findFirst.mockResolvedValue({ phoneNumber: '+15855153460' });
+      prisma.outboundAgentTemplate.findUnique.mockResolvedValue({
+        retellAgentId: 'agent-1',
+        voicemailMessages: {},
+      });
+      setupCampaignTest(mockCampaign, [
+        { id: 'c1', patientId: 'p1', phoneNumber: '+11234567890', attempts: 0, callContext: {} },
+      ]);
+
+      await service.processQueue();
+
+      expect(prisma.retellPhoneNumber.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            accountId: 'acc-1',
+            isActive: true,
+          }),
+        }),
+      );
+      expect(retellService.createOutboundCall).toHaveBeenCalledWith(
+        expect.objectContaining({ fromNumber: '+15855153460' }),
+      );
+    });
+
     it('skips campaign when ai-receptionist is disabled for account', async () => {
       prisma.outboundCampaign.findMany
         .mockResolvedValueOnce([mockCampaign])

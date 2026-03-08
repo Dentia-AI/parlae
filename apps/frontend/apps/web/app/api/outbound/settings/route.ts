@@ -345,25 +345,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Use phoneIntegrationSettings.phoneNumber as the authoritative phone
-    const settingsAccount = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { phoneIntegrationSettings: true },
-    });
-    const settingsIntegration = (settingsAccount?.phoneIntegrationSettings as any) ?? {};
-    const accountPhone = settingsIntegration.phoneNumber as string | undefined;
-
     // Auto-set fromPhoneNumberId from inbound phone if not already configured
     if (!existing?.fromPhoneNumberId) {
-      const inboundPhone = accountPhone
-        ? await prisma.retellPhoneNumber.findFirst({
-            where: { phoneNumber: accountPhone, isActive: true },
-            select: { id: true },
-          })
-        : await prisma.retellPhoneNumber.findFirst({
-            where: { accountId, isActive: true },
-            select: { id: true },
-          });
+      const inboundPhone = await prisma.retellPhoneNumber.findFirst({
+        where: { accountId, isActive: true },
+        select: { id: true },
+      });
       if (inboundPhone) {
         updateData.fromPhoneNumberId = inboundPhone.id;
       }
@@ -372,27 +359,22 @@ export async function POST(request: NextRequest) {
     // Always register the outbound agent on the Retell phone number
     const outboundAgentId = (updateData[agentIdField] ?? currentAgentId) as string | undefined;
     if (outboundAgentId) {
-      const phoneRecord = accountPhone
-        ? await prisma.retellPhoneNumber.findFirst({
-            where: { phoneNumber: accountPhone, isActive: true },
-            select: { phoneNumber: true },
-          })
-        : await prisma.retellPhoneNumber.findFirst({
-            where: { accountId, isActive: true },
-            select: { phoneNumber: true },
-          });
+      const phoneRecord = await prisma.retellPhoneNumber.findFirst({
+        where: { accountId, isActive: true },
+        select: { phoneNumber: true },
+      });
       if (phoneRecord?.phoneNumber) {
         try {
           const retell = createRetellService();
           await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
             outbound_agent_id: outboundAgentId,
           });
-          console.log(`[Outbound] Set outbound_agent_id=${outboundAgentId} on phone ${phoneRecord.phoneNumber} (accountPhone=${accountPhone || 'none'}) for account ${accountId}`);
+          console.log(`[Outbound] Set outbound_agent_id=${outboundAgentId} on phone ${phoneRecord.phoneNumber} for account ${accountId}`);
         } catch (err) {
           console.warn(`[Outbound] Failed to set outbound_agent_id on phone ${phoneRecord.phoneNumber} for account ${accountId}:`, err);
         }
       } else {
-        console.warn(`[Outbound] No active retellPhoneNumber found for account ${accountId} (accountPhone=${accountPhone || 'none'}) — outbound agent not attached to any phone`);
+        console.warn(`[Outbound] No active retellPhoneNumber found for account ${accountId} — outbound agent not attached to any phone`);
       }
     }
 

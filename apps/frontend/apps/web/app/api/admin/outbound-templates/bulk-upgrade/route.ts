@@ -133,25 +133,18 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Use phoneIntegrationSettings.phoneNumber as the authoritative phone
-        const accountPhone = integrationSettings.phoneNumber as string | undefined;
-
-        const phoneRecord = accountPhone
-          ? await prisma.retellPhoneNumber.findFirst({
-              where: { phoneNumber: accountPhone, isActive: true },
-              select: { phoneNumber: true },
-            })
-          : await prisma.retellPhoneNumber.findFirst({
-              where: { accountId: s.accountId, isActive: true },
-              select: { phoneNumber: true },
-            });
+        // Update the Retell phone number to use the new outbound agent
+        const phoneRecord = await prisma.retellPhoneNumber.findFirst({
+          where: { accountId: s.accountId, isActive: true },
+          select: { phoneNumber: true },
+        });
         if (phoneRecord?.phoneNumber) {
           try {
             await retell.updatePhoneNumber(phoneRecord.phoneNumber, {
               outbound_agent_id: agent.agent_id,
             });
             console.log(
-              `[Outbound] Set outbound_agent_id=${agent.agent_id} on phone ${phoneRecord.phoneNumber} (accountPhone=${accountPhone || 'none'}) for account ${s.accountId}`,
+              `[Outbound] Set outbound_agent_id=${agent.agent_id} on phone ${phoneRecord.phoneNumber} for account ${s.accountId}`,
             );
           } catch (err) {
             console.warn(
@@ -161,7 +154,7 @@ export async function POST(request: NextRequest) {
           }
         } else {
           console.warn(
-            `[Outbound] No active retellPhoneNumber found for account ${s.accountId} (accountPhone=${accountPhone || 'none'}) — outbound agent not attached to any phone`,
+            `[Outbound] No active retellPhoneNumber found for account ${s.accountId} — outbound agent not attached to any phone`,
           );
         }
 
