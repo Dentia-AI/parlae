@@ -10,6 +10,17 @@ import { Checkbox } from '@kit/ui/checkbox';
 import { toast } from '@kit/ui/sonner';
 import { useCsrfToken } from '@kit/shared/hooks/use-csrf-token';
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@kit/ui/alert-dialog';
+import {
   PhoneOutgoing, MessageSquare, Mail, Ban, ChevronDown, ChevronUp,
   Pause, Play, XCircle, Users, CheckCircle2, Clock, Phone,
   AlertCircle, Loader2, Trash2, ShieldBan, ChevronLeft, ChevronRight,
@@ -80,7 +91,45 @@ const CONTACT_STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   QUEUED: Clock,
   FAILED: AlertCircle,
   SKIPPED: XCircle,
+  NO_ANSWER: Phone,
+  BUSY: Phone,
+  VOICEMAIL: Phone,
+  CANCELLED: XCircle,
 };
+
+const CONTACT_STATUS_STYLE: Record<string, string> = {
+  COMPLETED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  QUEUED: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  FAILED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  NO_ANSWER: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  BUSY: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  VOICEMAIL: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  SKIPPED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
+  CANCELLED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
+};
+
+const OUTCOME_STYLE: Record<string, string> = {
+  booked: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  confirmed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  scheduled: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  interested: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  callback_requested: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  voicemail_left: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  declined: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  not_interested: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  no_answer: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  busy: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  wrong_number: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  disconnected: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  admin_aborted: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
+};
+
+function formatLabel(raw: string): string {
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 const CONTACTS_PER_PAGE = 20;
 
@@ -94,6 +143,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
   const [isPending, startTransition] = useTransition();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [contactActionPending, setContactActionPending] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   const [patientNames, setPatientNames] = useState<Record<string, string>>({});
   const [contactPage, setContactPage] = useState(1);
 
@@ -278,17 +328,41 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
     }
   }
 
+  async function handleDeleteCampaign() {
+    setDeletePending(true);
+    try {
+      const res = await fetch(`/api/outbound/campaigns/${campaign.id}`, {
+        method: 'DELETE',
+        headers: { 'x-csrf-token': getCsrfToken() },
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete');
+      }
+      toast.success(t('outbound.campaignActions.deleted', 'Campaign deleted'));
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete campaign');
+    } finally {
+      setDeletePending(false);
+    }
+  }
+
+  const canDelete = !['ACTIVE', 'SCHEDULED'].includes(currentStatus);
   const statusColor = STATUS_COLORS[currentStatus] || 'bg-gray-500';
   const allSelected = detail ? selectedIds.size === detail.contacts.length && detail.contacts.length > 0 : false;
   const someSelected = selectedIds.size > 0;
   const cPag = detail?.contactsPagination;
 
   return (
-    <Card className={expanded ? 'ring-1 ring-primary/20' : 'hover:shadow-sm transition-shadow'}>
-      <CardContent className="pt-4 pb-4">
+    <Card className={expanded ? 'ring-1 ring-primary/20' : 'transition-shadow'}>
+      <CardContent className="pt-0 pb-0">
         <button
           type="button"
-          className="flex items-center justify-between w-full text-left"
+          className={`flex items-center justify-between w-full text-left cursor-pointer rounded-lg px-4 py-4 -mx-4 transition-colors group ${
+            expanded ? '' : 'hover:bg-muted/50'
+          }`}
           onClick={handleToggleExpand}
         >
           <div className="flex items-center gap-3">
@@ -297,7 +371,7 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">{campaign.name}</p>
+                <p className="font-medium text-sm group-hover:text-primary transition-colors">{campaign.name}</p>
                 {campaign.isAutoGenerated && (
                   <Badge variant="outline" className="text-xs">
                     {t('outbound.campaign.auto')}
@@ -334,16 +408,18 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
             >
               {t(`outbound.campaign.status.${currentStatus.toLowerCase()}`)}
             </Badge>
-            {expanded ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
+            <div className={`rounded-full p-1 transition-colors ${expanded ? 'bg-primary/10' : 'group-hover:bg-muted'}`}>
+              {expanded ? (
+                <ChevronUp className="h-4 w-4 text-primary" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              )}
+            </div>
           </div>
         </button>
 
         {expanded && (
-          <div className="mt-4 border-t pt-4 space-y-4">
+          <div className="mx-4 mb-4 border-t pt-4 space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
                 {t('outbound.campaignActions.created')}: {new Date(campaign.createdAt).toLocaleDateString()}
@@ -396,6 +472,45 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                     {t('outbound.campaignActions.cancel')}
                   </Button>
                 )}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!canDelete || deletePending}
+                      className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/20"
+                    >
+                      {deletePending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      {t('outbound.campaignActions.delete', 'Delete')}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {t('outbound.campaignActions.deleteConfirmTitle', 'Delete this campaign?')}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t(
+                          'outbound.campaignActions.deleteConfirmDescription',
+                          'This will permanently delete the campaign and all its contact records. This action cannot be undone.',
+                        )}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common:cancel', 'Cancel')}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteCampaign}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        {t('outbound.campaignActions.deleteConfirm', 'Delete')}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
 
@@ -465,9 +580,15 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                     <p className="text-sm font-medium mb-2">{t('outbound.campaignActions.outcomes')}</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(detail.outcomeBreakdown).map(([outcome, count]) => (
-                        <Badge key={outcome} variant="secondary" className="text-xs">
-                          {outcome}: {count}
-                        </Badge>
+                        <span
+                          key={outcome}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${OUTCOME_STYLE[outcome] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+                        >
+                          {formatLabel(outcome)}
+                          <span className="rounded-full bg-black/10 dark:bg-white/10 px-1.5 py-0.5 text-[10px] leading-none font-semibold">
+                            {count}
+                          </span>
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -555,12 +676,20 @@ export function CampaignCard({ campaign, callTypeLabel, channelLabel }: Campaign
                                   </td>
                                   <td className="px-3 py-2 text-muted-foreground">{contact.phoneNumber || '—'}</td>
                                   <td className="px-3 py-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <StatusIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                      <span className="text-xs">{contact.status}</span>
-                                    </div>
+                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${CONTACT_STATUS_STYLE[contact.status] || 'bg-gray-100 text-gray-600'}`}>
+                                      <StatusIcon className="h-3 w-3" />
+                                      {formatLabel(contact.status)}
+                                    </span>
                                   </td>
-                                  <td className="px-3 py-2 text-xs">{contact.outcome || '—'}</td>
+                                  <td className="px-3 py-2">
+                                    {contact.outcome ? (
+                                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${OUTCOME_STYLE[contact.outcome] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                        {formatLabel(contact.outcome)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-2 text-right">{contact.attempts}</td>
                                   <td className="px-3 py-1.5">
                                     <div className="flex items-center gap-1 justify-end">

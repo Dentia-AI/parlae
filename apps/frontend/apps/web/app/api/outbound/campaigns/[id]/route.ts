@@ -82,6 +82,47 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await requireSession();
+    const userId = session.user?.id;
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const accountId = await getAccountId(userId);
+    if (!accountId) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+
+    const { id } = await params;
+
+    const campaign = await prisma.outboundCampaign.findFirst({
+      where: { id, accountId },
+    });
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    if (['ACTIVE', 'SCHEDULED'].includes(campaign.status)) {
+      return NextResponse.json(
+        { error: 'Cannot delete an active or scheduled campaign. Cancel it first.' },
+        { status: 400 },
+      );
+    }
+
+    await prisma.outboundCampaign.delete({ where: { id } });
+
+    return NextResponse.json({ success: true, campaignId: id });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('Error deleting campaign:', error);
+    return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

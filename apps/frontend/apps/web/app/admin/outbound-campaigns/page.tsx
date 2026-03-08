@@ -458,12 +458,12 @@ function AdminOutboundCampaignsPage() {
                 Stop Test Run
               </Button>
             )}
-            {testRun && !testRunning && (
+            {testRun && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="outline"
-                    disabled={deleting}
+                    disabled={deleting || testRunning}
                     className="text-red-600 border-red-200 hover:bg-red-50"
                   >
                     {deleting ? (
