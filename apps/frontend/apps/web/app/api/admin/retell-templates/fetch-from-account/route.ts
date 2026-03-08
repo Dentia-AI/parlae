@@ -165,6 +165,8 @@ export async function fetchRetellConfigsFromAccount(accountId: string) {
             boosted_keywords: agent.boosted_keywords,
             ambient_sound: agent.ambient_sound,
             ambient_sound_volume: agent.ambient_sound_volume,
+            stt_mode: (agent as any).stt_mode,
+            denoising_mode: (agent as any).denoising_mode,
             post_call_analysis_data: agent.post_call_analysis_data,
           };
         }

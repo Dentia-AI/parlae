@@ -246,6 +246,8 @@ export interface RetellAgentConfig {
   reminder_trigger_ms?: number;
   reminder_max_count?: number;
   vocab_specialization?: 'general' | 'medical';
+  stt_mode?: 'fast' | 'accurate' | 'custom';
+  denoising_mode?: 'no-denoise' | 'noise-cancellation' | 'noise-and-background-speech-cancellation';
   normalize_for_speech?: boolean;
   boosted_keywords?: string[];
   end_call_after_silence_ms?: number;

@@ -28,7 +28,7 @@ import type { RetellCustomTool, RetellAgentSwapTool, RetellEndCallTool, RetellTr
 // Constants
 // ---------------------------------------------------------------------------
 
-export const RETELL_DENTAL_CLINIC_VERSION = 'v1.0';
+export const RETELL_DENTAL_CLINIC_VERSION = 'v1.1';
 
 export type RetellAgentRole =
   | 'receptionist'
@@ -256,8 +256,10 @@ export const RETELL_TOOL_GROUP_MAP: Record<string, string> = {
 export const SHARED_RETELL_AGENT_CONFIG = {
   language: 'multi' as const,
   vocab_specialization: 'medical' as const,
+  stt_mode: 'accurate' as const,
+  denoising_mode: 'noise-and-background-speech-cancellation' as const,
   responsiveness: 0.9,
-  interruption_sensitivity: 0.7,
+  interruption_sensitivity: 0.8,
   enable_backchannel: true,
   backchannel_frequency: 0.6,
   reminder_trigger_ms: 10_000,

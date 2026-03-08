@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.1';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.2';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
