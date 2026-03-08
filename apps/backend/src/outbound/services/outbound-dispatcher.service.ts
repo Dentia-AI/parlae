@@ -282,14 +282,24 @@ export class OutboundDispatcherService {
     });
     const clinicName = account?.brandingBusinessName || account?.name || '';
 
+    const patientName = contextVars.patient_name || contextVars.patientName || '';
+
     const dynamicVariables: Record<string, string> = {
       ...contextVars,
+      // snake_case (used by code-built flows)
       call_type: callTypeLower,
-      patient_name: contextVars.patient_name || '',
+      patient_name: patientName,
       patient_id: contact.patientId,
       customer_phone: contact.phoneNumber || '',
       clinic_name: clinicName,
       clinic_phone: fromNumber,
+      // camelCase aliases (used by DB-stored template flows)
+      callType: callTypeLower,
+      patientName: patientName,
+      patientId: contact.patientId,
+      customerPhone: contact.phoneNumber || '',
+      clinicName: clinicName,
+      clinicPhone: fromNumber,
     };
 
     let voicemailMessage: string | undefined;
