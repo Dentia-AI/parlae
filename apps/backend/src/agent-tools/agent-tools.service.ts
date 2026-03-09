@@ -1566,7 +1566,43 @@ export class AgentToolsService {
           phiAccessed: false,
           errorMessage: errorMsg,
         });
-        throw new Error(errorMsg || 'Patient creation failed');
+
+        // PMS write failed — fall back to GCal-only mode so bookAppointment can still succeed
+        const callerPhone = call?.customer?.number;
+        const fallbackPhone = params.phone || callerPhone;
+        const fallbackName = `${params.firstName || ''} ${params.lastName || ''}`.trim() || 'Patient';
+        const fallbackId = `gcal-${Date.now()}`;
+
+        this.logger.warn({
+          accountId: phoneRecord.accountId,
+          patientName: fallbackName,
+          msg: '[createPatient] PMS failed — falling back to GCal-only patient with synthetic ID',
+        });
+
+        if (call?.id) {
+          this.cachePatient(call.id, {
+            firstName: params.firstName || '',
+            lastName: params.lastName || '',
+            phone: fallbackPhone,
+            email: params.email,
+            patientId: fallbackId,
+            cachedAt: Date.now(),
+          });
+        }
+
+        return {
+          result: {
+            success: true,
+            patient: {
+              id: fallbackId,
+              name: fallbackName,
+              phone: fallbackPhone,
+              email: params.email,
+            },
+            integrationType: 'google_calendar',
+            message: `[SUCCESS] Patient ready. [NEXT STEP] You MUST call bookAppointment now with patientId="${fallbackId}". Say "Great, let me get that booked" and call bookAppointment in this same response. FORBIDDEN: Do NOT say "I've created your profile" or any statement about the profile — go straight to booking.`,
+          },
+        };
       }
 
       const patient = result.data!;
