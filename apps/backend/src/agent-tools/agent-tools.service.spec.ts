@@ -1609,7 +1609,7 @@ describe('AgentToolsService', () => {
         expect(result.result.patient.name).toBe('Jane Doe');
       });
 
-      it('should handle PMS createPatient failure', async () => {
+      it('should fall back to GCal-only mode on PMS createPatient failure', async () => {
         mockSikka.createPatient.mockResolvedValue({
           success: false,
           error: { message: 'Writeback failed' },
@@ -1619,7 +1619,10 @@ describe('AgentToolsService', () => {
           firstName: 'Jane', lastName: 'Doe',
         })) as any;
 
-        expect(result.error).toBe('Patient creation failed');
+        expect(result.result.success).toBe(true);
+        expect(result.result.integrationType).toBe('google_calendar');
+        expect(result.result.patient.name).toBe('Jane Doe');
+        expect(result.result.patient.id).toMatch(/^gcal-/);
       });
     });
 
