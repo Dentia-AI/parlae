@@ -233,7 +233,7 @@ export class AgentToolsService {
       response.nextBooking = ctx.nextBooking;
     }
     if (ctx.lastVisitDate) {
-      response.lastVisitDate = ctx.lastVisitDate;
+      response.lastVisitInfo = this.formatRelativeDate(ctx.lastVisitDate);
     }
     if (ctx.lastCallSummary) {
       response.lastCallSummary = ctx.lastCallSummary;
@@ -1148,7 +1148,7 @@ export class AgentToolsService {
           gcalResult.patientName = callerCtx.patientName;
           gcalResult.message = `Welcome back, ${callerCtx.patientName.split(' ')[0]}! How can I help you today?`;
           if (callerCtx.nextBooking) gcalResult.nextBooking = callerCtx.nextBooking;
-          if (callerCtx.lastVisitDate) gcalResult.lastVisitDate = callerCtx.lastVisitDate;
+          if (callerCtx.lastVisitDate) gcalResult.lastVisitInfo = this.formatRelativeDate(callerCtx.lastVisitDate);
           if (callerCtx.lastCallSummary) gcalResult.lastCallSummary = callerCtx.lastCallSummary;
           if (callerCtx.lastCallOutcome) gcalResult.lastCallOutcome = callerCtx.lastCallOutcome;
         } else {
@@ -1343,6 +1343,10 @@ export class AgentToolsService {
           phiAccessed: true,
         });
 
+        const lastVisitDesc = patient.lastVisit
+          ? this.formatRelativeDate(patient.lastVisit)
+          : undefined;
+
         const verifiedResult: Record<string, any> = {
           success: true,
           callerVerified: true,
@@ -1351,7 +1355,7 @@ export class AgentToolsService {
             name: `${patient.firstName} ${patient.lastName}`,
             email: patient.email,
             dateOfBirth: patient.dateOfBirth,
-            lastVisit: patient.lastVisit,
+            lastVisitInfo: lastVisitDesc,
             balance: patient.balance,
           },
           message: `Welcome back, ${patient.firstName}!`,
@@ -1363,7 +1367,7 @@ export class AgentToolsService {
 
         if (callerCtx) {
           if (callerCtx.nextBooking) verifiedResult.nextBooking = callerCtx.nextBooking;
-          if (callerCtx.lastVisitDate) verifiedResult.lastVisitDate = callerCtx.lastVisitDate;
+          if (callerCtx.lastVisitDate) verifiedResult.lastVisitInfo = this.formatRelativeDate(callerCtx.lastVisitDate);
           if (callerCtx.lastCallSummary) verifiedResult.lastCallSummary = callerCtx.lastCallSummary;
           if (callerCtx.lastCallOutcome) verifiedResult.lastCallOutcome = callerCtx.lastCallOutcome;
         }
@@ -1451,6 +1455,26 @@ export class AgentToolsService {
     if (!phone) return '';
     const digits = phone.replace(/\D/g, '');
     return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  }
+
+  /**
+   * Convert a raw date into a relative description so the AI
+   * cannot mistake it for an appointment date to book.
+   */
+  private formatRelativeDate(dateInput: string | Date): string {
+    const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (isNaN(d.getTime())) return 'Unknown';
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const months = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30.44));
+    const monthName = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    if (months < 1) return `Recently (${monthName}) — HISTORICAL, not an appointment date`;
+    if (months < 12) return `About ${months} month(s) ago (${monthName}) — HISTORICAL, not an appointment date`;
+    const years = Math.floor(months / 12);
+    const rem = months % 12;
+    const yStr = years === 1 ? '1 year' : `${years} years`;
+    const desc = rem > 0 ? `${yStr} and ${rem} month(s)` : yStr;
+    return `About ${desc} ago (${monthName}) — HISTORICAL, not an appointment date`;
   }
 
   private extractNameQuery(params: any): { firstname: string; lastname?: string } | null {

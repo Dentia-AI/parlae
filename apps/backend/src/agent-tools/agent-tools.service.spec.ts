@@ -1266,7 +1266,8 @@ describe('AgentToolsService', () => {
       });
 
       expect(result.result.patientType).toBe('returning');
-      expect(result.result.lastVisitDate).toBe('2025-12-01T10:00:00Z');
+      expect(result.result.lastVisitInfo).toContain('HISTORICAL');
+      expect(result.result.lastVisitInfo).toContain('December 2025');
       expect(result.result.lastCallSummary).toBe('Called about insurance');
       expect(result.result.lastCallOutcome).toBe('resolved');
       expect(result.result.message).toContain('Last call:');
