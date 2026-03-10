@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.5';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.6';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -114,6 +114,7 @@ function toFlowTool(tool: RetellCustomTool): ConversationFlowTool {
     speak_during_execution: tool.speak_during_execution,
     speak_after_execution: tool.speak_after_execution,
     execution_message_description: tool.execution_message_description,
+    execution_message_type: tool.execution_message_type,
     timeout_ms: tool.timeout_ms,
   };
 }
@@ -199,6 +200,9 @@ export function buildDentalClinicFlow(
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_RECEPTIONIST_PROMPT, cn) },
     tool_ids: ['getProviders', 'getCallerContext'],
+    ...(config.knowledgeBaseIds?.length
+      ? { knowledge_base_ids: config.knowledgeBaseIds }
+      : {}),
     edges: [
       promptEdge(
         'Caller describes pain, bleeding, trauma, swelling, breathing difficulty, or any urgent/emergency symptoms.',
@@ -256,6 +260,10 @@ export function buildDentalClinicFlow(
         'appt_mgmt',
       ),
       promptEdge(
+        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
+        'faq',
+      ),
+      promptEdge(
         'Booking is complete and caller has no other needs, or caller needs general help.',
         'receptionist',
       ),
@@ -284,6 +292,10 @@ export function buildDentalClinicFlow(
       promptEdge(
         'Caller wants to book a brand new appointment (not reschedule).',
         'booking',
+      ),
+      promptEdge(
+        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
+        'faq',
       ),
       promptEdge(
         'Agent has refused a privacy/third-party request multiple times and the caller keeps pressing, or the conversation is going in circles.',
@@ -324,6 +336,10 @@ export function buildDentalClinicFlow(
         'insurance_billing',
       ),
       promptEdge(
+        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
+        'faq',
+      ),
+      promptEdge(
         'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing, or the conversation is going in circles.',
         'end_call',
       ),
@@ -361,6 +377,10 @@ export function buildDentalClinicFlow(
       promptEdge(
         'Caller wants to update personal (non-insurance) info.',
         'patient_records',
+      ),
+      promptEdge(
+        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
+        'faq',
       ),
       promptEdge(
         'Agent has already answered the insurance/billing question and offered a callback, but the caller keeps asking repeated detailed follow-up questions. The conversation is going in circles.',
@@ -415,10 +435,21 @@ export function buildDentalClinicFlow(
     id: 'faq',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_FAQ_PROMPT, cn) },
+    ...(config.knowledgeBaseIds?.length
+      ? { knowledge_base_ids: config.knowledgeBaseIds }
+      : {}),
     edges: [
       promptEdge(
-        'Caller wants to book an appointment.',
+        'Caller wants to book an appointment or continue booking.',
         'booking',
+      ),
+      promptEdge(
+        'Caller wants to cancel, reschedule, or manage an existing appointment.',
+        'appt_mgmt',
+      ),
+      promptEdge(
+        'Caller has questions about insurance, billing, or payments.',
+        'insurance_billing',
       ),
       promptEdge(
         'Caller has another question or needs other help.',
@@ -534,8 +565,5 @@ export function buildDentalClinicFlow(
     tools: allTools,
     start_node_id: 'receptionist',
     nodes,
-    ...(config.knowledgeBaseIds?.length
-      ? { knowledge_base_ids: config.knowledgeBaseIds }
-      : {}),
   };
 }

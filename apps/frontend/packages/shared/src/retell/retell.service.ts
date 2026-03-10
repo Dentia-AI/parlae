@@ -144,6 +144,7 @@ export interface ConversationFlowConversationNode extends ConversationFlowNodeBa
   instruction: { type: 'prompt'; text: string };
   tool_ids?: string[];
   global_tool_ids?: string[];
+  knowledge_base_ids?: string[];
 }
 
 export interface ConversationFlowFunctionNode extends ConversationFlowNodeBase {
@@ -199,6 +200,7 @@ export interface ConversationFlowTool {
   speak_during_execution?: boolean;
   speak_after_execution?: boolean;
   execution_message_description?: string;
+  execution_message_type?: 'prompt' | 'static_text';
   timeout_ms?: number;
   response_variables?: Record<string, string>;
 }
@@ -751,6 +753,49 @@ export class RetellService {
       `/update-conversation-flow/${flowId}`,
       config,
     );
+  }
+
+  /**
+   * Attach KB to specific conversation nodes instead of the whole flow.
+   * This avoids Retell running a KB vector search on every user turn in every node,
+   * which adds ~2-3s latency. By scoping KB to only nodes where the caller might
+   * ask general questions (e.g. receptionist, faq), booking/scheduling nodes
+   * stay fast.
+   */
+  async attachKbToFlowNodes(
+    flowId: string,
+    kbIds: string[],
+    targetNodeIds: string[] = ['receptionist', 'faq'],
+  ): Promise<boolean> {
+    const flow = await this.getConversationFlow(flowId);
+    if (!flow) return false;
+
+    const nodes = (flow as any).nodes as any[] | undefined;
+    if (!nodes?.length) return false;
+
+    let modified = false;
+    for (const node of nodes) {
+      if (node.type === 'conversation' && targetNodeIds.includes(node.id)) {
+        node.knowledge_base_ids = kbIds;
+        modified = true;
+      } else if (node.knowledge_base_ids) {
+        delete node.knowledge_base_ids;
+        modified = true;
+      }
+    }
+
+    if (!modified) return false;
+
+    await this.updateConversationFlow(flowId, {
+      knowledge_base_ids: [],
+      nodes,
+    } as any);
+
+    logger.info(
+      { flowId, targetNodeIds, kbCount: kbIds.length },
+      '[Retell] Attached KB to specific flow nodes (cleared flow-level KB)',
+    );
+    return true;
   }
 
   async deleteConversationFlow(flowId: string): Promise<void> {

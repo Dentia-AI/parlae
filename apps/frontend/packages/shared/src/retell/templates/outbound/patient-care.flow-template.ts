@@ -73,6 +73,7 @@ function toFlowTool(tool: RetellCustomTool): ConversationFlowTool {
     speak_during_execution: tool.speak_during_execution,
     speak_after_execution: tool.speak_after_execution,
     execution_message_description: tool.execution_message_description,
+    execution_message_type: tool.execution_message_type,
     timeout_ms: tool.timeout_ms,
   };
 }

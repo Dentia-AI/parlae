@@ -80,9 +80,6 @@ export async function POST(request: NextRequest) {
       try {
         const integrationSettings =
           (s.account?.phoneIntegrationSettings as any) ?? {};
-        const retellKbId = integrationSettings.retellKnowledgeBaseId as
-          | string
-          | undefined;
 
         const webhookSecret = process.env.RETELL_WEBHOOK_SECRET || '';
 
@@ -94,9 +91,8 @@ export async function POST(request: NextRequest) {
           .replace(/\{\{accountId\}\}/g, s.accountId);
         const flowConfig = JSON.parse(flowConfigStr) as Record<string, unknown>;
 
-        if (retellKbId) {
-          flowConfig.knowledge_base_ids = [retellKbId];
-        }
+        // KB is intentionally NOT attached to outbound flows — outbound calls
+        // are task-oriented and don't need KB retrieval on every turn.
         const flow = await retell.createConversationFlow(flowConfig as any);
         if (!flow) {
           results.push({ accountId: s.accountId, status: 'failed', error: 'Flow creation failed' });

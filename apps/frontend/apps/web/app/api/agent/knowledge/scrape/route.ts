@@ -433,7 +433,9 @@ export async function POST(request: NextRequest) {
       '[KB Scrape] Website scrape and KB upload complete',
     );
 
-    // Attach KB to all deployed agents (inbound CF + outbound)
+    // Attach KB to inbound flow nodes only (receptionist + faq).
+    // We deliberately skip outbound flows — outbound calls are task-oriented
+    // and rarely need KB retrieval, which adds ~2-3s latency per turn.
     if (provider === 'RETELL' && retellKnowledgeBaseId) {
       try {
         const { createRetellService: createSvc } = await import(
@@ -448,48 +450,20 @@ export async function POST(request: NextRequest) {
           (settings.retellConversationFlow as any)?.conversationFlowId ||
           settings.conversationFlowId;
         if (inboundFlowId) {
-          await retellSvc.updateConversationFlow(inboundFlowId, {
-            knowledge_base_ids: kbIds,
-          });
-          flowsUpdated.push(`inbound:${inboundFlowId}`);
-        }
-
-        const outboundSettings = await prisma.outboundSettings.findUnique({
-          where: { accountId: account.id },
-          select: {
-            patientCareRetellAgentId: true,
-            financialRetellAgentId: true,
-          },
-        });
-
-        const outboundAgentIds = [
-          outboundSettings?.patientCareRetellAgentId,
-          outboundSettings?.financialRetellAgentId,
-        ].filter(Boolean) as string[];
-
-        for (const oaId of outboundAgentIds) {
-          try {
-            const agentData = await retellSvc.getAgent(oaId);
-            const flowId =
-              (agentData?.response_engine as any)?.conversation_flow_id;
-            if (flowId) {
-              await retellSvc.updateConversationFlow(flowId, {
-                knowledge_base_ids: kbIds,
-              });
-              flowsUpdated.push(`outbound:${flowId}`);
-            }
-          } catch (agentErr: any) {
-            logger.warn(
-              { error: agentErr?.message, agentId: oaId },
-              '[KB Scrape] Failed to update outbound agent flow (non-fatal)',
-            );
+          const attached = await retellSvc.attachKbToFlowNodes(
+            inboundFlowId,
+            kbIds,
+            ['receptionist', 'faq'],
+          );
+          if (attached) {
+            flowsUpdated.push(`inbound:${inboundFlowId}`);
           }
         }
 
         if (flowsUpdated.length > 0) {
           logger.info(
             { accountId, flowsUpdated, kbId: retellKnowledgeBaseId },
-            '[KB Scrape] Attached KB to conversation flows',
+            '[KB Scrape] Attached KB to inbound flow nodes (receptionist + faq)',
           );
         }
       } catch (attachErr: any) {

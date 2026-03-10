@@ -171,9 +171,8 @@ export async function POST(request: NextRequest) {
           .replace(/\{\{accountId\}\}/g, accountId);
         const flowConfig = JSON.parse(flowConfigStr) as Record<string, unknown>;
 
-        if (retellKbId) {
-          flowConfig.knowledge_base_ids = [retellKbId];
-        }
+        // KB is intentionally NOT attached to outbound flows — outbound calls
+        // are task-oriented and don't need KB retrieval on every turn.
         const flow = await retell.createConversationFlow(flowConfig as any);
         if (!flow) {
           results.push({ accountId, success: false, error: 'Flow creation failed' });

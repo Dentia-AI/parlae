@@ -32,6 +32,9 @@ function toRetellTool(
   opts: {
     speakDuring?: boolean;
     speakDuringMessage?: string;
+    /** 'static_text' speaks the message verbatim (faster, no LLM call).
+     *  'prompt' lets the AI generate a message (slower, more varied). */
+    speakDuringType?: 'prompt' | 'static_text';
     timeoutMs?: number;
   } = {},
 ): RetellCustomTool {
@@ -49,6 +52,7 @@ function toRetellTool(
     speak_during_execution: opts.speakDuring ?? false,
     speak_after_execution: true,
     execution_message_description: opts.speakDuringMessage,
+    execution_message_type: opts.speakDuringType ?? 'static_text',
     timeout_ms: opts.timeoutMs ?? 30_000,
   };
 }
@@ -360,64 +364,70 @@ const getProvidersFn: VapiToolFunction = {
 
 export const retellLookupPatientTool = toRetellTool(lookupPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Sure, give me just a moment.',
 });
 
 export const retellCreatePatientTool = toRetellTool(createPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Perfect, let me get you all set up.',
 });
 
-export const retellUpdatePatientTool = toRetellTool(updatePatientFn);
+export const retellUpdatePatientTool = toRetellTool(updatePatientFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me update that for you.',
+});
 export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Let me see what we have available.',
 });
 
 export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Great, let me get that booked for you.',
   timeoutMs: 45_000,
 });
 
 export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Sure, let me move that around for you.',
 });
 
 export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Alright, let me take care of that.',
 });
 export const retellGetAppointmentsTool = toRetellTool(getAppointmentsFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Let me pull up your appointments.',
 });
 
 export const retellAddNoteTool = toRetellTool(addNoteFn);
 export const retellGetInsuranceTool = toRetellTool(getInsuranceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me pull up your insurance information.',
+  speakDuringMessage: 'Let me pull up your insurance details.',
 });
-export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn);
+export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me save that for you.',
+});
 export const retellVerifyInsuranceCoverageTool = toRetellTool(verifyInsuranceCoverageFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me verify that coverage for you.',
+  speakDuringMessage: 'Let me check on that coverage for you.',
 });
 export const retellGetBalanceTool = toRetellTool(getBalanceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me check your balance.',
+  speakDuringMessage: 'Let me look that up for you.',
 });
 export const retellGetPaymentHistoryTool = toRetellTool(getPaymentHistoryFn);
 export const retellProcessPaymentTool = toRetellTool(processPaymentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Processing that payment now.',
+  speakDuringMessage: 'Alright, let me process that for you.',
   timeoutMs: 45_000,
 });
 export const retellCreatePaymentPlanTool = toRetellTool(createPaymentPlanFn);
 export const retellTakeMessageTool = toRetellTool(takeMessageFn, {
   speakDuring: true,
-  speakDuringMessage: 'One moment please.',
+  speakDuringMessage: 'Of course, let me take a message.',
 });
 export const retellGetProvidersTool = toRetellTool(getProvidersFn);
 
