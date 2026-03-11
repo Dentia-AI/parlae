@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     const accountOverviews = accounts.map((account) => {
       const settings = account.phoneIntegrationSettings as any;
       const hasFlowAgent = !!settings?.conversationFlowId;
+      const deployedVersion: string | null = settings?.retellVersion || null;
 
       return {
         accountId: account.id,
@@ -86,11 +87,12 @@ export async function GET(request: NextRequest) {
         templateName: account.retellFlowTemplate?.name || null,
         templateDisplayName: account.retellFlowTemplate?.displayName || null,
         templateVersion: account.retellFlowTemplate?.version || null,
+        deployedVersion,
         hasFlowAgent,
         conversationFlowId: settings?.conversationFlowId || null,
         agentId: settings?.retellReceptionistAgentId || null,
         isOnLatestDefault: defaultTemplate
-          ? account.retellFlowTemplateId === defaultTemplate.id
+          ? deployedVersion != null && deployedVersion === defaultTemplate.version
           : false,
       };
     });
@@ -101,19 +103,34 @@ export async function GET(request: NextRequest) {
       prisma.account.count({ where: { retellFlowTemplateId: { not: null } } }),
     ]);
 
-    const onLatestDefault = defaultTemplate
-      ? await prisma.account.count({ where: { retellFlowTemplateId: defaultTemplate.id } })
-      : 0;
+    let onLatestDefault = 0;
+    if (defaultTemplate) {
+      const allAccounts = await prisma.account.findMany({
+        where: { retellFlowTemplateId: { not: null } },
+        select: { phoneIntegrationSettings: true },
+      });
+      onLatestDefault = allAccounts.filter((a: any) => {
+        const ver = (a.phoneIntegrationSettings as any)?.retellVersion;
+        return ver != null && ver === defaultTemplate.version;
+      }).length;
+    }
 
     const versionGroups: Record<string, { version: string; templateName: string; count: number }> = {};
-    for (const t of templates) {
-      if (t._count.accounts > 0) {
-        const key = t.version || 'unversioned';
-        if (!versionGroups[key]) {
-          versionGroups[key] = { version: key, templateName: t.name, count: 0 };
-        }
-        versionGroups[key]!.count += t._count.accounts;
+    const allAccountsForVersions = await prisma.account.findMany({
+      where: { retellFlowTemplateId: { not: null } },
+      select: {
+        phoneIntegrationSettings: true,
+        retellFlowTemplate: { select: { name: true } },
+      },
+    });
+    for (const a of allAccountsForVersions) {
+      const deployedVer = (a.phoneIntegrationSettings as any)?.retellVersion;
+      const key = deployedVer || 'not-deployed';
+      const tplName = (a as any).retellFlowTemplate?.name || 'unknown';
+      if (!versionGroups[key]) {
+        versionGroups[key] = { version: key, templateName: tplName, count: 0 };
       }
+      versionGroups[key]!.count++;
     }
 
     return NextResponse.json({

@@ -45,6 +45,7 @@ interface AccountOverview {
   templateName: string | null;
   templateDisplayName: string | null;
   templateVersion: string | null;
+  deployedVersion: string | null;
   hasFlowAgent: boolean;
   conversationFlowId: string | null;
   agentId: string | null;
@@ -406,7 +407,7 @@ export default function FlowVersionOverviewPage() {
                 </TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Template</TableHead>
-                <TableHead>Version</TableHead>
+                <TableHead>Deployed Version</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Deploy Type</TableHead>
               </TableRow>
@@ -434,8 +435,10 @@ export default function FlowVersionOverviewPage() {
                       {a.templateDisplayName || <span className="italic">None</span>}
                     </TableCell>
                     <TableCell>
-                      {a.templateVersion ? (
-                        <Badge variant="secondary">{a.templateVersion}</Badge>
+                      {a.deployedVersion ? (
+                        <Badge variant="secondary">{a.deployedVersion}</Badge>
+                      ) : a.hasFlowAgent ? (
+                        <Badge variant="outline" className="text-muted-foreground">unknown</Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
