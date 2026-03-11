@@ -5,6 +5,15 @@ import { AgentToolsService } from '../agent-tools/agent-tools.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { createMockPrismaService } from '../test/mocks/prisma.mock';
 
+/** Return a YYYY-MM-DD string 30 days in the future so date-validation never trips. */
+const futureDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+};
+
+const futureDateTime = () => `${futureDate()}T10:00:00Z`;
+
 describe('VapiWebhookController', () => {
   let controller: VapiWebhookController;
   let agentToolsService: any;
@@ -92,7 +101,7 @@ describe('VapiWebhookController', () => {
         message: {
           type: 'function-call',
           call: { id: 'call-1', phoneNumberId: 'pn-1' },
-          functionCall: { name: 'checkAvailability', parameters: { date: '2026-03-01' } },
+          functionCall: { name: 'checkAvailability', parameters: { date: futureDate() } },
           assistant: { metadata: { accountId: 'acc-1' } },
         },
       };
@@ -153,7 +162,7 @@ describe('VapiWebhookController', () => {
 
     it('should dispatch bookAppointment', async () => {
       const result = await controller.handleWebhook(
-        makeFunctionPayload('bookAppointment', { patientId: 'p-1', startTime: '2026-03-01T10:00:00Z', email: 'a@b.com' }),
+        makeFunctionPayload('bookAppointment', { patientId: 'p-1', startTime: futureDateTime(), email: 'a@b.com' }),
         '',
         '',
       );
@@ -289,7 +298,7 @@ describe('VapiWebhookController', () => {
           type: 'tool-calls',
           call: { id: 'call-tc', phoneNumberId: 'pn-1' },
           toolCallList: [
-            { id: 'tc-1', function: { name: 'checkAvailability', arguments: '{"date":"2026-03-10"}' } },
+            { id: 'tc-1', function: { name: 'checkAvailability', arguments: JSON.stringify({ date: futureDate() }) } },
             { id: 'tc-2', function: { name: 'lookupPatient', arguments: '{"query":"Jane"}' } },
           ],
           assistant: { metadata: { accountId: 'acc-1' } },
@@ -472,7 +481,7 @@ describe('VapiWebhookController', () => {
     });
 
     it('should dispatch rescheduleAppointment', async () => {
-      await controller.handleWebhook(makePayload('rescheduleAppointment', { appointmentId: 'a-1', newStartTime: '2026-03-10T10:00:00Z' }), '', '');
+      await controller.handleWebhook(makePayload('rescheduleAppointment', { appointmentId: 'a-1', newStartTime: futureDateTime() }), '', '');
       expect(agentToolsService.rescheduleAppointment).toHaveBeenCalled();
     });
 
@@ -659,7 +668,7 @@ describe('VapiWebhookController', () => {
           functionCall: {
             id: 'tc-1',
             name: 'bookAppointment',
-            parameters: { patientId: 'p-1', startTime: '2026-03-10T10:00:00Z', email: 'a@b.com' },
+            parameters: { patientId: 'p-1', startTime: futureDateTime(), email: 'a@b.com' },
           },
           assistant: { metadata: { accountId: 'acc-1' } },
         },
@@ -824,7 +833,7 @@ describe('VapiWebhookController', () => {
 
     it('should warn but allow bookAppointment with patientId but no email', async () => {
       const result = (await controller.handleWebhook(
-        makeValidationPayload('bookAppointment', { patientId: 'p-1', startTime: '2026-03-10T10:00:00Z' }),
+        makeValidationPayload('bookAppointment', { patientId: 'p-1', startTime: futureDateTime() }),
         '', '',
       )) as any;
       expect(agentToolsService.bookAppointment).toHaveBeenCalled();
@@ -832,7 +841,7 @@ describe('VapiWebhookController', () => {
 
     it('should reject bookAppointment without patientId and missing email+name', async () => {
       const result = (await controller.handleWebhook(
-        makeValidationPayload('bookAppointment', { startTime: '2026-03-10T10:00:00Z' }),
+        makeValidationPayload('bookAppointment', { startTime: futureDateTime() }),
         '', '',
       )) as any;
       expect(result.results[0].result).toContain('VALIDATION ERROR');

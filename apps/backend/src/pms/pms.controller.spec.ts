@@ -19,6 +19,8 @@ describe('PmsController', () => {
       getPmsStatus: jest.fn().mockResolvedValue({ success: true, integrations: [] }),
       getConnectionStatus: jest.fn().mockResolvedValue({ isConnected: false, status: 'pending' }),
       handleSikkaOAuthCallback: jest.fn().mockResolvedValue({ success: true, practiceName: 'Test' }),
+      handlePurchaseWebhook: jest.fn().mockResolvedValue({ success: true, accountId: 'acc-1' }),
+      handleCancelWebhook: jest.fn().mockResolvedValue({ success: true }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +35,10 @@ describe('PmsController', () => {
 
     controller = module.get<PmsController>(PmsController);
     service = module.get(PmsService);
+  });
+
+  afterEach(() => {
+    delete process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
   });
 
   it('should be defined', () => { expect(controller).toBeDefined(); });
@@ -148,6 +154,88 @@ describe('PmsController', () => {
       expect(guards).toBeDefined();
       const guardNames = guards.map((g: any) => g.name || g.constructor?.name);
       expect(guardNames).toContain('CognitoAuthGuard');
+    });
+
+    it('should NOT have CognitoAuthGuard on handlePurchaseWebhook', () => {
+      const guards = Reflect.getMetadata('__guards__', PmsController.prototype.handlePurchaseWebhook);
+      expect(guards ?? []).toHaveLength(0);
+    });
+
+    it('should NOT have CognitoAuthGuard on handleCancelWebhook', () => {
+      const guards = Reflect.getMetadata('__guards__', PmsController.prototype.handleCancelWebhook);
+      expect(guards ?? []).toHaveLength(0);
+    });
+  });
+
+  describe('handlePurchaseWebhook', () => {
+    const purchasePayload = {
+      'Email Address': 'clinic@example.com',
+      'Master Customer ID': 'mc-123',
+      'Practice Name': 'Happy Dental',
+      'First Name': 'Jane',
+      'Last Name': 'Doe',
+      'Status': 'Active',
+    };
+
+    it('should accept webhook and call service', async () => {
+      const result = await controller.handlePurchaseWebhook(purchasePayload as any);
+      expect(result.received).toBe(true);
+      expect(result.success).toBe(true);
+      expect(service.handlePurchaseWebhook).toHaveBeenCalledWith(purchasePayload);
+    });
+
+    it('should reject when callback-key does not match', async () => {
+      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+      await expect(
+        controller.handlePurchaseWebhook(purchasePayload as any, 'wrong-key'),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should accept when callback-key matches', async () => {
+      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+      const result = await controller.handlePurchaseWebhook(purchasePayload as any, 'correct-key');
+      expect(result.received).toBe(true);
+    });
+
+    it('should allow when SIKKA_WEBHOOK_CALLBACK_KEY is not set', async () => {
+      delete process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
+      const result = await controller.handlePurchaseWebhook(purchasePayload as any, undefined);
+      expect(result.received).toBe(true);
+    });
+
+    it('should still return 200 when service reports failure', async () => {
+      service.handlePurchaseWebhook.mockResolvedValue({ success: false, error: 'No account' });
+      const result = await controller.handlePurchaseWebhook(purchasePayload as any);
+      expect(result.received).toBe(true);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('handleCancelWebhook', () => {
+    const cancelPayload = {
+      'Master Customer ID': 'mc-123',
+      'Email Address': 'clinic@example.com',
+      'Cancel Date': '2026-03-08',
+    };
+
+    it('should accept webhook and call service', async () => {
+      const result = await controller.handleCancelWebhook(cancelPayload as any);
+      expect(result.received).toBe(true);
+      expect(result.success).toBe(true);
+      expect(service.handleCancelWebhook).toHaveBeenCalledWith(cancelPayload);
+    });
+
+    it('should reject when callback-key does not match', async () => {
+      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+      await expect(
+        controller.handleCancelWebhook(cancelPayload as any, 'wrong-key'),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('should accept when callback-key matches', async () => {
+      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+      const result = await controller.handleCancelWebhook(cancelPayload as any, 'correct-key');
+      expect(result.received).toBe(true);
     });
   });
 });

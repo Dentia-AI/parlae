@@ -423,6 +423,172 @@ describe('PmsService', () => {
     });
   });
 
+  describe('handlePurchaseWebhook', () => {
+    const basePurchaseDto = {
+      'Email Address': 'clinic@example.com',
+      'Master Customer ID': 'mc-123',
+      'Practice Name': 'Happy Dental',
+      'First Name': 'Jane',
+      'Last Name': 'Doe',
+      'Practice Phone Number': '555-1234',
+      'Practice City': 'Toronto',
+      'Practice State': 'ON',
+      'Practice Country': 'Canada',
+      'Partner Registration ID': 'reg-456',
+      'Purchase Date': '2026-03-08',
+      'Status': 'Active',
+    };
+
+    it('should match email to account and create ACTIVE integration when authorized_practices available', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_id: 'p-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+      });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.success).toBe(true);
+      expect(result.accountId).toBe('acc-1');
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ status: 'ACTIVE', masterCustomerId: 'mc-123' }),
+        }),
+      );
+    });
+
+    it('should create SETUP_REQUIRED integration when authorized_practices not yet available', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.success).toBe(true);
+      expect(result.accountId).toBe('acc-1');
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ status: 'SETUP_REQUIRED' }),
+        }),
+      );
+    });
+
+    it('should succeed but not create integration when no account matches', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue(null);
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.success).toBe(true);
+      expect(result.accountId).toBeUndefined();
+      expect(prisma.pmsIntegration.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should return failure when email and masterCustomerId are both missing', async () => {
+      const result = await service.handlePurchaseWebhook({} as any);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Missing identifying information');
+    });
+
+    it('should prefer team account over personal account', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [
+          { account: { id: 'personal-acc', name: 'Personal', isPersonalAccount: true } },
+          { account: { id: 'team-acc', name: 'Happy Dental', isPersonalAccount: false } },
+        ],
+      });
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.accountId).toBe('team-acc');
+    });
+
+    it('should fall back to Account.email when User not found', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-2', name: 'Found via Account' });
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.accountId).toBe('acc-2');
+    });
+  });
+
+  describe('handleCancelWebhook', () => {
+    it('should deactivate integration found by masterCustomerId', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'int-1',
+        accountId: 'acc-1',
+        provider: 'SIKKA',
+      });
+      prisma.pmsIntegration.update.mockResolvedValue({});
+
+      const result = await service.handleCancelWebhook({
+        'Master Customer ID': 'mc-123',
+        'Cancel Date': '2026-03-08',
+      } as any);
+
+      expect(result.success).toBe(true);
+      expect(prisma.pmsIntegration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'int-1' },
+          data: expect.objectContaining({ status: 'INACTIVE' }),
+        }),
+      );
+    });
+
+    it('should find integration via email when masterCustomerId not available', async () => {
+      // No masterCustomerId → skips first findFirst, goes straight to email path.
+      // findAccountByEmail calls user.findUnique, then the only pmsIntegration.findFirst
+      // is the one matching by accountId.
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'int-2',
+        accountId: 'acc-2',
+        provider: 'SIKKA',
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-2', name: 'Dental', isPersonalAccount: false } }],
+      });
+      prisma.pmsIntegration.update.mockResolvedValue({});
+
+      const result = await service.handleCancelWebhook({
+        'Email Address': 'clinic@example.com',
+        'Cancel Date': '2026-03-08',
+      } as any);
+
+      expect(result.success).toBe(true);
+      expect(prisma.pmsIntegration.update).toHaveBeenCalled();
+    });
+
+    it('should succeed silently when no integration found', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue(null);
+
+      const result = await service.handleCancelWebhook({
+        'Master Customer ID': 'unknown',
+      } as any);
+
+      expect(result.success).toBe(true);
+      expect(prisma.pmsIntegration.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getProviderName', () => {
     it('should return known provider names', () => {
       const getProviderName = (service as any).getProviderName.bind(service);
