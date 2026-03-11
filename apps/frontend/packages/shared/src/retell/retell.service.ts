@@ -145,6 +145,11 @@ export interface ConversationFlowConversationNode extends ConversationFlowNodeBa
   tool_ids?: string[];
   global_tool_ids?: string[];
   knowledge_base_ids?: string[];
+  model_choice?: {
+    type: 'cascading';
+    model: string;
+    high_priority?: boolean;
+  };
 }
 
 export interface ConversationFlowFunctionNode extends ConversationFlowNodeBase {

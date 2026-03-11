@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.6';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.8';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -239,9 +239,12 @@ export function buildDentalClinicFlow(
     ],
   };
 
+  const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
+
   const bookingNode: ConversationFlowConversationNode = {
     id: 'booking',
     type: 'conversation',
+    model_choice: FAST_MODEL,
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_BOOKING_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
@@ -277,6 +280,7 @@ export function buildDentalClinicFlow(
   const apptMgmtNode: ConversationFlowConversationNode = {
     id: 'appt_mgmt',
     type: 'conversation',
+    model_choice: FAST_MODEL,
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_APPT_MGMT_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
@@ -315,6 +319,7 @@ export function buildDentalClinicFlow(
   const patientRecordsNode: ConversationFlowConversationNode = {
     id: 'patient_records',
     type: 'conversation',
+    model_choice: FAST_MODEL,
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_PATIENT_RECORDS_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
@@ -357,6 +362,7 @@ export function buildDentalClinicFlow(
   const insuranceBillingNode: ConversationFlowConversationNode = {
     id: 'insurance_billing',
     type: 'conversation',
+    model_choice: FAST_MODEL,
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_INSURANCE_BILLING_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
@@ -400,6 +406,7 @@ export function buildDentalClinicFlow(
   const emergencyNode: ConversationFlowConversationNode = {
     id: 'emergency',
     type: 'conversation',
+    model_choice: FAST_MODEL,
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_EMERGENCY_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
@@ -553,7 +560,8 @@ export function buildDentalClinicFlow(
     start_speaker: 'agent',
     model_choice: {
       type: 'cascading',
-      model: 'gpt-4.1',
+      model: 'gemini-3.0-flash',
+      high_priority: true,
     },
     global_prompt: globalPrompt,
     default_dynamic_variables: {

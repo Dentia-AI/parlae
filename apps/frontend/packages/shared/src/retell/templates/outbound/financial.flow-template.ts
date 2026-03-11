@@ -36,7 +36,7 @@ import {
   retellGetInsuranceTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.3';
+export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.4';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -309,7 +309,7 @@ Use scheduling tools to find available times and book. Be efficient.`,
     start_speaker: 'agent',
     model_choice: {
       type: 'cascading',
-      model: 'gpt-4.1',
+      model: 'gemini-3.0-flash',
       high_priority: true,
     },
     global_prompt: FINANCIAL_GLOBAL_PROMPT,

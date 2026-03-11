@@ -170,6 +170,14 @@ async function deployFlowAgent(model: string): Promise<DeployedFlowAgent> {
     accountId: 'sim-test',
   });
 
+  // Apply the model under test to the flow-level model_choice
+  // (receptionist + faq use this; task nodes have per-node overrides)
+  (flowConfig as any).model_choice = {
+    type: 'cascading',
+    model,
+    high_priority: true,
+  };
+
   const flow = await retellRequest<{
     conversation_flow_id: string;
     version: number;

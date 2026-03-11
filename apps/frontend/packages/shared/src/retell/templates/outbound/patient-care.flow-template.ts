@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.7';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.8';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -415,7 +415,7 @@ Be efficient — the patient didn't call you, so respect their time.`,
     start_speaker: 'agent',
     model_choice: {
       type: 'cascading',
-      model: 'gpt-4.1',
+      model: 'gemini-3.0-flash',
       high_priority: true,
     },
     global_prompt: OUTBOUND_GLOBAL_PROMPT,
