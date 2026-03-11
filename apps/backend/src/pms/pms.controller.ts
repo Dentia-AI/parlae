@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Body, UseGuards, Req, Logger, HttpException, HttpStatus, Headers, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Req, Logger, HttpException, HttpStatus, Headers, Query, HttpCode } from '@nestjs/common';
 import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
 import { PmsService } from './pms.service';
 import { SetupPmsDto } from './dto/setup-pms.dto';
 import { SikkaAuthWebhookDto } from './dto/sikka-auth-webhook.dto';
+import { SikkaPurchaseWebhookDto, SikkaCancelWebhookDto } from './dto/sikka-purchase-webhook.dto';
 
 @Controller('pms')
 export class PmsController {
@@ -129,5 +130,68 @@ export class PmsController {
     );
     
     return result;
+  }
+
+  /**
+   * Sikka Registration Handshake — New Purchase webhook.
+   *
+   * Called by Sikka when a clinic installs our custom SPU and completes
+   * marketplace registration. No auth guard — Sikka calls this directly.
+   * We validate using the callback-key header set in the Sikka portal.
+   */
+  @Post('purchase')
+  @HttpCode(200)
+  async handlePurchaseWebhook(
+    @Body() dto: SikkaPurchaseWebhookDto,
+    @Headers('callback-key') callbackKey?: string,
+  ) {
+    this.logger.log('[PMS] Received Sikka purchase webhook');
+
+    if (!this.validateCallbackKey(callbackKey)) {
+      this.logger.warn('[PMS] Purchase webhook rejected — invalid callback-key');
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
+    const result = await this.pmsService.handlePurchaseWebhook(dto);
+
+    if (!result.success) {
+      this.logger.error({ error: result.error, msg: '[PMS] Purchase webhook failed' });
+    }
+
+    // Always return 200 to Sikka so it doesn't retry on business-logic errors
+    return { received: true, ...result };
+  }
+
+  /**
+   * Sikka Registration Handshake — Partner Cancellation webhook.
+   *
+   * Called by Sikka when a clinic cancels our service. No auth guard.
+   */
+  @Post('cancel')
+  @HttpCode(200)
+  async handleCancelWebhook(
+    @Body() dto: SikkaCancelWebhookDto,
+    @Headers('callback-key') callbackKey?: string,
+  ) {
+    this.logger.log('[PMS] Received Sikka cancel webhook');
+
+    if (!this.validateCallbackKey(callbackKey)) {
+      this.logger.warn('[PMS] Cancel webhook rejected — invalid callback-key');
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
+    const result = await this.pmsService.handleCancelWebhook(dto);
+
+    return { received: true, ...result };
+  }
+
+  private validateCallbackKey(key?: string): boolean {
+    const expected = process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
+    if (!expected) {
+      // If no callback key is configured, allow (dev/staging convenience)
+      this.logger.warn('[PMS] SIKKA_WEBHOOK_CALLBACK_KEY not set — skipping validation');
+      return true;
+    }
+    return key === expected;
   }
 }

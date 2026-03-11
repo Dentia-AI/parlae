@@ -1,94 +1,190 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@kit/ui/button';
 import { Alert, AlertDescription } from '@kit/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@kit/ui/card';
-import { CheckCircle2, AlertCircle, ExternalLink, Info } from 'lucide-react';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Download,
+  Info,
+  Loader2,
+  Monitor,
+  Copy,
+  Check,
+} from 'lucide-react';
 import { toast } from '@kit/ui/sonner';
+
+const SPU_DOWNLOAD_URL =
+  'https://sscsetups.s3.amazonaws.com/SikkaUtilityInstaller-Parlae.exe';
+
+const POLL_INTERVAL_MS = 5_000;
+const MAX_POLL_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
 interface PmsSetupWizardProps {
   accountId: string;
   accountEmail: string;
-  onConnectionStatusChange?: (status: 'pending' | 'connected' | 'not_connected') => void;
+  onConnectionStatusChange?: (
+    status: 'pending' | 'connected' | 'not_connected',
+  ) => void;
 }
 
-export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChange }: PmsSetupWizardProps) {
-  const router = useRouter();
-  const [hasConnected, setHasConnected] = useState(false);
+export function PmsSetupWizard({
+  accountId,
+  accountEmail,
+  onConnectionStatusChange,
+}: PmsSetupWizardProps) {
+  const [connectionStatus, setConnectionStatus] = useState<
+    'pending' | 'connected' | 'not_connected'
+  >('pending');
   const [checkingConnection, setCheckingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'pending' | 'connected' | 'not_connected'>('pending');
-  
-  // Notify parent of connection status changes
+  const [isPolling, setIsPolling] = useState(false);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [practiceName, setPracticeName] = useState<string | null>(null);
+  const [pmsType, setPmsType] = useState<string | null>(null);
+  const pollingRef = useRef(false);
+  const pollStartRef = useRef<number>(0);
+
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
 
-  // Check if PMS is already connected
   useEffect(() => {
     checkPmsConnection();
   }, []);
 
-  const checkPmsConnection = async () => {
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      pollingRef.current = false;
+    };
+  }, []);
+
+  const checkPmsConnection = useCallback(async () => {
     setCheckingConnection(true);
     try {
-      const response = await fetch(`/api/pms/connection-status?accountId=${accountId}`, {
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `/api/pms/connection-status?accountId=${accountId}`,
+        { credentials: 'include' },
+      );
       const data = await response.json();
-      
+
       if (data.isConnected) {
         setConnectionStatus('connected');
-        setHasConnected(true);
+        if (data.practiceName) setPracticeName(data.practiceName);
+        if (data.pmsType) setPmsType(data.pmsType);
       } else {
         setConnectionStatus('not_connected');
       }
-    } catch (error) {
+    } catch {
       setConnectionStatus('not_connected');
     } finally {
       setCheckingConnection(false);
     }
-  };
+  }, [accountId]);
 
-  const handleConnectSikka = () => {
-    // Create OAuth state (contains accountId for callback)
-    const state = {
-      accountId,
-      timestamp: Date.now(),
-      nonce: Math.random().toString(36).substring(2, 15),
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    pollStartRef.current = Date.now();
+    setIsPolling(true);
+
+    const poll = async () => {
+      if (!pollingRef.current) return;
+
+      if (Date.now() - pollStartRef.current > MAX_POLL_DURATION_MS) {
+        pollingRef.current = false;
+        setIsPolling(false);
+        toast.info(
+          'Auto-check timed out. Click "Check Connection" to try manually.',
+        );
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/pms/connection-status?accountId=${accountId}`,
+          { credentials: 'include' },
+        );
+        const data = await response.json();
+
+        if (data.isConnected) {
+          pollingRef.current = false;
+          setIsPolling(false);
+          setConnectionStatus('connected');
+          if (data.practiceName) setPracticeName(data.practiceName);
+          if (data.pmsType) setPmsType(data.pmsType);
+          toast.success(
+            `Connected to ${data.practiceName || 'your practice'}!`,
+          );
+          return;
+        }
+      } catch {
+        // Network error — keep polling
+      }
+
+      if (pollingRef.current) {
+        setTimeout(poll, POLL_INTERVAL_MS);
+      }
     };
-    const stateString = btoa(JSON.stringify(state));
 
-    // Construct Sikka OAuth URL
-    const sikkaAppId = process.env.NEXT_PUBLIC_SIKKA_APP_ID;
-    const redirectUri = `${window.location.origin}/api/pms/sikka/oauth/callback`;
-    const oauthUrl = `https://api.sikkasoft.com/portal/authapp.aspx?app_id=${sikkaAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(stateString)}`;
+    poll();
+  }, [accountId]);
 
-    // Redirect to Sikka OAuth
-    window.location.href = oauthUrl;
+  const stopPolling = useCallback(() => {
+    pollingRef.current = false;
+    setIsPolling(false);
+  }, []);
+
+  const handleDownload = () => {
+    setHasDownloaded(true);
+    window.open(SPU_DOWNLOAD_URL, '_blank');
+    // Start auto-polling after download
+    setTimeout(() => startPolling(), 2000);
   };
 
-  const handleCheckAgain = async () => {
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(SPU_DOWNLOAD_URL);
+      setCopied(true);
+      toast.success('Download link copied to clipboard');
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  };
+
+  const handleCheckManually = async () => {
     setCheckingConnection(true);
     try {
-      const response = await fetch(`/api/pms/connection-status?accountId=${accountId}`, {
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `/api/pms/connection-status?accountId=${accountId}`,
+        { credentials: 'include' },
+      );
       const data = await response.json();
-      
+
       if (data.isConnected) {
         setConnectionStatus('connected');
-        setHasConnected(true);
-        toast.success(`Successfully connected to ${data.practiceName || 'your practice'}!`);
-      } else if (data.status === 'failed') {
+        if (data.practiceName) setPracticeName(data.practiceName);
+        if (data.pmsType) setPmsType(data.pmsType);
+        stopPolling();
+        toast.success(
+          `Connected to ${data.practiceName || 'your practice'}!`,
+        );
+      } else if (data.status === 'failed' || data.status === 'error') {
         setConnectionStatus('not_connected');
-        toast.error(data.error || 'Connection not found. Please complete the authorization steps.');
+        toast.error(
+          data.error || 'Connection not ready yet. Please complete the installer steps.',
+        );
       } else {
         setConnectionStatus('not_connected');
-        toast.error('Connection not found. Please complete the authorization steps.');
+        toast.info(
+          'Connection not detected yet. Make sure the installer has completed.',
+        );
       }
-    } catch (error) {
+    } catch {
       setConnectionStatus('not_connected');
       toast.error('Failed to check connection');
     } finally {
@@ -99,12 +195,10 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
   return (
     <div className="space-y-6">
       {/* Connection Status Banner */}
-      {checkingConnection && (
+      {checkingConnection && !isPolling && (
         <Alert>
           <AlertCircle className="h-4 w-4 animate-pulse" />
-          <AlertDescription>
-            Checking for PMS connection...
-          </AlertDescription>
+          <AlertDescription>Checking for PMS connection...</AlertDescription>
         </Alert>
       )}
 
@@ -113,15 +207,28 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-600">
             Your practice management system is connected and ready to use!
+            {practiceName && (
+              <span className="font-medium"> ({practiceName})</span>
+            )}
           </AlertDescription>
         </Alert>
       )}
 
-      {!checkingConnection && connectionStatus === 'not_connected' && (
+      {!checkingConnection && connectionStatus === 'not_connected' && !isPolling && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             No PMS connection detected. Follow the steps below to connect.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isPolling && (
+        <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+          <AlertDescription className="text-blue-700 dark:text-blue-300">
+            Waiting for registration to complete... This will update
+            automatically once the installer finishes.
           </AlertDescription>
         </Alert>
       )}
@@ -131,107 +238,170 @@ export function PmsSetupWizard({ accountId, accountEmail, onConnectionStatusChan
         <CardHeader>
           <CardTitle>Connect Your Practice Management System</CardTitle>
           <CardDescription>
-            Follow these simple steps to enable automated appointment booking and patient management
+            Install the Parlae connector on your practice server to enable
+            automated appointment booking and patient management
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Step 1 */}
+          {/* Step 1: Download & Install */}
           <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-              1
+            <div
+              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
+                hasDownloaded
+                  ? 'bg-green-600 text-white'
+                  : 'bg-primary text-primary-foreground'
+              }`}
+            >
+              {hasDownloaded ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                '1'
+              )}
             </div>
             <div className="flex-1 space-y-3">
-              <h3 className="font-semibold">Install PMS Connector</h3>
+              <h3 className="font-semibold">
+                Download &amp; Install PMS Connector
+              </h3>
               <p className="text-sm text-muted-foreground">
-                Download and install the Practice Utility connector on your practice server. You should have received installation instructions via email.
+                Download the Parlae Practice Utility installer. This connects
+                your existing PMS (Dentrix, Eaglesoft, Open Dental, etc.) to our
+                platform and registers your practice automatically.
               </p>
-              <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
-                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <AlertDescription className="text-xs text-blue-800 dark:text-blue-300">
-                  <strong>Important:</strong> The connector links your existing PMS (Dentrix, Eaglesoft, Open Dental, etc.) to our cloud platform. Make sure it's running and connected to your PMS before proceeding.
+
+              <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+                <Monitor className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  <strong>Important:</strong> The installer must be run on the
+                  computer or server where your practice management software is
+                  installed. If you are not on that machine right now, copy the
+                  download link below and open it on your practice server.
                 </AlertDescription>
               </Alert>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => window.open('https://support.sikkasoft.com/spu-installation', '_blank')}
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View Installation Guide
-              </Button>
-            </div>
-          </div>
 
-          {/* Step 2 */}
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-              2
-            </div>
-            <div className="flex-1 space-y-3">
-              <h3 className="font-semibold">Authorize Parlae</h3>
-              <p className="text-sm text-muted-foreground">
-                Click the button below to authorize Parlae to access your practice data through a secure authorization portal.
-              </p>
-              <Button onClick={handleConnectSikka} disabled={connectionStatus === 'connected'}>
-                Authorize Connection
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleDownload}
+                  disabled={connectionStatus === 'connected'}
+                  size="sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Installer
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyLink}
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 mr-2 text-green-600" />
+                  ) : (
+                    <Copy className="w-4 h-4 mr-2" />
+                  )}
+                  {copied ? 'Copied!' : 'Copy Download Link'}
+                </Button>
+              </div>
+
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  You'll be redirected to an authorization page where you'll see your practice name and PMS type. Click "Allow" to grant access.
+                  The installer will guide you through connecting to your PMS.
+                  Once complete, your practice will be automatically linked to
+                  your Parlae account ({accountEmail}).
                 </AlertDescription>
               </Alert>
             </div>
           </div>
 
-          {/* Step 3 */}
+          {/* Step 2: Verify Connection */}
           <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-              3
+            <div
+              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
+                connectionStatus === 'connected'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-primary text-primary-foreground'
+              }`}
+            >
+              {connectionStatus === 'connected' ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                '2'
+              )}
             </div>
             <div className="flex-1 space-y-3">
               <h3 className="font-semibold">Verify Connection</h3>
-              <p className="text-sm text-muted-foreground">
-                After completing the authorization, click "Check Connection" to verify everything is working properly.
-              </p>
-              <Button 
-                onClick={handleCheckAgain} 
-                variant="outline"
-                disabled={checkingConnection}
-              >
-                {checkingConnection ? 'Checking...' : 'Check Connection'}
-              </Button>
+              {connectionStatus === 'connected' ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-green-700 dark:text-green-400 font-medium">
+                    Connection verified!
+                    {practiceName && ` — ${practiceName}`}
+                    {pmsType && pmsType !== 'Unknown' && ` (${pmsType})`}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {isPolling
+                      ? 'We are automatically checking for your connection. This page will update once the installer completes.'
+                      : 'After completing the installer, click below to verify the connection — or it will be detected automatically.'}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleCheckManually}
+                      variant="outline"
+                      disabled={checkingConnection}
+                      size="sm"
+                    >
+                      {checkingConnection ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        'Check Connection'
+                      )}
+                    </Button>
+                    {!isPolling && hasDownloaded && (
+                      <Button
+                        onClick={startPolling}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Loader2 className="w-4 h-4 mr-2" />
+                        Start Auto-Check
+                      </Button>
+                    )}
+                    {isPolling && (
+                      <Button
+                        onClick={stopPolling}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        Stop Auto-Check
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Features Info */}
           <div className="mt-6 pt-6 border-t">
-            <h3 className="font-semibold mb-3">What You'll Get</h3>
+            <h3 className="font-semibold mb-3">What You&apos;ll Get</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Automated appointment booking</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Patient lookup & management</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Insurance verification</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Payment processing</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Appointment reminders</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Patient notes & records</span>
-              </div>
+              {[
+                'Automated appointment booking',
+                'Patient lookup & management',
+                'Insurance verification',
+                'Payment processing',
+                'Appointment reminders',
+                'Patient notes & records',
+              ].map((feature) => (
+                <div key={feature} className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">{feature}</span>
+                </div>
+              ))}
             </div>
           </div>
         </CardContent>

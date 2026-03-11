@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SetupPmsDto } from './dto/setup-pms.dto';
+import { SikkaPurchaseWebhookDto, SikkaCancelWebhookDto } from './dto/sikka-purchase-webhook.dto';
 import { SikkaPmsService } from './providers/sikka.service';
 import axios from 'axios';
 
@@ -499,6 +500,314 @@ export class PmsService {
       refreshKey: response.data.refresh_key,
       tokenExpiry: response.data.end_time,
     };
+  }
+
+  /**
+   * Handle Sikka Registration Handshake webhook for new purchases.
+   *
+   * Called when a clinic installs the custom SPU and completes Sikka registration.
+   * We match the incoming email to an existing Parlae account and auto-connect.
+   */
+  async handlePurchaseWebhook(dto: SikkaPurchaseWebhookDto): Promise<{ success: boolean; accountId?: string; error?: string }> {
+    const email = dto['Email Address']?.toLowerCase().trim();
+    const masterCustomerId = dto['Master Customer ID'];
+    const practiceName = dto['Practice Name'];
+    const partnerRegId = dto['Partner Registration ID'];
+
+    this.logger.log({
+      email,
+      masterCustomerId,
+      practiceName,
+      partnerRegId,
+      msg: '[PMS] Sikka purchase webhook received',
+    });
+
+    if (!email && !masterCustomerId) {
+      this.logger.error('[PMS] Purchase webhook missing both email and Master Customer ID');
+      return { success: false, error: 'Missing identifying information' };
+    }
+
+    try {
+      // Match email to an existing Parlae account
+      const account = await this.findAccountByEmail(email);
+
+      if (!account) {
+        this.logger.warn({ email, msg: '[PMS] No Parlae account found for webhook email — storing for later matching' });
+
+        // Store the webhook payload for later matching when the user signs up
+        await this.storePendingRegistration(dto);
+        return { success: true, accountId: undefined };
+      }
+
+      this.logger.log({ accountId: account.id, accountName: account.name, msg: '[PMS] Matched webhook to account' });
+
+      // Fetch office_id and secret_key from Sikka authorized_practices
+      const systemCreds = this.getSikkaSystemCredentials();
+      const practiceData = await this.fetchAuthorizedPractice(systemCreds, masterCustomerId);
+
+      if (!practiceData) {
+        this.logger.warn({
+          masterCustomerId,
+          msg: '[PMS] Practice not yet in authorized_practices — may need time to propagate',
+        });
+
+        // Create integration in SETUP_REQUIRED status; connection-status check will upgrade it later
+        await this.upsertIntegrationFromWebhook(account.id, dto, null);
+        return { success: true, accountId: account.id };
+      }
+
+      // Generate request_key using office_id + secret_key
+      const tokens = await this.generateRequestKey(
+        practiceData.officeId,
+        practiceData.secretKey,
+        systemCreds.appId,
+        systemCreds.appKey,
+      );
+
+      // Create or update PmsIntegration as ACTIVE
+      await this.upsertIntegrationFromWebhook(account.id, dto, {
+        ...practiceData,
+        ...tokens,
+      });
+
+      this.invalidateCredentialsCache(account.id);
+
+      this.logger.log({ accountId: account.id, practiceName, msg: '[PMS] Auto-connected via purchase webhook' });
+      return { success: true, accountId: account.id };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, email, msg: '[PMS] Purchase webhook processing failed' });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle Sikka Registration Handshake webhook for cancellations.
+   */
+  async handleCancelWebhook(dto: SikkaCancelWebhookDto): Promise<{ success: boolean; error?: string }> {
+    const masterCustomerId = dto['Master Customer ID'];
+    const email = dto['Email Address']?.toLowerCase().trim();
+
+    this.logger.log({ masterCustomerId, email, msg: '[PMS] Sikka cancel webhook received' });
+
+    try {
+      // Find integration by masterCustomerId first, fall back to email
+      let integration = masterCustomerId
+        ? await this.prisma.pmsIntegration.findFirst({
+            where: { masterCustomerId, provider: 'SIKKA' },
+          })
+        : null;
+
+      if (!integration && email) {
+        const account = await this.findAccountByEmail(email);
+        if (account) {
+          integration = await this.prisma.pmsIntegration.findFirst({
+            where: { accountId: account.id, provider: 'SIKKA' },
+          });
+        }
+      }
+
+      if (!integration) {
+        this.logger.warn({ masterCustomerId, email, msg: '[PMS] No integration found for cancel webhook' });
+        return { success: true };
+      }
+
+      await this.prisma.pmsIntegration.update({
+        where: { id: integration.id },
+        data: {
+          status: 'INACTIVE',
+          lastError: `Cancelled via Sikka marketplace on ${dto['Cancel Date'] || new Date().toISOString()}`,
+          updatedAt: new Date(),
+        },
+      });
+
+      this.invalidateCredentialsCache(integration.accountId);
+
+      this.logger.log({ accountId: integration.accountId, msg: '[PMS] Integration deactivated via cancel webhook' });
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, msg: '[PMS] Cancel webhook processing failed' });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Match an email to a Parlae account.
+   * Checks User.email -> AccountMembership -> Account (team accounts),
+   * then falls back to Account.email.
+   */
+  private async findAccountByEmail(email?: string): Promise<{ id: string; name: string } | null> {
+    if (!email) return null;
+
+    // Check User email -> memberships -> team account (non-personal)
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          include: {
+            account: { select: { id: true, name: true, isPersonalAccount: true } },
+          },
+        },
+      },
+    });
+
+    if (user) {
+      // Prefer a team (non-personal) account
+      const teamAccount = user.memberships.find((m) => !m.account.isPersonalAccount);
+      if (teamAccount) return teamAccount.account;
+
+      // Fall back to any account
+      if (user.memberships.length > 0) return user.memberships[0].account;
+    }
+
+    // Fall back to Account.email direct match
+    const account = await this.prisma.account.findFirst({
+      where: { email, isPersonalAccount: false },
+      select: { id: true, name: true },
+    });
+
+    return account || null;
+  }
+
+  /**
+   * Fetch the authorized practice from Sikka that matches the given masterCustomerId.
+   * If masterCustomerId is not available, returns the most recently added practice.
+   */
+  private async fetchAuthorizedPractice(
+    systemCreds: { appId: string; appKey: string },
+    masterCustomerId?: string,
+  ): Promise<{
+    officeId: string;
+    secretKey: string;
+    practiceId: string;
+    practiceName: string;
+    pmsType: string;
+  } | null> {
+    try {
+      const response = await axios.get('https://api.sikkasoft.com/v4/authorized_practices', {
+        headers: {
+          'App-Id': systemCreds.appId,
+          'App-Key': systemCreds.appKey,
+        },
+      });
+
+      const practices = response.data?.items || [];
+      if (practices.length === 0) return null;
+
+      // Try matching by customer_id if available
+      let practice = masterCustomerId
+        ? practices.find((p: any) => String(p.customer_id) === String(masterCustomerId))
+        : null;
+
+      // Fall back to the last item (most recently authorized)
+      if (!practice) {
+        practice = practices[practices.length - 1];
+      }
+
+      return {
+        officeId: practice.office_id,
+        secretKey: practice.secret_key,
+        practiceId: practice.practice_id || '',
+        practiceName: practice.practice_name || '',
+        pmsType: practice.practice_management_system || 'Unknown',
+      };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, msg: '[PMS] Failed to fetch authorized practices' });
+      return null;
+    }
+  }
+
+  /**
+   * Create or update a PmsIntegration from webhook data.
+   */
+  private async upsertIntegrationFromWebhook(
+    accountId: string,
+    dto: SikkaPurchaseWebhookDto,
+    credentials: {
+      officeId: string;
+      secretKey: string;
+      practiceId: string;
+      practiceName: string;
+      pmsType: string;
+      requestKey: string;
+      refreshKey: string;
+      tokenExpiry: string;
+    } | null,
+  ) {
+    const isActive = credentials !== null;
+    const practiceName = credentials?.practiceName || dto['Practice Name'] || 'Unknown';
+    const metadata = {
+      practiceName,
+      actualPmsType: credentials?.pmsType || 'Unknown',
+      practiceId: credentials?.practiceId,
+      practicePhone: dto['Practice Phone Number'],
+      practiceCity: dto['Practice City'],
+      practiceState: dto['Practice State'],
+      practiceCountry: dto['Practice Country'],
+      practiceAddress: dto['Practice Street Address'],
+      contactFirstName: dto['First Name'],
+      contactLastName: dto['Last Name'],
+      contactEmail: dto['Email Address'],
+      partnerRegistrationId: dto['Partner Registration ID'],
+      purchaseDate: dto['Purchase Date'],
+      orderNumber: dto['Order #'],
+      registrationSource: 'sikka_purchase_webhook',
+    };
+
+    await this.prisma.pmsIntegration.upsert({
+      where: {
+        accountId_provider: { accountId, provider: 'SIKKA' },
+      },
+      create: {
+        accountId,
+        provider: 'SIKKA',
+        providerName: 'Sikka (Universal PMS Gateway)',
+        status: isActive ? 'ACTIVE' : 'SETUP_REQUIRED',
+        config: {},
+        features: {} as any,
+        metadata,
+        masterCustomerId: dto['Master Customer ID'],
+        officeId: credentials?.officeId ?? null,
+        secretKey: credentials?.secretKey ?? null,
+        requestKey: credentials?.requestKey ?? null,
+        refreshKey: credentials?.refreshKey ?? null,
+        tokenExpiry: credentials?.tokenExpiry ? new Date(credentials.tokenExpiry) : null,
+        lastSyncAt: isActive ? new Date() : null,
+      },
+      update: {
+        status: isActive ? 'ACTIVE' : 'SETUP_REQUIRED',
+        metadata,
+        masterCustomerId: dto['Master Customer ID'],
+        officeId: credentials?.officeId ?? undefined,
+        secretKey: credentials?.secretKey ?? undefined,
+        requestKey: credentials?.requestKey ?? undefined,
+        refreshKey: credentials?.refreshKey ?? undefined,
+        tokenExpiry: credentials?.tokenExpiry ? new Date(credentials.tokenExpiry) : undefined,
+        lastSyncAt: isActive ? new Date() : undefined,
+        lastError: null,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Store a pending registration for later matching.
+   * When a purchase webhook arrives but no Parlae account matches yet,
+   * we stash the data in the metadata JSON. The user can be matched
+   * when they sign up or when an admin links them.
+   */
+  private async storePendingRegistration(dto: SikkaPurchaseWebhookDto) {
+    const email = dto['Email Address']?.toLowerCase().trim();
+    this.logger.log({ email, msg: '[PMS] Storing pending Sikka registration' });
+
+    // Store as an unlinked PmsIntegration with no accountId?
+    // PmsIntegration requires accountId, so store in a separate mechanism.
+    // For now, log it — can be enhanced with a pending_registrations table later.
+    this.logger.warn({
+      email,
+      masterCustomerId: dto['Master Customer ID'],
+      practiceName: dto['Practice Name'],
+      msg: '[PMS] PENDING REGISTRATION — no account matched. Manual linking required.',
+    });
   }
 
   private getProviderName(provider: string): string {
