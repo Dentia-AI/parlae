@@ -261,6 +261,62 @@ describe('POST /api/agent/deploy', () => {
       expect(mockScrapeWebsite).not.toHaveBeenCalled();
     });
 
+    it('persists retellKnowledgeBaseId to DB before calling executeDeployment', async () => {
+      const { prisma } = require('@kit/prisma');
+      const { executeDeployment } = require('../../../../home/(user)/agent/setup/_lib/actions');
+
+      prisma.account.findFirst.mockResolvedValueOnce({
+        id: 'acc-1',
+        phoneIntegrationSettings: {},
+        brandingBusinessName: 'Test Dental',
+        brandingWebsite: 'https://testdental.com',
+        name: 'Test Dental',
+      });
+
+      mockScrapeWebsite.mockResolvedValue({
+        pages: [{ url: 'https://testdental.com', content: 'Dental clinic.' }],
+        scrapedCount: 1,
+        skippedPages: [],
+      });
+      mockCategorizeContent.mockResolvedValue({
+        documents: [{ categoryId: 'about', content: 'Dental clinic.', categoryLabel: 'About' }],
+      });
+
+      const mockKbCreate = jest.fn().mockResolvedValue({ knowledge_base_id: 'kb-auto-123' });
+      const mockKbWait = jest.fn().mockResolvedValue({ status: 'complete' });
+      mockCreateRetellService.mockReturnValue({
+        isEnabled: () => true,
+        createKnowledgeBase: mockKbCreate,
+        waitForKnowledgeBase: mockKbWait,
+      });
+
+      const updateCallOrder: string[] = [];
+      prisma.account.update.mockImplementation(async (args: any) => {
+        const data = args?.data?.phoneIntegrationSettings;
+        if (data?.retellKnowledgeBaseId) {
+          updateCallOrder.push('kb_persisted');
+        }
+        return {};
+      });
+      executeDeployment.mockImplementation(async () => {
+        updateCallOrder.push('deploy_called');
+        return { success: true };
+      });
+
+      const res = await POST(
+        makeRequest({ voice: { voiceId: 'v1', name: 'Test Voice' } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockKbCreate).toHaveBeenCalled();
+
+      const kbIdx = updateCallOrder.indexOf('kb_persisted');
+      const deployIdx = updateCallOrder.indexOf('deploy_called');
+      expect(kbIdx).toBeGreaterThanOrEqual(0);
+      expect(deployIdx).toBeGreaterThanOrEqual(0);
+      expect(kbIdx).toBeLessThan(deployIdx);
+    });
+
     it('continues deployment when scrape fails', async () => {
       const { prisma } = require('@kit/prisma');
       prisma.account.findFirst.mockResolvedValueOnce({

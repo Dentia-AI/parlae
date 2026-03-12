@@ -186,10 +186,14 @@ export async function PUT(request: NextRequest) {
               ?.conversationFlowId ||
             (updatedSettings.conversationFlowId as string | undefined);
           if (inboundFlowId) {
-            await retell.updateConversationFlow(inboundFlowId, {
-              knowledge_base_ids: kbIds,
-            });
-            flowsUpdated.push(`inbound:${inboundFlowId}`);
+            const attached = await retell.attachKbToFlowNodes(
+              inboundFlowId,
+              kbIds,
+              ['receptionist', 'faq'],
+            );
+            if (attached) {
+              flowsUpdated.push(`inbound:${inboundFlowId}`);
+            }
           }
 
           const outboundSettings = await prisma.outboundSettings.findUnique({

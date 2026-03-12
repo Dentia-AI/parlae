@@ -16,6 +16,20 @@ jest.mock('@kit/shared/voice-provider', () => ({
   getAccountProvider: jest.fn(() => Promise.resolve('RETELL')),
 }));
 
+const mockAttachKbToFlowNodes = jest.fn().mockResolvedValue(true);
+const mockUpdateConversationFlow = jest.fn().mockResolvedValue({});
+const mockGetAgent = jest.fn();
+
+jest.mock('@kit/shared/retell/retell.service', () => ({
+  createRetellService: () => ({
+    attachKbToFlowNodes: mockAttachKbToFlowNodes,
+    updateConversationFlow: mockUpdateConversationFlow,
+    getAgent: mockGetAgent,
+  }),
+}));
+
+let afterPromise: Promise<void> | null = null;
+
 jest.mock('next/server', () => {
   const actual = jest.requireActual('next/server');
   return {
@@ -28,8 +42,7 @@ jest.mock('next/server', () => {
       }),
     },
     after: jest.fn((fn: () => void) => {
-      // Execute immediately in tests so we can verify side-effects
-      fn();
+      afterPromise = Promise.resolve(fn()).catch(() => {});
     }),
   };
 });
@@ -253,5 +266,89 @@ describe('PUT /api/agent/knowledge', () => {
     const body = await (res as any).json();
 
     expect(body.totalFiles).toBe(3);
+  });
+
+  it('should call attachKbToFlowNodes for inbound flow in background', async () => {
+    mockRequireSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+    mockPrisma.account.findFirst.mockResolvedValue({
+      id: 'account-1',
+      phoneIntegrationSettings: {
+        queryToolId: 'tool-1',
+        queryToolName: 'query-tool',
+        retellKnowledgeBaseId: 'kb-abc',
+        retellConversationFlow: {
+          conversationFlowId: 'flow-inbound-1',
+          agentId: 'agent-1',
+        },
+      },
+      brandingBusinessName: 'Clinic',
+      name: 'Test',
+    });
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.outboundSettings.findUnique.mockResolvedValue(null);
+    mockAttachKbToFlowNodes.mockResolvedValue(true);
+
+    await PUT(makeRequest({ knowledgeBaseConfig: { about: ['file-1'] } }));
+    if (afterPromise) await afterPromise;
+
+    expect(mockAttachKbToFlowNodes).toHaveBeenCalledWith(
+      'flow-inbound-1',
+      ['kb-abc'],
+      ['receptionist', 'faq'],
+    );
+  });
+
+  it('should use flow-level update for outbound flows in background', async () => {
+    mockRequireSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+    mockPrisma.account.findFirst.mockResolvedValue({
+      id: 'account-1',
+      phoneIntegrationSettings: {
+        retellKnowledgeBaseId: 'kb-abc',
+        retellConversationFlow: {
+          conversationFlowId: 'flow-inbound-1',
+        },
+      },
+      brandingBusinessName: 'Clinic',
+      name: 'Test',
+    });
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.outboundSettings.findUnique.mockResolvedValue({
+      patientCareRetellAgentId: 'ob-agent-1',
+      financialRetellAgentId: null,
+    });
+    mockGetAgent.mockResolvedValue({
+      response_engine: { conversation_flow_id: 'ob-flow-1' },
+    });
+    mockAttachKbToFlowNodes.mockResolvedValue(true);
+    mockUpdateConversationFlow.mockResolvedValue({});
+
+    await PUT(makeRequest({ knowledgeBaseConfig: { about: ['file-1'] } }));
+    if (afterPromise) await afterPromise;
+
+    expect(mockUpdateConversationFlow).toHaveBeenCalledWith('ob-flow-1', {
+      knowledge_base_ids: ['kb-abc'],
+    });
+  });
+
+  it('should skip background sync when no retellKnowledgeBaseId', async () => {
+    mockRequireSession.mockResolvedValue({ user: { id: 'user-1' } });
+
+    mockPrisma.account.findFirst.mockResolvedValue({
+      id: 'account-1',
+      phoneIntegrationSettings: {
+        conversationFlowId: 'flow-1',
+      },
+      brandingBusinessName: 'Clinic',
+      name: 'Test',
+    });
+    mockPrisma.account.update.mockResolvedValue({});
+
+    await PUT(makeRequest({ knowledgeBaseConfig: { about: ['file-1'] } }));
+    if (afterPromise) await afterPromise;
+
+    expect(mockAttachKbToFlowNodes).not.toHaveBeenCalled();
+    expect(mockUpdateConversationFlow).not.toHaveBeenCalled();
   });
 });

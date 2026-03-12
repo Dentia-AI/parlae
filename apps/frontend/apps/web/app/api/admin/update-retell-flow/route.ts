@@ -75,8 +75,17 @@ export async function POST(request: NextRequest) {
       process.env.VAPI_SERVER_SECRET ||
       '';
 
+    const retellKbId = settings.retellKnowledgeBaseId as string | undefined;
+
+    if (!retellKbId) {
+      logger.warn(
+        { funcName, accountId },
+        '[Flow Update] No retellKnowledgeBaseId found — flow will be rebuilt without KB',
+      );
+    }
+
     logger.info(
-      { funcName, accountId, flowId: existingFlow.conversationFlowId, clinicName },
+      { funcName, accountId, flowId: existingFlow.conversationFlowId, clinicName, hasKb: !!retellKbId },
       '[Flow Update] Rebuilding flow definition from template',
     );
 
@@ -86,6 +95,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret,
       accountId,
+      knowledgeBaseIds: retellKbId ? [retellKbId] : undefined,
     });
 
     const updated = await retell.updateConversationFlow(

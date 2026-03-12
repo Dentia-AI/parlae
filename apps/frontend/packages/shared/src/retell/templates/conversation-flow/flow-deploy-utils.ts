@@ -108,6 +108,7 @@ export async function deployRetellConversationFlow(
       accountId: config.accountId,
       deployType: 'conversation_flow',
       version: CONVERSATION_FLOW_VERSION,
+      knowledgeBaseIds: config.knowledgeBaseIds?.join(',') || '',
     },
   } as any); // response_engine type union requires 'as any' for the expanded config spread
 
