@@ -702,11 +702,29 @@ describe('RetellToolController', () => {
       setTimeoutSpy.mockRestore();
     });
 
-    it('should schedule delay for regular tools when execution is fast', async () => {
+    it('should schedule delay for lookup tools to let filler finish', async () => {
       agentToolsService.lookupPatient.mockResolvedValue({ found: true });
       const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
 
       await invokeTool('lookupPatient', { phone: '+1234' });
+
+      const delayCallArgs = setTimeoutSpy.mock.calls.filter(
+        ([, ms]) => typeof ms === 'number' && ms > 100,
+      );
+      expect(delayCallArgs.length).toBeGreaterThanOrEqual(1);
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('should schedule delay for slow writeback tools when execution is fast', async () => {
+      agentToolsService.bookAppointment.mockResolvedValue({ success: true });
+      const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+
+      await invokeTool('bookAppointment', {
+        patientId: 'p-1',
+        date: '2026-04-01',
+        startTime: '10:00',
+        appointmentType: 'cleaning',
+      });
 
       const delayCallArgs = setTimeoutSpy.mock.calls.filter(
         ([, ms]) => typeof ms === 'number' && ms > 100,

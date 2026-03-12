@@ -42,16 +42,33 @@ export class RetellToolController {
 
   /**
    * Per-tool minimum delay (ms) before returning the result to Retell.
-   * Gives the speak_during_execution filler message time to play.
-   * Writeback tools (bookAppointment, processPayment) need the longest
-   * filler; fast lookup tools should return ASAP.
+   * Ensures the speak_during_execution filler finishes playing before the
+   * result arrives (Retell cuts speech the instant it receives the response).
+   *
+   * Short fillers ("One moment." / "Let me check.") ≈ 1200ms
+   *   (TTS synthesis ~300ms + playback ~600ms + buffer ~300ms)
+   * Long fillers ("Let me get that booked for you.") ≈ 2000ms
    */
   private static readonly TOOL_SPEAK_DELAY: Record<string, number> = {
     getCallerContext: 0,
-    bookAppointment: 1500,
-    processPayment: 1500,
-    rescheduleAppointment: 1200,
-    cancelAppointment: 1200,
+    lookupPatient: 1200,
+    createPatient: 1200,
+    updatePatient: 1200,
+    checkAvailability: 1200,
+    getAppointments: 1200,
+    getInsurance: 1200,
+    getBalance: 1200,
+    getPaymentHistory: 0,
+    getProviders: 0,
+    verifyInsuranceCoverage: 1200,
+    addNote: 0,
+    bookAppointment: 2000,
+    processPayment: 2000,
+    rescheduleAppointment: 1800,
+    cancelAppointment: 1800,
+    saveInsurance: 1200,
+    takeMessage: 1800,
+    createPaymentPlan: 0,
   };
 
   constructor(
@@ -174,7 +191,7 @@ export class RetellToolController {
       // tool result is returned (Retell stops speaking as soon as it receives
       // the response). Delay is per-tool: slow writeback tools need more filler
       // time, fast lookup tools should return ASAP.
-      const speakDelayMs = RetellToolController.TOOL_SPEAK_DELAY[toolName] ?? 800;
+      const speakDelayMs = RetellToolController.TOOL_SPEAK_DELAY[toolName] ?? 1200;
       if (speakDelayMs > 0) {
         const remaining = speakDelayMs - durationMs;
         if (remaining > 0) {

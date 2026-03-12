@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.9';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.11';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -539,7 +539,7 @@ export function buildDentalClinicFlow(
     '## RULES',
     '- Match the caller\'s language. If they switch, follow.',
     '- NEVER give medical advice — redirect to scheduling a visit.',
-    '- Keep responses concise (<30s). Use caller\'s name when known. Show empathy.',
+    '- **BE BRIEF**: 1-2 short sentences per turn. Use caller\'s name when known. Show empathy.',
     '- Never mention system internals (nodes, flow, routing, transferring).',
     '- Speak dates naturally ("tomorrow at 2 PM"), never ISO. Read phone numbers digit by digit.',
     '- **PHONE VERIFY**: Read back any phone number digit by digit before searching. When calling lookupPatient, provide both phone AND name when available.',

@@ -362,72 +362,72 @@ const getProvidersFn: VapiToolFunction = {
 // Exported Retell Tool Definitions
 // ---------------------------------------------------------------------------
 
+// All tools use speak_during_execution so the caller hears a short filler
+// while waiting. The backend pads fast responses so the filler always
+// finishes before the result arrives (no mid-word cutoff).
+// Short fillers (~0.6-0.8s speech) for read/lookup tools.
 export const retellLookupPatientTool = toRetellTool(lookupPatientFn, {
   speakDuring: true,
   speakDuringMessage: 'One moment.',
 });
-
 export const retellCreatePatientTool = toRetellTool(createPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me set that up.',
+  speakDuringMessage: 'One moment.',
 });
-
 export const retellUpdatePatientTool = toRetellTool(updatePatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Updating now.',
+  speakDuringMessage: 'One moment.',
 });
 export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
   speakDuring: true,
   speakDuringMessage: 'Let me check.',
 });
-
-export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
-  speakDuring: true,
-  speakDuringMessage: 'Booking that now.',
-  timeoutMs: 45_000,
-});
-
-export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
-  speakDuring: true,
-  speakDuringMessage: 'Let me reschedule that.',
-});
-
-export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
-  speakDuring: true,
-  speakDuringMessage: 'One moment.',
-});
 export const retellGetAppointmentsTool = toRetellTool(getAppointmentsFn, {
   speakDuring: true,
   speakDuringMessage: 'One moment.',
 });
-
 export const retellAddNoteTool = toRetellTool(addNoteFn);
 export const retellGetInsuranceTool = toRetellTool(getInsuranceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me check.',
-});
-export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn, {
-  speakDuring: true,
-  speakDuringMessage: 'Saving that now.',
-});
-export const retellVerifyInsuranceCoverageTool = toRetellTool(verifyInsuranceCoverageFn, {
-  speakDuring: true,
-  speakDuringMessage: 'Let me check.',
+  speakDuringMessage: 'One moment.',
 });
 export const retellGetBalanceTool = toRetellTool(getBalanceFn, {
   speakDuring: true,
   speakDuringMessage: 'One moment.',
 });
 export const retellGetPaymentHistoryTool = toRetellTool(getPaymentHistoryFn);
+export const retellVerifyInsuranceCoverageTool = toRetellTool(verifyInsuranceCoverageFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me check.',
+});
+
+// Longer fillers (~1.2-1.5s speech) for slow writeback tools.
+export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me get that booked for you.',
+  timeoutMs: 45_000,
+});
+export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me reschedule that for you.',
+});
+export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Let me take care of that.',
+});
+export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn, {
+  speakDuring: true,
+  speakDuringMessage: 'Saving that now.',
+});
 export const retellProcessPaymentTool = toRetellTool(processPaymentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Processing now.',
+  speakDuringMessage: 'Processing that now.',
   timeoutMs: 45_000,
 });
 export const retellCreatePaymentPlanTool = toRetellTool(createPaymentPlanFn);
 export const retellTakeMessageTool = toRetellTool(takeMessageFn, {
   speakDuring: true,
-  speakDuringMessage: 'Of course.',
+  speakDuringMessage: 'Of course, let me note that down.',
 });
 export const retellGetProvidersTool = toRetellTool(getProvidersFn);
 
