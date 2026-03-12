@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.11';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.12';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -561,7 +561,7 @@ export function buildDentalClinicFlow(
     },
     global_prompt: globalPrompt,
     default_dynamic_variables: {
-      customer_phone: '{{call.from_number}}',
+      customer_phone: '',
       patient_id: '',
       patient_name: '',
       now: new Date().toISOString(),

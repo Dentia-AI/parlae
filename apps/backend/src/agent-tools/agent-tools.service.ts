@@ -215,10 +215,19 @@ export class AgentToolsService {
       }
     }
 
+    // Extract the caller's phone from the call object (available for real phone calls, not web calls)
+    const callerPhone =
+      ctx?.callerPhone ||
+      call?.from_number ||
+      call?.customer?.number ||
+      call?.metadata?.customerPhone ||
+      '';
+
     if (!ctx || ctx.patientType === 'new') {
       return {
         result: {
           patientType: 'new',
+          ...(callerPhone ? { callerPhone } : {}),
           message: 'This appears to be a new caller. Proceed with the standard greeting.',
         },
       };
@@ -227,6 +236,7 @@ export class AgentToolsService {
     const response: Record<string, any> = {
       patientType: ctx.patientType,
       patientName: ctx.patientName,
+      ...(callerPhone ? { callerPhone } : {}),
     };
 
     if (ctx.nextBooking) {

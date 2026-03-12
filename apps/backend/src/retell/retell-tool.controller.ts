@@ -45,29 +45,29 @@ export class RetellToolController {
    * Ensures the speak_during_execution filler finishes playing before the
    * result arrives (Retell cuts speech the instant it receives the response).
    *
-   * Short fillers ("One moment." / "Let me check.") ≈ 1200ms
-   *   (TTS synthesis ~300ms + playback ~600ms + buffer ~300ms)
-   * Long fillers ("Let me get that booked for you.") ≈ 2000ms
+   * Short fillers ("One moment." / "Let me check.") ≈ 900ms
+   *   (TTS synthesis ~200ms + playback ~500ms + buffer ~200ms)
+   * Long fillers ("Let me get that booked for you.") ≈ 1800ms
    */
   private static readonly TOOL_SPEAK_DELAY: Record<string, number> = {
     getCallerContext: 0,
-    lookupPatient: 1200,
-    createPatient: 1200,
-    updatePatient: 1200,
-    checkAvailability: 1200,
-    getAppointments: 1200,
-    getInsurance: 1200,
-    getBalance: 1200,
+    lookupPatient: 900,
+    createPatient: 900,
+    updatePatient: 900,
+    checkAvailability: 900,
+    getAppointments: 900,
+    getInsurance: 900,
+    getBalance: 900,
     getPaymentHistory: 0,
     getProviders: 0,
-    verifyInsuranceCoverage: 1200,
+    verifyInsuranceCoverage: 900,
     addNote: 0,
-    bookAppointment: 2000,
-    processPayment: 2000,
-    rescheduleAppointment: 1800,
-    cancelAppointment: 1800,
-    saveInsurance: 1200,
-    takeMessage: 1800,
+    bookAppointment: 1800,
+    processPayment: 1800,
+    rescheduleAppointment: 1500,
+    cancelAppointment: 1500,
+    saveInsurance: 900,
+    takeMessage: 1500,
     createPaymentPlan: 0,
   };
 
