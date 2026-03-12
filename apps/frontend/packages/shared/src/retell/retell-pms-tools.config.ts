@@ -149,11 +149,16 @@ const checkAvailabilityFn: VapiToolFunction = {
 const bookAppointmentFn: VapiToolFunction = {
   name: 'bookAppointment',
   description:
-    'Book an appointment. Requires patientId (from lookupPatient or createPatient), date (YYYY-MM-DD), startTime (HH:MM 24h), and appointmentType.',
+    'Book an appointment. For existing patients pass patientId. For new patients pass firstName, lastName, phone instead — the system registers them automatically.',
   parameters: {
     type: 'object',
     properties: {
-      patientId: { type: 'string', description: 'Patient ID from lookupPatient or createPatient' },
+      patientId: { type: 'string', description: 'Patient ID from lookupPatient (omit for new patients)' },
+      firstName: { type: 'string', description: "New patient's first name (required if no patientId)" },
+      lastName: { type: 'string', description: "New patient's last name (required if no patientId)" },
+      phone: { type: 'string', description: "New patient's phone number (required if no patientId)" },
+      email: { type: 'string', description: "New patient's email address" },
+      dateOfBirth: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' },
       date: { type: 'string', description: 'Appointment date (YYYY-MM-DD)' },
       startTime: { type: 'string', description: 'Start time in 24h format (HH:MM)' },
       appointmentType: {
@@ -163,7 +168,7 @@ const bookAppointmentFn: VapiToolFunction = {
       providerId: { type: 'string', description: 'Provider/dentist ID (optional)' },
       notes: { type: 'string', description: 'Special notes for the appointment' },
     },
-    required: ['patientId', 'date', 'startTime', 'appointmentType'],
+    required: ['date', 'startTime', 'appointmentType'],
   },
 };
 

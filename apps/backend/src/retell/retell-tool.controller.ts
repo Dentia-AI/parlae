@@ -42,34 +42,10 @@ export class RetellToolController {
 
   /**
    * Per-tool minimum delay (ms) before returning the result to Retell.
-   * Ensures the speak_during_execution filler finishes playing before the
-   * result arrives (Retell cuts speech the instant it receives the response).
-   *
-   * Short fillers ("One moment." / "Let me check.") ≈ 900ms
-   *   (TTS synthesis ~200ms + playback ~500ms + buffer ~200ms)
-   * Long fillers ("Let me get that booked for you.") ≈ 1800ms
+   * All set to 0: speak_during_execution fillers play naturally for
+   * the actual tool duration. No artificial padding — saves per-minute cost.
    */
-  private static readonly TOOL_SPEAK_DELAY: Record<string, number> = {
-    getCallerContext: 0,
-    lookupPatient: 900,
-    createPatient: 900,
-    updatePatient: 900,
-    checkAvailability: 900,
-    getAppointments: 900,
-    getInsurance: 900,
-    getBalance: 900,
-    getPaymentHistory: 0,
-    getProviders: 0,
-    verifyInsuranceCoverage: 900,
-    addNote: 0,
-    bookAppointment: 1800,
-    processPayment: 1800,
-    rescheduleAppointment: 1500,
-    cancelAppointment: 1500,
-    saveInsurance: 900,
-    takeMessage: 1500,
-    createPaymentPlan: 0,
-  };
+  private static readonly TOOL_SPEAK_DELAY: Record<string, number> = {};
 
   constructor(
     private readonly agentToolsService: AgentToolsService,
@@ -187,11 +163,9 @@ export class RetellToolController {
         message: "I'm having trouble with that right now. Let me help you another way.",
       };
 
-      // Ensure speak_during_execution messages have time to play before the
-      // tool result is returned (Retell stops speaking as soon as it receives
-      // the response). Delay is per-tool: slow writeback tools need more filler
-      // time, fast lookup tools should return ASAP.
-      const speakDelayMs = RetellToolController.TOOL_SPEAK_DELAY[toolName] ?? 1200;
+      // Optional per-tool minimum delay. Currently all 0 — fillers play
+      // naturally for the actual tool duration with no artificial padding.
+      const speakDelayMs = RetellToolController.TOOL_SPEAK_DELAY[toolName] ?? 0;
       if (speakDelayMs > 0) {
         const remaining = speakDelayMs - durationMs;
         if (remaining > 0) {
@@ -422,7 +396,12 @@ export class RetellToolController {
         if (!params.phone) errors.push('phone is required.');
         break;
       case 'bookAppointment':
-        if (!params.patientId) errors.push('patientId is required. Look up or create the patient first.');
+        if (!params.patientId && !params.firstName) {
+          errors.push('Either patientId or patient details (firstName, lastName, phone) required.');
+        }
+        if (!params.patientId && params.firstName && !params.phone) {
+          errors.push('phone is required for new patients.');
+        }
         if (!params.date) errors.push('date is required (YYYY-MM-DD).');
         if (!params.startTime) errors.push('startTime is required (HH:MM).');
         if (!params.appointmentType) errors.push('appointmentType is required.');

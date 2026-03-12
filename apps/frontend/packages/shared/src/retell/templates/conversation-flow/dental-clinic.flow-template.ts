@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.12';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.13';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -248,7 +248,6 @@ export function buildDentalClinicFlow(
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_BOOKING_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
-      'createPatient',
       'checkAvailability',
       'bookAppointment',
       'rescheduleAppointment',
@@ -410,7 +409,6 @@ export function buildDentalClinicFlow(
     instruction: { type: 'prompt', text: hydratePrompt(FLOW_EMERGENCY_PROMPT, cn) },
     tool_ids: [
       'lookupPatient',
-      'createPatient',
       'checkAvailability',
       'bookAppointment',
     ],

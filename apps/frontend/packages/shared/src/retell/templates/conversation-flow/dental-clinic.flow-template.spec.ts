@@ -93,4 +93,32 @@ describe('buildDentalClinicFlow', () => {
     const flow = buildDentalClinicFlow(BASE_CONFIG);
     expect(flow.start_node_id).toBe('receptionist');
   });
+
+  it('booking node does NOT include createPatient in tool_ids', () => {
+    const flow = buildDentalClinicFlow(BASE_CONFIG);
+    const booking = flow.nodes.find((n: any) => n.id === 'booking');
+    expect(booking).toBeDefined();
+    expect((booking as any).tool_ids).not.toContain('createPatient');
+    expect((booking as any).tool_ids).toContain('bookAppointment');
+    expect((booking as any).tool_ids).toContain('lookupPatient');
+    expect((booking as any).tool_ids).toContain('checkAvailability');
+  });
+
+  it('emergency node does NOT include createPatient in tool_ids', () => {
+    const flow = buildDentalClinicFlow(BASE_CONFIG);
+    const emergency = flow.nodes.find((n: any) => n.id === 'emergency');
+    expect(emergency).toBeDefined();
+    expect((emergency as any).tool_ids).not.toContain('createPatient');
+    expect((emergency as any).tool_ids).toContain('bookAppointment');
+    expect((emergency as any).tool_ids).toContain('lookupPatient');
+  });
+
+  it('patient_records node still includes createPatient in tool_ids', () => {
+    const flow = buildDentalClinicFlow(BASE_CONFIG);
+    const patientRecords = flow.nodes.find((n: any) => n.id === 'patient_records');
+    expect(patientRecords).toBeDefined();
+    expect((patientRecords as any).tool_ids).toContain('createPatient');
+    expect((patientRecords as any).tool_ids).toContain('lookupPatient');
+    expect((patientRecords as any).tool_ids).toContain('updatePatient');
+  });
 });

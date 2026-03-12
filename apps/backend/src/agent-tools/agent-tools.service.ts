@@ -734,15 +734,26 @@ export class AgentToolsService {
         }
       }
 
-      // Get phone record and PMS integration
       const phoneRecord = await this.resolvePhoneRecord(call, payload.accountId);
+      const needsPatientCreate = !params.patientId && params.firstName && params.lastName;
 
       if (!phoneRecord?.pmsIntegration) {
-        // ── Google Calendar Fallback ──
+        // ── GCal path: cache patient fields so GCal booking can use them ──
+        if (needsPatientCreate && call?.id) {
+          const callerPhone = call?.customer?.number;
+          this.cachePatient(call.id, {
+            firstName: params.firstName || '',
+            lastName: params.lastName || '',
+            phone: params.phone || callerPhone,
+            email: params.email,
+            patientId: `gcal-${Date.now()}`,
+            cachedAt: Date.now(),
+          });
+        }
         return this.bookAppointmentViaGoogleCalendar(phoneRecord, params, call);
       }
 
-      // Get PMS service (credentials from env, never DB)
+      // ── PMS path ──
       const { PmsService } = await import('../pms/pms.service');
       const pmsService = new PmsService(this.prisma);
       const sikkaService = await pmsService.getPmsService(
@@ -751,8 +762,32 @@ export class AgentToolsService {
         phoneRecord.pmsIntegration.config,
       );
 
+      let resolvedPatientId = params.patientId;
+
+      // Auto-create the patient when AI provides patient fields instead of patientId
+      if (needsPatientCreate) {
+        const createResult = await this.createPatientForBooking(
+          sikkaService, phoneRecord, params, call,
+        );
+        if (!createResult.success) {
+          // PMS create failed — fall back to GCal for the whole booking
+          if (call?.id) {
+            this.cachePatient(call.id, {
+              firstName: params.firstName || '',
+              lastName: params.lastName || '',
+              phone: params.phone || call?.customer?.number,
+              email: params.email,
+              patientId: `gcal-${Date.now()}`,
+              cachedAt: Date.now(),
+            });
+          }
+          return this.bookAppointmentViaGoogleCalendar(phoneRecord, params, call);
+        }
+        resolvedPatientId = createResult.patientId;
+      }
+
       const bookingInput = {
-        patientId: params.patientId,
+        patientId: resolvedPatientId,
         providerId: params.providerId,
         appointmentType: params.appointmentType || params.type || 'General',
         startTime: this.parseBookingStartTime(params),
@@ -778,19 +813,12 @@ export class AgentToolsService {
       
       if (!result.success || !result.data) {
         const errorMsg = result.error ? (typeof result.error === 'string' ? result.error : result.error.message) : 'Booking failed';
-
-        // ── PMS writeback failed — fallback: GCal backup + email notification ──
         this.logger.warn({ accountId: phoneRecord.accountId, errorMsg, pmsError: result.error, msg: '[PMS] Writeback failed, attempting fallback' });
-
-        return this.handlePmsBookingFailure(
-          phoneRecord,
-          params,
-          call,
-          errorMsg,
-        );
+        return this.handlePmsBookingFailure(phoneRecord, params, call, errorMsg);
       }
       
       const appointment = result.data;
+      const wasCreated = needsPatientCreate;
 
       this.logger.log({ appointmentId: appointment.id });
 
@@ -806,17 +834,22 @@ export class AgentToolsService {
         appointmentType: params.appointmentType || params.type || 'General',
         providerName: appointment.providerName || params.providerId,
         duration: params.duration || 30,
-        summary: `Booked ${params.appointmentType || params.type || 'General'} appointment, ${params.duration || 30} min${appointment.providerName ? ` with ${appointment.providerName}` : ''}`,
+        summary: `${wasCreated ? 'Created patient & ' : ''}Booked ${params.appointmentType || params.type || 'General'} appointment, ${params.duration || 30} min${appointment.providerName ? ` with ${appointment.providerName}` : ''}`,
         pmsProvider: phoneRecord.pmsIntegration?.provider,
         writebackId: appointment.metadata?.writebackId as string | undefined,
       }).catch(() => {});
+
+      const confirmMsg = wasCreated
+        ? `I've registered you and booked your ${params.appointmentType || 'appointment'} for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}.`
+        : `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}.`;
 
       const agentResponse = {
         result: {
           success: true,
           appointmentId: appointment.id,
           confirmationNumber: appointment.confirmationNumber,
-          message: `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}. Do NOT say "with [patient name]" — the caller already knows who they are.`,
+          patientCreated: wasCreated,
+          message: `${confirmMsg} Do NOT say "with [patient name]" — the caller already knows who they are.`,
         },
       };
 
@@ -831,7 +864,6 @@ export class AgentToolsService {
     } catch (error: any) {
       this.logger.error(error);
 
-      // Even on unexpected errors, try the fallback if we have a phone record
       try {
         const { call, message } = payload;
         const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
@@ -1540,7 +1572,7 @@ export class AgentToolsService {
               email: params.email,
             },
             integrationType: 'google_calendar',
-            message: `[SUCCESS] Patient ready. [NEXT STEP] You MUST call bookAppointment now with patientId="${patientId}". Say "Great, let me get that booked" and call bookAppointment in this same response. FORBIDDEN: Do NOT say "I've created your profile" or any statement about the profile — go straight to booking.`,
+            message: `[SUCCESS] Patient ready. [NEXT STEP] Call bookAppointment with patientId="${patientId}". Say something brief like "Perfect, let me book that for you now" and then call bookAppointment. Do NOT mention the patient profile — go straight to booking.`,
           },
         };
       }
@@ -1634,7 +1666,7 @@ export class AgentToolsService {
               email: params.email,
             },
             integrationType: 'google_calendar',
-            message: `[SUCCESS] Patient ready. [NEXT STEP] You MUST call bookAppointment now with patientId="${fallbackId}". Say "Great, let me get that booked" and call bookAppointment in this same response. FORBIDDEN: Do NOT say "I've created your profile" or any statement about the profile — go straight to booking.`,
+            message: `[SUCCESS] Patient ready. [NEXT STEP] Call bookAppointment with patientId="${fallbackId}". Say something brief like "Perfect, let me book that for you now" and then call bookAppointment. Do NOT mention the patient profile — go straight to booking.`,
           },
         };
       }
@@ -3320,6 +3352,88 @@ export class AgentToolsService {
           "I'm sorry, I had trouble booking that appointment. Let me take your information and have someone call you back.",
       };
     }
+  }
+
+  /**
+   * Internal helper: create a patient via PMS as part of an atomic
+   * bookAppointment call. Returns the PMS patientId on success or
+   * { success: false } so the caller can fall back to GCal.
+   */
+  private async createPatientForBooking(
+    sikkaService: any,
+    phoneRecord: any,
+    params: any,
+    call: any,
+  ): Promise<{ success: true; patientId: string } | { success: false }> {
+    const startTime = Date.now();
+    const callerPhone = call?.customer?.number;
+    const patientPhone = params.phone || callerPhone;
+
+    const createInput = {
+      firstName: params.firstName,
+      lastName: params.lastName,
+      phone: patientPhone,
+      email: params.email,
+      dateOfBirth: params.dateOfBirth,
+      address: params.address,
+      notes: params.notes,
+    };
+
+    this.logger.verbose({
+      accountId: phoneRecord.accountId,
+      tool: 'bookAppointment→createPatient',
+      pmsInput: { ...createInput, phone: createInput.phone ? '***' : undefined },
+      msg: '[PMS Call] auto-create patient for booking',
+    });
+
+    const result = await sikkaService.createPatient(createInput);
+    const responseTime = Date.now() - startTime;
+
+    if (!result.success) {
+      const errorMsg = typeof result.error === 'string' ? result.error : result.error?.message;
+      this.logger.warn({ accountId: phoneRecord.accountId, errorMsg, msg: '[bookAppointment] PMS createPatient failed — will fall back to GCal' });
+      await this.hipaaAudit.logAccess({
+        pmsIntegrationId: phoneRecord.pmsIntegration.id,
+        action: 'createPatient',
+        endpoint: '/patients',
+        method: 'POST',
+        callId: call?.id,
+        requestSummary: `Attempted to create patient: ${params.firstName} ${params.lastName}`,
+        responseStatus: 500,
+        responseTime,
+        phiAccessed: false,
+        errorMessage: errorMsg,
+      });
+      return { success: false };
+    }
+
+    const patient = result.data!;
+
+    await this.hipaaAudit.logAccess({
+      pmsIntegrationId: phoneRecord.pmsIntegration.id,
+      action: 'createPatient',
+      endpoint: '/patients',
+      method: 'POST',
+      callId: call?.id,
+      requestSummary: 'Created new patient record',
+      responseStatus: 201,
+      responseTime,
+      phiAccessed: true,
+    });
+
+    this.logAiAction({
+      accountId: phoneRecord.accountId,
+      source: 'pms',
+      action: 'create_patient',
+      category: 'patient',
+      callId: call?.id,
+      externalResourceId: patient.id,
+      externalResourceType: 'patient',
+      summary: 'Created new patient record (auto-created for booking)',
+      pmsProvider: phoneRecord.pmsIntegration?.provider,
+    }).catch(() => {});
+
+    return { success: true, patientId: patient.id };
   }
 
   /**

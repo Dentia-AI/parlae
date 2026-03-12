@@ -162,6 +162,82 @@ describe('AgentToolsService', () => {
 
       expect(result).toBeDefined();
     });
+
+    it('should auto-create patient and book via GCal when no patientId and no PMS', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: {
+          id: 'acc-1',
+          googleCalendarConnected: true,
+          brandingTimezone: 'America/New_York',
+          name: 'Test Clinic',
+        },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true,
+        eventId: 'evt-auto',
+        htmlLink: 'https://cal/evt-auto',
+      });
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { id: 'call-auto-1', phoneNumberId: 'vapi-phone-1' },
+        message: {
+          functionCall: {
+            parameters: {
+              firstName: 'Jane',
+              lastName: 'Smith',
+              phone: '+14155551234',
+              email: 'jane@test.com',
+              startTime: '2026-04-01T10:00:00Z',
+              appointmentType: 'Cleaning',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(gcalService.createAppointmentEvent).toHaveBeenCalled();
+    });
+
+    it('should auto-create patient and book without patientId when no PMS and no call id', async () => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: {
+          id: 'acc-1',
+          googleCalendarConnected: true,
+          brandingTimezone: 'America/New_York',
+          name: 'Test Clinic',
+        },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.createAppointmentEvent.mockResolvedValue({
+        success: true,
+        eventId: 'evt-no-callid',
+        htmlLink: 'https://cal/evt-no-callid',
+      });
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-1',
+        call: { phoneNumberId: 'vapi-phone-1' },
+        message: {
+          functionCall: {
+            parameters: {
+              firstName: 'Bob',
+              lastName: 'Jones',
+              phone: '+14155559999',
+              startTime: '2026-04-01T14:00:00Z',
+              appointmentType: 'exam',
+            },
+          },
+        },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+    });
   });
 
   describe('lookupPatient', () => {

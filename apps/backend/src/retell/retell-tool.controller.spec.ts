@@ -545,11 +545,19 @@ describe('RetellToolController', () => {
     });
 
     describe('bookAppointment', () => {
-      it('should reject when patientId is missing', async () => {
+      it('should reject when neither patientId nor patient fields provided', async () => {
         const result = await invokeTool('bookAppointment', {
           date: '2026-03-05', startTime: '10:00', appointmentType: 'cleaning',
         });
-        expect(result.error).toContain('patientId is required');
+        expect(result.error).toContain('Either patientId or patient details');
+      });
+
+      it('should reject when new patient fields missing phone', async () => {
+        const result = await invokeTool('bookAppointment', {
+          firstName: 'John', lastName: 'Doe',
+          date: '2026-03-05', startTime: '10:00', appointmentType: 'cleaning',
+        });
+        expect(result.error).toContain('phone is required for new patients');
       });
 
       it('should reject when date is missing', async () => {
@@ -573,9 +581,17 @@ describe('RetellToolController', () => {
         expect(result.error).toContain('appointmentType is required');
       });
 
-      it('should pass when all fields provided', async () => {
+      it('should pass when patientId provided', async () => {
         const result = await invokeTool('bookAppointment', {
           patientId: 'p-1', date: '2026-03-05', startTime: '10:00', appointmentType: 'cleaning',
+        });
+        expect(result).toEqual({ success: true });
+      });
+
+      it('should pass when patient fields provided instead of patientId', async () => {
+        const result = await invokeTool('bookAppointment', {
+          firstName: 'John', lastName: 'Doe', phone: '+1234',
+          date: '2026-03-05', startTime: '10:00', appointmentType: 'cleaning',
         });
         expect(result).toEqual({ success: true });
       });
@@ -689,10 +705,10 @@ describe('RetellToolController', () => {
     });
   });
 
-  // ── Speak Delay (per-tool TOOL_SPEAK_DELAY) ────────────────────────
+  // ── Speak Delay (all delays removed — fillers play for actual tool duration) ──
 
   describe('speak delay', () => {
-    it('should not schedule delay for getCallerContext', async () => {
+    it('should not schedule any artificial delay for any tool', async () => {
       const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
       await invokeTool('getCallerContext');
       const delayCallArgs = setTimeoutSpy.mock.calls.filter(
@@ -702,7 +718,7 @@ describe('RetellToolController', () => {
       setTimeoutSpy.mockRestore();
     });
 
-    it('should schedule delay for lookup tools to let filler finish', async () => {
+    it('should not delay lookup tools', async () => {
       agentToolsService.lookupPatient.mockResolvedValue({ found: true });
       const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
 
@@ -711,11 +727,11 @@ describe('RetellToolController', () => {
       const delayCallArgs = setTimeoutSpy.mock.calls.filter(
         ([, ms]) => typeof ms === 'number' && ms > 100,
       );
-      expect(delayCallArgs.length).toBeGreaterThanOrEqual(1);
+      expect(delayCallArgs).toHaveLength(0);
       setTimeoutSpy.mockRestore();
     });
 
-    it('should schedule delay for slow writeback tools when execution is fast', async () => {
+    it('should not delay writeback tools', async () => {
       agentToolsService.bookAppointment.mockResolvedValue({ success: true });
       const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
 
@@ -729,7 +745,7 @@ describe('RetellToolController', () => {
       const delayCallArgs = setTimeoutSpy.mock.calls.filter(
         ([, ms]) => typeof ms === 'number' && ms > 100,
       );
-      expect(delayCallArgs.length).toBeGreaterThanOrEqual(1);
+      expect(delayCallArgs).toHaveLength(0);
       setTimeoutSpy.mockRestore();
     });
   });
