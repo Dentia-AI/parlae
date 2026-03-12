@@ -689,7 +689,7 @@ describe('RetellToolController', () => {
     });
   });
 
-  // ── Speak Delay (MIN_SPEAK_DELAY_MS for non-getCallerContext) ──────
+  // ── Speak Delay (per-tool TOOL_SPEAK_DELAY) ────────────────────────
 
   describe('speak delay', () => {
     it('should not schedule delay for getCallerContext', async () => {

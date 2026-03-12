@@ -40,6 +40,20 @@ export class RetellToolController {
     'bookAppointment', 'createPatient', 'checkAvailability', 'rescheduleAppointment',
   ]);
 
+  /**
+   * Per-tool minimum delay (ms) before returning the result to Retell.
+   * Gives the speak_during_execution filler message time to play.
+   * Writeback tools (bookAppointment, processPayment) need the longest
+   * filler; fast lookup tools should return ASAP.
+   */
+  private static readonly TOOL_SPEAK_DELAY: Record<string, number> = {
+    getCallerContext: 0,
+    bookAppointment: 1500,
+    processPayment: 1500,
+    rescheduleAppointment: 1200,
+    cancelAppointment: 1200,
+  };
+
   constructor(
     private readonly agentToolsService: AgentToolsService,
     private readonly prisma: PrismaService,
@@ -158,10 +172,11 @@ export class RetellToolController {
 
       // Ensure speak_during_execution messages have time to play before the
       // tool result is returned (Retell stops speaking as soon as it receives
-      // the response). getCallerContext is excluded because it runs pre-greeting.
-      if (toolName !== 'getCallerContext') {
-        const MIN_SPEAK_DELAY_MS = 1500;
-        const remaining = MIN_SPEAK_DELAY_MS - durationMs;
+      // the response). Delay is per-tool: slow writeback tools need more filler
+      // time, fast lookup tools should return ASAP.
+      const speakDelayMs = RetellToolController.TOOL_SPEAK_DELAY[toolName] ?? 800;
+      if (speakDelayMs > 0) {
+        const remaining = speakDelayMs - durationMs;
         if (remaining > 0) {
           await new Promise((r) => setTimeout(r, remaining));
         }

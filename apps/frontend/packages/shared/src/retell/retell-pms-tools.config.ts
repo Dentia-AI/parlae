@@ -364,70 +364,70 @@ const getProvidersFn: VapiToolFunction = {
 
 export const retellLookupPatientTool = toRetellTool(lookupPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Sure, give me just a moment.',
+  speakDuringMessage: 'One moment.',
 });
 
 export const retellCreatePatientTool = toRetellTool(createPatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Perfect, let me get you all set up.',
+  speakDuringMessage: 'Let me set that up.',
 });
 
 export const retellUpdatePatientTool = toRetellTool(updatePatientFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me update that for you.',
+  speakDuringMessage: 'Updating now.',
 });
 export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me see what we have available.',
+  speakDuringMessage: 'Let me check.',
 });
 
 export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Great, let me get that booked for you.',
+  speakDuringMessage: 'Booking that now.',
   timeoutMs: 45_000,
 });
 
 export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Sure, let me move that around for you.',
+  speakDuringMessage: 'Let me reschedule that.',
 });
 
 export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Alright, let me take care of that.',
+  speakDuringMessage: 'One moment.',
 });
 export const retellGetAppointmentsTool = toRetellTool(getAppointmentsFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me pull up your appointments.',
+  speakDuringMessage: 'One moment.',
 });
 
 export const retellAddNoteTool = toRetellTool(addNoteFn);
 export const retellGetInsuranceTool = toRetellTool(getInsuranceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me pull up your insurance details.',
+  speakDuringMessage: 'Let me check.',
 });
 export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me save that for you.',
+  speakDuringMessage: 'Saving that now.',
 });
 export const retellVerifyInsuranceCoverageTool = toRetellTool(verifyInsuranceCoverageFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me check on that coverage for you.',
+  speakDuringMessage: 'Let me check.',
 });
 export const retellGetBalanceTool = toRetellTool(getBalanceFn, {
   speakDuring: true,
-  speakDuringMessage: 'Let me look that up for you.',
+  speakDuringMessage: 'One moment.',
 });
 export const retellGetPaymentHistoryTool = toRetellTool(getPaymentHistoryFn);
 export const retellProcessPaymentTool = toRetellTool(processPaymentFn, {
   speakDuring: true,
-  speakDuringMessage: 'Alright, let me process that for you.',
+  speakDuringMessage: 'Processing now.',
   timeoutMs: 45_000,
 });
 export const retellCreatePaymentPlanTool = toRetellTool(createPaymentPlanFn);
 export const retellTakeMessageTool = toRetellTool(takeMessageFn, {
   speakDuring: true,
-  speakDuringMessage: 'Of course, let me take a message.',
+  speakDuringMessage: 'Of course.',
 });
 export const retellGetProvidersTool = toRetellTool(getProvidersFn);
 
