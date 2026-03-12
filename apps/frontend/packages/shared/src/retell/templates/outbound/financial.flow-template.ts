@@ -36,7 +36,7 @@ import {
   retellGetInsuranceTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.4';
+export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.5';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;

@@ -28,7 +28,7 @@ import type { RetellCustomTool, RetellAgentSwapTool, RetellEndCallTool, RetellTr
 // Constants
 // ---------------------------------------------------------------------------
 
-export const RETELL_DENTAL_CLINIC_VERSION = 'v1.1';
+export const RETELL_DENTAL_CLINIC_VERSION = 'v1.2';
 
 export type RetellAgentRole =
   | 'receptionist'
