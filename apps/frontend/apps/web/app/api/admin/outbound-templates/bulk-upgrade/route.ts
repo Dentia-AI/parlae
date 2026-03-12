@@ -91,8 +91,10 @@ export async function POST(request: NextRequest) {
           .replace(/\{\{accountId\}\}/g, s.accountId);
         const flowConfig = JSON.parse(flowConfigStr) as Record<string, unknown>;
 
-        // KB is intentionally NOT attached to outbound flows — outbound calls
-        // are task-oriented and don't need KB retrieval on every turn.
+        const retellKbId = integrationSettings.retellKnowledgeBaseId as string | undefined;
+        if (retellKbId) {
+          flowConfig.knowledge_base_ids = [retellKbId];
+        }
         const flow = await retell.createConversationFlow(flowConfig as any);
         if (!flow) {
           results.push({ accountId: s.accountId, status: 'failed', error: 'Flow creation failed' });
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
             templateVersion: template.version,
             deployType: 'outbound_conversation_flow',
             upgradeFrom: (s as any)[agentIdField],
+            knowledgeBaseIds: retellKbId || '',
           },
         };
 

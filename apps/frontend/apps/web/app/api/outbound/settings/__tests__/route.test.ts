@@ -1,8 +1,31 @@
-import { POST } from '../route';
 import { NextRequest } from 'next/server';
 
 jest.mock('~/lib/auth/get-session', () => ({
   requireSession: jest.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+}));
+
+jest.mock('@kit/shared/retell/templates/outbound/patient-care.flow-template', () => ({
+  buildPatientCareOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
+}));
+
+jest.mock('@kit/shared/retell/templates/outbound/financial.flow-template', () => ({
+  buildFinancialOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
+}));
+
+jest.mock('@kit/shared/retell/retell.service', () => ({
+  createRetellService: jest.fn().mockReturnValue({
+    isEnabled: () => true,
+    createConversationFlow: jest.fn().mockResolvedValue({ conversation_flow_id: 'flow-1' }),
+    createAgent: jest.fn().mockResolvedValue({ agent_id: 'agent-1' }),
+    deleteConversationFlow: jest.fn(),
+    updatePhoneNumber: jest.fn().mockResolvedValue({}),
+  }),
+}));
+
+jest.mock('@kit/shared/retell/templates/dental-clinic.retell-template', () => ({
+  SHARED_RETELL_AGENT_CONFIG: {},
+  RETELL_POST_CALL_ANALYSIS: [],
+  ALLOWED_OUTBOUND_COUNTRIES: ['US', 'CA'],
 }));
 
 jest.mock('@kit/prisma', () => ({
@@ -15,6 +38,7 @@ jest.mock('@kit/prisma', () => ({
         brandingBusinessName: null,
         phoneIntegrationSettings: {},
       }),
+      update: jest.fn().mockResolvedValue({}),
     },
     outboundSettings: {
       findUnique: jest.fn().mockResolvedValue({
@@ -48,27 +72,18 @@ jest.mock('@kit/prisma', () => ({
   },
 }));
 
-jest.mock('@kit/shared/retell/retell.service', () => ({
-  createRetellService: jest.fn().mockReturnValue({
-    isEnabled: () => true,
-    createConversationFlow: jest.fn().mockResolvedValue({ conversation_flow_id: 'flow-1' }),
-    createAgent: jest.fn().mockResolvedValue({ agent_id: 'agent-1' }),
-    deleteConversationFlow: jest.fn(),
+jest.mock('@kit/shared/logger', () => ({
+  getLogger: jest.fn().mockResolvedValue({
+    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
   }),
 }));
 
-jest.mock('@kit/shared/retell/templates/dental-clinic.retell-template', () => ({
-  SHARED_RETELL_AGENT_CONFIG: {},
-  RETELL_POST_CALL_ANALYSIS: [],
-}));
+import { POST } from '../route';
 
-jest.mock('@kit/shared/retell/templates/outbound/patient-care.flow-template', () => ({
-  buildPatientCareOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
-}));
-
-jest.mock('@kit/shared/retell/templates/outbound/financial.flow-template', () => ({
-  buildFinancialOutboundFlow: jest.fn().mockReturnValue({ nodes: [], start_speaker: 'agent' }),
-}));
+function getRetellMocks() {
+  const { createRetellService } = require('@kit/shared/retell/retell.service');
+  return createRetellService();
+}
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/outbound/settings', {
@@ -83,7 +98,6 @@ describe('POST /api/outbound/settings', () => {
   it('setAutoApprove updates the autoApproveCampaigns field', async () => {
     const { prisma } = require('@kit/prisma');
     const res = await POST(makeRequest({ action: 'setAutoApprove', value: true }));
-    const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(prisma.outboundSettings.update).toHaveBeenCalledWith({
@@ -128,18 +142,15 @@ describe('POST /api/outbound/settings', () => {
       outboundUpgradeHistory: [],
     });
 
-    const { createRetellService } = require('@kit/shared/retell/retell.service');
-
     await POST(makeRequest({ action: 'enable', group: 'PATIENT_CARE' }));
 
-    const retell = createRetellService();
+    const retell = getRetellMocks();
     expect(retell.createConversationFlow).not.toHaveBeenCalled();
   });
 
   it('returns 500 and does not enable when agent deployment fails', async () => {
     const { prisma } = require('@kit/prisma');
-    const { createRetellService } = require('@kit/shared/retell/retell.service');
-    const retell = createRetellService();
+    const retell = getRetellMocks();
     retell.createConversationFlow.mockRejectedValueOnce(
       new Error('Retell POST /create-conversation-flow (400): schema validation error'),
     );
@@ -226,6 +237,102 @@ describe('POST /api/outbound/settings', () => {
     it('returns 400 when channelDefaults is missing', async () => {
       const res = await POST(makeRequest({ action: 'setChannelDefaults' }));
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('KB attachment on enable', () => {
+    it('passes knowledgeBaseIds to buildPatientCareOutboundFlow when account has KB', async () => {
+      const { prisma } = require('@kit/prisma');
+      const { buildPatientCareOutboundFlow } = require(
+        '@kit/shared/retell/templates/outbound/patient-care.flow-template',
+      );
+      prisma.account.findUnique.mockResolvedValue({
+        name: 'Test Dental',
+        brandingBusinessName: 'Test Dental',
+        brandingTimezone: 'America/Toronto',
+        phoneIntegrationSettings: {
+          retellKnowledgeBaseId: 'kb-test-123',
+          phoneNumber: '+15551234567',
+          voiceConfig: { voiceId: 'retell-Chloe' },
+        },
+      });
+
+      await POST(makeRequest({ action: 'enable', group: 'PATIENT_CARE' }));
+
+      expect(buildPatientCareOutboundFlow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          knowledgeBaseIds: ['kb-test-123'],
+        }),
+      );
+    });
+
+    it('passes knowledgeBaseIds to buildFinancialOutboundFlow when account has KB', async () => {
+      const { prisma } = require('@kit/prisma');
+      const { buildFinancialOutboundFlow } = require(
+        '@kit/shared/retell/templates/outbound/financial.flow-template',
+      );
+      prisma.account.findUnique.mockResolvedValue({
+        name: 'Test Dental',
+        brandingBusinessName: 'Test Dental',
+        brandingTimezone: 'America/Toronto',
+        phoneIntegrationSettings: {
+          retellKnowledgeBaseId: 'kb-test-456',
+          phoneNumber: '+15551234567',
+        },
+      });
+
+      await POST(makeRequest({ action: 'enable', group: 'FINANCIAL' }));
+
+      expect(buildFinancialOutboundFlow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          knowledgeBaseIds: ['kb-test-456'],
+        }),
+      );
+    });
+
+    it('passes undefined knowledgeBaseIds when account has no KB', async () => {
+      const { prisma } = require('@kit/prisma');
+      const { buildPatientCareOutboundFlow } = require(
+        '@kit/shared/retell/templates/outbound/patient-care.flow-template',
+      );
+      prisma.account.findUnique.mockResolvedValue({
+        name: 'Test Dental',
+        brandingBusinessName: null,
+        brandingTimezone: 'America/Toronto',
+        phoneIntegrationSettings: {},
+      });
+
+      await POST(makeRequest({ action: 'enable', group: 'PATIENT_CARE' }));
+
+      expect(buildPatientCareOutboundFlow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          knowledgeBaseIds: undefined,
+        }),
+      );
+    });
+
+    it('includes knowledgeBaseIds in agent metadata', async () => {
+      const { prisma } = require('@kit/prisma');
+      prisma.account.findUnique.mockResolvedValue({
+        name: 'Test Dental',
+        brandingBusinessName: 'Test Dental',
+        brandingTimezone: 'America/Toronto',
+        phoneIntegrationSettings: {
+          retellKnowledgeBaseId: 'kb-meta-789',
+          phoneNumber: '+15551234567',
+        },
+      });
+
+      await POST(makeRequest({ action: 'enable', group: 'PATIENT_CARE' }));
+
+      const retell = getRetellMocks();
+      expect(retell.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            knowledgeBaseIds: 'kb-meta-789',
+          }),
+        }),
+      );
     });
   });
 });

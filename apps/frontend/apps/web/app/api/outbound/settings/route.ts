@@ -121,20 +121,20 @@ async function createOutboundRetellAgent(
     integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
   const voiceModel = resolveVoiceModel(voiceId);
 
+  const retellKbId = integrationSettings.retellKnowledgeBaseId as string | undefined;
+
   const buildConfig = {
     clinicName,
     clinicPhone,
     webhookUrl: backendUrl ? `${backendUrl}/retell/webhook` : '',
     webhookSecret,
     accountId,
+    knowledgeBaseIds: retellKbId ? [retellKbId] : undefined,
   };
 
   const flowConfig = group === 'PATIENT_CARE'
     ? buildPatientCareOutboundFlow(buildConfig)
     : buildFinancialOutboundFlow(buildConfig);
-
-  // KB is intentionally NOT attached to outbound flows — outbound calls
-  // are task-oriented and don't need KB retrieval on every turn.
 
   const template = await prisma.outboundAgentTemplate.findUnique({
     where: { agentGroup: group },
@@ -168,6 +168,7 @@ async function createOutboundRetellAgent(
       templateId: template?.id || group,
       templateVersion,
       deployType: 'outbound_conversation_flow',
+      knowledgeBaseIds: retellKbId || '',
     },
   };
 

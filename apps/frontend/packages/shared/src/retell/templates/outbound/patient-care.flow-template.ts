@@ -44,7 +44,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.10';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.11';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -52,6 +52,7 @@ export interface OutboundFlowBuildConfig {
   webhookUrl: string;
   webhookSecret: string;
   accountId: string;
+  knowledgeBaseIds?: string[];
 }
 
 function hydratePrompt(text: string, clinicName: string, clinicPhone: string): string {
@@ -419,6 +420,9 @@ Be efficient — the patient didn't call you, so respect their time.`,
       high_priority: true,
     },
     global_prompt: OUTBOUND_GLOBAL_PROMPT,
+    ...(config.knowledgeBaseIds?.length
+      ? { knowledge_base_ids: config.knowledgeBaseIds }
+      : {}),
     default_dynamic_variables: {
       call_type: 'recall',
       patient_name: '',

@@ -36,7 +36,7 @@ import {
   retellGetInsuranceTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.6';
+export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.7';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -44,6 +44,7 @@ export interface OutboundFlowBuildConfig {
   webhookUrl: string;
   webhookSecret: string;
   accountId: string;
+  knowledgeBaseIds?: string[];
 }
 
 function hydratePrompt(text: string, clinicName: string, clinicPhone: string): string {
@@ -313,6 +314,9 @@ Use scheduling tools to find available times and book. Be efficient.`,
       high_priority: true,
     },
     global_prompt: FINANCIAL_GLOBAL_PROMPT,
+    ...(config.knowledgeBaseIds?.length
+      ? { knowledge_base_ids: config.knowledgeBaseIds }
+      : {}),
     default_dynamic_variables: {
       call_type: 'payment',
       patient_name: '',

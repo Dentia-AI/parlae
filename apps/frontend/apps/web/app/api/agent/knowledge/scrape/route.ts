@@ -433,9 +433,7 @@ export async function POST(request: NextRequest) {
       '[KB Scrape] Website scrape and KB upload complete',
     );
 
-    // Attach KB to inbound flow nodes only (receptionist + faq).
-    // We deliberately skip outbound flows — outbound calls are task-oriented
-    // and rarely need KB retrieval, which adds ~2-3s latency per turn.
+    // Attach KB to inbound flow nodes (receptionist + faq) and outbound flows (flow-level).
     if (provider === 'RETELL' && retellKnowledgeBaseId) {
       try {
         const { createRetellService: createSvc } = await import(
@@ -460,10 +458,42 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const outboundSettings = await prisma.outboundSettings.findUnique({
+          where: { accountId },
+          select: {
+            patientCareRetellAgentId: true,
+            financialRetellAgentId: true,
+          },
+        });
+
+        const outboundAgentIds = [
+          outboundSettings?.patientCareRetellAgentId,
+          outboundSettings?.financialRetellAgentId,
+        ].filter(Boolean) as string[];
+
+        for (const agentId of outboundAgentIds) {
+          try {
+            const agent = await retellSvc.getAgent(agentId);
+            const flowId =
+              (agent?.response_engine as any)?.conversation_flow_id;
+            if (flowId) {
+              await retellSvc.updateConversationFlow(flowId, {
+                knowledge_base_ids: kbIds,
+              });
+              flowsUpdated.push(`outbound:${flowId}`);
+            }
+          } catch (agentErr: any) {
+            logger.warn(
+              { error: agentErr?.message, agentId },
+              '[KB Scrape] Failed to update outbound flow (non-fatal)',
+            );
+          }
+        }
+
         if (flowsUpdated.length > 0) {
           logger.info(
             { accountId, flowsUpdated, kbId: retellKnowledgeBaseId },
-            '[KB Scrape] Attached KB to inbound flow nodes (receptionist + faq)',
+            '[KB Scrape] Attached KB to conversation flows',
           );
         }
       } catch (attachErr: any) {
