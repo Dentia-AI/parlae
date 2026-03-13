@@ -210,6 +210,22 @@ export class PmsService {
           timestamp: new Date().toISOString(),
         };
       }
+
+      // Auto-upgrade: try to fetch Sikka credentials for SETUP_REQUIRED integrations
+      if (integration.status === 'SETUP_REQUIRED' && integration.masterCustomerId) {
+        const upgraded = await this.tryUpgradeIntegration(integration);
+        if (upgraded) {
+          const metadata = upgraded.metadata as any;
+          return {
+            isConnected: true,
+            status: 'connected',
+            provider: 'SIKKA',
+            practiceName: metadata?.practiceName || 'Unknown',
+            pmsType: metadata?.actualPmsType || 'Unknown',
+            timestamp: new Date().toISOString(),
+          };
+        }
+      }
       
       if (integration.status === 'INACTIVE' || integration.status === 'ERROR') {
         return {
@@ -235,6 +251,78 @@ export class PmsService {
         error: error.message,
         timestamp: new Date().toISOString(),
       };
+    }
+  }
+
+  /**
+   * Attempt to upgrade a SETUP_REQUIRED integration to ACTIVE by
+   * fetching credentials from Sikka authorized_practices API.
+   * Returns the updated record on success, null if credentials aren't ready yet.
+   */
+  private async tryUpgradeIntegration(integration: any) {
+    try {
+      const systemCreds = this.getSikkaSystemCredentials();
+      const practiceData = await this.fetchAuthorizedPractice(
+        systemCreds,
+        integration.masterCustomerId,
+      );
+
+      if (!practiceData) {
+        this.logger.log({
+          accountId: integration.accountId,
+          masterCustomerId: integration.masterCustomerId,
+          msg: '[PMS] Credentials not yet available in authorized_practices — staying SETUP_REQUIRED',
+        });
+        return null;
+      }
+
+      const tokens = await this.generateRequestKey(
+        practiceData.officeId,
+        practiceData.secretKey,
+        systemCreds.appId,
+        systemCreds.appKey,
+      );
+
+      const existingMetadata = (integration.metadata as any) || {};
+      const metadata = {
+        ...existingMetadata,
+        practiceName: practiceData.practiceName || existingMetadata.practiceName,
+        actualPmsType: practiceData.pmsType || existingMetadata.actualPmsType,
+        practiceId: practiceData.practiceId,
+      };
+
+      const updated = await this.prisma.pmsIntegration.update({
+        where: { id: integration.id },
+        data: {
+          status: 'ACTIVE',
+          officeId: practiceData.officeId,
+          secretKey: practiceData.secretKey,
+          requestKey: tokens.requestKey,
+          refreshKey: tokens.refreshKey,
+          tokenExpiry: tokens.tokenExpiry ? new Date(tokens.tokenExpiry) : null,
+          metadata,
+          lastSyncAt: new Date(),
+          lastError: null,
+          updatedAt: new Date(),
+        },
+      });
+
+      this.invalidateCredentialsCache(integration.accountId);
+
+      this.logger.log({
+        accountId: integration.accountId,
+        practiceName: practiceData.practiceName,
+        msg: '[PMS] Auto-upgraded SETUP_REQUIRED → ACTIVE via connection-status check',
+      });
+
+      return updated;
+    } catch (error: any) {
+      this.logger.warn({
+        accountId: integration.accountId,
+        error: error.message,
+        msg: '[PMS] Failed to auto-upgrade integration — will retry on next check',
+      });
+      return null;
     }
   }
 

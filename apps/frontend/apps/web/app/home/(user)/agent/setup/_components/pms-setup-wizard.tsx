@@ -278,6 +278,16 @@ export function PmsSetupWizard({
                 </AlertDescription>
               </Alert>
 
+              <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-xs text-blue-800 dark:text-blue-300">
+                  <strong>Registration email:</strong> When the installer asks
+                  for your email address, use the same email you signed up with
+                  on Parlae (<strong>{accountEmail}</strong>) so we can
+                  automatically link your practice.
+                </AlertDescription>
+              </Alert>
+
               <div className="flex flex-wrap gap-2">
                 <Button
                   onClick={handleDownload}
