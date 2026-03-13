@@ -1089,4 +1089,275 @@ describe('SikkaPmsService', () => {
       expect(result.error?.code).toBe('NOT_SUPPORTED');
     });
   });
+
+  describe('searchPatients — multi-phone fallback', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('returns patient found by cell (no fallback needed)', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          items: [{ patient_id: 'pat-1', firstname: 'Jane', lastname: 'Doe', cell: '5551234' }],
+          total_count: '1',
+          pagination: { next: '' },
+        },
+      });
+
+      const result = await service.searchPatients({ query: '5551234' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+      expect(result.data![0].id).toBe('pat-1');
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to homephone/workphone search when cell returns empty', async () => {
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              { patient_id: 'pat-2', firstname: 'Bob', lastname: 'Smith', cell: '', homephone: '5858578357', workphone: '' },
+              { patient_id: 'pat-3', firstname: 'Alice', lastname: 'Brown', cell: '1112223333', homephone: '', workphone: '' },
+            ],
+            total_count: '2',
+            pagination: { next: '' },
+          },
+        });
+
+      const result = await service.searchPatients({ query: '5858578357' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+      expect(result.data![0].id).toBe('pat-2');
+      expect(result.data![0].firstName).toBe('Bob');
+    });
+
+    it('falls back to workphone match', async () => {
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              { patient_id: 'pat-4', firstname: 'Carol', lastname: 'White', cell: '', homephone: '', workphone: '9876543210' },
+            ],
+            total_count: '1',
+            pagination: { next: '' },
+          },
+        });
+
+      const result = await service.searchPatients({ query: '9876543210' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+      expect(result.data![0].id).toBe('pat-4');
+    });
+
+    it('strips country code 1 when matching phones', async () => {
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              { patient_id: 'pat-5', firstname: 'Dave', lastname: 'Jones', cell: '', homephone: '15551234567', workphone: '' },
+            ],
+            total_count: '1',
+            pagination: { next: '' },
+          },
+        });
+
+      const result = await service.searchPatients({ query: '+15551234567' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+      expect(result.data![0].id).toBe('pat-5');
+    });
+
+    it('returns empty when no phone fields match', async () => {
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              { patient_id: 'pat-6', firstname: 'Eve', lastname: 'Gray', cell: '', homephone: '1111111111', workphone: '2222222222' },
+            ],
+            total_count: '1',
+            pagination: { next: '' },
+          },
+        });
+
+      const result = await service.searchPatients({ query: '9999999999' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('does not trigger fallback for non-phone queries', async () => {
+      mockGet.mockResolvedValue({
+        data: { items: [], total_count: '0', pagination: { next: '' } },
+      });
+
+      const result = await service.searchPatients({ query: 'Jane Doe' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('paginates through multiple batches in fallback', async () => {
+      const batch1 = Array.from({ length: 100 }, (_, i) => ({
+        patient_id: `pat-${i}`, firstname: 'P', lastname: `${i}`, cell: '', homephone: '', workphone: '',
+      }));
+      batch1[80].homephone = '5551112222';
+
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({ data: { items: batch1, total_count: '120', pagination: { next: 'page2' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [{ patient_id: 'pat-101', firstname: 'Match', lastname: 'Two', cell: '5551112222', homephone: '', workphone: '' }],
+            total_count: '120',
+            pagination: { next: '' },
+          },
+        });
+
+      const result = await service.searchPatients({ query: '5551112222', limit: 5 });
+
+      expect(result.success).toBe(true);
+      expect(result.data!.length).toBeGreaterThanOrEqual(1);
+      expect(result.data![0].id).toBe('pat-80');
+    });
+  });
+
+  describe('checkAvailability — inferred slots fallback', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('infers slots from booked appointments when 204 returned', async () => {
+      // 2025-03-17 is a Monday
+      mockGet
+        .mockResolvedValueOnce({ status: 204, data: '' })
+        .mockResolvedValueOnce({
+          data: {
+            items: [{
+              appointment_sr_no: 'apt-1',
+              patient_id: 'pat-1',
+              provider_id: 'DOC1',
+              date: '2025-03-17',
+              time: '10:00',
+              length: '60',
+              status: 'scheduled',
+            }],
+            total_count: '1',
+            pagination: { next: '' },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            items: [{
+              id: 'DOC1',
+              first_name: 'Brian',
+              last_name: 'Albert',
+              status: 'active',
+            }],
+            total_count: '1',
+          },
+        });
+
+      const result = await service.checkAvailability({ date: '2025-03-17' });
+
+      expect(result.success).toBe(true);
+      expect(result.data!.length).toBeGreaterThan(0);
+      const slot = result.data![0];
+      expect(slot.providerId).toBe('DOC1');
+      expect(slot.available).toBe(true);
+      expect(slot.reason).toBe('inferred');
+      expect(slot.providerName).toBe('Brian Albert');
+    });
+
+    it('does not infer slots on weekends', async () => {
+      mockGet
+        .mockResolvedValueOnce({ status: 204, data: '' })
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({
+          data: {
+            items: [{ id: 'DOC1', first_name: 'Dr', last_name: 'One', status: 'active' }],
+            total_count: '1',
+          },
+        });
+
+      // 2025-03-16 is a Sunday
+      const result = await service.checkAvailability({ date: '2025-03-16' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('excludes booked time blocks from inferred slots', async () => {
+      mockGet
+        .mockResolvedValueOnce({ status: 204, data: '' })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              { appointment_sr_no: 'apt-1', patient_id: 'p1', provider_id: 'DOC1', date: '2025-03-17', time: '08:00', length: '30', status: 'scheduled' },
+              { appointment_sr_no: 'apt-2', patient_id: 'p2', provider_id: 'DOC1', date: '2025-03-17', time: '08:30', length: '30', status: 'scheduled' },
+            ],
+            total_count: '2',
+            pagination: { next: '' },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            items: [{ id: 'DOC1', first_name: 'Dr', last_name: 'One', status: 'active' }],
+            total_count: '1',
+          },
+        });
+
+      const result = await service.checkAvailability({ date: '2025-03-17', duration: 30 });
+
+      expect(result.success).toBe(true);
+      const slotHours = result.data!.map(s => s.startTime.getHours() * 100 + s.startTime.getMinutes());
+      expect(slotHours).not.toContain(800);
+      expect(slotHours).not.toContain(830);
+      expect(slotHours).toContain(900);
+      expect(result.data!.length).toBeGreaterThan(0);
+      expect(result.data![0].startTime.getHours()).toBe(9);
+      expect(result.data![0].startTime.getMinutes()).toBe(0);
+    });
+
+    it('returns 204 noContent when inference also finds no slots', async () => {
+      mockGet
+        .mockResolvedValueOnce({ status: 204, data: '' })
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
+        .mockResolvedValueOnce({ data: { items: [], total_count: '0' } });
+
+      const result = await service.checkAvailability({ date: '2025-03-15' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.noContent).toBe(true);
+    });
+
+    it('returns normal slots when available_slots API has data', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          items: [{
+            date: '2025-03-15',
+            time: '14:00',
+            length: '30',
+            provider_id: 'DOC1',
+          }],
+        },
+      });
+
+      const result = await service.checkAvailability({ date: '2025-03-15' });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(1);
+      expect(result.meta?.inferred).toBeUndefined();
+      expect(result.meta?.noContent).toBeUndefined();
+    });
+  });
 });

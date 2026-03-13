@@ -600,11 +600,17 @@ export class SikkaPmsService extends BasePmsService {
         msg: '[Sikka] checkAvailability raw response',
       });
 
-      if (response.status === 204) {
+      if (response.status === 204 || !(response.data?.items?.length)) {
         this.logger.warn({
           accountId: this.accountId,
-          msg: '[Sikka] checkAvailability returned 204 No Content — PMS has no slot data',
+          msg: '[Sikka] checkAvailability returned 204/empty — trying booked-appointment fallback',
         });
+
+        const inferredSlots = await this.inferAvailabilityFromAppointments(query);
+        if (inferredSlots.length > 0) {
+          return this.createSuccessResponse(inferredSlots, { inferred: true });
+        }
+
         return this.createSuccessResponse([] as TimeSlot[], { httpStatus: 204, noContent: true });
       }
 
@@ -614,6 +620,152 @@ export class SikkaPmsService extends BasePmsService {
     } catch (error) {
       return this.handleError(error, 'checkAvailability');
     }
+  }
+
+  private static readonly DEFAULT_START_HOUR = 8;
+  private static readonly DEFAULT_END_HOUR = 17;
+  private static readonly SLOT_DURATION_MINS = 30;
+
+  /**
+   * Fallback when appointments_available_slots returns 204:
+   * Infer open slots by subtracting booked appointments from business hours.
+   */
+  private async inferAvailabilityFromAppointments(
+    query: AppointmentAvailabilityQuery,
+  ): Promise<TimeSlot[]> {
+    try {
+      const startDate = new Date(`${query.date}T00:00:00`);
+      const endDateStr = query.endDate || query.date;
+      const endDate = new Date(`${endDateStr}T23:59:59`);
+
+      const [appointmentsResult, providersResult] = await Promise.all([
+        this.getAppointments({
+          startDate,
+          endDate,
+          providerId: query.providerId,
+          limit: 200,
+        }),
+        this.getProviders(),
+      ]);
+
+      if (!appointmentsResult.success) {
+        this.logger.warn({ msg: '[Sikka] inferAvailability: failed to fetch appointments' });
+        return [];
+      }
+
+      let providers = providersResult.success ? (providersResult.data || []) : [];
+      providers = providers.filter(p => p.isActive);
+      if (query.providerId) {
+        providers = providers.filter(p => p.id === query.providerId);
+      }
+      if (providers.length === 0 && query.providerId) {
+        providers = [{
+          id: query.providerId,
+          firstName: '',
+          lastName: '',
+          isActive: true,
+        }] as Provider[];
+      }
+      if (providers.length === 0) {
+        this.logger.warn({ msg: '[Sikka] inferAvailability: no providers found' });
+        return [];
+      }
+
+      const slotDuration = query.duration || SikkaPmsService.SLOT_DURATION_MINS;
+      const bookedAppts = appointmentsResult.data || [];
+      const allSlots: TimeSlot[] = [];
+
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          currentDate.setDate(currentDate.getDate() + 1);
+          continue;
+        }
+
+        const dateStr = currentDate.toISOString().slice(0, 10);
+
+        for (const provider of providers) {
+          const providerAppts = bookedAppts
+            .filter(a =>
+              a.providerId === provider.id &&
+              a.startTime.toISOString().slice(0, 10) === dateStr &&
+              a.status !== 'cancelled',
+            )
+            .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+          const dayStart = new Date(`${dateStr}T${String(SikkaPmsService.DEFAULT_START_HOUR).padStart(2, '0')}:00:00`);
+          const dayEnd = new Date(`${dateStr}T${String(SikkaPmsService.DEFAULT_END_HOUR).padStart(2, '0')}:00:00`);
+
+          const gaps = this.findGaps(dayStart, dayEnd, providerAppts, slotDuration);
+
+          for (const gap of gaps) {
+            allSlots.push({
+              startTime: gap.start,
+              endTime: gap.end,
+              providerId: provider.id,
+              providerName: `${provider.firstName || ''} ${provider.lastName || ''}`.trim(),
+              available: true,
+              reason: 'inferred',
+            });
+          }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      this.logger.log({
+        accountId: this.accountId,
+        inferredSlotCount: allSlots.length,
+        dateRange: `${query.date} - ${endDateStr}`,
+        providerCount: providers.length,
+        bookedCount: bookedAppts.length,
+        msg: '[Sikka] inferAvailability complete',
+      });
+
+      return allSlots;
+    } catch (error) {
+      this.logger.warn({
+        error: error instanceof Error ? error.message : error,
+        msg: '[Sikka] inferAvailability failed (non-fatal)',
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Find available time gaps between booked appointments within business hours.
+   * Returns slot-sized blocks that fit in the gaps.
+   */
+  private findGaps(
+    dayStart: Date,
+    dayEnd: Date,
+    sortedAppts: Appointment[],
+    slotMinutes: number,
+  ): Array<{ start: Date; end: Date }> {
+    const gaps: Array<{ start: Date; end: Date }> = [];
+    let cursor = dayStart.getTime();
+    const endMs = dayEnd.getTime();
+    const slotMs = slotMinutes * 60_000;
+
+    for (const appt of sortedAppts) {
+      const apptStart = appt.startTime.getTime();
+      const apptEnd = appt.endTime.getTime();
+
+      while (cursor + slotMs <= Math.min(apptStart, endMs)) {
+        gaps.push({ start: new Date(cursor), end: new Date(cursor + slotMs) });
+        cursor += slotMs;
+      }
+
+      cursor = Math.max(cursor, apptEnd);
+    }
+
+    while (cursor + slotMs <= endMs) {
+      gaps.push({ start: new Date(cursor), end: new Date(cursor + slotMs) });
+      cursor += slotMs;
+    }
+
+    return gaps;
   }
   
   /**
@@ -821,9 +973,12 @@ export class SikkaPmsService extends BasePmsService {
         offset: query.offset || 0,
       };
 
+      let phoneDigits: string | undefined;
+
       if (query.cell) {
         const digits = query.cell.replace(/\D/g, '');
         params.cell = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+        phoneDigits = params.cell;
       }
       if (query.firstname) {
         params.firstname = query.firstname;
@@ -840,6 +995,7 @@ export class SikkaPmsService extends BasePmsService {
         if (isPhone) {
           const qDigits = query.query.replace(/\D/g, '');
           params.cell = qDigits.length === 11 && qDigits.startsWith('1') ? qDigits.slice(1) : qDigits;
+          phoneDigits = params.cell;
         } else if (query.query.includes('@')) {
           params.email = query.query.trim();
         } else {
@@ -874,15 +1030,103 @@ export class SikkaPmsService extends BasePmsService {
 
       const patients = (response.data.items || []).map((item: any) => this.mapSikkaPatient(item));
       
+      if (patients.length > 0) {
+        return this.createListResponse(patients, {
+          total: parseInt(response.data.total_count || '0'),
+          limit: params.limit,
+          offset: params.offset,
+          hasMore: response.data.pagination?.next !== '',
+        });
+      }
+
+      // Fallback: Sikka only filters by `cell`. If the practice stores phone
+      // numbers in homephone/workphone, the cell search will miss them.
+      // Fetch patients with extended phone fields and match client-side.
+      if (phoneDigits) {
+        return this.searchPatientsByAnyPhone(phoneDigits, params.limit);
+      }
+
       return this.createListResponse(patients, {
-        total: parseInt(response.data.total_count || '0'),
+        total: 0,
         limit: params.limit,
         offset: params.offset,
-        hasMore: response.data.pagination?.next !== '',
+        hasMore: false,
       });
     } catch (error) {
       return this.handleError(error, 'searchPatients') as PmsListResponse<Patient>;
     }
+  }
+
+  private static readonly EXTENDED_PHONE_FIELDS =
+    'patient_id,firstname,middlename,lastname,preferred_name,salutation,birthdate,status,' +
+    'address_line1,address_line2,city,state,zipcode,cell,homephone,workphone,email,' +
+    'first_visit,last_visit,provider_id,practice_id,guarantor_id';
+
+  /**
+   * Fallback search: fetches patients with homephone/workphone fields
+   * and matches against any phone field client-side.
+   */
+  private async searchPatientsByAnyPhone(
+    phoneDigits: string,
+    limit: number,
+  ): Promise<PmsListResponse<Patient>> {
+    this.logger.log({
+      accountId: this.accountId,
+      phoneDigits: phoneDigits.slice(0, 3) + '****',
+      msg: '[Sikka] cell search returned empty, trying homephone/workphone fallback',
+    });
+
+    const batchSize = 100;
+    let offset = 0;
+    const matched: Patient[] = [];
+
+    for (let page = 0; page < 10 && matched.length < limit; page++) {
+      const params: Record<string, any> = {
+        limit: batchSize,
+        offset,
+        fields: SikkaPmsService.EXTENDED_PHONE_FIELDS,
+      };
+      if (this.practiceId) params.practice_id = this.practiceId;
+
+      const resp = await this.client.get('/patients', { params });
+      const items: any[] = resp.data?.items || [];
+      if (items.length === 0) break;
+
+      for (const item of items) {
+        if (this.phoneMatchesAny(phoneDigits, item.cell, item.homephone, item.workphone)) {
+          matched.push(this.mapSikkaPatient(item));
+          if (matched.length >= limit) break;
+        }
+      }
+
+      const total = parseInt(resp.data?.total_count || '0');
+      offset += batchSize;
+      if (offset >= total) break;
+    }
+
+    this.logger.log({
+      accountId: this.accountId,
+      matchedCount: matched.length,
+      msg: '[Sikka] homephone/workphone fallback complete',
+    });
+
+    return this.createListResponse(matched, {
+      total: matched.length,
+      limit,
+      offset: 0,
+      hasMore: false,
+    });
+  }
+
+  private phoneMatchesAny(targetDigits: string, ...phones: (string | undefined | null)[]): boolean {
+    for (const raw of phones) {
+      if (!raw) continue;
+      const digits = raw.replace(/\D/g, '');
+      if (!digits) continue;
+      const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+      if (normalized === targetDigits) return true;
+    }
+    return false;
   }
   
   async getPatient(patientId: string): Promise<PmsApiResponse<Patient>> {
