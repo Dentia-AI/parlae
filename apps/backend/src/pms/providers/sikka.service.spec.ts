@@ -465,6 +465,7 @@ describe('SikkaPmsService', () => {
           length: '30',
           note: 'Annual checkup',
           type: 'Checkup',
+          description: 'Checkup',
           practice_id: '1',
         }),
         expect.anything()
@@ -476,6 +477,42 @@ describe('SikkaPmsService', () => {
         appointmentType: 'Checkup',
         status: 'scheduled',
       });
+    });
+
+    it('always includes description even when only appointmentType is set', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-apt-2' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Created' }] } });
+
+      await service.bookAppointment({
+        patientId: 'pat-1',
+        appointmentType: 'cleaning',
+        startTime: new Date('2025-03-15T14:00:00Z'),
+        duration: 30,
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ description: 'cleaning' }),
+        expect.anything(),
+      );
+    });
+
+    it('uses "Appointment" as description fallback when no type or notes', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-apt-3' } });
+      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Created' }] } });
+
+      await service.bookAppointment({
+        patientId: 'pat-1',
+        appointmentType: '',
+        startTime: new Date('2025-03-15T14:00:00Z'),
+        duration: 30,
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ description: 'Appointment' }),
+        expect.anything(),
+      );
     });
   });
 
