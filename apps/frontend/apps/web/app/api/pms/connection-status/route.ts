@@ -96,16 +96,28 @@ export async function GET(request: NextRequest) {
 
         if (practicesRes.ok) {
           const practicesData = await practicesRes.json();
-          const practices = practicesData.items || [];
-          const matched = practices.find(
-            (p: any) => String(p.customer_id) === String(pmsIntegration.masterCustomerId),
-          ) || (practices.length === 1 ? practices[0] : null);
+          const practices = practicesData.items || practicesData || [];
+          const practicesList = Array.isArray(practices) ? practices : [];
+
+          console.log('[PMS Check] authorized_practices returned', practicesList.length, 'practices for masterCustomerId', pmsIntegration.masterCustomerId);
+          if (practicesList.length > 0) {
+            console.log('[PMS Check] Practice IDs:', practicesList.map((p: any) => ({
+              customer_id: p.customer_id,
+              office_id: p.office_id,
+              practice_name: p.practice_name,
+            })));
+          }
+
+          const mcid = String(pmsIntegration.masterCustomerId);
+          const matched =
+            practicesList.find((p: any) => String(p.customer_id) === mcid) ||
+            practicesList.find((p: any) => String(p.office_id) === mcid) ||
+            (practicesList.length > 0 ? practicesList[practicesList.length - 1] : null);
 
           if (matched?.office_id && matched?.secret_key) {
             officeId = matched.office_id;
             secretKey = matched.secret_key;
 
-            // Persist the discovered credentials
             const meta = (pmsIntegration.metadata as any) || {};
             await prisma.pmsIntegration.update({
               where: { id: pmsIntegration.id },
@@ -121,8 +133,12 @@ export async function GET(request: NextRequest) {
                 updatedAt: new Date(),
               },
             });
-            console.log('[PMS Check] Auto-discovered credentials for', pmsIntegration.masterCustomerId);
+            console.log('[PMS Check] Auto-discovered credentials for', pmsIntegration.masterCustomerId, '-> office_id:', officeId);
+          } else {
+            console.warn('[PMS Check] No matching practice with credentials found. Matched:', matched);
           }
+        } else {
+          console.error('[PMS Check] authorized_practices returned status', practicesRes.status, await practicesRes.text().catch(() => ''));
         }
       } catch (err) {
         console.error('[PMS Check] Failed to fetch authorized_practices for auto-upgrade:', err);

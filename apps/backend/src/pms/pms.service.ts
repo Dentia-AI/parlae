@@ -781,12 +781,12 @@ export class PmsService {
       const practices = response.data?.items || [];
       if (practices.length === 0) return null;
 
-      // Try matching by customer_id if available
+      // Try matching by customer_id, then office_id, then fall back to last practice
       let practice = masterCustomerId
         ? practices.find((p: any) => String(p.customer_id) === String(masterCustomerId))
+          || practices.find((p: any) => String(p.office_id) === String(masterCustomerId))
         : null;
 
-      // Fall back to the last item (most recently authorized)
       if (!practice) {
         practice = practices[practices.length - 1];
       }
