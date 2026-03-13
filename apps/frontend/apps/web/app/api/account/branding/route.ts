@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
         brandingContactPhone: true,
         brandingAddress: true,
         brandingWebsite: true,
+        phoneIntegrationSettings: true,
       },
     });
 
@@ -84,9 +85,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const phoneSettings = (account.phoneIntegrationSettings as Record<string, unknown>) || {};
+    const branding = {
+      ...account,
+      brandingContactPhone:
+        account.brandingContactPhone ||
+        (phoneSettings.clinicNumber as string) ||
+        (phoneSettings.phoneNumber as string) ||
+        '',
+      brandingBusinessName:
+        account.brandingBusinessName ||
+        (phoneSettings.businessName as string) ||
+        '',
+    };
+    delete (branding as any).phoneIntegrationSettings;
+
     return NextResponse.json({
       success: true,
-      branding: account,
+      branding,
     });
   } catch (error) {
     console.error('Error fetching branding:', error);

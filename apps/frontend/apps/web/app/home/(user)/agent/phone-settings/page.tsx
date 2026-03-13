@@ -103,7 +103,7 @@ export default async function PhoneIntegrationSettingsPage() {
           <Trans i18nKey={'phoneSettingsPage.title'} defaults="Phone Integration" />
         </h1>
         <p className="text-muted-foreground mt-2">
-          <Trans i18nKey={'phoneSettingsPage.description'} defaults="Manage how your phone number connects to your AI receptionist" />
+          <Trans i18nKey={'phoneSettingsPage.description'} defaults="Manage how your phone number connects to your AI assistant" />
         </p>
       </div>
 
@@ -209,7 +209,7 @@ export default async function PhoneIntegrationSettingsPage() {
           <div className="mb-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <p className="text-sm text-amber-800 dark:text-amber-200">
-              <Trans i18nKey={'phoneSettingsPage.changeMethodWarning'} defaults="Changing your integration method will require reconfiguring your phone setup. Your AI receptionist will be temporarily unavailable during the transition." />
+              <Trans i18nKey={'phoneSettingsPage.changeMethodWarning'} defaults="Changing your integration method will require reconfiguring your phone setup. Your AI assistant will be temporarily unavailable during the transition." />
             </p>
           </div>
 

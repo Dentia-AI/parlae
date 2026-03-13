@@ -781,14 +781,14 @@ export class PmsService {
       const practices = response.data?.items || [];
       if (practices.length === 0) return null;
 
-      // Try matching by customer_id, then office_id, then fall back to last practice
       let practice = masterCustomerId
         ? practices.find((p: any) => String(p.customer_id) === String(masterCustomerId))
           || practices.find((p: any) => String(p.office_id) === String(masterCustomerId))
         : null;
 
-      if (!practice) {
-        practice = practices[practices.length - 1];
+      // Only fall back to the single practice when there's no ambiguity
+      if (!practice && practices.length === 1) {
+        practice = practices[0];
       }
 
       return {

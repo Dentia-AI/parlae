@@ -64,20 +64,30 @@ export const setupPortedNumberAction = enhanceAction(
       });
       const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
 
+      const normalizedPhone = normalizePhoneNumber(data.phoneNumber);
+      const updateData: Record<string, unknown> = {
+        phoneIntegrationMethod: 'ported',
+        phoneIntegrationSettings: {
+          ...existingSettings,
+          businessName: data.businessName,
+          phoneNumber: normalizedPhone,
+          currentCarrier: data.currentCarrier,
+          accountNumber: data.accountNumber,
+          portStatus: 'pending_configuration',
+          configuredAt: new Date().toISOString(),
+        },
+      };
+
+      if (normalizedPhone) {
+        updateData.brandingContactPhone = normalizedPhone;
+      }
+      if (data.businessName) {
+        updateData.brandingBusinessName = data.businessName;
+      }
+
       await prisma.account.update({
         where: { id: data.accountId },
-        data: {
-          phoneIntegrationMethod: 'ported',
-          phoneIntegrationSettings: {
-            ...existingSettings,
-            businessName: data.businessName,
-            phoneNumber: normalizePhoneNumber(data.phoneNumber),
-            currentCarrier: data.currentCarrier,
-            accountNumber: data.accountNumber,
-            portStatus: 'pending_configuration',
-            configuredAt: new Date().toISOString(),
-          },
-        },
+        data: updateData,
       });
 
       logger.info(
@@ -131,20 +141,29 @@ export const setupForwardedNumberAction = enhanceAction(
       });
       const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
 
+      const updateData: Record<string, unknown> = {
+        phoneIntegrationMethod: 'forwarded',
+        phoneIntegrationSettings: {
+          ...existingSettings,
+          businessName: data.businessName,
+          clinicNumber: normalizedClinic,
+          staffDirectNumber: data.staffDirectNumber || null,
+          forwardingType: data.forwardingType || 'all',
+          needsPhoneNumber: true,
+          configuredAt: new Date().toISOString(),
+        },
+      };
+
+      if (normalizedClinic) {
+        updateData.brandingContactPhone = normalizedClinic;
+      }
+      if (data.businessName) {
+        updateData.brandingBusinessName = data.businessName;
+      }
+
       await prisma.account.update({
         where: { id: data.accountId },
-        data: {
-          phoneIntegrationMethod: 'forwarded',
-          phoneIntegrationSettings: {
-            ...existingSettings,
-            businessName: data.businessName,
-            clinicNumber: normalizedClinic,
-            staffDirectNumber: data.staffDirectNumber || null,
-            forwardingType: data.forwardingType || 'all',
-            needsPhoneNumber: true,
-            configuredAt: new Date().toISOString(),
-          },
-        },
+        data: updateData,
       });
 
       logger.info(
@@ -201,22 +220,31 @@ export const setupSipTrunkAction = enhanceAction(
       });
       const existingSettings = (existing?.phoneIntegrationSettings as Record<string, unknown>) || {};
 
+      const sipUpdateData: Record<string, unknown> = {
+        phoneIntegrationMethod: 'sip',
+        phoneIntegrationSettings: {
+          ...existingSettings,
+          businessName: data.businessName,
+          clinicNumber: normalizedClinic,
+          pbxType: data.pbxType,
+          sipUrl,
+          sipUsername,
+          sipPassword,
+          needsPhoneNumber: true,
+          configuredAt: new Date().toISOString(),
+        },
+      };
+
+      if (normalizedClinic) {
+        sipUpdateData.brandingContactPhone = normalizedClinic;
+      }
+      if (data.businessName) {
+        sipUpdateData.brandingBusinessName = data.businessName;
+      }
+
       await prisma.account.update({
         where: { id: data.accountId },
-        data: {
-          phoneIntegrationMethod: 'sip',
-          phoneIntegrationSettings: {
-            ...existingSettings,
-            businessName: data.businessName,
-            clinicNumber: normalizedClinic,
-            pbxType: data.pbxType,
-            sipUrl,
-            sipUsername,
-            sipPassword,
-            needsPhoneNumber: true,
-            configuredAt: new Date().toISOString(),
-          },
-        },
+        data: sipUpdateData,
       });
 
       logger.info(

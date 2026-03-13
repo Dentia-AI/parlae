@@ -636,11 +636,24 @@ export async function executeDeployment(
           );
         }
 
+        // Deactivate all existing records for this account (old phones, pending placeholders)
+        // before creating the canonical record for the newly deployed agent + phone.
+        try {
+          await (prisma as any).retellPhoneNumber.updateMany({
+            where: {
+              accountId: account.id,
+              phoneNumber: { not: e164Phone },
+            },
+            data: { isActive: false },
+          });
+        } catch { /* best effort */ }
+
         // Create or update RetellPhoneNumber record
         try {
           await (prisma as any).retellPhoneNumber.upsert({
             where: { phoneNumber: e164Phone },
             update: {
+              accountId: account.id,
               retellAgentId: flowResult.agentId,
               retellAgentIds: { conversationFlow: { agentId: flowResult.agentId, flowId: flowResult.conversationFlowId } },
               retellLlmIds: null,
@@ -657,6 +670,15 @@ export async function executeDeployment(
               name: `${businessName} - Conversation Flow`,
               isActive: true,
             },
+          });
+
+          // Deactivate stale records from other accounts that reference this agent
+          await (prisma as any).retellPhoneNumber.updateMany({
+            where: {
+              retellAgentId: flowResult.agentId,
+              accountId: { not: account.id },
+            },
+            data: { isActive: false },
           });
         } catch (recErr: any) {
           logger.warn(

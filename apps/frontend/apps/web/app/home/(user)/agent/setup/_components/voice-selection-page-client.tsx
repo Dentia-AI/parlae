@@ -164,7 +164,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
               <Trans i18nKey="common:setup.voice.manageTitle" defaults="Change Voice" />
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              <Trans i18nKey="common:setup.voice.manageSubtitle" defaults="Update the voice for your AI receptionist. Changes apply to all agents immediately." />
+              <Trans i18nKey="common:setup.voice.manageSubtitle" defaults="Update the voice for your AI assistant. Changes apply to all agents immediately." />
             </p>
           </div>
           <Button
@@ -189,7 +189,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
               <Trans i18nKey="common:setup.clinicName.title" defaults="Your Clinic" />
             </CardTitle>
             <CardDescription className="text-sm">
-              <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI receptionist when greeting callers." />
+              <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI assistant when greeting callers." />
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -263,7 +263,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
                 <Trans i18nKey="common:setup.clinicName.title" defaults="Your Clinic" />
               </CardTitle>
               <CardDescription className="text-sm">
-                <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI receptionist when greeting callers." />
+                <Trans i18nKey="common:setup.clinicName.description" defaults="This name will be used by your AI assistant when greeting callers." />
               </CardDescription>
             </CardHeader>
             <CardContent>

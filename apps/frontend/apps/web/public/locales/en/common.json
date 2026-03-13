@@ -107,8 +107,8 @@
     "yearly": "per year"
   },
   "setup": {
-    "title": "Set Up Your AI Receptionist",
-    "subtitle": "Configure your AI-powered phone receptionist in a few simple steps",
+    "title": "Set Up Your AI Assistant",
+    "subtitle": "Configure your AI-powered phone assistant in a few simple steps",
     "steps": {
       "voice": "Voice",
       "knowledge": "Knowledge",
@@ -118,13 +118,13 @@
     },
     "clinicName": {
       "title": "Your Clinic",
-      "description": "This name will be used by your AI receptionist when greeting callers.",
+      "description": "This name will be used by your AI assistant when greeting callers.",
       "label": "Clinic / Business Name",
       "placeholder": "e.g. Maple Dental Clinic"
     },
     "voice": {
       "title": "Voice Selection",
-      "description": "Choose the voice personality for your AI receptionist",
+      "description": "Choose the voice personality for your AI assistant",
       "selectVoice": "Please select a voice",
       "enterClinicName": "Please enter your clinic or business name",
       "continueToKnowledge": "Continue to Knowledge Base",
@@ -205,7 +205,7 @@
     "knowledge": {
       "title": "Knowledge Base",
       "pageTitle": "Step 2: Knowledge Base",
-      "description": "Upload documents to train your AI receptionist",
+      "description": "Upload documents to train your AI assistant",
       "cardDescription": "Upload documents about your services, hours, policies, and FAQs",
       "dropFilesHere": "Drop files here or click to upload",
       "supportedFormats": "Supports PDF, DOC, DOCX, TXT files up to 10MB each",
@@ -227,13 +227,13 @@
         "insurance": "Insurance and payment information"
       },
       "manageTitle": "Knowledge Base",
-      "manageDescription": "Upload documents to train your AI receptionist. Changes are synced immediately after saving.",
+      "manageDescription": "Upload documents to train your AI assistant. Changes are synced immediately after saving.",
       "saveAndUpdate": "Save & Update",
       "saving": "Saving...",
       "filesAcrossCategories": "{{count}} file(s) across {{categories}} categories",
       "queryToolActive": "Synced with AI agent",
       "unsavedChanges": "Unsaved changes",
-      "howItWorks": "Your AI receptionist learns from the documents you upload here. The more relevant information you provide, the more accurate and helpful it will be when answering caller questions. Changes take effect immediately after saving.",
+      "howItWorks": "Your AI assistant learns from the documents you upload here. The more relevant information you provide, the more accurate and helpful it will be when answering caller questions. Changes take effect immediately after saving.",
       "howItWorksLabel": "How it works:",
       "dropOrBrowse": "Drop files here or",
       "browse": "browse",
@@ -244,7 +244,7 @@
       "failedToView": "Failed to view file",
       "failedToSave": "Failed to save knowledge base",
       "kbUpdated": "Knowledge base updated — {{count}} file(s) synced to AI agent",
-      "wizardDescription": "Upload documents to train your AI receptionist. Organize by category for smarter, more targeted responses.",
+      "wizardDescription": "Upload documents to train your AI assistant. Organize by category for smarter, more targeted responses.",
       "website": {
         "title": "Your Website",
         "autoScanned": "Auto-Scanned",
@@ -323,7 +323,7 @@
       "googleCalendarNote": "Note: Google Calendar provides basic appointment scheduling. For full features (patient records, billing, insurance), connect a PMS instead.",
       "disconnect": "Disconnect",
       "connectCalendar": "Connect Calendar",
-      "alertOptional": "This integration is optional but highly recommended. Your AI receptionist will be able to book appointments, look up patient information, and handle scheduling automatically when connected.",
+      "alertOptional": "This integration is optional but highly recommended. Your AI assistant will be able to book appointments, look up patient information, and handle scheduling automatically when connected.",
       "authSuccess": "Authorization successful! Verifying connection...",
       "authError": "Authorization failed. Please try again.",
       "connectionStatus": {
@@ -350,7 +350,7 @@
     "phone": {
       "title": "Phone Integration",
       "pageTitle": "Step 4: Phone Integration",
-      "description": "Connect your phone number to your AI receptionist",
+      "description": "Connect your phone number to your AI assistant",
       "chooseMethod": "Step 4: Choose Integration Method",
       "chooseMethodDesc": "Select how you want to connect your phone number",
       "setupMethod": "Complete the setup for your selected method",
@@ -436,7 +436,7 @@
         "clinicNumberHint": "The number patients currently call. You will set up forwarding from this number after deployment.",
         "forwardingType": "Forwarding Type",
         "forwardAll": "Forward All Calls",
-        "forwardAllDesc": "Every incoming call goes to the AI receptionist. You'll provide a dedicated human line for emergencies and transfer requests.",
+        "forwardAllDesc": "Every incoming call goes to the AI assistant. You'll provide a dedicated human line for emergencies and transfer requests.",
         "noAnswer": "No-Answer & Busy Only",
         "noAnswerDesc": "Staff answers during office hours. AI picks up when nobody answers or lines are busy. Good for gradual adoption.",
         "humanLine": "Dedicated Human Line",
@@ -458,12 +458,12 @@
         "recommendedLabel": "Recommended:",
         "recommendedNudge": "Add a human line so the AI can transfer emergency calls to a real person instead of your main line.",
         "nextSteps": "Next Steps:",
-        "nextStepsDesc": "A Twilio forwarding number will be provisioned when you complete payment and deploy your AI receptionist in the review step.",
+        "nextStepsDesc": "A Twilio forwarding number will be provisioned when you complete payment and deploy your AI assistant in the review step.",
         "afterDeployment": "After deployment",
         "step1": "We'll provision a Twilio number and share it with you",
         "step2Pre": "Set up call forwarding on your carrier from",
         "step2Post": "to the Twilio number",
-        "step3": "Calls will be handled by your AI receptionist.",
+        "step3": "Calls will be handled by your AI assistant.",
         "step3HumanLine": "Emergency and human transfer requests will route to your dedicated human line.",
         "step3NoHumanLine": "Human transfer requests will route to your main clinic number.",
         "carrierGuide": "How to Set Up Forwarding on Your Carrier",
@@ -475,7 +475,7 @@
     "review": {
       "title": "Review & Launch",
       "pageTitle": "Step 5: Review & Launch",
-      "description": "Review your configuration and launch your AI receptionist",
+      "description": "Review your configuration and launch your AI assistant",
       "paymentStep": "Step 1: Payment Information",
       "reviewStep": "Step 2: Review & Launch",
       "paymentAdded": "Payment method added successfully",
@@ -484,13 +484,13 @@
       "completePayment": "Complete payment to continue",
       "configNotFound": "Configuration not found. Please start from step 1.",
       "voiceMissing": "Voice configuration is missing. Please go back to step 1.",
-      "deploySuccess": "AI Receptionist deployed successfully!",
-      "deployStarted": "Deployment started! Setting up your AI receptionist...",
-      "deployError": "Failed to deploy receptionist",
+      "deploySuccess": "AI Assistant deployed successfully!",
+      "deployStarted": "Deployment started! Setting up your AI assistant...",
+      "deployError": "Failed to deploy assistant",
       "deployErrorGeneric": "An error occurred during deployment",
       "live": {
-        "title": "Your AI Receptionist is Live!",
-        "description": "Your AI receptionist has been configured and is ready to answer calls",
+        "title": "Your AI Assistant is Live!",
+        "description": "Your AI assistant has been configured and is ready to answer calls",
         "phoneNumber": "Internal phone number:",
         "goToDashboard": "Go to Dashboard"
       },
@@ -505,8 +505,8 @@
       "noFiles": "No files uploaded. You can add files later from settings.",
       "noIntegrations": "No integrations configured. You can add integrations later from settings.",
       "readyToLaunch": "Ready to launch?",
-      "readyToLaunchDesc": "Your AI receptionist will be configured with a phone number automatically. You can update settings later from the dashboard.",
-      "deployButton": "Deploy AI Receptionist",
+      "readyToLaunchDesc": "Your AI assistant will be configured with a phone number automatically. You can update settings later from the dashboard.",
+      "deployButton": "Deploy AI Assistant",
       "completePaymentToDeploy": "Complete Payment to Deploy"
     },
     "navigation": {
@@ -553,7 +553,7 @@
       "owner": "Owner",
       "teamCount": "Team ({{count}})",
       "noMembers": "No team members yet",
-      "noMembersDescription": "Invite employees to collaborate on managing your AI receptionist",
+      "noMembersDescription": "Invite employees to collaborate on managing your AI assistant",
       "pendingInvitations": "Pending Invitations",
       "pendingInvitationsDescription": "Invitations that haven't been accepted yet",
       "expires": "Expires",
@@ -625,7 +625,7 @@
   },
   "phoneSettingsPage": {
     "title": "Phone Integration",
-    "description": "Manage how your phone number connects to your AI receptionist",
+    "description": "Manage how your phone number connects to your AI assistant",
     "portedNumber": "Ported Number",
     "portedDescription": "Your number is fully transferred to our system",
     "callForwarding": "Call Forwarding",
@@ -641,7 +641,7 @@
     "setupCompletedOn": "Setup completed on {{date}}",
     "changeMethodTitle": "Change Integration Method",
     "changeMethodDescription": "Switch to a different phone integration method",
-    "changeMethodWarning": "Changing your integration method will require reconfiguring your phone setup. Your AI receptionist will be temporarily unavailable during the transition.",
+    "changeMethodWarning": "Changing your integration method will require reconfiguring your phone setup. Your AI assistant will be temporarily unavailable during the transition.",
     "changeMethodButton": "Change Integration Method",
     "forwardingInstructionsTitle": "Call Forwarding Instructions",
     "forwardingInstructionsDescription": "How to set up forwarding on your carrier",
@@ -785,7 +785,7 @@
     "pms": "Practice Management System",
     "reconfigure": "Reconfigure Agent",
     "reconfigureDesc": "Change voice, knowledge base, or phone setup",
-    "testCallLabel": "Test your AI receptionist:",
+    "testCallLabel": "Test your AI assistant:",
     "testCallDesc": "Call {{number}} to hear how it sounds",
     "testCall": "Test Call",
     "integrationMethods": {
@@ -796,13 +796,13 @@
     }
   },
   "deployedBanner": {
-    "title": "Your AI Receptionist is Live!",
-    "description": "Your AI receptionist has been deployed and is ready to answer calls at {{number}}.",
+    "title": "Your AI Assistant is Live!",
+    "description": "Your AI assistant has been deployed and is ready to answer calls at {{number}}.",
     "forwardingHint": "Complete the call forwarding setup below to start receiving calls."
   },
   "callForwarding": {
     "title": "Set Up Call Forwarding",
-    "description": "Forward your clinic calls to your AI receptionist",
+    "description": "Forward your clinic calls to your AI assistant",
     "forwardTo": "Forward your calls to this number:",
     "fromClinic": "From your clinic number:",
     "numberCopied": "Number copied",
@@ -983,7 +983,7 @@
     "practiceLocations": "Practice locations",
     "additionalLocationCost": "Each additional location is {{percent}}% of your base fee.",
     "features": "Features",
-    "featuresDescription": "Choose what your AI receptionist handles",
+    "featuresDescription": "Choose what your AI assistant handles",
     "monthlyCallVolume": "Monthly call volume",
     "freeMinIncluded": "{{minutes}} free min included. {{rate}}/min overage.",
     "perMonth": "Per month, {{minutes}} min included",
@@ -1009,16 +1009,16 @@
     "overage": "Overage ({{minutes}} min)"
   },
   "features": {
-    "title": "AI Receptionist",
+    "title": "AI Assistant",
     "active": "Active",
     "inactive": "Inactive",
-    "liveMessage": "Your AI receptionist is live. {{count}} features enabled.",
-    "offMessage": "Your AI receptionist is turned off. Enable it to start answering calls.",
+    "liveMessage": "Your AI assistant is live. {{count}} features enabled.",
+    "offMessage": "Your AI assistant is turned off. Enable it to start answering calls.",
     "featureControls": "Feature Controls",
     "featureControlsDesc": "Toggle individual features on or off. Changes take effect immediately.",
     "comingSoon": "Coming Soon",
     "disableDialog": {
-      "title": "Turn off AI Receptionist?",
+      "title": "Turn off AI Assistant?",
       "description": "This will disable all AI call handling, including inbound answering, outbound campaigns, and automated notifications. Your phone lines will stop being answered by the AI.",
       "confirm": "Yes, Turn Off"
     },
@@ -1045,7 +1045,7 @@
     },
     "inboundAiAnswering": {
       "name": "AI Call Answering",
-      "description": "Your AI receptionist answers calls, handles inquiries, and routes conversations 24/7."
+      "description": "Your AI assistant answers calls, handles inquiries, and routes conversations 24/7."
     },
     "inboundAppointmentScheduling": {
       "name": "Appointment Scheduling",
@@ -1099,7 +1099,7 @@
     "notConnected": "Not Connected",
     "manage": "Manage",
     "setup": "Set up",
-    "wizardRequired": "Complete the setup wizard to enable your AI receptionist.",
+    "wizardRequired": "Complete the setup wizard to enable your AI assistant.",
     "completeSetup": "Complete setup",
     "outboundPrerequisite": "Connect your PMS to enable outbound campaigns.",
     "connectPms": "Go to PMS Integrations",

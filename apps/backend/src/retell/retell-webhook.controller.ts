@@ -440,26 +440,35 @@ export class RetellWebhookController {
   }
 
   private async resolveAccountFromCall(call: any): Promise<string | null> {
-    // 1. Agent metadata
+    // 1. Agent metadata (most reliable — set during deployment)
     const metadataAccountId = call?.metadata?.accountId;
     if (metadataAccountId) return metadataAccountId;
 
-    // 2. RetellPhoneNumber by agent ID
     const agentId = call?.agent_id;
+    const phoneNumber = call?.to_number;
+
+    // 2. RetellPhoneNumber lookup — try narrowest match first
     if (agentId) {
       try {
-        const retellPhone = await this.prisma.retellPhoneNumber.findFirst({
-          where: { retellAgentId: agentId },
-          select: { accountId: true },
+        const matches = await this.prisma.retellPhoneNumber.findMany({
+          where: { retellAgentId: agentId, isActive: true },
+          select: { accountId: true, phoneNumber: true },
         });
-        if (retellPhone) return retellPhone.accountId;
+
+        if (matches.length === 1) return matches[0]!.accountId;
+
+        if (matches.length > 1 && phoneNumber) {
+          const byPhone = matches.find((m) => m.phoneNumber === phoneNumber);
+          if (byPhone) return byPhone.accountId;
+        }
+
+        if (matches.length > 0) return matches[0]!.accountId;
       } catch {
-        // continue to next resolution method
+        // continue
       }
     }
 
-    // 3. RetellPhoneNumber by phone number
-    const phoneNumber = call?.to_number;
+    // 3. Phone number only (fallback)
     if (phoneNumber) {
       try {
         const retellPhone = await this.prisma.retellPhoneNumber.findFirst({

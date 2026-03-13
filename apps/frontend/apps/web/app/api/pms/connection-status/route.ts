@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
           const matched =
             practicesList.find((p: any) => String(p.customer_id) === mcid) ||
             practicesList.find((p: any) => String(p.office_id) === mcid) ||
-            (practicesList.length > 0 ? practicesList[practicesList.length - 1] : null);
+            (practicesList.length === 1 ? practicesList[0] : null);
 
           if (matched?.office_id && matched?.secret_key) {
             officeId = matched.office_id;
@@ -221,11 +221,11 @@ export async function GET(request: NextRequest) {
 
       if (practicesResponse.ok) {
         const practicesData = await practicesResponse.json();
-        const practices = practicesData.items || [];
-        // Find the matching practice by office_id
-        const matchedPractice = practices.find(
-          (p: any) => p.office_id === officeId,
-        ) || practices[0];
+        const practices = practicesData.items || practicesData || [];
+        const practiceArr = Array.isArray(practices) ? practices : [];
+        const matchedPractice =
+          practiceArr.find((p: any) => p.office_id === officeId) ||
+          (practiceArr.length === 1 ? practiceArr[0] : null);
         if (matchedPractice) {
           practiceName = matchedPractice.practice_name || null;
           actualPmsType = matchedPractice.practice_management_system || null;
