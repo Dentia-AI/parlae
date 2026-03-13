@@ -181,9 +181,17 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Update phone number record in DB
+        // Update phone number record in DB — ensure only 1 active record per account
         try {
           if (settings.phoneNumber) {
+            const e164 = settings.phoneNumber.startsWith('+') ? settings.phoneNumber : `+${settings.phoneNumber}`;
+
+            // Deactivate any stale records for this account
+            await prisma.retellPhoneNumber.updateMany({
+              where: { accountId, phoneNumber: { not: e164 } },
+              data: { isActive: false },
+            });
+
             await prisma.retellPhoneNumber.updateMany({
               where: { accountId, isActive: true },
               data: {

@@ -1408,20 +1408,22 @@ export const changePhoneNumberAction = enhanceAction(
           } catch {
             logger.warn({ phone: oldE164 }, '[Receptionist] Non-fatal: could not delete old Retell phone');
           }
-
-          try {
-            await (prisma as any).retellPhoneNumber.updateMany({
-              where: { phoneNumber: oldE164, accountId: account.id },
-              data: { isActive: false },
-            });
-          } catch { /* best effort */ }
         }
+
+        // Deactivate all existing records for this account before creating the new one
+        try {
+          await (prisma as any).retellPhoneNumber.updateMany({
+            where: { accountId: account.id, phoneNumber: { not: e164Phone } },
+            data: { isActive: false },
+          });
+        } catch { /* best effort */ }
 
         // Create new RetellPhoneNumber record
         try {
           await (prisma as any).retellPhoneNumber.upsert({
             where: { phoneNumber: e164Phone },
             update: {
+              accountId: account.id,
               retellAgentId: receptionistAgentId,
               retellAgentIds: settings.retellAgentIds || null,
               retellLlmIds: settings.retellLlmIds || null,

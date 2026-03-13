@@ -161,21 +161,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (retellPhoneId || phoneNumber) {
+      const e164Phone = phoneNumber || retellPhoneId!;
+
+      // Deactivate stale records for this account
+      await prisma.retellPhoneNumber.updateMany({
+        where: { accountId, phoneNumber: { not: e164Phone } },
+        data: { isActive: false },
+      });
+
       await prisma.retellPhoneNumber.upsert({
-        where: { phoneNumber: phoneNumber || retellPhoneId! },
+        where: { phoneNumber: e164Phone },
         create: {
           accountId,
           retellPhoneId: retellPhoneId || phoneNumber,
-          phoneNumber: phoneNumber || retellPhoneId!,
+          phoneNumber: e164Phone,
           retellAgentId: result.agents.receptionist.agentId,
           retellAgentIds: agentIds,
           retellLlmIds: llmIds,
           name: `${clinicName} - Retell`,
+          isActive: true,
         },
         update: {
+          accountId,
           retellAgentId: result.agents.receptionist.agentId,
           retellAgentIds: agentIds,
           retellLlmIds: llmIds,
+          isActive: true,
         },
       });
     } else {

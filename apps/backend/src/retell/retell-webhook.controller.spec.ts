@@ -26,6 +26,7 @@ describe('RetellWebhookController', () => {
     },
     retellPhoneNumber: {
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
     },
   };
 
@@ -188,7 +189,7 @@ describe('RetellWebhookController', () => {
 
   describe('call_started', () => {
     it('should create CallReference with provider RETELL', async () => {
-      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([{ accountId: 'acc-1', phoneNumber: '+14165550000' }]);
 
       const body = {
         event: 'call_started',
@@ -221,10 +222,9 @@ describe('RetellWebhookController', () => {
       );
     });
 
-    it('should resolve account from phone number when agent lookup fails', async () => {
-      prisma.retellPhoneNumber.findFirst
-        .mockResolvedValueOnce(null) // agent_id lookup
-        .mockResolvedValueOnce({ accountId: 'acc-phone' }); // to_number lookup
+    it('should resolve account from phone number when agent lookup returns empty', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([]); // agent_id lookup — no matches
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-phone' }); // phone fallback
 
       const body = {
         event: 'call_started',
@@ -248,7 +248,7 @@ describe('RetellWebhookController', () => {
     });
 
     it('should fire prefetchCallerContext when call has from_number', async () => {
-      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([{ accountId: 'acc-1', phoneNumber: '+14165550000' }]);
 
       const body = {
         event: 'call_started',
@@ -267,7 +267,7 @@ describe('RetellWebhookController', () => {
     });
 
     it('should not fire prefetchCallerContext when from_number is missing', async () => {
-      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([{ accountId: 'acc-1', phoneNumber: '+14165550000' }]);
 
       const body = {
         event: 'call_started',
@@ -289,7 +289,7 @@ describe('RetellWebhookController', () => {
     });
 
     it('should not block webhook response if prefetch fails', async () => {
-      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([{ accountId: 'acc-1', phoneNumber: '+14165550000' }]);
       agentToolsService.prefetchCallerContext.mockRejectedValueOnce(new Error('Prefetch boom'));
 
       const body = {
@@ -795,7 +795,7 @@ describe('RetellWebhookController', () => {
 
   describe('call_started — edge cases', () => {
     it('handles callReference upsert failure gracefully', async () => {
-      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-1' });
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([{ accountId: 'acc-1', phoneNumber: '+14165550000' }]);
       prisma.callReference.upsert.mockRejectedValue(new Error('upsert failed'));
 
       const body = {
@@ -814,9 +814,8 @@ describe('RetellWebhookController', () => {
     });
 
     it('resolves account via agent_id lookup error then falls through to phone', async () => {
-      prisma.retellPhoneNumber.findFirst
-        .mockRejectedValueOnce(new Error('DB error'))
-        .mockResolvedValueOnce({ accountId: 'acc-phone' });
+      prisma.retellPhoneNumber.findMany.mockRejectedValueOnce(new Error('DB error'));
+      prisma.retellPhoneNumber.findFirst.mockResolvedValueOnce({ accountId: 'acc-phone' });
 
       const body = {
         event: 'call_started',
@@ -830,10 +829,9 @@ describe('RetellWebhookController', () => {
       );
     });
 
-    it('resolves account returns null when phone lookup also fails', async () => {
-      prisma.retellPhoneNumber.findFirst
-        .mockResolvedValueOnce(null)
-        .mockRejectedValueOnce(new Error('DB error'));
+    it('resolves account returns null when both agent and phone lookups fail', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([]); // agent lookup returns nothing
+      prisma.retellPhoneNumber.findFirst.mockRejectedValueOnce(new Error('DB error'));
 
       const body = {
         event: 'call_started',
@@ -841,6 +839,100 @@ describe('RetellWebhookController', () => {
       };
       await controller.handleWebhook(body, '', createMockReq(body));
       expect(prisma.callReference.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── resolveAccountFromCall — 1:1 agent-to-account invariant ────────
+  describe('resolveAccountFromCall — agent disambiguation', () => {
+    it('should resolve the correct account when agent has a single active record', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([
+        { accountId: 'acc-A', phoneNumber: '+14165550001' },
+      ]);
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-single', agent_id: 'agent-shared', to_number: '+14165550001' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-A' }),
+        }),
+      );
+    });
+
+    it('should disambiguate by phone number when same agent is linked to multiple accounts', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([
+        { accountId: 'acc-WRONG', phoneNumber: '+14165550001' },
+        { accountId: 'acc-RIGHT', phoneNumber: '+14165550002' },
+      ]);
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-disambig', agent_id: 'agent-shared', to_number: '+14165550002' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-RIGHT' }),
+        }),
+      );
+    });
+
+    it('should fall back to first match when agent has duplicates and phone does not match', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([
+        { accountId: 'acc-FIRST', phoneNumber: '+14165550001' },
+        { accountId: 'acc-SECOND', phoneNumber: '+14165550002' },
+      ]);
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-no-phone-match', agent_id: 'agent-shared', to_number: '+14165559999' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-FIRST' }),
+        }),
+      );
+    });
+
+    it('should prefer metadata over any DB records', async () => {
+      const body = {
+        event: 'call_started',
+        call: {
+          call_id: 'c-meta-wins',
+          agent_id: 'agent-shared',
+          to_number: '+14165550001',
+          metadata: { accountId: 'acc-META' },
+        },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-META' }),
+        }),
+      );
+      expect(prisma.retellPhoneNumber.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should not resolve to wrong account when agent has duplicates but no to_number', async () => {
+      prisma.retellPhoneNumber.findMany.mockResolvedValueOnce([
+        { accountId: 'acc-A', phoneNumber: '+14165550001' },
+        { accountId: 'acc-B', phoneNumber: '+14165550002' },
+      ]);
+
+      const body = {
+        event: 'call_started',
+        call: { call_id: 'c-no-to', agent_id: 'agent-shared' },
+      };
+      await controller.handleWebhook(body, '', createMockReq(body));
+      // Falls back to first match — still resolves (best effort)
+      expect(prisma.callReference.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ accountId: 'acc-A' }),
+        }),
+      );
     });
   });
 

@@ -93,21 +93,15 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Update RetellPhoneNumber if exists
-      const retellPhone = await prisma.retellPhoneNumber.findFirst({
-        where: { accountId },
+      // Update the single active RetellPhoneNumber for this account
+      await prisma.retellPhoneNumber.updateMany({
+        where: { accountId, isActive: true },
+        data: {
+          retellAgentId: result.agents.receptionist?.agent_id,
+          retellAgentIds: result.agents as any,
+          retellLlmIds: result.llms || null,
+        },
       });
-
-      if (retellPhone) {
-        await prisma.retellPhoneNumber.update({
-          where: { id: retellPhone.id },
-          data: {
-            retellAgentId: result.agents.receptionist?.agent_id,
-            retellAgentIds: result.agents,
-            retellLlmIds: result.llms || null,
-          },
-        });
-      }
     }
 
     logger.info(

@@ -172,6 +172,19 @@ describe('POST /api/admin/retell-templates/conversation-flow/bulk-deploy', () =>
     });
   });
 
+  it('deactivates stale retellPhoneNumber records for the account before updating', async () => {
+    const { prisma } = require('@kit/prisma');
+
+    await POST(makeRequest({ templateId: 'tpl-1', accountIds: ['acc-1'] }));
+
+    const calls = prisma.retellPhoneNumber.updateMany.mock.calls;
+    const deactivateCall = calls.find(
+      (c) => c[0].where.phoneNumber?.not === '+15551234567' && c[0].data.isActive === false,
+    );
+    expect(deactivateCall).toBeDefined();
+    expect(deactivateCall[0].where.accountId).toBe('acc-1');
+  });
+
   it('still succeeds if both updatePhoneNumber and importPhoneNumber fail', async () => {
     mockUpdatePhoneNumber.mockRejectedValueOnce(new Error('update failed'));
     mockImportPhoneNumber.mockRejectedValueOnce(new Error('import failed'));
