@@ -71,25 +71,69 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Verify Sikka credentials are present
-    const officeId = pmsIntegration.officeId;
-    const secretKey = pmsIntegration.secretKey;
     const appId = process.env.SIKKA_APP_ID;
     const appKey = process.env.SIKKA_APP_KEY;
-
-    if (!officeId || !secretKey) {
-      return NextResponse.json({
-        isConnected: false,
-        status: 'missing_credentials',
-        error: 'PMS credentials incomplete — office_id or secret_key is missing',
-      });
-    }
 
     if (!appId || !appKey) {
       return NextResponse.json({
         isConnected: false,
         status: 'missing_config',
         error: 'Sikka system credentials not configured',
+      });
+    }
+
+    // If office_id/secret_key are missing but we have a masterCustomerId,
+    // try to fetch them from Sikka authorized_practices (auto-upgrade flow).
+    let officeId = pmsIntegration.officeId;
+    let secretKey = pmsIntegration.secretKey;
+
+    if ((!officeId || !secretKey) && pmsIntegration.masterCustomerId) {
+      try {
+        const practicesRes = await fetch(`${SIKKA_BASE_URL}/authorized_practices`, {
+          method: 'GET',
+          headers: { 'App-Id': appId, 'App-Key': appKey },
+        });
+
+        if (practicesRes.ok) {
+          const practicesData = await practicesRes.json();
+          const practices = practicesData.items || [];
+          const matched = practices.find(
+            (p: any) => String(p.customer_id) === String(pmsIntegration.masterCustomerId),
+          ) || (practices.length === 1 ? practices[0] : null);
+
+          if (matched?.office_id && matched?.secret_key) {
+            officeId = matched.office_id;
+            secretKey = matched.secret_key;
+
+            // Persist the discovered credentials
+            const meta = (pmsIntegration.metadata as any) || {};
+            await prisma.pmsIntegration.update({
+              where: { id: pmsIntegration.id },
+              data: {
+                officeId,
+                secretKey,
+                metadata: {
+                  ...meta,
+                  practiceName: matched.practice_name || meta.practiceName,
+                  actualPmsType: matched.practice_management_system || meta.actualPmsType,
+                  practiceId: matched.practice_id || meta.practiceId,
+                },
+                updatedAt: new Date(),
+              },
+            });
+            console.log('[PMS Check] Auto-discovered credentials for', pmsIntegration.masterCustomerId);
+          }
+        }
+      } catch (err) {
+        console.error('[PMS Check] Failed to fetch authorized_practices for auto-upgrade:', err);
+      }
+    }
+
+    if (!officeId || !secretKey) {
+      return NextResponse.json({
+        isConnected: false,
+        status: 'missing_credentials',
+        error: 'PMS credentials not yet available — Sikka may still be processing the registration. Please try again in a few minutes.',
       });
     }
 

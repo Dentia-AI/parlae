@@ -146,10 +146,10 @@ export function VoiceSelectionForm({ accountId, businessName, initialVoice, voic
         {filteredVoices.map((voice) => (
           <Card
             key={voice.id}
-            className={`cursor-pointer transition-all ${
+            className={`cursor-pointer transition-all duration-200 ${
               selectedVoice?.id === voice.id
                 ? 'border-primary border-2 shadow-md'
-                : 'hover:border-muted-foreground/50'
+                : 'hover:border-primary/30 hover:bg-muted/50 hover:shadow-sm'
             }`}
             onClick={() => handleVoiceSelect(voice)}
           >

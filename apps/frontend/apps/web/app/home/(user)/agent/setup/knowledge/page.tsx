@@ -526,7 +526,7 @@ export default function KnowledgeBasePage() {
   ];
 
   return (
-    <div className="container max-w-4xl mx-auto py-4 h-[calc(100vh-4rem)] flex flex-col">
+    <div className="container max-w-4xl mx-auto py-4 h-full flex flex-col">
       {/* Header */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">
@@ -692,7 +692,7 @@ export default function KnowledgeBasePage() {
                 <button
                   type="button"
                   onClick={() => toggleCategory(cat.id)}
-                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+                  className="w-full px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-muted/50 transition-colors text-left"
                 >
                   <div className="rounded-lg bg-muted p-2">
                     <Icon className="h-4 w-4 text-muted-foreground" />

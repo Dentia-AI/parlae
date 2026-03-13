@@ -125,7 +125,7 @@ export function PhoneMethodSelector({
                   ${
                     isSelected
                       ? 'bg-primary/[0.04] ring-1 ring-primary/50 shadow-sm'
-                      : 'bg-card ring-1 ring-border/40 hover:ring-border/70 hover:shadow-sm'
+                      : 'bg-card ring-1 ring-border/40 hover:ring-primary/30 hover:bg-muted/50 hover:shadow-sm'
                   }`}
                 style={{ animationDelay: `${index * 60}ms` }}
                 onClick={() => handleMethodClick(method.id)}

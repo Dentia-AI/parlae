@@ -233,7 +233,7 @@ export function VoiceSelectionPageClient({ accountId, businessName, accountEmail
   }
 
   return (
-    <div className="container max-w-4xl py-4 h-[calc(100vh-4rem)] flex flex-col">
+    <div className="container max-w-4xl py-4 h-full flex flex-col">
       {/* Header */}
       <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">
