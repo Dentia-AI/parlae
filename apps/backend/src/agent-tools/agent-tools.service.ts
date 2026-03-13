@@ -786,9 +786,28 @@ export class AgentToolsService {
         resolvedPatientId = createResult.patientId;
       }
 
+      let resolvedProviderId = params.providerId;
+      if (!resolvedProviderId) {
+        try {
+          const providers = await sikkaService.getProviders();
+          const active = providers.success ? (providers.data || []).filter((p: any) => p.isActive) : [];
+          if (active.length > 0) {
+            resolvedProviderId = active[0].id;
+            this.logger.log({
+              accountId: phoneRecord.accountId,
+              providerId: resolvedProviderId,
+              providerName: `${active[0].firstName} ${active[0].lastName}`.trim(),
+              msg: '[bookAppointment] Auto-assigned provider — AI did not specify one',
+            });
+          }
+        } catch {
+          this.logger.warn({ msg: '[bookAppointment] Could not fetch providers for auto-assign' });
+        }
+      }
+
       const bookingInput = {
         patientId: resolvedPatientId,
-        providerId: params.providerId,
+        providerId: resolvedProviderId,
         appointmentType: params.appointmentType || params.type || 'General',
         startTime: this.parseBookingStartTime(params),
         duration: params.duration || 30,
@@ -967,15 +986,35 @@ export class AgentToolsService {
       }
 
       if (slots.length > 0) {
+        const tz = await this.getAccountTimezone(phoneRecord.accountId);
+        const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+        const todayLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+
+        let filtered = slots;
+        if (params.date === todayLocal) {
+          filtered = slots.filter(s => s.startTime > nowLocal);
+          if (filtered.length === 0) {
+            filtered = slots;
+          }
+        }
+
+        const deduped = new Map<string, typeof filtered[0]>();
+        for (const slot of filtered) {
+          const key = `${slot.startTime.toISOString()}`;
+          if (!deduped.has(key)) deduped.set(key, slot);
+        }
+        const uniqueSlots = Array.from(deduped.values());
+
         return {
           result: {
             success: true,
-            availableSlots: slots.map((slot) => ({
+            availableSlots: uniqueSlots.map((slot) => ({
               date: params.date,
               time: slot.startTime,
-              provider: slot.providerName,
+              provider: slot.providerName || '',
+              providerId: slot.providerId || '',
             })),
-            message: `We have ${slots.length} available slot(s) on ${params.date}. Which time works best for you?`,
+            message: `We have ${uniqueSlots.length} available slot(s) on ${params.date}. Which time works best for you?`,
           },
         };
       }

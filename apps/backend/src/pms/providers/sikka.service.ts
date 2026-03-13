@@ -781,10 +781,13 @@ export class SikkaPmsService extends BasePmsService {
         length: String(data.duration || 30),
         practice_id: this.practiceId,
       };
+      if (!payload.provider_id) {
+        payload.provider_id = await this.resolveProviderId();
+      }
       if (data.appointmentType) payload.type = data.appointmentType;
       payload.description = data.metadata?.description || data.appointmentType || data.notes || 'Appointment';
       if (data.notes) payload.note = data.notes;
-      if (data.metadata?.operatory) payload.operatory = data.metadata.operatory;
+      payload.operatory = data.metadata?.operatory || await this.resolveOperatory();
 
       const response = await this.client.post('/appointment', payload);
       
@@ -849,9 +852,7 @@ export class SikkaPmsService extends BasePmsService {
       if (updates.duration !== undefined) {
         payload.length = String(updates.duration);
       }
-      if (updates.providerId) {
-        payload.provider_id = updates.providerId;
-      }
+      payload.provider_id = updates.providerId || await this.resolveProviderId();
       if (updates.appointmentType) {
         payload.type = updates.appointmentType;
       }
@@ -1157,6 +1158,7 @@ export class SikkaPmsService extends BasePmsService {
         lastname: data.lastName,
         practice_id: this.practiceId,
       };
+      payload.provider_id = data.metadata?.providerId || await this.resolveProviderId();
       if (data.dateOfBirth) payload.birthdate = data.dateOfBirth;
       if (data.phone) payload.cell = data.phone;
       if (data.email) payload.email = data.email;
@@ -1217,7 +1219,28 @@ export class SikkaPmsService extends BasePmsService {
     updates: PatientUpdateInput
   ): Promise<PmsApiResponse<Patient>> {
     try {
-      const response = await this.client.patch(`/patient/${patientId}`, updates);
+      const payload: Record<string, any> = {
+        practice_id: this.practiceId,
+      };
+      if (updates.firstName) payload.firstname = updates.firstName;
+      if (updates.lastName) payload.lastname = updates.lastName;
+      if (updates.phone) payload.cell = updates.phone;
+      if (updates.email) payload.email = updates.email;
+      if (updates.notes) payload.note = updates.notes;
+      if (updates.address) {
+        if (updates.address.street) payload.address_line1 = updates.address.street;
+        if (updates.address.street2) payload.address_line2 = updates.address.street2;
+        if (updates.address.city) payload.city = updates.address.city;
+        if (updates.address.state) payload.state = updates.address.state;
+        if (updates.address.zip) payload.zipcode = updates.address.zip;
+      }
+      if (updates.metadata) {
+        for (const [key, value] of Object.entries(updates.metadata)) {
+          if (value !== undefined) payload[key] = value;
+        }
+      }
+
+      const response = await this.client.patch(`/patient/${patientId}`, payload);
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -1454,6 +1477,47 @@ export class SikkaPmsService extends BasePmsService {
   }
   
   // ============================================================================
+  // Writeback Helpers — resolve required Sikka params on demand
+  // ============================================================================
+
+  private async resolveProviderId(): Promise<string | undefined> {
+    try {
+      const result = await this.getProviders();
+      const active = result.success ? (result.data || []).filter(p => p.isActive) : [];
+      if (active.length > 0) {
+        this.logger.log({
+          accountId: this.accountId,
+          providerId: active[0].id,
+          msg: '[Sikka] Auto-resolved provider_id',
+        });
+        return active[0].id;
+      }
+    } catch { /* non-fatal */ }
+    return undefined;
+  }
+
+  private async resolveOperatory(): Promise<string | undefined> {
+    try {
+      const response = await this.client.get('/operatories', {
+        params: { practice_id: this.practiceId, is_hidden: 'F', limit: 1 },
+      });
+      const items = response.data?.items || [];
+      if (items.length > 0) {
+        const op = items[0].operatory_id || items[0].id || items[0].operatory;
+        if (op) {
+          this.logger.log({
+            accountId: this.accountId,
+            operatory: op,
+            msg: '[Sikka] Auto-resolved operatory',
+          });
+          return String(op);
+        }
+      }
+    } catch { /* non-fatal — operatory may not be strictly enforced by all PMS */ }
+    return undefined;
+  }
+
+  // ============================================================================
   // Data Mapping Functions (Sikka format → Parlae format)
   // ============================================================================
   
@@ -1612,13 +1676,14 @@ export class SikkaPmsService extends BasePmsService {
   private mapSikkaProvider(sikkaData: any): Provider {
     return {
       id: sikkaData.id || sikkaData.providerId || sikkaData.provider_id,
-      firstName: sikkaData.firstName || sikkaData.first_name,
-      lastName: sikkaData.lastName || sikkaData.last_name,
+      firstName: sikkaData.firstName || sikkaData.first_name || sikkaData.firstname || '',
+      lastName: sikkaData.lastName || sikkaData.last_name || sikkaData.lastname || '',
       title: sikkaData.title || sikkaData.credentials,
-      specialty: sikkaData.specialty,
+      specialty: sikkaData.specialty || sikkaData.specialty_code,
       phone: sikkaData.phone || sikkaData.phoneNumber || sikkaData.phone_number,
       email: sikkaData.email,
-      isActive: sikkaData.isActive !== false && sikkaData.is_active !== false,
+      isActive: sikkaData.isActive !== false && sikkaData.is_active !== false
+        && sikkaData.status !== 'inactive',
       metadata: sikkaData.metadata || {},
     };
   }

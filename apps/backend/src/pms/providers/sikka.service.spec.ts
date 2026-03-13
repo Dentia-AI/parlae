@@ -829,14 +829,16 @@ describe('SikkaPmsService', () => {
 
     it('updates appointment and returns result', async () => {
       mockPut.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
-      mockGet.mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [{ provider_id: 'DOC1', firstname: 'Doc', lastname: 'One', status: 'active' }] } })
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
         .mockResolvedValueOnce({
           data: {
             items: [
               {
                 appointment_sr_no: 'apt-1',
                 patient_id: 'pat-1',
-                provider_id: 'prov-1',
+                provider_id: 'DOC1',
                 date: '2025-03-16',
                 time: '14:00',
                 length: '45',
@@ -858,6 +860,7 @@ describe('SikkaPmsService', () => {
           time: '14:00',
           length: '45',
           practice_id: '1',
+          provider_id: 'DOC1',
         }),
         expect.anything()
       );
@@ -920,7 +923,7 @@ describe('SikkaPmsService', () => {
 
       expect(mockPatch).toHaveBeenCalledWith(
         '/patient/pat-1',
-        { email: 'jane.updated@example.com' },
+        expect.objectContaining({ email: 'jane.updated@example.com', practice_id: '1' }),
         expect.anything()
       );
       expect(result.success).toBe(true);
@@ -1042,6 +1045,60 @@ describe('SikkaPmsService', () => {
         title: 'DDS',
         specialty: 'General',
       });
+    });
+  });
+
+  describe('getProviders — Sikka lowercase field names', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('maps Sikka lowercase firstname/lastname to camelCase', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          items: [
+            {
+              provider_id: 'HYG2',
+              firstname: 'Bruce',
+              lastname: 'Bently',
+              status: 'active',
+              specialty_code: '124Q00000X',
+              practice_id: '1',
+            },
+          ],
+          total_count: '1',
+        },
+      });
+
+      const result = await service.getProviders();
+
+      expect(result.success).toBe(true);
+      expect(result.data![0]).toMatchObject({
+        id: 'HYG2',
+        firstName: 'Bruce',
+        lastName: 'Bently',
+        isActive: true,
+      });
+    });
+
+    it('marks provider inactive when status is "inactive"', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          items: [
+            {
+              provider_id: 'DOC1',
+              firstname: 'Jane',
+              lastname: 'Doe',
+              status: 'inactive',
+            },
+          ],
+          total_count: '1',
+        },
+      });
+
+      const result = await service.getProviders();
+
+      expect(result.data![0].isActive).toBe(false);
     });
   });
 
@@ -1395,6 +1452,328 @@ describe('SikkaPmsService', () => {
       expect(result.data).toHaveLength(1);
       expect(result.meta?.inferred).toBeUndefined();
       expect(result.meta?.noContent).toBeUndefined();
+    });
+
+    it('populates providerName from Sikka lowercase field names in inferred slots', async () => {
+      mockGet
+        .mockResolvedValueOnce({ status: 204, data: '' })
+        .mockResolvedValueOnce({
+          data: { items: [], total_count: '0', pagination: { next: '' } },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            items: [
+              {
+                provider_id: 'HYG2',
+                firstname: 'Bruce',
+                lastname: 'Bently',
+                status: 'active',
+                practice_id: '1',
+              },
+              {
+                provider_id: 'DOC1',
+                firstname: 'Albert',
+                lastname: 'Jones',
+                status: 'active',
+                practice_id: '1',
+              },
+            ],
+            total_count: '2',
+          },
+        });
+
+      // 2025-03-17 is a Monday
+      const result = await service.checkAvailability({ date: '2025-03-17' });
+
+      expect(result.success).toBe(true);
+      expect(result.data!.length).toBeGreaterThan(0);
+      const providerNames = [...new Set(result.data!.map(s => s.providerName))];
+      expect(providerNames).toContain('Bruce Bently');
+      expect(providerNames).toContain('Albert Jones');
+    });
+  });
+
+  describe('bookAppointment — provider_id always included', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('sends provider_id when providerId is given', async () => {
+      mockPost.mockResolvedValue({
+        data: { writeback_id: 'wb-1', status: 'completed' },
+      });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { status: 'completed', result: 'completed' },
+        });
+
+      await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ provider_id: 'DOC1' }),
+        expect.anything(),
+      );
+    });
+
+    it('auto-resolves provider_id from providers API when not given', async () => {
+      mockPost.mockResolvedValue({
+        data: { writeback_id: 'wb-1', status: 'completed' },
+      });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ provider_id: 'HYG1', firstname: 'Tina', lastname: 'Jones', status: 'active' }] },
+        })
+        .mockResolvedValueOnce({
+          data: { items: [] },
+        })
+        .mockResolvedValueOnce({
+          data: { status: 'completed', result: 'completed' },
+        });
+
+      await service.bookAppointment({
+        patientId: '12',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ provider_id: 'HYG1' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('bookAppointment — operatory auto-resolve', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('auto-resolves operatory from /operatories API when not in metadata', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ operatory_id: 'OP-2', name: 'Hygiene Room' }] },
+        })
+        .mockResolvedValueOnce({
+          data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Booked' }] },
+        });
+
+      await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ operatory: 'OP-2' }),
+        expect.anything(),
+      );
+    });
+
+    it('uses metadata.operatory if provided', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Booked' }] },
+        });
+
+      await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+        metadata: { operatory: 'OP-CUSTOM' },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ operatory: 'OP-CUSTOM' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('createPatient — provider_id always included', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('auto-resolves provider_id from providers API', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ provider_id: 'DOC2', firstname: 'Sarah', lastname: 'Lex', status: 'active' }] },
+        })
+        .mockResolvedValueOnce({
+          data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Created' }] },
+        });
+
+      await service.createPatient({
+        firstName: 'New',
+        lastName: 'Patient',
+        phone: '5551234567',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/patient',
+        expect.objectContaining({ provider_id: 'DOC2', practice_id: '1' }),
+        expect.anything(),
+      );
+    });
+
+    it('uses metadata.providerId when provided', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Created' }] },
+        });
+
+      await service.createPatient({
+        firstName: 'New',
+        lastName: 'Patient',
+        metadata: { providerId: 'HYG1' },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/patient',
+        expect.objectContaining({ provider_id: 'HYG1' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('rescheduleAppointment — provider_id always included', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('uses provided providerId', async () => {
+      mockPut.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: { items: [{ appointment_sr_no: 'apt-1', patient_id: 'pat-1', provider_id: 'DOC1', date: '2025-03-16', time: '14:00', length: '45', status: 'scheduled' }] },
+        });
+
+      await service.rescheduleAppointment('apt-1', {
+        startTime: new Date('2025-03-16T14:00:00Z'),
+        duration: 45,
+        providerId: 'DOC1',
+      });
+
+      expect(mockPut).toHaveBeenCalledWith(
+        '/appointments/apt-1',
+        expect.objectContaining({ provider_id: 'DOC1' }),
+        expect.anything(),
+      );
+    });
+
+    it('auto-resolves provider_id when not given', async () => {
+      mockPut.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ provider_id: 'HYG2', firstname: 'Bruce', lastname: 'B', status: 'active' }] },
+        })
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: { items: [{ appointment_sr_no: 'apt-1', patient_id: 'pat-1', provider_id: 'HYG2', date: '2025-03-16', time: '14:00', length: '45', status: 'scheduled' }] },
+        });
+
+      await service.rescheduleAppointment('apt-1', {
+        startTime: new Date('2025-03-16T14:00:00Z'),
+        duration: 45,
+      });
+
+      expect(mockPut).toHaveBeenCalledWith(
+        '/appointments/apt-1',
+        expect.objectContaining({ provider_id: 'HYG2' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('updatePatient — field mapping and practice_id', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('maps camelCase fields to Sikka lowercase format', async () => {
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: { items: [{ patient_id: 'pat-1', firstname: 'Jane', lastname: 'Smith', email: 'jane@test.com' }] },
+        });
+
+      await service.updatePatient('pat-1', {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        phone: '5551234567',
+        email: 'jane@test.com',
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/patient/pat-1',
+        expect.objectContaining({
+          practice_id: '1',
+          firstname: 'Jane',
+          lastname: 'Smith',
+          cell: '5551234567',
+          email: 'jane@test.com',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('always includes practice_id even with minimal updates', async () => {
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: { items: [{ patient_id: 'pat-1', firstname: 'Jane', lastname: 'Doe', email: 'new@test.com' }] },
+        });
+
+      await service.updatePatient('pat-1', { email: 'new@test.com' });
+
+      const payload = mockPatch.mock.calls[0][1];
+      expect(payload.practice_id).toBe('1');
+    });
+
+    it('maps address fields to Sikka format', async () => {
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Updated' }] } })
+        .mockResolvedValueOnce({
+          data: { items: [{ patient_id: 'pat-1', firstname: 'Bob', lastname: 'Z' }] },
+        });
+
+      await service.updatePatient('pat-1', {
+        address: { street: '123 Main St', city: 'Dallas', state: 'TX', zip: '75001' },
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/patient/pat-1',
+        expect.objectContaining({
+          address_line1: '123 Main St',
+          city: 'Dallas',
+          state: 'TX',
+          zipcode: '75001',
+        }),
+        expect.anything(),
+      );
     });
   });
 });
