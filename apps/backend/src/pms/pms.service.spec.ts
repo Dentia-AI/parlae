@@ -425,18 +425,19 @@ describe('PmsService', () => {
 
   describe('handlePurchaseWebhook', () => {
     const basePurchaseDto = {
-      'Email Address': 'clinic@example.com',
-      'Master Customer ID': 'mc-123',
-      'Practice Name': 'Happy Dental',
-      'First Name': 'Jane',
-      'Last Name': 'Doe',
-      'Practice Phone Number': '555-1234',
-      'Practice City': 'Toronto',
-      'Practice State': 'ON',
-      'Practice Country': 'Canada',
-      'Partner Registration ID': 'reg-456',
-      'Purchase Date': '2026-03-08',
-      'Status': 'Active',
+      Source: 'Sikka',
+      EmailAddress: 'clinic@example.com',
+      MasterCustomerID: 'mc-123',
+      PracticeName: 'Happy Dental',
+      FirstName: 'Jane',
+      LastName: 'Doe',
+      PracticePhoneNumber: '555-1234',
+      PracticeCity: 'Toronto',
+      PracticeState: 'ON',
+      PracticeCountry: 'Canada',
+      PartnerRegistrationID: 'reg-456',
+      PurchaseDate: '2026-03-08',
+      Status: 'Active',
     };
 
     it('should match email to account and create ACTIVE integration when authorized_practices available', async () => {
@@ -538,8 +539,9 @@ describe('PmsService', () => {
       prisma.pmsIntegration.update.mockResolvedValue({});
 
       const result = await service.handleCancelWebhook({
-        'Master Customer ID': 'mc-123',
-        'Cancel Date': '2026-03-08',
+        Source: 'Sikka',
+        MasterCustomerID: 'mc-123',
+        CancelDate: '2026-03-08',
       } as any);
 
       expect(result.success).toBe(true);
@@ -567,8 +569,9 @@ describe('PmsService', () => {
       prisma.pmsIntegration.update.mockResolvedValue({});
 
       const result = await service.handleCancelWebhook({
-        'Email Address': 'clinic@example.com',
-        'Cancel Date': '2026-03-08',
+        Source: 'Sikka',
+        EmailAddress: 'clinic@example.com',
+        CancelDate: '2026-03-08',
       } as any);
 
       expect(result.success).toBe(true);
@@ -581,7 +584,8 @@ describe('PmsService', () => {
       prisma.account.findFirst.mockResolvedValue(null);
 
       const result = await service.handleCancelWebhook({
-        'Master Customer ID': 'unknown',
+        Source: 'Sikka',
+        MasterCustomerID: 'unknown',
       } as any);
 
       expect(result.success).toBe(true);

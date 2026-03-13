@@ -509,10 +509,10 @@ export class PmsService {
    * We match the incoming email to an existing Parlae account and auto-connect.
    */
   async handlePurchaseWebhook(dto: SikkaPurchaseWebhookDto): Promise<{ success: boolean; accountId?: string; error?: string }> {
-    const email = dto['Email Address']?.toLowerCase().trim();
-    const masterCustomerId = dto['Master Customer ID'];
-    const practiceName = dto['Practice Name'];
-    const partnerRegId = dto['Partner Registration ID'];
+    const email = dto.EmailAddress?.toLowerCase().trim();
+    const masterCustomerId = dto.MasterCustomerID;
+    const practiceName = dto.PracticeName;
+    const partnerRegId = dto.PartnerRegistrationID;
 
     this.logger.log({
       email,
@@ -584,8 +584,8 @@ export class PmsService {
    * Handle Sikka Registration Handshake webhook for cancellations.
    */
   async handleCancelWebhook(dto: SikkaCancelWebhookDto): Promise<{ success: boolean; error?: string }> {
-    const masterCustomerId = dto['Master Customer ID'];
-    const email = dto['Email Address']?.toLowerCase().trim();
+    const masterCustomerId = dto.MasterCustomerID;
+    const email = dto.EmailAddress?.toLowerCase().trim();
 
     this.logger.log({ masterCustomerId, email, msg: '[PMS] Sikka cancel webhook received' });
 
@@ -734,22 +734,22 @@ export class PmsService {
     } | null,
   ) {
     const isActive = credentials !== null;
-    const practiceName = credentials?.practiceName || dto['Practice Name'] || 'Unknown';
+    const practiceName = credentials?.practiceName || dto.PracticeName || 'Unknown';
     const metadata = {
       practiceName,
       actualPmsType: credentials?.pmsType || 'Unknown',
       practiceId: credentials?.practiceId,
-      practicePhone: dto['Practice Phone Number'],
-      practiceCity: dto['Practice City'],
-      practiceState: dto['Practice State'],
-      practiceCountry: dto['Practice Country'],
-      practiceAddress: dto['Practice Street Address'],
-      contactFirstName: dto['First Name'],
-      contactLastName: dto['Last Name'],
-      contactEmail: dto['Email Address'],
-      partnerRegistrationId: dto['Partner Registration ID'],
-      purchaseDate: dto['Purchase Date'],
-      orderNumber: dto['Order #'],
+      practicePhone: dto.PracticePhoneNumber,
+      practiceCity: dto.PracticeCity,
+      practiceState: dto.PracticeState,
+      practiceCountry: dto.PracticeCountry,
+      practiceAddress: dto.PracticeStreetAddress,
+      contactFirstName: dto.FirstName,
+      contactLastName: dto.LastName,
+      contactEmail: dto.EmailAddress,
+      partnerRegistrationId: dto.PartnerRegistrationID,
+      purchaseDate: dto.PurchaseDate,
+      orderNumber: dto['Order#'],
       registrationSource: 'sikka_purchase_webhook',
     };
 
@@ -765,7 +765,7 @@ export class PmsService {
         config: {},
         features: {} as any,
         metadata,
-        masterCustomerId: dto['Master Customer ID'],
+        masterCustomerId: dto.MasterCustomerID,
         officeId: credentials?.officeId ?? null,
         secretKey: credentials?.secretKey ?? null,
         requestKey: credentials?.requestKey ?? null,
@@ -776,7 +776,7 @@ export class PmsService {
       update: {
         status: isActive ? 'ACTIVE' : 'SETUP_REQUIRED',
         metadata,
-        masterCustomerId: dto['Master Customer ID'],
+        masterCustomerId: dto.MasterCustomerID,
         officeId: credentials?.officeId ?? undefined,
         secretKey: credentials?.secretKey ?? undefined,
         requestKey: credentials?.requestKey ?? undefined,
@@ -796,16 +796,15 @@ export class PmsService {
    * when they sign up or when an admin links them.
    */
   private async storePendingRegistration(dto: SikkaPurchaseWebhookDto) {
-    const email = dto['Email Address']?.toLowerCase().trim();
+    const email = dto.EmailAddress?.toLowerCase().trim();
     this.logger.log({ email, msg: '[PMS] Storing pending Sikka registration' });
 
-    // Store as an unlinked PmsIntegration with no accountId?
-    // PmsIntegration requires accountId, so store in a separate mechanism.
-    // For now, log it — can be enhanced with a pending_registrations table later.
+    // PmsIntegration requires accountId, so we can't persist yet.
+    // Log for manual linking; can be enhanced with a pending_registrations table later.
     this.logger.warn({
       email,
-      masterCustomerId: dto['Master Customer ID'],
-      practiceName: dto['Practice Name'],
+      masterCustomerId: dto.MasterCustomerID,
+      practiceName: dto.PracticeName,
       msg: '[PMS] PENDING REGISTRATION — no account matched. Manual linking required.',
     });
   }

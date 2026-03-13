@@ -37,9 +37,7 @@ describe('PmsController', () => {
     service = module.get(PmsService);
   });
 
-  afterEach(() => {
-    delete process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
-  });
+  afterEach(() => jest.clearAllMocks());
 
   it('should be defined', () => { expect(controller).toBeDefined(); });
 
@@ -169,38 +167,34 @@ describe('PmsController', () => {
 
   describe('handlePurchaseWebhook', () => {
     const purchasePayload = {
-      'Email Address': 'clinic@example.com',
-      'Master Customer ID': 'mc-123',
-      'Practice Name': 'Happy Dental',
-      'First Name': 'Jane',
-      'Last Name': 'Doe',
-      'Status': 'Active',
+      Source: 'Sikka',
+      MasterCustomerID: 'mc-123',
+      EmailAddress: 'clinic@example.com',
+      PracticeName: 'Happy Dental',
+      FirstName: 'Jane',
+      LastName: 'Doe',
+      Status: 'Active',
     };
 
-    it('should accept webhook and call service', async () => {
+    it('should accept webhook with Source=Sikka and call service', async () => {
       const result = await controller.handlePurchaseWebhook(purchasePayload as any);
       expect(result.received).toBe(true);
       expect(result.success).toBe(true);
       expect(service.handlePurchaseWebhook).toHaveBeenCalledWith(purchasePayload);
     });
 
-    it('should reject when callback-key does not match', async () => {
-      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+    it('should reject when Source is missing', async () => {
+      const noSource = { ...purchasePayload, Source: undefined };
       await expect(
-        controller.handlePurchaseWebhook(purchasePayload as any, 'wrong-key'),
+        controller.handlePurchaseWebhook(noSource as any),
       ).rejects.toThrow(HttpException);
     });
 
-    it('should accept when callback-key matches', async () => {
-      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
-      const result = await controller.handlePurchaseWebhook(purchasePayload as any, 'correct-key');
-      expect(result.received).toBe(true);
-    });
-
-    it('should allow when SIKKA_WEBHOOK_CALLBACK_KEY is not set', async () => {
-      delete process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
-      const result = await controller.handlePurchaseWebhook(purchasePayload as any, undefined);
-      expect(result.received).toBe(true);
+    it('should reject when Source is not Sikka', async () => {
+      const wrongSource = { ...purchasePayload, Source: 'Other' };
+      await expect(
+        controller.handlePurchaseWebhook(wrongSource as any),
+      ).rejects.toThrow(HttpException);
     });
 
     it('should still return 200 when service reports failure', async () => {
@@ -213,29 +207,31 @@ describe('PmsController', () => {
 
   describe('handleCancelWebhook', () => {
     const cancelPayload = {
-      'Master Customer ID': 'mc-123',
-      'Email Address': 'clinic@example.com',
-      'Cancel Date': '2026-03-08',
+      Source: 'Sikka',
+      MasterCustomerID: 'mc-123',
+      EmailAddress: 'clinic@example.com',
+      CancelDate: '2026-03-08',
     };
 
-    it('should accept webhook and call service', async () => {
+    it('should accept webhook with Source=Sikka and call service', async () => {
       const result = await controller.handleCancelWebhook(cancelPayload as any);
       expect(result.received).toBe(true);
       expect(result.success).toBe(true);
       expect(service.handleCancelWebhook).toHaveBeenCalledWith(cancelPayload);
     });
 
-    it('should reject when callback-key does not match', async () => {
-      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
+    it('should reject when Source is missing', async () => {
+      const noSource = { ...cancelPayload, Source: undefined };
       await expect(
-        controller.handleCancelWebhook(cancelPayload as any, 'wrong-key'),
+        controller.handleCancelWebhook(noSource as any),
       ).rejects.toThrow(HttpException);
     });
 
-    it('should accept when callback-key matches', async () => {
-      process.env.SIKKA_WEBHOOK_CALLBACK_KEY = 'correct-key';
-      const result = await controller.handleCancelWebhook(cancelPayload as any, 'correct-key');
-      expect(result.received).toBe(true);
+    it('should reject when Source is not Sikka', async () => {
+      const wrongSource = { ...cancelPayload, Source: 'NotSikka' };
+      await expect(
+        controller.handleCancelWebhook(wrongSource as any),
+      ).rejects.toThrow(HttpException);
     });
   });
 });

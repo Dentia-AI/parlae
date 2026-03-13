@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards, Req, Logger, HttpException, HttpStatus, Headers, Query, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Req, Logger, HttpException, HttpStatus, Query, HttpCode } from '@nestjs/common';
 import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
 import { PmsService } from './pms.service';
 import { SetupPmsDto } from './dto/setup-pms.dto';
@@ -137,18 +137,17 @@ export class PmsController {
    *
    * Called by Sikka when a clinic installs our custom SPU and completes
    * marketplace registration. No auth guard — Sikka calls this directly.
-   * We validate using the callback-key header set in the Sikka portal.
+   * Sikka does not send authentication headers; we validate the Source field.
    */
   @Post('purchase')
   @HttpCode(200)
   async handlePurchaseWebhook(
     @Body() dto: SikkaPurchaseWebhookDto,
-    @Headers('callback-key') callbackKey?: string,
   ) {
     this.logger.log('[PMS] Received Sikka purchase webhook');
 
-    if (!this.validateCallbackKey(callbackKey)) {
-      this.logger.warn('[PMS] Purchase webhook rejected — invalid callback-key');
+    if (!this.validateSikkaSource(dto.Source)) {
+      this.logger.warn({ source: dto.Source, msg: '[PMS] Purchase webhook rejected — invalid source' });
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
@@ -171,12 +170,11 @@ export class PmsController {
   @HttpCode(200)
   async handleCancelWebhook(
     @Body() dto: SikkaCancelWebhookDto,
-    @Headers('callback-key') callbackKey?: string,
   ) {
     this.logger.log('[PMS] Received Sikka cancel webhook');
 
-    if (!this.validateCallbackKey(callbackKey)) {
-      this.logger.warn('[PMS] Cancel webhook rejected — invalid callback-key');
+    if (!this.validateSikkaSource(dto.Source)) {
+      this.logger.warn({ source: dto.Source, msg: '[PMS] Cancel webhook rejected — invalid source' });
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
@@ -185,13 +183,7 @@ export class PmsController {
     return { received: true, ...result };
   }
 
-  private validateCallbackKey(key?: string): boolean {
-    const expected = process.env.SIKKA_WEBHOOK_CALLBACK_KEY;
-    if (!expected) {
-      // If no callback key is configured, allow (dev/staging convenience)
-      this.logger.warn('[PMS] SIKKA_WEBHOOK_CALLBACK_KEY not set — skipping validation');
-      return true;
-    }
-    return key === expected;
+  private validateSikkaSource(source?: string): boolean {
+    return source === 'Sikka';
   }
 }

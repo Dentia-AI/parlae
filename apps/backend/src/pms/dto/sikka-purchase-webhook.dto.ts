@@ -6,98 +6,101 @@ import { Transform } from 'class-transformer';
  * Sent to POST /pms/purchase when a practice installs our custom SPU
  * and completes registration on the Sikka Marketplace.
  *
- * Field names come from the Sikka portal "Registration Handshake" config
- * and are sent as JSON (not camelCase).
+ * Sikka sends PascalCase field names (e.g. MasterCustomerID, FirstName).
  */
 export class SikkaPurchaseWebhookDto {
   @IsString()
   @IsOptional()
-  'Package/Source'?: string;
+  Source?: string;
 
   @IsString()
   @IsOptional()
-  'Master Customer ID'?: string;
+  SPUInstallationKey?: string;
 
   @IsString()
   @IsOptional()
-  'UserName'?: string;
+  MasterCustomerID?: string;
 
   @IsString()
   @IsOptional()
-  'Speciality'?: string;
+  UserName?: string;
 
   @IsString()
   @IsOptional()
-  'Postal Code'?: string;
+  Speciality?: string;
 
   @IsString()
   @IsOptional()
-  'Practice Phone Number'?: string;
+  PostalCode?: string;
 
   @IsString()
   @IsOptional()
-  'Practice City'?: string;
+  PracticePhoneNumber?: string;
 
   @IsString()
   @IsOptional()
-  'Practice State'?: string;
+  PracticeCity?: string;
 
   @IsString()
   @IsOptional()
-  'Practice Country'?: string;
+  PracticeState?: string;
 
   @IsString()
   @IsOptional()
-  'First Name'?: string;
+  PracticeCountry?: string;
 
   @IsString()
   @IsOptional()
-  'Last Name'?: string;
+  FirstName?: string;
+
+  @IsString()
+  @IsOptional()
+  LastName?: string;
 
   @IsEmail()
   @IsOptional()
   @Transform(({ value }) => value?.toLowerCase().trim())
-  'Email Address'?: string;
+  EmailAddress?: string;
 
   @IsString()
   @IsOptional()
-  'Order #'?: string;
+  'Order#'?: string;
 
   @IsString()
   @IsOptional()
-  'Partner Service Name'?: string;
+  PartnerServiceName?: string;
 
   @IsString()
   @IsOptional()
-  'Partner Service SKU Name'?: string;
+  PartnerServiceSKUName?: string;
 
   @IsString()
   @IsOptional()
-  'Partner Service SKU Price'?: string;
+  PartnerServiceSKUPrice?: string;
 
   @IsString()
   @IsOptional()
-  'Status'?: string;
+  Status?: string;
 
   @IsString()
   @IsOptional()
-  'Purchase Date'?: string;
+  PurchaseDate?: string;
 
   @IsString()
   @IsOptional()
-  'Cancel Date'?: string;
+  CancelDate?: string;
 
   @IsString()
   @IsOptional()
-  'Partner Registration ID'?: string;
+  PartnerRegistrationID?: string;
 
   @IsString()
   @IsOptional()
-  'Practice Name'?: string;
+  PracticeName?: string;
 
   @IsString()
   @IsOptional()
-  'Practice Street Address'?: string;
+  PracticeStreetAddress?: string;
 }
 
 /**
