@@ -1371,7 +1371,7 @@ describe('SikkaPmsService', () => {
       expect(slot.providerName).toBe('Brian Albert');
     });
 
-    it('does not infer slots on weekends', async () => {
+    it('does not infer slots on weekends and returns closedDay instead of noContent', async () => {
       mockGet
         .mockResolvedValueOnce({ status: 204, data: '' })
         .mockResolvedValueOnce({ data: { items: [], total_count: '0', pagination: { next: '' } } })
@@ -1387,6 +1387,8 @@ describe('SikkaPmsService', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(0);
+      expect(result.meta?.closedDay).toBe(true);
+      expect(result.meta?.noContent).toBeUndefined();
     });
 
     it('excludes booked time blocks from inferred slots', async () => {

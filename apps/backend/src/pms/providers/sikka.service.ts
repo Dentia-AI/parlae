@@ -606,9 +606,13 @@ export class SikkaPmsService extends BasePmsService {
           msg: '[Sikka] checkAvailability returned 204/empty — trying booked-appointment fallback',
         });
 
-        const inferredSlots = await this.inferAvailabilityFromAppointments(query);
-        if (inferredSlots.length > 0) {
-          return this.createSuccessResponse(inferredSlots, { inferred: true });
+        const inferResult = await this.inferAvailabilityFromAppointments(query);
+        if (inferResult.slots.length > 0) {
+          return this.createSuccessResponse(inferResult.slots, { inferred: true });
+        }
+
+        if (inferResult.hadProviders) {
+          return this.createSuccessResponse([] as TimeSlot[], { inferred: true, closedDay: true });
         }
 
         return this.createSuccessResponse([] as TimeSlot[], { httpStatus: 204, noContent: true });
@@ -632,7 +636,7 @@ export class SikkaPmsService extends BasePmsService {
    */
   private async inferAvailabilityFromAppointments(
     query: AppointmentAvailabilityQuery,
-  ): Promise<TimeSlot[]> {
+  ): Promise<{ slots: TimeSlot[]; hadProviders: boolean }> {
     try {
       const startDate = new Date(`${query.date}T00:00:00`);
       const endDateStr = query.endDate || query.date;
@@ -650,7 +654,7 @@ export class SikkaPmsService extends BasePmsService {
 
       if (!appointmentsResult.success) {
         this.logger.warn({ msg: '[Sikka] inferAvailability: failed to fetch appointments' });
-        return [];
+        return { slots: [], hadProviders: false };
       }
 
       let providers = providersResult.success ? (providersResult.data || []) : [];
@@ -668,7 +672,7 @@ export class SikkaPmsService extends BasePmsService {
       }
       if (providers.length === 0) {
         this.logger.warn({ msg: '[Sikka] inferAvailability: no providers found' });
-        return [];
+        return { slots: [], hadProviders: false };
       }
 
       const slotDuration = query.duration || SikkaPmsService.SLOT_DURATION_MINS;
@@ -723,13 +727,13 @@ export class SikkaPmsService extends BasePmsService {
         msg: '[Sikka] inferAvailability complete',
       });
 
-      return allSlots;
+      return { slots: allSlots, hadProviders: true };
     } catch (error) {
       this.logger.warn({
         error: error instanceof Error ? error.message : error,
         msg: '[Sikka] inferAvailability failed (non-fatal)',
       });
-      return [];
+      return { slots: [], hadProviders: false };
     }
   }
 
