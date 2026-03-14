@@ -1596,11 +1596,17 @@ export class SikkaPmsService extends BasePmsService {
       });
       const items = response.data?.items || [];
       if (items.length > 0) {
-        const op = items[0].operatory_id || items[0].id || items[0].operatory;
+        const item = items[0];
+        const op = item.abbreviation || item.operatory || item.operatory_id || item.id;
         if (op) {
           this.logger.log({
             accountId: this.accountId,
             operatory: op,
+            operatoryRaw: {
+              operatory: item.operatory,
+              abbreviation: item.abbreviation,
+              operatory_id: item.operatory_id,
+            },
             msg: '[Sikka] Auto-resolved operatory',
           });
           return String(op);

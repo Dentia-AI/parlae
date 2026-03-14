@@ -1559,11 +1559,11 @@ describe('SikkaPmsService', () => {
       service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
     });
 
-    it('auto-resolves operatory from /operatories API when not in metadata', async () => {
+    it('auto-resolves operatory using abbreviation from /operatories API', async () => {
       mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
       mockGet
         .mockResolvedValueOnce({
-          data: { items: [{ operatory_id: 'OP-2', name: 'Hygiene Room' }] },
+          data: { items: [{ operatory_id: '5', operatory: 'Tina', abbreviation: 'Hyg1', is_hidden: 'F' }] },
         })
         .mockResolvedValueOnce({
           data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Booked' }] },
@@ -1579,7 +1579,32 @@ describe('SikkaPmsService', () => {
 
       expect(mockPost).toHaveBeenCalledWith(
         '/appointment',
-        expect.objectContaining({ operatory: 'OP-2' }),
+        expect.objectContaining({ operatory: 'Hyg1' }),
+        expect.anything(),
+      );
+    });
+
+    it('falls back to operatory name when abbreviation is missing', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ operatory_id: '5', operatory: 'Tina' }] },
+        })
+        .mockResolvedValueOnce({
+          data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Booked' }] },
+        });
+
+      await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/appointment',
+        expect.objectContaining({ operatory: 'Tina' }),
         expect.anything(),
       );
     });
