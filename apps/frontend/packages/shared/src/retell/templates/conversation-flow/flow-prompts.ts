@@ -82,7 +82,7 @@ export const FLOW_APPT_RESCHED_PROMPT = `The caller's upcoming appointments were
 
 Now: {{now}}`;
 
-export const FLOW_APPT_MGMT_DONE_PROMPT = `The action completed successfully. Confirm what was done naturally. If this was a cancellation, offer to book a new appointment. Ask "Is there anything else I can help with?"`;
+export const FLOW_APPT_MGMT_DONE_PROMPT = `The action completed successfully. Confirm ONLY what was just done — do NOT claim other actions were completed unless a tool result confirms them. If the caller mentioned another request (e.g. cancel a different appointment), acknowledge it and say you'll take care of it next. If this was a cancellation, offer to book a new appointment.`;
 
 export const FLOW_APPT_MGMT_FAILED_PROMPT = `The action did not go through. Apologize briefly and explain the issue. Offer to try again or help with something else.`;
 

@@ -734,6 +734,10 @@ export function buildDentalClinicFlow(
     instruction: { type: 'prompt', text: FLOW_APPT_MGMT_DONE_PROMPT },
     edges: [
       promptEdge(
+        'Caller wants to cancel, reschedule, or manage another appointment.',
+        'appt_mgmt',
+      ),
+      promptEdge(
         'Caller wants to book a new appointment.',
         'booking_collect',
       ),
