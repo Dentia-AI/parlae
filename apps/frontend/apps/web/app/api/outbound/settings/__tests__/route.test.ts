@@ -26,6 +26,7 @@ jest.mock('@kit/shared/retell/templates/dental-clinic.retell-template', () => ({
   SHARED_RETELL_AGENT_CONFIG: {},
   RETELL_POST_CALL_ANALYSIS: [],
   ALLOWED_OUTBOUND_COUNTRIES: ['US', 'CA'],
+  DEFAULT_VOICE_ID: 'minimax-Chloe',
 }));
 
 jest.mock('@kit/prisma', () => ({
