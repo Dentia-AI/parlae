@@ -89,4 +89,3 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 function flatten(value: string | undefined): string | undefined {
   return value?.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
 }
-

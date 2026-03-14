@@ -36,6 +36,7 @@ describe('buildDentalClinicFlow', () => {
     expect(fn.tool_id).toBe('getCallerContext');
     expect(fn.wait_for_result).toBe(true);
     expect(fn.speak_during_execution).toBe(false);
+    expect(fn.else_edge.id).toBe('else_fn_get_context');
     expect(fn.else_edge.destination_node_id).toBe('greeting');
   });
 
@@ -310,6 +311,21 @@ describe('buildDentalClinicFlow', () => {
     const tool = flow.tools.find((t) => t.name === 'getAppointments');
     expect(tool.response_variables).toBeDefined();
     expect(tool.response_variables.appts_found).toBe('result.success');
+  });
+
+  // -------------------------------------------------------------------
+  // else_edge IDs (required by Retell API)
+  // -------------------------------------------------------------------
+
+  it('all else_edges have an id field', () => {
+    const flow = buildDentalClinicFlow(BASE_CONFIG);
+    const nodesWithElse = flow.nodes.filter((n) => n.else_edge);
+    expect(nodesWithElse.length).toBeGreaterThan(0);
+    for (const node of nodesWithElse) {
+      expect(node.else_edge.id).toBeDefined();
+      expect(typeof node.else_edge.id).toBe('string');
+      expect(node.else_edge.id.length).toBeGreaterThan(0);
+    }
   });
 
   // -------------------------------------------------------------------

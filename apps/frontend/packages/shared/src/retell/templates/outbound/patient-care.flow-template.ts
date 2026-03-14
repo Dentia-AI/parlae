@@ -22,6 +22,10 @@ import {
   OUTBOUND_REACTIVATION_PROMPT,
   OUTBOUND_SURVEY_PROMPT,
   OUTBOUND_WELCOME_PROMPT,
+  OUTBOUND_BOOKING_COLLECT_PROMPT,
+  OUTBOUND_BOOKING_PICK_SLOT_PROMPT,
+  OUTBOUND_BOOKING_DONE_PROMPT,
+  OUTBOUND_BOOKING_FAILED_PROMPT,
 } from './patient-care-prompts';
 
 import type {
@@ -30,6 +34,7 @@ import type {
   ConversationFlowTool,
   ConversationFlowEdge,
   ConversationFlowConversationNode,
+  ConversationFlowFunctionNode,
   ConversationFlowEquation,
   RetellCustomTool,
 } from '../../retell.service';
@@ -44,7 +49,7 @@ import {
   retellVerifyInsuranceCoverageTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v1.11';
+export const OUTBOUND_PATIENT_CARE_FLOW_VERSION = 'ob-pc-v2.0';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -76,6 +81,17 @@ function toFlowTool(tool: RetellCustomTool): ConversationFlowTool {
     execution_message_description: tool.execution_message_description,
     execution_message_type: tool.execution_message_type,
     timeout_ms: tool.timeout_ms,
+    ...(tool.response_variables ? { response_variables: tool.response_variables } : {}),
+  };
+}
+
+const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
+
+function elseEdge(id: string, destinationNodeId: string) {
+  return {
+    id,
+    destination_node_id: destinationNodeId,
+    transition_condition: { type: 'prompt' as const, prompt: 'Else' },
   };
 }
 
@@ -112,6 +128,79 @@ function equationEdge(
 function eqVar(variable: string, operator: ConversationFlowEquation['operator'], right?: string): ConversationFlowEquation {
   return right !== undefined ? { left: variable, operator, right } : { left: variable, operator };
 }
+
+// ---------------------------------------------------------------------------
+// Node visual layout (positions + readable names for Retell dashboard)
+// ---------------------------------------------------------------------------
+
+const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
+  // Router (top center)
+  router: { x: 0, y: 0 },
+
+  // Call-type nodes (fanned out)
+  recall_node: { x: -600, y: 200 },
+  reminder_node: { x: -400, y: 200 },
+  followup_node: { x: -200, y: 200 },
+  noshow_node: { x: 0, y: 200 },
+  treatment_plan_node: { x: 200, y: 200 },
+  postop_node: { x: 400, y: 200 },
+  reactivation_node: { x: 600, y: 200 },
+  survey_node: { x: 800, y: 200 },
+  welcome_node: { x: 1000, y: 200 },
+
+  // Booking sub-flow (center column)
+  ob_booking_collect: { x: 0, y: 450 },
+  fn_check_avail: { x: 0, y: 600 },
+  ob_booking_pick_slot: { x: 0, y: 750 },
+  fn_book: { x: 0, y: 900 },
+  ob_booking_done: { x: -100, y: 1050 },
+  ob_booking_failed: { x: 100, y: 1050 },
+
+  // End/Transfer (bottom)
+  end_call: { x: 0, y: 1250 },
+  end_dnc: { x: -300, y: 1250 },
+  urgent_transfer: { x: 300, y: 1250 },
+};
+
+const NODE_NAMES: Record<string, string> = {
+  router: 'Router',
+  recall_node: 'Recall',
+  reminder_node: 'Reminder',
+  followup_node: 'Follow-up',
+  noshow_node: 'No-show',
+  treatment_plan_node: 'Treatment Plan',
+  postop_node: 'Post-op',
+  reactivation_node: 'Reactivation',
+  survey_node: 'Survey',
+  welcome_node: 'Welcome',
+  ob_booking_collect: 'Collect Booking Info',
+  fn_check_avail: 'Check Availability',
+  ob_booking_pick_slot: 'Pick Time Slot',
+  fn_book: 'Book Appointment',
+  ob_booking_done: 'Booking Confirmed',
+  ob_booking_failed: 'Booking Failed',
+  end_call: 'End Call',
+  end_dnc: 'Do Not Call',
+  urgent_transfer: 'Urgent Transfer',
+};
+
+function autoLayoutNodes(nodes: ConversationFlowNode[]): void {
+  let fallbackY = 1400;
+  for (const node of nodes) {
+    const pos = NODE_POSITIONS[node.id];
+    if (pos) {
+      node.display_position = { ...pos };
+    } else {
+      node.display_position = { x: 600, y: fallbackY };
+      fallbackY += 150;
+    }
+    node.name = NODE_NAMES[node.id] || node.id;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main builder
+// ---------------------------------------------------------------------------
 
 export function buildPatientCareOutboundFlow(
   config: OutboundFlowBuildConfig,
@@ -153,16 +242,6 @@ export function buildPatientCareOutboundFlow(
     retellVerifyInsuranceCoverageTool,
   ].map(toFlowTool).map(hydrateTool);
 
-  const schedulingToolIds = [
-    'lookupPatient',
-    'checkAvailability',
-    'bookAppointment',
-    'getAppointments',
-    'rescheduleAppointment',
-    'cancelAppointment',
-  ];
-
-  // Generate fresh edges per node so every edge ID is globally unique
   const commonExitEdges = () => [
     promptEdge(
       'Patient asks to stop calling, remove from list, or says "do not call".',
@@ -170,12 +249,12 @@ export function buildPatientCareOutboundFlow(
       'DNC request',
     ),
     promptEdge(
-      'Patient wants to schedule, reschedule, or cancel an appointment and no booking tool has been successfully called yet.',
-      'booking_node',
+      'Patient wants to schedule, reschedule, or cancel an appointment.',
+      'ob_booking_collect',
       'Scheduling request',
     ),
     promptEdge(
-      'Conversation is fully complete: either the patient explicitly said goodbye or declined to book, the patient is unavailable, OR the bookAppointment tool has already returned a success result. Do NOT trigger this if the patient agreed to book but the booking tools have not been called yet.',
+      'Conversation is complete: the patient said goodbye, declined to book, or is unavailable.',
       'end_call',
       'End call',
     ),
@@ -198,7 +277,7 @@ export function buildPatientCareOutboundFlow(
       equationEdge([eqVar('{{call_type}}', '==', 'survey')], 'survey_node', 'Survey'),
       equationEdge([eqVar('{{call_type}}', '==', 'welcome')], 'welcome_node', 'Welcome'),
     ],
-    else_edge: { destination_node_id: 'recall_node' },
+    else_edge: elseEdge('else_router', 'recall_node'),
   };
 
   // ── Call Type Nodes ──────────────────────────────────────────────────
@@ -207,7 +286,6 @@ export function buildPatientCareOutboundFlow(
     id: 'recall_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_RECALL_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: commonExitEdges(),
   };
 
@@ -223,7 +301,6 @@ export function buildPatientCareOutboundFlow(
     id: 'followup_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_FOLLOWUP_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: [
       promptEdge(
         'Patient reports severe pain, excessive bleeding, swelling, or fever.',
@@ -238,7 +315,6 @@ export function buildPatientCareOutboundFlow(
     id: 'noshow_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_NOSHOW_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: commonExitEdges(),
   };
 
@@ -246,7 +322,7 @@ export function buildPatientCareOutboundFlow(
     id: 'treatment_plan_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_TREATMENT_PLAN_PROMPT, cn, cp) },
-    tool_ids: [...schedulingToolIds, 'verifyInsuranceCoverage'],
+    tool_ids: ['verifyInsuranceCoverage'],
     edges: commonExitEdges(),
   };
 
@@ -254,7 +330,6 @@ export function buildPatientCareOutboundFlow(
     id: 'postop_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_POSTOP_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: [
       promptEdge(
         'Patient reports severe pain, excessive bleeding, swelling, or fever.',
@@ -269,7 +344,6 @@ export function buildPatientCareOutboundFlow(
     id: 'reactivation_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_REACTIVATION_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: commonExitEdges(),
   };
 
@@ -292,44 +366,122 @@ export function buildPatientCareOutboundFlow(
     id: 'welcome_node',
     type: 'conversation',
     instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_WELCOME_PROMPT, cn, cp) },
-    tool_ids: schedulingToolIds,
     edges: commonExitEdges(),
   };
 
-  // ── Booking Sub-Node ─────────────────────────────────────────────────
+  // ── Booking Sub-Flow (rigid, sequential) ─────────────────────────────
 
-  const bookingNode: ConversationFlowConversationNode = {
-    id: 'booking_node',
+  const obBookingCollect: ConversationFlowConversationNode = {
+    id: 'ob_booking_collect',
     type: 'conversation',
-    instruction: {
-      type: 'prompt',
-      text: hydratePrompt(
-        `You are helping {{patient_name}} schedule an appointment at {{clinic_name}}.
-
-You MUST follow these steps in order:
-1. If you don't already have the patient record, call lookupPatient.
-2. Call checkAvailability with the date THE PATIENT VERBALLY REQUESTED (e.g. "tomorrow", "next Monday", "March 10th"). IMPORTANT: Do NOT use last_visit_date or any historical date from context — those are past visit records, not appointment requests.
-3. Call bookAppointment with the patientId, the patient's requested date, startTime, and appointmentType.
-4. ONLY after bookAppointment returns a success response, read back the confirmed date and time.
-
-CRITICAL: The appointment does NOT exist until the bookAppointment tool returns success. Saying "I'll book that for you" without calling the tool means NO appointment is created. You MUST invoke the tools.
-
-Be efficient — the patient didn't call you, so respect their time.`,
-        cn,
-        cp,
-      ),
-    },
-    tool_ids: schedulingToolIds,
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_BOOKING_COLLECT_PROMPT, cn, cp) },
     edges: [
       promptEdge(
-        'The bookAppointment, rescheduleAppointment, or cancelAppointment tool has returned a successful result and the patient has been told the confirmed details.',
-        'end_call',
-        'Booking complete',
+        'Patient has stated both the appointment type and preferred date/time.',
+        'fn_check_avail',
+        'Ready to check',
       ),
       promptEdge(
-        'Patient explicitly says they don\'t want to book right now, changed their mind, or wants to call back later.',
+        'Patient changes mind and does not want to book.',
         'end_call',
         'Patient defers',
+      ),
+    ],
+  };
+
+  const fnCheckAvail: ConversationFlowFunctionNode = {
+    id: 'fn_check_avail',
+    type: 'function',
+    tool_id: 'checkAvailability',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract the date (YYYY-MM-DD) and appointmentType from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [eqVar('{{avail_success}}', '==', 'true')],
+        'ob_booking_pick_slot',
+        'Availability found',
+      ),
+    ],
+    else_edge: elseEdge('else_fn_check_avail', 'ob_booking_failed'),
+  };
+
+  const obBookingPickSlot: ConversationFlowConversationNode = {
+    id: 'ob_booking_pick_slot',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_BOOKING_PICK_SLOT_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Patient has selected a specific time slot.',
+        'fn_book',
+        'Slot selected',
+      ),
+      promptEdge(
+        'Patient wants to check a different date.',
+        'ob_booking_collect',
+        'Try another date',
+      ),
+    ],
+  };
+
+  const fnBook: ConversationFlowFunctionNode = {
+    id: 'fn_book',
+    type: 'function',
+    tool_id: 'bookAppointment',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract booking details: date (YYYY-MM-DD), startTime (HH:MM), appointmentType. If {{patient_id}} is set, pass it as patientId. Otherwise extract firstName, lastName, phone from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [eqVar('{{book_success}}', '==', 'true')],
+        'ob_booking_done',
+        'Booking succeeded',
+      ),
+    ],
+    else_edge: elseEdge('else_fn_book', 'ob_booking_failed'),
+  };
+
+  const obBookingDone: ConversationFlowConversationNode = {
+    id: 'ob_booking_done',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_BOOKING_DONE_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Confirmation delivered and patient responds.',
+        'end_call',
+        'Done',
+      ),
+    ],
+  };
+
+  const obBookingFailed: ConversationFlowConversationNode = {
+    id: 'ob_booking_failed',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(OUTBOUND_BOOKING_FAILED_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Patient wants to try a different date or time.',
+        'ob_booking_collect',
+        'Retry',
+      ),
+      promptEdge(
+        'Patient is done trying or wants to call back later.',
+        'end_call',
+        'Give up',
       ),
     ],
   };
@@ -406,11 +558,20 @@ Be efficient — the patient didn't call you, so respect their time.`,
     reactivationNode,
     surveyNode,
     welcomeNode,
-    bookingNode,
+    // Booking sub-flow
+    obBookingCollect,
+    fnCheckAvail,
+    obBookingPickSlot,
+    fnBook,
+    obBookingDone,
+    obBookingFailed,
+    // End/Transfer
     endCallNode,
     endDncNode,
     urgentTransferNode,
   ];
+
+  autoLayoutNodes(nodes);
 
   return {
     start_speaker: 'agent',
@@ -438,9 +599,14 @@ Be efficient — the patient didn't call you, so respect their time.`,
       procedure_name: '',
       procedure_date: '',
       treatment_details: '',
+      avail_success: '',
+      avail_message: '',
+      book_success: '',
+      book_message: '',
     },
     tools: allTools,
     start_node_id: 'router',
     nodes,
+    begin_tag_display_position: { x: 0, y: -100 },
   };
 }

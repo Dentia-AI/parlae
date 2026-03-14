@@ -139,7 +139,11 @@ export interface ConversationFlowNodeBase {
   name?: string;
   display_position?: { x: number; y: number };
   edges?: ConversationFlowEdge[];
-  else_edge?: { destination_node_id: string };
+  else_edge?: {
+    id: string;
+    destination_node_id: string;
+    transition_condition: ConversationFlowTransitionCondition;
+  };
 }
 
 export interface ConversationFlowConversationNode extends ConversationFlowNodeBase {

@@ -168,6 +168,14 @@ function equationEdge(
   };
 }
 
+function elseEdge(id: string, destinationNodeId: string) {
+  return {
+    id,
+    destination_node_id: destinationNodeId,
+    transition_condition: { type: 'prompt' as const, prompt: 'Else' },
+  };
+}
+
 const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
 
 // ---------------------------------------------------------------------------
@@ -327,7 +335,7 @@ export function buildDentalClinicFlow(
     tool_type: 'local',
     wait_for_result: true,
     speak_during_execution: false,
-    else_edge: { destination_node_id: 'greeting' },
+    else_edge: elseEdge('else_fn_get_context', 'greeting'),
   };
 
   const greetingNode: ConversationFlowConversationNode = {
@@ -418,7 +426,7 @@ export function buildDentalClinicFlow(
         'Availability found',
       ),
     ],
-    else_edge: { destination_node_id: 'booking_failed' },
+    else_edge: elseEdge('else_fn_check_avail', 'booking_failed'),
   };
 
   const bookingPickSlot: ConversationFlowConversationNode = {
@@ -479,7 +487,7 @@ export function buildDentalClinicFlow(
         'Booking succeeded',
       ),
     ],
-    else_edge: { destination_node_id: 'booking_failed' },
+    else_edge: elseEdge('else_fn_book', 'booking_failed'),
   };
 
   const bookingDone: ConversationFlowConversationNode = {
@@ -628,7 +636,7 @@ export function buildDentalClinicFlow(
         'appt_resched',
       ),
     ],
-    else_edge: { destination_node_id: 'appt_mgmt' },
+    else_edge: elseEdge('else_fn_get_appts', 'appt_mgmt'),
   };
 
   const apptCancel: ConversationFlowConversationNode = {
@@ -672,7 +680,7 @@ export function buildDentalClinicFlow(
         'Cancellation succeeded',
       ),
     ],
-    else_edge: { destination_node_id: 'appt_mgmt_failed' },
+    else_edge: elseEdge('else_fn_cancel', 'appt_mgmt_failed'),
   };
 
   const apptResched: ConversationFlowConversationNode = {
@@ -716,7 +724,7 @@ export function buildDentalClinicFlow(
         'Reschedule succeeded',
       ),
     ],
-    else_edge: { destination_node_id: 'appt_mgmt_failed' },
+    else_edge: elseEdge('else_fn_reschedule', 'appt_mgmt_failed'),
   };
 
   const apptMgmtDone: ConversationFlowConversationNode = {

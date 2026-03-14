@@ -31,6 +31,10 @@ import {
   OUTBOUND_REACTIVATION_PROMPT,
   OUTBOUND_SURVEY_PROMPT,
   OUTBOUND_WELCOME_PROMPT,
+  OUTBOUND_BOOKING_COLLECT_PROMPT,
+  OUTBOUND_BOOKING_PICK_SLOT_PROMPT,
+  OUTBOUND_BOOKING_DONE_PROMPT,
+  OUTBOUND_BOOKING_FAILED_PROMPT,
 } from './patient-care-prompts';
 
 import {
@@ -38,6 +42,10 @@ import {
   FINANCIAL_ROUTER_PROMPT,
   FINANCIAL_PAYMENT_PROMPT,
   FINANCIAL_BENEFITS_PROMPT,
+  FINANCIAL_BOOKING_COLLECT_PROMPT,
+  FINANCIAL_BOOKING_PICK_SLOT_PROMPT,
+  FINANCIAL_BOOKING_DONE_PROMPT,
+  FINANCIAL_BOOKING_FAILED_PROMPT,
 } from './financial-prompts';
 
 const PLACEHOLDER_CONFIG = {
@@ -63,6 +71,10 @@ function buildPatientCareDbShape() {
     reactivation: OUTBOUND_REACTIVATION_PROMPT,
     survey: OUTBOUND_SURVEY_PROMPT,
     welcome: OUTBOUND_WELCOME_PROMPT,
+    booking_collect: OUTBOUND_BOOKING_COLLECT_PROMPT,
+    booking_pick_slot: OUTBOUND_BOOKING_PICK_SLOT_PROMPT,
+    booking_done: OUTBOUND_BOOKING_DONE_PROMPT,
+    booking_failed: OUTBOUND_BOOKING_FAILED_PROMPT,
   };
 
   const voicemailMessages: Record<string, string> = {
@@ -104,6 +116,10 @@ function buildFinancialDbShape() {
     router: FINANCIAL_ROUTER_PROMPT,
     payment: FINANCIAL_PAYMENT_PROMPT,
     benefits: FINANCIAL_BENEFITS_PROMPT,
+    booking_collect: FINANCIAL_BOOKING_COLLECT_PROMPT,
+    booking_pick_slot: FINANCIAL_BOOKING_PICK_SLOT_PROMPT,
+    booking_done: FINANCIAL_BOOKING_DONE_PROMPT,
+    booking_failed: FINANCIAL_BOOKING_FAILED_PROMPT,
   };
 
   const voicemailMessages: Record<string, string> = {

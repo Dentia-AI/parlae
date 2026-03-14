@@ -13,6 +13,10 @@ import {
   FINANCIAL_ROUTER_PROMPT,
   FINANCIAL_PAYMENT_PROMPT,
   FINANCIAL_BENEFITS_PROMPT,
+  FINANCIAL_BOOKING_COLLECT_PROMPT,
+  FINANCIAL_BOOKING_PICK_SLOT_PROMPT,
+  FINANCIAL_BOOKING_DONE_PROMPT,
+  FINANCIAL_BOOKING_FAILED_PROMPT,
 } from './financial-prompts';
 
 import type {
@@ -21,6 +25,7 @@ import type {
   ConversationFlowTool,
   ConversationFlowEdge,
   ConversationFlowConversationNode,
+  ConversationFlowFunctionNode,
   ConversationFlowEquation,
   RetellCustomTool,
 } from '../../retell.service';
@@ -36,7 +41,7 @@ import {
   retellGetInsuranceTool,
 } from '../../retell-pms-tools.config';
 
-export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v1.7';
+export const OUTBOUND_FINANCIAL_FLOW_VERSION = 'ob-fin-v2.0';
 
 export interface OutboundFlowBuildConfig {
   clinicName: string;
@@ -67,6 +72,17 @@ function toFlowTool(tool: RetellCustomTool): ConversationFlowTool {
     speak_after_execution: tool.speak_after_execution,
     execution_message_description: tool.execution_message_description,
     timeout_ms: tool.timeout_ms,
+    ...(tool.response_variables ? { response_variables: tool.response_variables } : {}),
+  };
+}
+
+const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
+
+function elseEdge(id: string, destinationNodeId: string) {
+  return {
+    id,
+    destination_node_id: destinationNodeId,
+    transition_condition: { type: 'prompt' as const, prompt: 'Else' },
   };
 }
 
@@ -103,6 +119,65 @@ function equationEdge(
 function eqVar(variable: string, operator: ConversationFlowEquation['operator'], right?: string): ConversationFlowEquation {
   return right !== undefined ? { left: variable, operator, right } : { left: variable, operator };
 }
+
+// ---------------------------------------------------------------------------
+// Node visual layout (positions + readable names for Retell dashboard)
+// ---------------------------------------------------------------------------
+
+const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
+  // Router (top center)
+  router: { x: 0, y: 0 },
+
+  // Call-type nodes
+  payment_node: { x: -200, y: 200 },
+  benefits_node: { x: 200, y: 200 },
+
+  // Booking sub-flow (center column)
+  ob_booking_collect: { x: 0, y: 450 },
+  fn_check_avail: { x: 0, y: 600 },
+  ob_booking_pick_slot: { x: 0, y: 750 },
+  fn_book: { x: 0, y: 900 },
+  ob_booking_done: { x: -100, y: 1050 },
+  ob_booking_failed: { x: 100, y: 1050 },
+
+  // End/Transfer (bottom)
+  end_call: { x: 0, y: 1250 },
+  end_dnc: { x: -300, y: 1250 },
+  transfer_billing: { x: 300, y: 1250 },
+};
+
+const NODE_NAMES: Record<string, string> = {
+  router: 'Router',
+  payment_node: 'Payment',
+  benefits_node: 'Benefits',
+  ob_booking_collect: 'Collect Booking Info',
+  fn_check_avail: 'Check Availability',
+  ob_booking_pick_slot: 'Pick Time Slot',
+  fn_book: 'Book Appointment',
+  ob_booking_done: 'Booking Confirmed',
+  ob_booking_failed: 'Booking Failed',
+  end_call: 'End Call',
+  end_dnc: 'Do Not Call',
+  transfer_billing: 'Transfer to Billing',
+};
+
+function autoLayoutNodes(nodes: ConversationFlowNode[]): void {
+  let fallbackY = 1400;
+  for (const node of nodes) {
+    const pos = NODE_POSITIONS[node.id];
+    if (pos) {
+      node.display_position = { ...pos };
+    } else {
+      node.display_position = { x: 600, y: fallbackY };
+      fallbackY += 150;
+    }
+    node.name = NODE_NAMES[node.id] || node.id;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main builder
+// ---------------------------------------------------------------------------
 
 export function buildFinancialOutboundFlow(
   config: OutboundFlowBuildConfig,
@@ -158,6 +233,13 @@ export function buildFinancialOutboundFlow(
     ),
   ];
 
+  const bookingExitEdge = () =>
+    promptEdge(
+      'Patient wants to schedule an appointment.',
+      'ob_booking_collect',
+      'Schedule appointment',
+    );
+
   // ── Router Node ──────────────────────────────────────────────────────
 
   const routerNode: ConversationFlowConversationNode = {
@@ -168,7 +250,7 @@ export function buildFinancialOutboundFlow(
       equationEdge([eqVar('{{call_type}}', '==', 'payment')], 'payment_node', 'Payment'),
       equationEdge([eqVar('{{call_type}}', '==', 'benefits')], 'benefits_node', 'Benefits'),
     ],
-    else_edge: { destination_node_id: 'payment_node' },
+    else_edge: elseEdge('else_router', 'payment_node'),
   };
 
   // ── Payment Node ─────────────────────────────────────────────────────
@@ -198,39 +280,126 @@ export function buildFinancialOutboundFlow(
       'lookupPatient',
       'getInsurance',
       'verifyInsuranceCoverage',
-      'checkAvailability',
-      'bookAppointment',
     ],
     edges: [
-      promptEdge(
-        'Patient wants to schedule an appointment to use their benefits.',
-        'booking_node',
-        'Schedule appointment',
-      ),
+      bookingExitEdge(),
       ...commonExitEdges(),
     ],
   };
 
-  // ── Booking Sub-Node ─────────────────────────────────────────────────
+  // ── Booking Sub-Flow (rigid, sequential) ─────────────────────────────
 
-  const bookingNode: ConversationFlowConversationNode = {
-    id: 'booking_node',
+  const obBookingCollect: ConversationFlowConversationNode = {
+    id: 'ob_booking_collect',
     type: 'conversation',
-    instruction: {
-      type: 'prompt',
-      text: hydratePrompt(
-        `Help {{patient_name}} schedule an appointment at {{clinic_name}} to use their insurance benefits before they expire.
-Use scheduling tools to find available times and book. Be efficient.`,
-        cn,
-        cp,
-      ),
-    },
-    tool_ids: ['lookupPatient', 'checkAvailability', 'bookAppointment', 'getAppointments'],
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(FINANCIAL_BOOKING_COLLECT_PROMPT, cn, cp) },
     edges: [
       promptEdge(
-        'Appointment booked successfully or patient defers.',
+        'Patient has stated both the appointment type and preferred date/time.',
+        'fn_check_avail',
+        'Ready to check',
+      ),
+      promptEdge(
+        'Patient changes mind and does not want to book.',
         'end_call',
-        'Complete',
+        'Patient defers',
+      ),
+    ],
+  };
+
+  const fnCheckAvail: ConversationFlowFunctionNode = {
+    id: 'fn_check_avail',
+    type: 'function',
+    tool_id: 'checkAvailability',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract the date (YYYY-MM-DD) and appointmentType from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [eqVar('{{avail_success}}', '==', 'true')],
+        'ob_booking_pick_slot',
+        'Availability found',
+      ),
+    ],
+    else_edge: elseEdge('else_fn_check_avail', 'ob_booking_failed'),
+  };
+
+  const obBookingPickSlot: ConversationFlowConversationNode = {
+    id: 'ob_booking_pick_slot',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(FINANCIAL_BOOKING_PICK_SLOT_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Patient has selected a specific time slot.',
+        'fn_book',
+        'Slot selected',
+      ),
+      promptEdge(
+        'Patient wants to check a different date.',
+        'ob_booking_collect',
+        'Try another date',
+      ),
+    ],
+  };
+
+  const fnBook: ConversationFlowFunctionNode = {
+    id: 'fn_book',
+    type: 'function',
+    tool_id: 'bookAppointment',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract booking details: date (YYYY-MM-DD), startTime (HH:MM), appointmentType. If {{patient_id}} is set, pass it as patientId. Otherwise extract firstName, lastName, phone from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [eqVar('{{book_success}}', '==', 'true')],
+        'ob_booking_done',
+        'Booking succeeded',
+      ),
+    ],
+    else_edge: elseEdge('else_fn_book', 'ob_booking_failed'),
+  };
+
+  const obBookingDone: ConversationFlowConversationNode = {
+    id: 'ob_booking_done',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(FINANCIAL_BOOKING_DONE_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Confirmation delivered and patient responds.',
+        'end_call',
+        'Done',
+      ),
+    ],
+  };
+
+  const obBookingFailed: ConversationFlowConversationNode = {
+    id: 'ob_booking_failed',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(FINANCIAL_BOOKING_FAILED_PROMPT, cn, cp) },
+    edges: [
+      promptEdge(
+        'Patient wants to try a different date or time.',
+        'ob_booking_collect',
+        'Retry',
+      ),
+      promptEdge(
+        'Patient is done trying or wants to call back later.',
+        'end_call',
+        'Give up',
       ),
     ],
   };
@@ -300,11 +469,20 @@ Use scheduling tools to find available times and book. Be efficient.`,
     routerNode,
     paymentNode,
     benefitsNode,
-    bookingNode,
+    // Booking sub-flow
+    obBookingCollect,
+    fnCheckAvail,
+    obBookingPickSlot,
+    fnBook,
+    obBookingDone,
+    obBookingFailed,
+    // End/Transfer
     endCallNode,
     endDncNode,
     transferBillingNode,
   ];
+
+  autoLayoutNodes(nodes);
 
   return {
     start_speaker: 'agent',
@@ -329,9 +507,14 @@ Use scheduling tools to find available times and book. Be efficient.`,
       insurance_provider: '',
       benefits_expiry_date: '',
       remaining_benefits: '',
+      avail_success: '',
+      avail_message: '',
+      book_success: '',
+      book_message: '',
     },
     tools: allTools,
     start_node_id: 'router',
     nodes,
+    begin_tag_display_position: { x: 0, y: -100 },
   };
 }
