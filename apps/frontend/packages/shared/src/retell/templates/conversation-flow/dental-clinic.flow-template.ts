@@ -54,7 +54,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.14';
+export const CONVERSATION_FLOW_VERSION = 'cf-v1.15';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -266,11 +266,11 @@ export function buildDentalClinicFlow(
         'faq',
       ),
       promptEdge(
-        'Booking is complete and caller has no other needs, or caller needs general help.',
+        'The bookAppointment tool has been called and returned a successful result, AND the caller has no further needs or needs general help.',
         'receptionist',
       ),
       promptEdge(
-        'Caller says goodbye or conversation is complete after booking.',
+        'The bookAppointment tool has been called and returned a successful result, AND the caller says goodbye or the conversation is complete.',
         'end_call',
       ),
     ],

@@ -793,7 +793,20 @@ export class SikkaPmsService extends BasePmsService {
       if (data.notes) payload.note = data.notes;
       payload.operatory = data.metadata?.operatory || await this.resolveOperatory();
 
+      this.logger.log({
+        accountId: this.accountId,
+        writebackPayload: payload,
+        msg: '[Sikka] bookAppointment submitting writeback',
+      });
+
       const response = await this.client.post('/appointment', payload);
+
+      this.logger.log({
+        accountId: this.accountId,
+        httpStatus: response.status,
+        responseData: JSON.stringify(response.data).slice(0, 1000),
+        msg: '[Sikka] bookAppointment writeback response',
+      });
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -801,19 +814,23 @@ export class SikkaPmsService extends BasePmsService {
         return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
       }
       
-      this.logger.log({ writebackId, msg: '[Sikka] Appointment booking submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment booking submitted — polling writeback status' });
       
-      // TODO: Save to PmsWriteback table
-      
-      // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
+
+      this.logger.log({
+        accountId: this.accountId,
+        writebackId,
+        writebackResult: status.result,
+        writebackError: status.errorMessage,
+        msg: '[Sikka] bookAppointment writeback final status',
+      });
       
       if (status.result === 'completed') {
-        // Return the appointment data
         const appointment: Appointment = {
           id: writebackId,
           patientId: data.patientId,
-          patientName: '', // Will be populated from PMS
+          patientName: '',
           providerId: data.providerId || '',
           providerName: '',
           appointmentType: data.appointmentType || 'General',
@@ -864,22 +881,40 @@ export class SikkaPmsService extends BasePmsService {
         payload.description = updates.notes;
       }
       
+      this.logger.log({
+        accountId: this.accountId,
+        appointmentId,
+        writebackPayload: payload,
+        msg: '[Sikka] rescheduleAppointment submitting writeback',
+      });
+
       const response = await this.client.put(`/appointments/${appointmentId}`, payload);
+
+      this.logger.log({
+        accountId: this.accountId,
+        httpStatus: response.status,
+        responseData: JSON.stringify(response.data).slice(0, 1000),
+        msg: '[Sikka] rescheduleAppointment writeback response',
+      });
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
         return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
       }
       
-      this.logger.log({ writebackId, msg: '[Sikka] Appointment update submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment update submitted — polling writeback status' });
       
-      // TODO: Save to PmsWriteback table
-      
-      // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
+
+      this.logger.log({
+        accountId: this.accountId,
+        writebackId,
+        writebackResult: status.result,
+        writebackError: status.errorMessage,
+        msg: '[Sikka] rescheduleAppointment writeback final status',
+      });
       
       if (status.result === 'completed') {
-        // Fetch updated appointment
         return await this.getAppointment(appointmentId);
       } else {
         return this.createErrorResponse(
@@ -912,19 +947,38 @@ export class SikkaPmsService extends BasePmsService {
         payload.cancellation_note = input.reason;
       }
 
+      this.logger.log({
+        accountId: this.accountId,
+        appointmentId,
+        writebackPayload: payload,
+        msg: '[Sikka] cancelAppointment submitting writeback',
+      });
+
       const response = await this.client.patch(`/appointments/${appointmentId}`, payload);
+
+      this.logger.log({
+        accountId: this.accountId,
+        httpStatus: response.status,
+        responseData: JSON.stringify(response.data).slice(0, 1000),
+        msg: '[Sikka] cancelAppointment writeback response',
+      });
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
         return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
       }
       
-      this.logger.log({ writebackId, msg: '[Sikka] Appointment cancellation submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Appointment cancellation submitted — polling writeback status' });
       
-      // TODO: Save to PmsWriteback table
-      
-      // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
+
+      this.logger.log({
+        accountId: this.accountId,
+        writebackId,
+        writebackResult: status.result,
+        writebackError: status.errorMessage,
+        msg: '[Sikka] cancelAppointment writeback final status',
+      });
       
       if (status.result === 'completed') {
         return this.createSuccessResponse({
@@ -1175,7 +1229,20 @@ export class SikkaPmsService extends BasePmsService {
         if (data.address.country) payload.country = data.address.country;
       }
 
+      this.logger.log({
+        accountId: this.accountId,
+        writebackPayload: { ...payload, birthdate: payload.birthdate ? '***' : undefined },
+        msg: '[Sikka] createPatient submitting writeback',
+      });
+
       const response = await this.client.post('/patient', payload);
+
+      this.logger.log({
+        accountId: this.accountId,
+        httpStatus: response.status,
+        responseData: JSON.stringify(response.data).slice(0, 1000),
+        msg: '[Sikka] createPatient writeback response',
+      });
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -1183,15 +1250,19 @@ export class SikkaPmsService extends BasePmsService {
         return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
       }
       
-      this.logger.log({ writebackId, msg: '[Sikka] Patient creation submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Patient creation submitted — polling writeback status' });
       
-      // TODO: Save to PmsWriteback table
-      
-      // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
+
+      this.logger.log({
+        accountId: this.accountId,
+        writebackId,
+        writebackResult: status.result,
+        writebackError: status.errorMessage,
+        msg: '[Sikka] createPatient writeback final status',
+      });
       
       if (status.result === 'completed') {
-        // Return the patient data (ID will be in writeback response)
         const patient: Patient = {
           id: writebackId,
           firstName: data.firstName,
@@ -1244,7 +1315,21 @@ export class SikkaPmsService extends BasePmsService {
         }
       }
 
+      this.logger.log({
+        accountId: this.accountId,
+        patientId,
+        writebackPayload: payload,
+        msg: '[Sikka] updatePatient submitting writeback',
+      });
+
       const response = await this.client.patch(`/patient/${patientId}`, payload);
+
+      this.logger.log({
+        accountId: this.accountId,
+        httpStatus: response.status,
+        responseData: JSON.stringify(response.data).slice(0, 1000),
+        msg: '[Sikka] updatePatient writeback response',
+      });
       
       const writebackId = this.extractWritebackId(response.data);
       if (!writebackId) {
@@ -1252,15 +1337,19 @@ export class SikkaPmsService extends BasePmsService {
         return this.createErrorResponse('WRITEBACK_PARSE_ERROR', 'Could not extract writeback ID from Sikka response', new Error('Missing writeback ID'));
       }
       
-      this.logger.log({ writebackId, msg: '[Sikka] Patient update submitted' });
+      this.logger.log({ writebackId, msg: '[Sikka] Patient update submitted — polling writeback status' });
       
-      // TODO: Save to PmsWriteback table
-      
-      // Poll for completion
       const status = await this.pollWritebackStatus(writebackId);
+
+      this.logger.log({
+        accountId: this.accountId,
+        writebackId,
+        writebackResult: status.result,
+        writebackError: status.errorMessage,
+        msg: '[Sikka] updatePatient writeback final status',
+      });
       
       if (status.result === 'completed') {
-        // Fetch updated patient
         return await this.getPatient(patientId);
       } else {
         return this.createErrorResponse(
