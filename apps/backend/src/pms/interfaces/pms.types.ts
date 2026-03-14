@@ -56,6 +56,14 @@ export interface PmsConfig {
   autoConfirmAppointments?: boolean;
   sendSmsReminders?: boolean;
   sendEmailReminders?: boolean;
+  /** Maps AI free-text type names → PMS-specific type IDs (e.g. { "cleaning": "1", "exam": "2" }) */
+  appointmentTypeMap?: Record<string, string>;
+  /** Preferred operatory name for this clinic */
+  defaultOperatory?: string;
+  /** Override for the PMS-specific cancel status value (e.g. "broken", "Cancelled") */
+  cancelStatusOverride?: string;
+  /** Appointment types that require an initial consultation (e.g. ["filling", "root-canal"]) */
+  requireConsultationForTypes?: string[];
   [key: string]: any;
 }
 

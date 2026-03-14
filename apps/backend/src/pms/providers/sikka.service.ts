@@ -60,6 +60,14 @@ export class SikkaPmsService extends BasePmsService {
   private secretKey?: string;
   private practiceId?: string;
   private practiceIdVerified = false;
+
+  private pmsMetadataCache: {
+    appointmentTypes?: any[];
+    operatories?: any[];
+    statuses?: any[];
+    fetchedAt?: number;
+  } = {};
+  private static readonly METADATA_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
   
   constructor(
     accountId: string,
@@ -803,8 +811,10 @@ export class SikkaPmsService extends BasePmsService {
       if (!payload.provider_id) {
         payload.provider_id = await this.resolveProviderId();
       }
-      if (data.metadata?.appointmentTypeId) {
-        payload.type = data.metadata.appointmentTypeId;
+      const resolvedType = data.metadata?.appointmentTypeId
+        || await this.resolveAppointmentType(data.appointmentType);
+      if (resolvedType) {
+        payload.type = resolvedType;
       }
       payload.description = data.metadata?.description || data.appointmentType || data.notes || 'Appointment';
       if (data.notes) payload.note = data.notes;
@@ -1610,76 +1620,193 @@ export class SikkaPmsService extends BasePmsService {
   private static readonly CANCEL_STATUS_KEYWORDS = ['broken', 'cancelled', 'canceled', 'deleted', 'no_show', 'no show', 'missed'];
 
   /**
-   * Dynamically resolves the PMS-specific status value that represents a
-   * cancellation by querying practice_variables.  Falls back to common
-   * terms if the API call fails or returns nothing useful.
+   * Lazily fetches and caches PMS metadata (appointment types, operatories,
+   * cancel statuses) from Sikka APIs.  Cached for ~1 hour.
    */
-  private async resolveCancelStatus(): Promise<string> {
-    try {
-      const response = await this.client.get('/practice_variables', {
-        params: {
-          cust_id: this.practiceId,
-          practice_id: this.practiceId,
-          service_name: 'Appointment Status',
-        },
-      });
-      const items: any[] = response.data?.items || [];
-      const statusItems = items.filter(
-        (i: any) => i.service_item === 'appointment status',
-      );
-      for (const keyword of SikkaPmsService.CANCEL_STATUS_KEYWORDS) {
-        const match = statusItems.find(
-          (i: any) => (i.value || '').toLowerCase() === keyword,
-        );
-        if (match) {
-          this.logger.log({
-            accountId: this.accountId,
-            cancelStatus: match.value,
-            msg: '[Sikka] Resolved cancel status from practice_variables',
-          });
-          return match.value;
-        }
-      }
-      if (statusItems.length > 0) {
+  private async ensurePmsMetadata(): Promise<void> {
+    const now = Date.now();
+    if (
+      this.pmsMetadataCache.fetchedAt &&
+      now - this.pmsMetadataCache.fetchedAt < SikkaPmsService.METADATA_CACHE_TTL_MS
+    ) {
+      return;
+    }
+
+    const [typesResult, operatoriesResult, statusesResult] = await Promise.allSettled([
+      this.client.get('/practice_variables', {
+        params: { cust_id: this.practiceId, practice_id: this.practiceId, service_name: 'Appointment Type' },
+      }),
+      this.client.get('/operatories', {
+        params: { cust_id: this.practiceId, practice_id: this.practiceId, is_hidden: 'F', limit: 50 },
+      }),
+      this.client.get('/practice_variables', {
+        params: { cust_id: this.practiceId, practice_id: this.practiceId, service_name: 'Appointment Status' },
+      }),
+    ]);
+
+    this.pmsMetadataCache.appointmentTypes =
+      typesResult.status === 'fulfilled' ? (typesResult.value.data?.items || []) : [];
+    this.pmsMetadataCache.operatories =
+      operatoriesResult.status === 'fulfilled' ? (operatoriesResult.value.data?.items || []) : [];
+    this.pmsMetadataCache.statuses =
+      statusesResult.status === 'fulfilled' ? (statusesResult.value.data?.items || []) : [];
+    this.pmsMetadataCache.fetchedAt = now;
+
+    this.logger.log({
+      accountId: this.accountId,
+      appointmentTypesCount: this.pmsMetadataCache.appointmentTypes.length,
+      operatoriesCount: this.pmsMetadataCache.operatories.length,
+      statusesCount: this.pmsMetadataCache.statuses.length,
+      msg: '[Sikka] PMS metadata cache populated',
+    });
+  }
+
+  /**
+   * Resolves an AI free-text appointment type to a PMS-specific type ID.
+   * 1. Check config.appointmentTypeMap for an explicit override.
+   * 2. Fuzzy-match against cached PMS appointment types.
+   * 3. Return undefined if no match (omitting the field is safe for most PMSes).
+   */
+  async resolveAppointmentType(freeTextType?: string): Promise<string | undefined> {
+    if (!freeTextType) return undefined;
+
+    const normalised = freeTextType.toLowerCase().trim();
+
+    if (this.config.appointmentTypeMap) {
+      const mapped = this.config.appointmentTypeMap[normalised]
+        ?? this.config.appointmentTypeMap[freeTextType];
+      if (mapped) {
         this.logger.log({
           accountId: this.accountId,
-          availableStatuses: statusItems.map((i: any) => i.value),
-          msg: '[Sikka] No recognised cancel keyword — returning first non-scheduled status',
+          freeTextType,
+          resolvedType: mapped,
+          msg: '[Sikka] Resolved appointment type from config map',
         });
+        return mapped;
       }
+    }
+
+    try {
+      await this.ensurePmsMetadata();
+    } catch {
+      this.logger.warn({ accountId: this.accountId, msg: '[Sikka] Failed to load metadata for type resolution' });
+      return undefined;
+    }
+
+    const typeItems = (this.pmsMetadataCache.appointmentTypes || []).filter(
+      (i: any) => i.service_item === 'appointment type',
+    );
+    if (typeItems.length === 0) return undefined;
+
+    const exactMatch = typeItems.find(
+      (i: any) => (i.value || '').toLowerCase() === normalised,
+    );
+    if (exactMatch) {
+      this.logger.log({
+        accountId: this.accountId,
+        freeTextType,
+        resolvedType: exactMatch.value,
+        msg: '[Sikka] Resolved appointment type via exact match',
+      });
+      return exactMatch.value;
+    }
+
+    const partialMatch = typeItems.find(
+      (i: any) =>
+        (i.value || '').toLowerCase().includes(normalised) ||
+        normalised.includes((i.value || '').toLowerCase()),
+    );
+    if (partialMatch) {
+      this.logger.log({
+        accountId: this.accountId,
+        freeTextType,
+        resolvedType: partialMatch.value,
+        msg: '[Sikka] Resolved appointment type via partial match',
+      });
+      return partialMatch.value;
+    }
+
+    this.logger.log({
+      accountId: this.accountId,
+      freeTextType,
+      availableTypes: typeItems.map((i: any) => i.value).slice(0, 20),
+      msg: '[Sikka] No matching appointment type found — omitting',
+    });
+    return undefined;
+  }
+
+  /**
+   * Dynamically resolves the PMS-specific status value that represents a
+   * cancellation.  Uses the metadata cache, with config override support.
+   */
+  private async resolveCancelStatus(): Promise<string> {
+    if (this.config.cancelStatusOverride) {
+      return this.config.cancelStatusOverride;
+    }
+
+    try {
+      await this.ensurePmsMetadata();
     } catch {
       this.logger.warn({
         accountId: this.accountId,
-        msg: '[Sikka] practice_variables lookup failed — using fallback cancel status',
+        msg: '[Sikka] Metadata cache failed — using fallback cancel status',
+      });
+      return 'broken';
+    }
+
+    const statusItems = (this.pmsMetadataCache.statuses || []).filter(
+      (i: any) => i.service_item === 'appointment status',
+    );
+    for (const keyword of SikkaPmsService.CANCEL_STATUS_KEYWORDS) {
+      const match = statusItems.find(
+        (i: any) => (i.value || '').toLowerCase() === keyword,
+      );
+      if (match) {
+        this.logger.log({
+          accountId: this.accountId,
+          cancelStatus: match.value,
+          msg: '[Sikka] Resolved cancel status from cached metadata',
+        });
+        return match.value;
+      }
+    }
+    if (statusItems.length > 0) {
+      this.logger.log({
+        accountId: this.accountId,
+        availableStatuses: statusItems.map((i: any) => i.value),
+        msg: '[Sikka] No recognised cancel keyword — returning first non-scheduled status',
       });
     }
     return 'broken';
   }
 
   private async resolveOperatory(): Promise<string | undefined> {
+    if (this.config.defaultOperatory) {
+      return this.config.defaultOperatory;
+    }
+
     try {
-      const response = await this.client.get('/operatories', {
-        params: { cust_id: this.practiceId, practice_id: this.practiceId, is_hidden: 'F', limit: 1 },
-      });
-      const items = response.data?.items || [];
-      if (items.length > 0) {
-        const item = items[0];
-        const op = item.operatory || item.operatory_id || item.id;
-        if (op) {
-          this.logger.log({
-            accountId: this.accountId,
-            operatory: op,
-            operatoryRaw: {
-              operatory: item.operatory,
-              abbreviation: item.abbreviation,
-              operatory_id: item.operatory_id,
-            },
-            msg: '[Sikka] Auto-resolved operatory',
-          });
-          return String(op);
-        }
+      await this.ensurePmsMetadata();
+    } catch { /* non-fatal */ }
+
+    const items = this.pmsMetadataCache.operatories || [];
+    if (items.length > 0) {
+      const item = items[0];
+      const op = item.operatory || item.operatory_id || item.id;
+      if (op) {
+        this.logger.log({
+          accountId: this.accountId,
+          operatory: op,
+          operatoryRaw: {
+            operatory: item.operatory,
+            abbreviation: item.abbreviation,
+            operatory_id: item.operatory_id,
+          },
+          msg: '[Sikka] Auto-resolved operatory from cached metadata',
+        });
+        return String(op);
       }
-    } catch { /* non-fatal — operatory may not be strictly enforced by all PMS */ }
+    }
     return undefined;
   }
 

@@ -58,6 +58,12 @@ You MUST call **bookAppointment** before confirming any appointment. NEVER say "
 - Time change after booking → **rescheduleAppointment**. Before booking → just re-check availability.
 - NEVER read out {{customer_phone}} or any raw template variable to the caller.
 
+## CONSULTATION RULE
+For NON-hygienist appointment types (filling, root-canal, extraction, crown, cosmetic, etc.),
+inform the caller that an initial consultation appointment is typically required first.
+Ask if they already have one scheduled or if they'd like to book a consultation instead.
+Hygienist appointments (cleaning, exam, checkup, prophylaxis) do NOT require a prior consultation.
+
 TYPES: cleaning, exam, filling, root-canal, extraction, consultation, cosmetic, emergency.`;
 
 // ---------------------------------------------------------------------------

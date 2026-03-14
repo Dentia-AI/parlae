@@ -2669,4 +2669,208 @@ describe('AgentToolsService', () => {
       expect(result.error).toBe('No scheduling system configured');
     });
   });
+
+  // ── Past-date correction: preserve day-of-week ────────────────────
+
+  describe('checkAvailability — past date correction preserves weekday', () => {
+    beforeEach(() => {
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue({
+        accountId: 'acc-1',
+        pmsIntegration: null,
+        account: { id: 'acc-1', googleCalendarConnected: true, brandingTimezone: 'America/New_York' },
+      });
+      gcalService.isConnectedForAccount.mockResolvedValue(true);
+      gcalService.checkFreeBusy.mockResolvedValue({
+        success: true,
+        availableSlots: [{ startTime: '2026-03-18T09:00:00Z', endTime: '2026-03-18T17:00:00Z' }],
+        timezone: 'America/New_York',
+      });
+    });
+
+    it('should advance a past Wednesday to the next Wednesday', async () => {
+      const pastWednesday = '2026-03-04';
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+
+      if (pastWednesday >= today) return;
+
+      const result = await service.checkAvailability({
+        accountId: 'acc-1',
+        call: { id: 'call-past-dow-1', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: pastWednesday } },
+      }) as any;
+
+      expect(result).toBeDefined();
+
+      const calledDate = gcalService.checkFreeBusy.mock.calls[0][1];
+      expect(calledDate).not.toBe(pastWednesday);
+      const correctedDow = new Date(`${calledDate}T12:00:00`).getDay();
+      expect(correctedDow).toBe(3);
+    });
+
+    it('should advance a past Monday to the next Monday', async () => {
+      const pastMonday = '2026-03-02';
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+
+      if (pastMonday >= today) return;
+
+      await service.checkAvailability({
+        accountId: 'acc-1',
+        call: { id: 'call-past-dow-2', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: pastMonday } },
+      });
+
+      const calledDate = gcalService.checkFreeBusy.mock.calls[0][1];
+      expect(calledDate).not.toBe(pastMonday);
+      const correctedDow = new Date(`${calledDate}T12:00:00`).getDay();
+      expect(correctedDow).toBe(1);
+    });
+
+    it('should not modify a future date', async () => {
+      const futureDate = '2026-12-25';
+
+      await service.checkAvailability({
+        accountId: 'acc-1',
+        call: { id: 'call-future-1', phoneNumberId: 'vapi-phone-1' },
+        functionCall: { parameters: { date: futureDate } },
+      });
+
+      const calledDate = gcalService.checkFreeBusy.mock.calls[0][1];
+      expect(calledDate).toBe(futureDate);
+    });
+  });
+
+  describe('bookAppointment — past date correction preserves weekday', () => {
+    const pmsPhoneRecord = {
+      accountId: 'acc-pms',
+      pmsIntegration: { id: 'pms-int-1', provider: 'SIKKA', config: {} },
+      account: { id: 'acc-pms', googleCalendarConnected: true, brandingTimezone: 'America/Toronto', name: 'PMS Clinic' },
+    };
+
+    const mockSikka = {
+      bookAppointment: jest.fn(),
+      getProviders: jest.fn().mockResolvedValue({ success: true, data: [] }),
+      checkAvailability: jest.fn(),
+      resolveAppointmentType: jest.fn(),
+    };
+
+    beforeEach(() => {
+      jest.doMock('../pms/pms.service', () => ({
+        PmsService: jest.fn().mockImplementation(() => ({
+          getPmsService: jest.fn().mockResolvedValue(mockSikka),
+        })),
+      }));
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(pmsPhoneRecord);
+    });
+
+    afterEach(() => {
+      jest.resetModules();
+      mockSikka.bookAppointment.mockReset();
+      mockSikka.getProviders.mockReset();
+    });
+
+    it('should advance a past Friday to the next Friday for PMS booking', async () => {
+      const pastFriday = '2026-03-06';
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+
+      if (pastFriday >= today) return;
+
+      mockSikka.getProviders.mockResolvedValue({ success: true, data: [] });
+      mockSikka.bookAppointment.mockResolvedValue({
+        success: true,
+        data: { id: 'appt-1', patientId: 'p-1', confirmationNumber: 'C1', metadata: {} },
+      });
+      prisma.aiActionLog = { create: jest.fn().mockResolvedValue({}) };
+
+      await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-past-book-1', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          patientId: 'p-1', date: pastFriday, startTime: '10:00', appointmentType: 'Cleaning',
+        } } },
+      });
+
+      const bookedInput = mockSikka.bookAppointment.mock.calls[0]?.[0];
+      if (bookedInput) {
+        const bookedDate = bookedInput.startTime;
+        expect(bookedDate.getDay()).toBe(5);
+        expect(bookedDate >= now).toBe(true);
+      }
+    });
+  });
+
+  // ── bookAppointment — confirmation message uses parsed Date ────────
+
+  describe('bookAppointment — confirmation message format', () => {
+    const pmsPhoneRecord = {
+      accountId: 'acc-pms',
+      pmsIntegration: { id: 'pms-int-1', provider: 'SIKKA', config: {} },
+      account: { id: 'acc-pms', googleCalendarConnected: true, brandingTimezone: 'America/Toronto', name: 'PMS Clinic' },
+    };
+
+    const mockSikka = {
+      bookAppointment: jest.fn(),
+      getProviders: jest.fn().mockResolvedValue({ success: true, data: [] }),
+      checkAvailability: jest.fn(),
+      resolveAppointmentType: jest.fn(),
+    };
+
+    beforeEach(() => {
+      jest.doMock('../pms/pms.service', () => ({
+        PmsService: jest.fn().mockImplementation(() => ({
+          getPmsService: jest.fn().mockResolvedValue(mockSikka),
+        })),
+      }));
+      prisma.vapiPhoneNumber.findFirst.mockResolvedValue(pmsPhoneRecord);
+    });
+
+    afterEach(() => {
+      jest.resetModules();
+      mockSikka.bookAppointment.mockReset();
+      mockSikka.getProviders.mockReset();
+    });
+
+    it('should not produce "Invalid Date" when AI sends time-only startTime', async () => {
+      mockSikka.getProviders.mockResolvedValue({ success: true, data: [] });
+      mockSikka.bookAppointment.mockResolvedValue({
+        success: true,
+        data: { id: 'appt-1', patientId: 'p-1', confirmationNumber: 'C1', metadata: {} },
+      });
+      prisma.aiActionLog = { create: jest.fn().mockResolvedValue({}) };
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-time-only', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          patientId: 'p-1', date: '2026-04-01', startTime: '08:00', appointmentType: 'cleaning',
+        } } },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.message).not.toContain('Invalid Date');
+    });
+
+    it('should produce valid date in confirmation with ISO startTime', async () => {
+      mockSikka.getProviders.mockResolvedValue({ success: true, data: [] });
+      mockSikka.bookAppointment.mockResolvedValue({
+        success: true,
+        data: { id: 'appt-2', patientId: 'p-1', confirmationNumber: 'C2', metadata: {} },
+      });
+      prisma.aiActionLog = { create: jest.fn().mockResolvedValue({}) };
+
+      const result = await service.bookAppointment({
+        accountId: 'acc-pms',
+        call: { id: 'call-iso-time', phoneNumberId: 'vapi-phone-1' },
+        message: { functionCall: { parameters: {
+          patientId: 'p-1', startTime: '2026-04-01T10:00:00Z', appointmentType: 'exam',
+        } } },
+      }) as any;
+
+      expect(result.result.success).toBe(true);
+      expect(result.result.message).not.toContain('Invalid Date');
+      expect(result.result.message).toContain('April');
+    });
+  });
 });

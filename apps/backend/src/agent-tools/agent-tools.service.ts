@@ -750,12 +750,19 @@ export class AgentToolsService {
       const { call, message } = payload;
       const params = message?.functionCall?.parameters || payload?.functionCall?.parameters || {};
 
-      // Correct past dates before any processing
       if (params.date) {
         const today = new Date().toISOString().slice(0, 10);
         if (params.date < today) {
-          this.logger.warn({ requestedDate: params.date, correctedTo: today, msg: '[bookAppointment] AI sent past date — correcting to today' });
-          params.date = today;
+          const requestedDow = new Date(`${params.date}T12:00:00`).getDay();
+          const todayDate = new Date(`${today}T12:00:00`);
+          const todayDow = todayDate.getDay();
+          let daysAhead = (requestedDow - todayDow + 7) % 7;
+          if (daysAhead === 0) daysAhead = 7;
+          const corrected = new Date(todayDate);
+          corrected.setDate(corrected.getDate() + daysAhead);
+          const correctedStr = corrected.toISOString().slice(0, 10);
+          this.logger.warn({ requestedDate: params.date, correctedTo: correctedStr, preservedDayOfWeek: requestedDow, msg: '[bookAppointment] AI sent past date — advancing to next occurrence of same weekday' });
+          params.date = correctedStr;
         }
       }
 
@@ -883,11 +890,12 @@ export class AgentToolsService {
         writebackId: appointment.metadata?.writebackId as string | undefined,
       }).catch(() => {});
 
+      const bookedTime = bookingInput.startTime;
       const confirmMsg = wasCreated
-        ? `I've registered you and booked your ${params.appointmentType || 'appointment'} for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}.`
-        : `Appointment booked for ${formatDateForSpeech(params.startTime || params.datetime)} at ${formatTimeForSpeech(params.startTime || params.datetime)}.`;
+        ? `I've registered you and booked your ${params.appointmentType || 'appointment'} for ${formatDateForSpeech(bookedTime)} at ${formatTimeForSpeech(bookedTime)}.`
+        : `Appointment booked for ${formatDateForSpeech(bookedTime)} at ${formatTimeForSpeech(bookedTime)}.`;
 
-      const agentResponse = {
+      const agentResponse: Record<string, any> = {
         result: {
           success: true,
           appointmentId: appointment.id,
@@ -896,6 +904,23 @@ export class AgentToolsService {
           message: `${confirmMsg} Do NOT say "with [patient name]" — the caller already knows who they are.`,
         },
       };
+
+      const HYGIENIST_TYPES = ['cleaning', 'exam', 'checkup', 'hygiene', 'prophylaxis'];
+      const appointmentType = params.appointmentType || params.type || '';
+      if (
+        appointmentType &&
+        !HYGIENIST_TYPES.includes(appointmentType.toLowerCase())
+      ) {
+        const pmsConfig = (phoneRecord.pmsIntegration?.config as Record<string, any>) || {};
+        const consultTypes = pmsConfig.requireConsultationForTypes;
+        const needsConsultation = consultTypes
+          ? consultTypes.some((t: string) => t.toLowerCase() === appointmentType.toLowerCase())
+          : true;
+        if (needsConsultation) {
+          agentResponse.result.consultationNote =
+            'Note: This type of appointment typically requires an initial consultation. Please confirm with the patient whether they already have one scheduled.';
+        }
+      }
 
       this.logger.verbose({
         accountId: phoneRecord.accountId,
@@ -934,12 +959,19 @@ export class AgentToolsService {
 
       const callerPhone = call?.customer?.number || 'unknown';
 
-      // Safety net: if the AI hallucinated a date in the past, replace with today
       const today = new Date().toISOString().slice(0, 10);
       let requestedDate = params.date || today;
       if (requestedDate < today) {
-        this.logger.warn({ requestedDate, correctedTo: today, msg: '[checkAvailability] AI sent past date — correcting to today' });
-        requestedDate = today;
+        const requestedDow = new Date(`${requestedDate}T12:00:00`).getDay();
+        const todayDate = new Date(`${today}T12:00:00`);
+        const todayDow = todayDate.getDay();
+        let daysAhead = (requestedDow - todayDow + 7) % 7;
+        if (daysAhead === 0) daysAhead = 7;
+        const corrected = new Date(todayDate);
+        corrected.setDate(corrected.getDate() + daysAhead);
+        const correctedStr = corrected.toISOString().slice(0, 10);
+        this.logger.warn({ requestedDate, correctedTo: correctedStr, preservedDayOfWeek: requestedDow, msg: '[checkAvailability] AI sent past date — advancing to next occurrence of same weekday' });
+        requestedDate = correctedStr;
       }
       params.date = requestedDate;
 

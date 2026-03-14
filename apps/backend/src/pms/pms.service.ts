@@ -14,6 +14,7 @@ export interface SikkaPracticeCredentials {
   practiceName?: string;
   practiceId?: string;
   pmsType?: string;
+  pmsConfig?: Record<string, any>;
 }
 
 interface CacheEntry {
@@ -61,6 +62,7 @@ export class PmsService {
         refreshKey: true,
         tokenExpiry: true,
         metadata: true,
+        config: true,
       },
     });
 
@@ -78,6 +80,7 @@ export class PmsService {
       practiceName: meta.practiceName,
       practiceId: meta.practiceId,
       pmsType: meta.actualPmsType,
+      pmsConfig: (integration.config as Record<string, any>) || undefined,
     };
 
     this.credentialsCache.set(accountId, {
@@ -389,7 +392,9 @@ export class PmsService {
       practiceId: practiceCredentials.practiceId,
     };
     
+    const dbConfig = practiceCredentials.pmsConfig || {};
     const instance = new SikkaPmsService(accountId, fullCredentials, {
+      ...dbConfig,
       ...config,
       onPracticeIdCorrected: async (correctedPracticeId: string) => {
         try {

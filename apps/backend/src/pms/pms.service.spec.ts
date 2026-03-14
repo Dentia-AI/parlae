@@ -285,6 +285,40 @@ describe('PmsService', () => {
 
       expect(prisma.pmsIntegration.findFirst).toHaveBeenCalledTimes(2);
     });
+
+    it('should load integration.config from DB and merge with caller config', async () => {
+      const { SikkaPmsService } = require('./providers/sikka.service');
+      const dbConfig = { appointmentTypeMap: { cleaning: 'type-1' }, defaultOperatory: 'Op-A' };
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        ...mockIntegrationWithCreds,
+        config: dbConfig,
+      });
+      service.invalidateCredentialsCache('acc-1');
+
+      await service.getPmsService('acc-1', 'SIKKA', { timezone: 'US/Central' });
+
+      const constructorCall = SikkaPmsService.mock.calls[SikkaPmsService.mock.calls.length - 1];
+      const passedConfig = constructorCall[2];
+      expect(passedConfig.appointmentTypeMap).toEqual({ cleaning: 'type-1' });
+      expect(passedConfig.defaultOperatory).toBe('Op-A');
+      expect(passedConfig.timezone).toBe('US/Central');
+    });
+
+    it('should let caller config override DB config', async () => {
+      const { SikkaPmsService } = require('./providers/sikka.service');
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        ...mockIntegrationWithCreds,
+        config: { defaultOperatory: 'Op-DB', timezone: 'US/Eastern' },
+      });
+      service.invalidateCredentialsCache('acc-1');
+
+      await service.getPmsService('acc-1', 'SIKKA', { defaultOperatory: 'Op-Caller' });
+
+      const constructorCall = SikkaPmsService.mock.calls[SikkaPmsService.mock.calls.length - 1];
+      const passedConfig = constructorCall[2];
+      expect(passedConfig.defaultOperatory).toBe('Op-Caller');
+      expect(passedConfig.timezone).toBe('US/Eastern');
+    });
   });
 
   describe('getSikkaSystemCredentials (via setupPmsIntegration)', () => {
