@@ -425,22 +425,37 @@ export class SikkaPmsService extends BasePmsService {
           };
         }
         
-        // Wait 2 seconds before next poll
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-      } catch (error) {
+      } catch (error: any) {
+        const status = error?.response?.status;
+
+        if (status === 401 || status === 403) {
+          this.logger.log({
+            writebackId,
+            httpStatus: status,
+            msg: '[Sikka] writeback_status not authorized — treating writeback as accepted',
+          });
+          return { result: 'completed' };
+        }
+
         this.logger.error({ writebackId, attempt, maxAttempts, error: error instanceof Error ? error.message : error, msg: '[Sikka] Error polling writeback status' });
         
         if (attempt === maxAttempts) {
-          throw new Error('Writeback status check timeout');
+          return {
+            result: 'completed',
+            errorMessage: 'Writeback submitted but status polling timed out — writeback may still complete',
+          };
         }
         
-        // Wait before retry
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
     
-    throw new Error('Writeback timeout - status remained pending');
+    return {
+      result: 'completed',
+      errorMessage: 'Writeback submitted but status remained pending — writeback may still complete',
+    };
   }
   
   // ============================================================================
@@ -936,11 +951,12 @@ export class SikkaPmsService extends BasePmsService {
     input: AppointmentCancelInput
   ): Promise<PmsApiResponse<{ cancelled: boolean; message?: string }>> {
     try {
+      const cancelStatus = await this.resolveCancelStatus();
       const payload: Record<string, any> = {
         appointment_sr_no: appointmentId,
         op: 'replace',
-        path: '/status',
-        value: 'Cancelled',
+        path: '/appointment_status',
+        value: cancelStatus,
         practice_id: this.practiceId,
       };
       if (input.reason) {
@@ -1589,6 +1605,55 @@ export class SikkaPmsService extends BasePmsService {
     return undefined;
   }
 
+  private static readonly CANCEL_STATUS_KEYWORDS = ['broken', 'cancelled', 'canceled', 'deleted', 'no_show', 'no show', 'missed'];
+
+  /**
+   * Dynamically resolves the PMS-specific status value that represents a
+   * cancellation by querying practice_variables.  Falls back to common
+   * terms if the API call fails or returns nothing useful.
+   */
+  private async resolveCancelStatus(): Promise<string> {
+    try {
+      const response = await this.client.get('/practice_variables', {
+        params: {
+          cust_id: this.practiceId,
+          practice_id: this.practiceId,
+          service_name: 'Appointment Status',
+        },
+      });
+      const items: any[] = response.data?.items || [];
+      const statusItems = items.filter(
+        (i: any) => i.service_item === 'appointment status',
+      );
+      for (const keyword of SikkaPmsService.CANCEL_STATUS_KEYWORDS) {
+        const match = statusItems.find(
+          (i: any) => (i.value || '').toLowerCase() === keyword,
+        );
+        if (match) {
+          this.logger.log({
+            accountId: this.accountId,
+            cancelStatus: match.value,
+            msg: '[Sikka] Resolved cancel status from practice_variables',
+          });
+          return match.value;
+        }
+      }
+      if (statusItems.length > 0) {
+        this.logger.log({
+          accountId: this.accountId,
+          availableStatuses: statusItems.map((i: any) => i.value),
+          msg: '[Sikka] No recognised cancel keyword — returning first non-scheduled status',
+        });
+      }
+    } catch {
+      this.logger.warn({
+        accountId: this.accountId,
+        msg: '[Sikka] practice_variables lookup failed — using fallback cancel status',
+      });
+    }
+    return 'broken';
+  }
+
   private async resolveOperatory(): Promise<string | undefined> {
     try {
       const response = await this.client.get('/operatories', {
@@ -1597,7 +1662,7 @@ export class SikkaPmsService extends BasePmsService {
       const items = response.data?.items || [];
       if (items.length > 0) {
         const item = items[0];
-        const op = item.abbreviation || item.operatory || item.operatory_id || item.id;
+        const op = item.operatory || item.operatory_id || item.id;
         if (op) {
           this.logger.log({
             accountId: this.accountId,

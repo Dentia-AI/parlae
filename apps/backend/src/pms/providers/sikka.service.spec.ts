@@ -873,26 +873,71 @@ describe('SikkaPmsService', () => {
       service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
     });
 
-    it('cancels appointment with reason', async () => {
+    it('resolves cancel status from practice_variables (OpenDental: broken)', async () => {
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [
+            { service_item: 'appointment status', value: 'scheduled' },
+            { service_item: 'appointment status', value: 'complete' },
+            { service_item: 'appointment status', value: 'broken' },
+            { service_item: 'appointment confirmed status', value: 'Confirmed' },
+          ] },
+        })
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'broken' }] } });
       mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
-      mockGet.mockResolvedValue({ data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Cancelled' }] } });
 
       const result = await service.cancelAppointment('apt-1', { reason: 'Patient request' });
 
       expect(mockPatch).toHaveBeenCalledWith(
         '/appointments/apt-1',
         expect.objectContaining({
-          appointment_sr_no: 'apt-1',
           op: 'replace',
-          path: '/status',
-          value: 'Cancelled',
-          practice_id: '1',
+          path: '/appointment_status',
+          value: 'broken',
           cancellation_note: 'Patient request',
         }),
         expect.anything()
       );
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({ cancelled: true });
+    });
+
+    it('resolves cancel status for PMS that uses "Cancelled" instead of "broken"', async () => {
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [
+            { service_item: 'appointment status', value: 'Scheduled' },
+            { service_item: 'appointment status', value: 'Complete' },
+            { service_item: 'appointment status', value: 'Cancelled' },
+          ] },
+        })
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False' }] } });
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-2' } });
+
+      const result = await service.cancelAppointment('apt-2', { reason: 'No longer needed' });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/appointments/apt-2',
+        expect.objectContaining({ value: 'Cancelled' }),
+        expect.anything()
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('falls back to "broken" when practice_variables API fails', async () => {
+      mockGet
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({ data: { items: [{ is_completed: 'True', has_error: 'False' }] } });
+      mockPatch.mockResolvedValue({ data: { long_message: 'Id:wb-3' } });
+
+      const result = await service.cancelAppointment('apt-3', { reason: 'Fallback test' });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/appointments/apt-3',
+        expect.objectContaining({ value: 'broken' }),
+        expect.anything()
+      );
+      expect(result.success).toBe(true);
     });
   });
 
@@ -1559,7 +1604,7 @@ describe('SikkaPmsService', () => {
       service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
     });
 
-    it('auto-resolves operatory using abbreviation from /operatories API', async () => {
+    it('auto-resolves operatory using the operatory name from /operatories API', async () => {
       mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
       mockGet
         .mockResolvedValueOnce({
@@ -1579,16 +1624,16 @@ describe('SikkaPmsService', () => {
 
       expect(mockPost).toHaveBeenCalledWith(
         '/appointment',
-        expect.objectContaining({ operatory: 'Hyg1' }),
+        expect.objectContaining({ operatory: 'Tina' }),
         expect.anything(),
       );
     });
 
-    it('falls back to operatory name when abbreviation is missing', async () => {
+    it('falls back to operatory_id when operatory name is missing', async () => {
       mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
       mockGet
         .mockResolvedValueOnce({
-          data: { items: [{ operatory_id: '5', operatory: 'Tina' }] },
+          data: { items: [{ operatory_id: '5', abbreviation: 'Hyg1' }] },
         })
         .mockResolvedValueOnce({
           data: { items: [{ is_completed: 'True', has_error: 'False', result: 'Booked' }] },
@@ -1604,7 +1649,7 @@ describe('SikkaPmsService', () => {
 
       expect(mockPost).toHaveBeenCalledWith(
         '/appointment',
-        expect.objectContaining({ operatory: 'Tina' }),
+        expect.objectContaining({ operatory: '5' }),
         expect.anything(),
       );
     });
@@ -1630,6 +1675,54 @@ describe('SikkaPmsService', () => {
         expect.objectContaining({ operatory: 'OP-CUSTOM' }),
         expect.anything(),
       );
+    });
+  });
+
+  describe('pollWritebackStatus — 401 handling', () => {
+    beforeEach(() => {
+      service = new SikkaPmsService('acc-1', VALID_CREDENTIALS, {});
+    });
+
+    it('treats writeback as accepted when writeback_status returns 401', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ operatory_id: '5', operatory: 'Tina', abbreviation: 'Hyg1' }] },
+        })
+        .mockRejectedValueOnce({
+          response: { status: 401, data: { error_code: 'API2004', long_message: 'You are not authorized' } },
+        });
+
+      const result = await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('treats writeback as accepted when writeback_status returns 403', async () => {
+      mockPost.mockResolvedValue({ data: { long_message: 'Id:wb-1' } });
+      mockGet
+        .mockResolvedValueOnce({
+          data: { items: [{ operatory_id: '5', operatory: 'Tina' }] },
+        })
+        .mockRejectedValueOnce({
+          response: { status: 403, data: {} },
+        });
+
+      const result = await service.bookAppointment({
+        patientId: '12',
+        providerId: 'DOC1',
+        startTime: new Date('2026-03-13T15:00:00'),
+        duration: 30,
+        appointmentType: 'cleaning',
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 
