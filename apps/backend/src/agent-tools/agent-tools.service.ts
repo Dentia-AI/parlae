@@ -420,8 +420,8 @@ export class AgentToolsService {
         if (!isNaN(apptDate.getTime())) {
           context.nextBooking = {
             date: apptDate.toISOString(),
-            dayOfWeek: apptDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }),
-            time: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz }),
+            dayOfWeek: apptDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
+            time: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' }),
             type: appt.appointmentType,
           };
         }
@@ -2103,9 +2103,15 @@ export class AgentToolsService {
       }
 
       const updates: any = {};
-      if (params.startTime) updates.startTime = new Date(params.startTime);
+      if (params.newDate && params.newStartTime) {
+        updates.startTime = new Date(`${params.newDate}T${params.newStartTime}:00Z`);
+      } else if (params.startTime) {
+        const st = params.startTime;
+        updates.startTime = st instanceof Date ? st : new Date(st);
+      }
       if (params.duration) updates.duration = params.duration;
       if (params.providerId) updates.providerId = params.providerId;
+      if (params.reason) updates.notes = params.reason;
       if (params.notes) updates.notes = params.notes;
 
       const result = await sikkaService.service.rescheduleAppointment(

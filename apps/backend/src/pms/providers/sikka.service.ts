@@ -1847,7 +1847,9 @@ export class SikkaPmsService extends BasePmsService {
   private parseSikkaDateTime(date?: string, time?: string): Date | null {
     if (!date) return null;
     const datePart = date.includes('T') ? date.split('T')[0] : date;
-    const dateStr = time ? `${datePart}T${time}` : date;
+    const raw = time ? `${datePart}T${time}` : date;
+    const alreadyTz = raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw);
+    const dateStr = alreadyTz ? raw : (raw.includes('T') ? `${raw}Z` : `${raw}T00:00:00Z`);
     const parsed = new Date(dateStr);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
