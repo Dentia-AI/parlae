@@ -47,7 +47,7 @@ function getArg(name: string): string | undefined {
 const ACCOUNT_ID = getArg('account-id') ?? 'test-account';
 const CLINIC_NAME = getArg('clinic-name') ?? 'Test Dental Clinic';
 const CLINIC_PHONE = getArg('clinic-phone');
-const VOICE_ID = getArg('voice-id') ?? 'retell-Chloe';
+const VOICE_ID = getArg('voice-id') ?? 'minimax-Chloe';
 const TEARDOWN = args.includes('--teardown');
 const TEARDOWN_AGENT_ID = getArg('agent-id');
 const TEARDOWN_FLOW_ID = getArg('flow-id');
@@ -127,7 +127,7 @@ function resolveVoiceModel(voiceId: string): string | undefined {
     case 'cartesia':
       return 'sonic-3';
     case 'minimax':
-      return 'speech-02-turbo';
+      return undefined;
     default:
       return undefined;
   }

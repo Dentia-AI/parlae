@@ -66,7 +66,7 @@ function resolveVoiceModel(voiceId: string): string | undefined {
     case 'cartesia':
       return 'sonic-3';
     case 'minimax':
-      return 'speech-02-turbo';
+      return undefined;
     // retell-*, inworld-*, and others: let Retell pick the provider default
     default:
       return undefined;
@@ -223,7 +223,7 @@ export async function deployRetellSquad(
     accountId: config.accountId,
   };
 
-  const defaultVoiceId = config.voiceId || 'retell-Chloe';
+  const defaultVoiceId = config.voiceId || 'minimax-Chloe';
   const defaultVoiceModel = config.voiceModel ?? resolveVoiceModel(defaultVoiceId);
   const webhookUrl = config.webhookBaseUrl || config.webhookUrl;
 

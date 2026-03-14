@@ -8,7 +8,7 @@ import {
   teardownRetellSquad,
   type RetellDeploymentConfig,
 } from '@kit/shared/retell/templates/retell-template-utils';
-import { RETELL_AGENT_ROLES, type RetellAgentRole } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { RETELL_AGENT_ROLES, DEFAULT_VOICE_ID, type RetellAgentRole } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service';
 
 /**
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret: process.env.RETELL_WEBHOOK_SECRET || process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET || '',
       accountId,
-      voiceId: voiceId || 'retell-Chloe',
+      voiceId: voiceId || DEFAULT_VOICE_ID,
       webhookBaseUrl: backendUrl,
       knowledgeBaseIds: knowledgeBaseIds.length > 0 ? knowledgeBaseIds : undefined,
     };

@@ -7,6 +7,7 @@ import {
   deployRetellConversationFlow,
   teardownRetellConversationFlow,
 } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
+import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 
 /**
  * POST /api/admin/retell-deploy-flow
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret,
       accountId,
-      voiceId: voiceId || 'retell-Chloe',
+      voiceId: voiceId || DEFAULT_VOICE_ID,
       knowledgeBaseIds,
     });
 

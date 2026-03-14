@@ -9,6 +9,7 @@ import {
   SHARED_RETELL_AGENT_CONFIG,
   RETELL_POST_CALL_ANALYSIS,
   ALLOWED_OUTBOUND_COUNTRIES,
+  DEFAULT_VOICE_ID,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { buildPatientCareOutboundFlow } from '@kit/shared/retell/templates/outbound/patient-care.flow-template';
 import { buildFinancialOutboundFlow } from '@kit/shared/retell/templates/outbound/financial.flow-template';
@@ -51,7 +52,7 @@ function resolveVoiceModel(voiceId: string): string | undefined {
     case 'cartesia':
       return 'sonic-3';
     case 'minimax':
-      return 'speech-02-turbo';
+      return undefined;
     default:
       return undefined;
   }
@@ -118,7 +119,7 @@ async function createOutboundRetellAgent(
   const clinicPhone = integrationSettings.phoneNumber as string || '';
 
   const voiceId: string =
-    integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
+    integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID;
   const voiceModel = resolveVoiceModel(voiceId);
 
   const retellKbId = integrationSettings.retellKnowledgeBaseId as string | undefined;

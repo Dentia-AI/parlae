@@ -16,6 +16,7 @@ import {
   getAllFunctionToolDefinitions,
   prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
+import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import type {
   TemplateVariables,
   RuntimeConfig,
@@ -530,7 +531,7 @@ export async function executeDeployment(
             process.env.VAPI_WEBHOOK_SECRET ||
             '',
           accountId: account.id,
-          voiceId: data.voice?.voiceId || 'retell-Chloe',
+          voiceId: data.voice?.voiceId || DEFAULT_VOICE_ID,
           knowledgeBaseIds:
             retellKbIds.length > 0 ? retellKbIds : undefined,
         };
@@ -1657,12 +1658,12 @@ export const updateVoiceAction = enhanceAction(
           return { success: false, error: 'Retell not configured' };
         }
 
-        const voiceId = data.voice.voiceId || 'retell-Chloe';
+        const voiceId = data.voice.voiceId || DEFAULT_VOICE_ID;
         const voicePrefix = voiceId.split('-')[0]?.toLowerCase();
         const voiceModelMap: Record<string, string> = {
           '11labs': 'eleven_turbo_v2_5',
           'cartesia': 'sonic-3',
-          'minimax': 'speech-02-turbo',
+          'minimax': undefined,
         };
         const voiceModel = voiceModelMap[voicePrefix];
 

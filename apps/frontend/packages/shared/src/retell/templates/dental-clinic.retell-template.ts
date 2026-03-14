@@ -253,6 +253,8 @@ export const RETELL_TOOL_GROUP_MAP: Record<string, string> = {
 // Shared agent configuration values
 // ---------------------------------------------------------------------------
 
+export const DEFAULT_VOICE_ID = 'minimax-Chloe';
+
 export const SHARED_RETELL_AGENT_CONFIG = {
   language: 'multi' as const,
   vocab_specialization: 'medical' as const,
@@ -261,7 +263,9 @@ export const SHARED_RETELL_AGENT_CONFIG = {
   responsiveness: 0.98,
   interruption_sensitivity: 0.95,
   enable_backchannel: true,
-  backchannel_frequency: 0.6,
+  backchannel_frequency: 0.4,
+  enable_dynamic_voice_speed: true,
+  enable_dynamic_responsiveness: true,
   reminder_trigger_ms: 10_000,
   reminder_max_count: 2,
   normalize_for_speech: true,

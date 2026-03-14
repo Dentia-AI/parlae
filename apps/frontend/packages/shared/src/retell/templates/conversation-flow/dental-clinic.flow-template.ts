@@ -184,43 +184,45 @@ const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
 
 const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   // Entry (top center)
-  fn_get_context: { x: 0, y: 0 },
-  greeting: { x: 0, y: 150 },
+  fn_get_context: { x: 500, y: 0 },
+  greeting: { x: 500, y: 500 },
+
+  // Emergency (far left column)
+  emergency: { x: -1200, y: 1200 },
 
   // Booking sub-flow (left column)
-  booking_collect: { x: -400, y: 350 },
-  fn_check_avail: { x: -400, y: 500 },
-  booking_pick_slot: { x: -400, y: 650 },
-  booking_contact: { x: -400, y: 800 },
-  fn_book: { x: -400, y: 950 },
-  booking_done: { x: -500, y: 1100 },
-  booking_failed: { x: -300, y: 1100 },
+  booking_collect: { x: -400, y: 1200 },
+  fn_check_avail: { x: -400, y: 1800 },
+  booking_pick_slot: { x: -400, y: 2400 },
+  booking_contact: { x: -400, y: 3000 },
+  fn_book: { x: -400, y: 3600 },
+  booking_done: { x: -700, y: 4200 },
+  booking_failed: { x: -100, y: 4200 },
 
-  // Appt mgmt sub-flow (center-left column)
-  appt_mgmt: { x: -100, y: 350 },
-  fn_get_appts: { x: -100, y: 500 },
-  appt_cancel: { x: -200, y: 650 },
-  fn_cancel: { x: -200, y: 800 },
-  appt_resched: { x: 0, y: 650 },
-  fn_reschedule: { x: 0, y: 800 },
-  appt_mgmt_done: { x: -200, y: 950 },
-  appt_mgmt_failed: { x: 0, y: 950 },
+  // Appt mgmt sub-flow (center column)
+  appt_mgmt: { x: 500, y: 1200 },
+  fn_get_appts: { x: 500, y: 1800 },
+  appt_cancel: { x: 200, y: 2400 },
+  fn_cancel: { x: 200, y: 3000 },
+  appt_resched: { x: 800, y: 2400 },
+  fn_reschedule: { x: 800, y: 3000 },
+  appt_mgmt_done: { x: 300, y: 3600 },
+  appt_mgmt_failed: { x: 700, y: 3600 },
 
-  // Hub nodes (center-right)
-  post_action: { x: 200, y: 350 },
-  faq: { x: 200, y: 500 },
+  // Hub nodes (center-right column)
+  post_action: { x: 1400, y: 1200 },
+  faq: { x: 1400, y: 1800 },
 
-  // Standalone nodes (right columns)
-  emergency: { x: -600, y: 350 },
-  patient_records: { x: 400, y: 350 },
-  insurance_billing: { x: 400, y: 500 },
+  // Standalone nodes (right column)
+  patient_records: { x: 2200, y: 1200 },
+  insurance_billing: { x: 2200, y: 1800 },
 
-  // Utility
-  take_message: { x: 400, y: 650 },
-  transfer_clinic: { x: 400, y: 800 },
+  // Utility (far right column)
+  take_message: { x: 3000, y: 1200 },
+  transfer_clinic: { x: 3000, y: 1800 },
 
   // End (bottom center)
-  end_call: { x: 0, y: 1300 },
+  end_call: { x: 1000, y: 4800 },
 };
 
 const NODE_NAMES: Record<string, string> = {
@@ -257,14 +259,14 @@ const NODE_NAMES: Record<string, string> = {
  * all nodes clumped in a pile.
  */
 function autoLayoutNodes(nodes: ConversationFlowNode[]): void {
-  let fallbackY = 1400;
+  let fallbackY = 5400;
   for (const node of nodes) {
     const pos = NODE_POSITIONS[node.id];
     if (pos) {
       node.display_position = { ...pos };
     } else {
-      node.display_position = { x: 600, y: fallbackY };
-      fallbackY += 150;
+      node.display_position = { x: 3800, y: fallbackY };
+      fallbackY += 600;
     }
     node.name = NODE_NAMES[node.id] || node.id;
   }
@@ -982,6 +984,6 @@ export function buildDentalClinicFlow(
     tools: allTools,
     start_node_id: 'fn_get_context',
     nodes,
-    begin_tag_display_position: { x: 0, y: -100 },
+    begin_tag_display_position: { x: 500, y: -200 },
   };
 }

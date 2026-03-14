@@ -14,6 +14,7 @@ import { PmsIntegrationCard } from './_components/pms-integration-card';
 import { CallForwardingInstructions } from './_components/call-forwarding-instructions';
 import { SetupRedirect } from '../_components/setup-redirect';
 import { getAccountProvider } from '@kit/shared/voice-provider';
+import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { formatPhoneDisplay } from '~/lib/format-phone';
 
 export const metadata = {
@@ -100,7 +101,7 @@ export default async function ReceptionistDashboardPage({
         const savedVoice = integrationSettings?.voiceConfig;
         retellVoiceInfo = savedVoice
           ? { voiceId: savedVoice.voiceId, voiceName: savedVoice.name }
-          : { voiceId: 'retell-Chloe', voiceName: 'Chloe' };
+          : { voiceId: DEFAULT_VOICE_ID, voiceName: 'Chloe' };
       }
     } catch {
       // RetellPhoneNumber model may not be generated yet

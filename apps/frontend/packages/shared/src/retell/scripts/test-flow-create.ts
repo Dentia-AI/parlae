@@ -64,7 +64,7 @@ async function main() {
         type: 'conversation-flow',
         conversation_flow_id: flowId,
       },
-      voice_id: 'retell-Chloe',
+      voice_id: 'minimax-Chloe',
       language: 'en-US',
       webhook_url: 'https://example.com/api/retell/webhook',
       webhook_events: ['call_started', 'call_ended', 'call_analyzed'],

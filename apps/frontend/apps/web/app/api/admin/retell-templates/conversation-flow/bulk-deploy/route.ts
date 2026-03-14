@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '~/lib/auth/is-admin';
 import { prisma } from '@kit/prisma';
 import { getLogger } from '@kit/shared/logger';
+import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 
 /**
  * POST /api/admin/retell-templates/conversation-flow/bulk-deploy
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
           webhookUrl: backendUrl,
           webhookSecret: process.env.RETELL_WEBHOOK_SECRET || '',
           accountId,
-          voiceId: settings.voiceConfig?.voiceId || 'retell-Chloe',
+          voiceId: settings.voiceConfig?.voiceId || DEFAULT_VOICE_ID,
           knowledgeBaseIds: settings.retellKnowledgeBaseId ? [settings.retellKnowledgeBaseId] : undefined,
         });
 

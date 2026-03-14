@@ -10,6 +10,7 @@ import {
   SHARED_RETELL_AGENT_CONFIG,
   RETELL_POST_CALL_ANALYSIS,
   ALLOWED_OUTBOUND_COUNTRIES,
+  DEFAULT_VOICE_ID,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { createTwilioService } from '@kit/shared/twilio/twilio.service';
 
@@ -21,7 +22,7 @@ function resolveVoiceModel(voiceId: string): string | undefined {
     case 'cartesia':
       return 'sonic-3';
     case 'minimax':
-      return 'speech-02-turbo';
+      return undefined;
     default:
       return undefined;
   }
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
 
         // Mirror voice from inbound agent config; fall back to default
         const voiceId: string =
-          integrationSettings.voiceConfig?.voiceId || 'retell-Chloe';
+          integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID;
         const voiceModel = resolveVoiceModel(voiceId);
 
         const webhookSecret = process.env.RETELL_WEBHOOK_SECRET || '';

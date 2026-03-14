@@ -42,7 +42,7 @@ function resolveVoiceModel(voiceId: string): string | undefined {
     case 'cartesia':
       return 'sonic-3';
     case 'minimax':
-      return 'speech-02-turbo';
+      return undefined;
     default:
       return undefined;
   }
@@ -88,7 +88,7 @@ export async function deployRetellConversationFlow(
   );
 
   // 3. Create the agent linked to the conversation flow
-  const voiceId = config.voiceId || 'retell-Chloe';
+  const voiceId = config.voiceId || 'minimax-Chloe';
   const voiceModel = resolveVoiceModel(voiceId);
 
   const agent = await retell.createAgent({

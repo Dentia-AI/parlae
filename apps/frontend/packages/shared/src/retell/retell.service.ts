@@ -263,6 +263,10 @@ export interface RetellAgentConfig {
   responsiveness?: number;
   interruption_sensitivity?: number;
   enable_backchannel?: boolean;
+  backchannel_frequency?: number;
+  enable_dynamic_voice_speed?: boolean;
+  enable_dynamic_responsiveness?: boolean;
+  voice_speed?: number;
   reminder_trigger_ms?: number;
   reminder_max_count?: number;
   vocab_specialization?: 'general' | 'medical';
