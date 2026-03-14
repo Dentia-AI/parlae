@@ -36,6 +36,7 @@ function toRetellTool(
      *  'prompt' lets the AI generate a message (slower, more varied). */
     speakDuringType?: 'prompt' | 'static_text';
     timeoutMs?: number;
+    responseVariables?: Record<string, string>;
   } = {},
 ): RetellCustomTool {
   return {
@@ -54,6 +55,7 @@ function toRetellTool(
     execution_message_description: opts.speakDuringMessage,
     execution_message_type: opts.speakDuringType ?? 'static_text',
     timeout_ms: opts.timeoutMs ?? 30_000,
+    ...(opts.responseVariables ? { response_variables: opts.responseVariables } : {}),
   };
 }
 
@@ -386,10 +388,17 @@ export const retellUpdatePatientTool = toRetellTool(updatePatientFn, {
 export const retellCheckAvailabilityTool = toRetellTool(checkAvailabilityFn, {
   speakDuring: true,
   speakDuringMessage: 'Let me check.',
+  responseVariables: {
+    avail_success: 'result.success',
+    avail_message: 'result.message',
+  },
 });
 export const retellGetAppointmentsTool = toRetellTool(getAppointmentsFn, {
   speakDuring: true,
   speakDuringMessage: 'One moment.',
+  responseVariables: {
+    appts_found: 'result.success',
+  },
 });
 export const retellAddNoteTool = toRetellTool(addNoteFn);
 export const retellGetInsuranceTool = toRetellTool(getInsuranceFn, {
@@ -411,14 +420,26 @@ export const retellBookAppointmentTool = toRetellTool(bookAppointmentFn, {
   speakDuring: true,
   speakDuringMessage: 'Let me get that booked for you.',
   timeoutMs: 45_000,
+  responseVariables: {
+    book_success: 'result.success',
+    book_message: 'result.message',
+  },
 });
 export const retellRescheduleAppointmentTool = toRetellTool(rescheduleAppointmentFn, {
   speakDuring: true,
   speakDuringMessage: 'Let me reschedule that for you.',
+  responseVariables: {
+    resched_success: 'result.success',
+    resched_message: 'result.message',
+  },
 });
 export const retellCancelAppointmentTool = toRetellTool(cancelAppointmentFn, {
   speakDuring: true,
   speakDuringMessage: 'Let me take care of that.',
+  responseVariables: {
+    cancel_success: 'result.success',
+    cancel_message: 'result.message',
+  },
 });
 export const retellSaveInsuranceTool = toRetellTool(saveInsuranceFn, {
   speakDuring: true,
@@ -467,6 +488,12 @@ export const retellGetCallerContextTool = toRetellTool(getCallerContextFn, {
   speakDuring: false,
   speakDuringMessage: '',
   timeoutMs: 5_000,
+  responseVariables: {
+    caller_patient_type: 'result.patientType',
+    caller_patient_name: 'result.patientName',
+    caller_patient_id: 'result.patientId',
+    caller_next_booking: 'result.nextBooking',
+  },
 });
 
 export const RETELL_RECEPTIONIST_TOOLS: RetellCustomTool[] = [

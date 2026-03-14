@@ -58,6 +58,7 @@ export interface RetellCustomTool {
   execution_message_description?: string;
   execution_message_type?: 'prompt' | 'static_text';
   timeout_ms?: number;
+  response_variables?: Record<string, string>;
 }
 
 export interface RetellEndCallTool {
@@ -135,6 +136,8 @@ export interface ConversationFlowEdge {
 
 export interface ConversationFlowNodeBase {
   id: string;
+  name?: string;
+  display_position?: { x: number; y: number };
   edges?: ConversationFlowEdge[];
   else_edge?: { destination_node_id: string };
 }
@@ -159,6 +162,11 @@ export interface ConversationFlowFunctionNode extends ConversationFlowNodeBase {
   wait_for_result?: boolean;
   speak_during_execution?: boolean;
   instruction?: { type: 'prompt'; text: string };
+  model_choice?: {
+    type: 'cascading';
+    model: string;
+    high_priority?: boolean;
+  };
 }
 
 export interface ConversationFlowTransferCallNode extends ConversationFlowNodeBase {
@@ -223,6 +231,7 @@ export interface ConversationFlowConfig {
   start_node_id: string;
   nodes: ConversationFlowNode[];
   knowledge_base_ids?: string[];
+  begin_tag_display_position?: { x: number; y: number };
 }
 
 export interface ConversationFlowResponse {
@@ -770,7 +779,7 @@ export class RetellService {
   async attachKbToFlowNodes(
     flowId: string,
     kbIds: string[],
-    targetNodeIds: string[] = ['receptionist', 'faq'],
+    targetNodeIds: string[] = ['greeting', 'faq'],
   ): Promise<boolean> {
     const flow = await this.getConversationFlow(flowId);
     if (!flow) return false;

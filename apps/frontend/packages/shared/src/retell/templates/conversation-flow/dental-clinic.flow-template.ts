@@ -1,25 +1,39 @@
 /**
- * Dental Clinic Conversation Flow Template
+ * Dental Clinic Conversation Flow Template — v2.0
  *
- * Builds a single Retell conversation flow that handles the full dental clinic:
- *   Receptionist -> Booking, Appt Mgmt, Patient Records, Insurance, Emergency, FAQ
+ * Two-tier hybrid architecture:
+ *   Tier 1 — Hub nodes (free-form): greeting, faq, post_action
+ *   Tier 2 — Action sub-flows (rigid): booking, appt_mgmt
  *
- * Uses dedicated short node-specific prompts (flow-prompts.ts), NOT the
- * single-prompt agent templates. Routing is handled by edges, shared state
- * by dynamic variables, and global rules by the flow's global_prompt.
+ * Entry sequence: fn_get_context (function) -> greeting (0 tools, KB)
+ * Booking sub-flow: booking_collect -> fn_check_avail -> booking_pick_slot
+ *   -> booking_contact -> fn_book -> booking_done / booking_failed
+ * Appt mgmt sub-flow: appt_mgmt -> fn_get_appts -> [appt_cancel / appt_resched]
+ *   -> fn_cancel / fn_reschedule -> appt_mgmt_done / appt_mgmt_failed
  *
- * The flow deploys as ONE agent with instant node transitions.
+ * Function nodes execute deterministically (no tool-selection overhead).
+ * Equation-based edges route on response_variables (no LLM evaluation).
  */
 
 import {
-  FLOW_RECEPTIONIST_PROMPT,
-  FLOW_BOOKING_PROMPT,
-  FLOW_APPT_MGMT_PROMPT,
+  FLOW_GREETING_PROMPT,
+  FLOW_BOOKING_COLLECT_PROMPT,
+  FLOW_BOOKING_PICK_SLOT_PROMPT,
+  FLOW_BOOKING_CONTACT_PROMPT,
+  FLOW_BOOKING_DONE_PROMPT,
+  FLOW_BOOKING_FAILED_PROMPT,
+  FLOW_POST_ACTION_PROMPT,
+  FLOW_APPT_MGMT_ENTRY_PROMPT,
+  FLOW_APPT_CANCEL_PROMPT,
+  FLOW_APPT_RESCHED_PROMPT,
+  FLOW_APPT_MGMT_DONE_PROMPT,
+  FLOW_APPT_MGMT_FAILED_PROMPT,
   FLOW_PATIENT_RECORDS_PROMPT,
   FLOW_INSURANCE_BILLING_PROMPT,
   FLOW_EMERGENCY_PROMPT,
   FLOW_FAQ_PROMPT,
   FLOW_TAKE_MESSAGE_PROMPT,
+  GLOBAL_PROMPT_STAY_ON_TASK,
 } from './flow-prompts';
 
 import type {
@@ -28,6 +42,8 @@ import type {
   ConversationFlowTool,
   ConversationFlowEdge,
   ConversationFlowConversationNode,
+  ConversationFlowFunctionNode,
+  ConversationFlowEquation,
   RetellCustomTool,
 } from '../../retell.service';
 
@@ -54,7 +70,7 @@ import {
 // Flow version
 // ---------------------------------------------------------------------------
 
-export const CONVERSATION_FLOW_VERSION = 'cf-v1.16';
+export const CONVERSATION_FLOW_VERSION = 'cf-v2.0';
 
 // ---------------------------------------------------------------------------
 // Config interface for building the flow
@@ -84,16 +100,9 @@ function hydratePrompt(text: string, clinicName: string): string {
  */
 function normalizeToE164(phone: string): string | null {
   const digits = phone.replace(/\D/g, '');
-
-  // 10-digit North American: assume +1
   if (digits.length === 10) return `+1${digits}`;
-
-  // 11-digit starting with 1: already has country code
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-
-  // Already looks international (12+ digits): just add +
   if (digits.length >= 12) return `+${digits}`;
-
   return null;
 }
 
@@ -116,6 +125,7 @@ function toFlowTool(tool: RetellCustomTool): ConversationFlowTool {
     execution_message_description: tool.execution_message_description,
     execution_message_type: tool.execution_message_type,
     timeout_ms: tool.timeout_ms,
+    ...(tool.response_variables ? { response_variables: tool.response_variables } : {}),
   };
 }
 
@@ -137,6 +147,119 @@ function promptEdge(
     transition_condition: { type: 'prompt', prompt },
     destination_node_id: destinationNodeId,
   };
+}
+
+/**
+ * Build an equation-based edge. Used after function nodes to route on
+ * response_variables without LLM evaluation.
+ */
+function equationEdge(
+  equations: ConversationFlowEquation[],
+  operator: '||' | '&&',
+  destinationNodeId: string,
+  description?: string,
+): ConversationFlowEdge {
+  _edgeCounter++;
+  return {
+    id: `edge_${_edgeCounter}`,
+    description,
+    transition_condition: { type: 'equation', equations, operator },
+    destination_node_id: destinationNodeId,
+  };
+}
+
+const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
+
+// ---------------------------------------------------------------------------
+// Node visual layout (positions + readable names for Retell dashboard)
+// ---------------------------------------------------------------------------
+
+const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
+  // Entry (top center)
+  fn_get_context: { x: 0, y: 0 },
+  greeting: { x: 0, y: 150 },
+
+  // Booking sub-flow (left column)
+  booking_collect: { x: -400, y: 350 },
+  fn_check_avail: { x: -400, y: 500 },
+  booking_pick_slot: { x: -400, y: 650 },
+  booking_contact: { x: -400, y: 800 },
+  fn_book: { x: -400, y: 950 },
+  booking_done: { x: -500, y: 1100 },
+  booking_failed: { x: -300, y: 1100 },
+
+  // Appt mgmt sub-flow (center-left column)
+  appt_mgmt: { x: -100, y: 350 },
+  fn_get_appts: { x: -100, y: 500 },
+  appt_cancel: { x: -200, y: 650 },
+  fn_cancel: { x: -200, y: 800 },
+  appt_resched: { x: 0, y: 650 },
+  fn_reschedule: { x: 0, y: 800 },
+  appt_mgmt_done: { x: -200, y: 950 },
+  appt_mgmt_failed: { x: 0, y: 950 },
+
+  // Hub nodes (center-right)
+  post_action: { x: 200, y: 350 },
+  faq: { x: 200, y: 500 },
+
+  // Standalone nodes (right columns)
+  emergency: { x: -600, y: 350 },
+  patient_records: { x: 400, y: 350 },
+  insurance_billing: { x: 400, y: 500 },
+
+  // Utility
+  take_message: { x: 400, y: 650 },
+  transfer_clinic: { x: 400, y: 800 },
+
+  // End (bottom center)
+  end_call: { x: 0, y: 1300 },
+};
+
+const NODE_NAMES: Record<string, string> = {
+  fn_get_context: 'Get Caller Context',
+  greeting: 'Greeting',
+  booking_collect: 'Collect Booking Info',
+  fn_check_avail: 'Check Availability',
+  booking_pick_slot: 'Pick Time Slot',
+  booking_contact: 'Confirm Contact',
+  fn_book: 'Book Appointment',
+  booking_done: 'Booking Confirmed',
+  booking_failed: 'Booking Failed',
+  appt_mgmt: 'Manage Appointment',
+  fn_get_appts: 'Fetch Appointments',
+  appt_cancel: 'Confirm Cancellation',
+  fn_cancel: 'Cancel Appointment',
+  appt_resched: 'Reschedule Details',
+  fn_reschedule: 'Reschedule Appointment',
+  appt_mgmt_done: 'Action Confirmed',
+  appt_mgmt_failed: 'Action Failed',
+  post_action: 'Anything Else?',
+  faq: 'FAQ',
+  emergency: 'Emergency',
+  patient_records: 'Patient Records',
+  insurance_billing: 'Insurance & Billing',
+  take_message: 'Take Message',
+  transfer_clinic: 'Transfer to Clinic',
+  end_call: 'End Call',
+};
+
+/**
+ * Assign display_position and name to every node so API-created flows
+ * render with an organized layout in the Retell dashboard instead of
+ * all nodes clumped in a pile.
+ */
+function autoLayoutNodes(nodes: ConversationFlowNode[]): void {
+  let fallbackY = 1400;
+  for (const node of nodes) {
+    const pos = NODE_POSITIONS[node.id];
+    if (pos) {
+      node.display_position = { ...pos };
+    } else {
+      node.display_position = { x: 600, y: fallbackY };
+      fallbackY += 150;
+    }
+    node.name = NODE_NAMES[node.id] || node.id;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,13 +316,24 @@ export function buildDentalClinicFlow(
     retellTakeMessageTool,
   ].map(toFlowTool).map(hydrateTool);
 
-  // ------- Nodes -------
+  // =====================================================================
+  // ENTRY SEQUENCE: fn_get_context -> greeting
+  // =====================================================================
 
-  const receptionistNode: ConversationFlowConversationNode = {
-    id: 'receptionist',
+  const fnGetContext: ConversationFlowFunctionNode = {
+    id: 'fn_get_context',
+    type: 'function',
+    tool_id: 'getCallerContext',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: false,
+    else_edge: { destination_node_id: 'greeting' },
+  };
+
+  const greetingNode: ConversationFlowConversationNode = {
+    id: 'greeting',
     type: 'conversation',
-    instruction: { type: 'prompt', text: hydratePrompt(FLOW_RECEPTIONIST_PROMPT, cn) },
-    tool_ids: ['getProviders', 'getCallerContext'],
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_GREETING_PROMPT, cn) },
     ...(config.knowledgeBaseIds?.length
       ? { knowledge_base_ids: config.knowledgeBaseIds }
       : {}),
@@ -210,7 +344,7 @@ export function buildDentalClinicFlow(
       ),
       promptEdge(
         'Caller wants to book a new appointment, schedule a visit, or find available times.',
-        'booking',
+        'booking_collect',
       ),
       promptEdge(
         'Caller wants to cancel, reschedule, check on, or change an existing appointment.',
@@ -225,11 +359,11 @@ export function buildDentalClinicFlow(
         'insurance_billing',
       ),
       promptEdge(
-        'Caller has a general question about the clinic that cannot be answered with available tools.',
+        'Caller has a general question about the clinic (hours, location, services, dentists, parking, etc.).',
         'faq',
       ),
       promptEdge(
-        'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing, or the conversation is going in circles.',
+        'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing.',
         'end_call',
       ),
       promptEdge(
@@ -239,54 +373,219 @@ export function buildDentalClinicFlow(
     ],
   };
 
-  const FAST_MODEL = { type: 'cascading' as const, model: 'gemini-3.0-flash' };
+  // =====================================================================
+  // BOOKING SUB-FLOW (rigid, sequential)
+  // =====================================================================
 
-  const bookingNode: ConversationFlowConversationNode = {
-    id: 'booking',
+  const bookingCollect: ConversationFlowConversationNode = {
+    id: 'booking_collect',
     type: 'conversation',
     model_choice: FAST_MODEL,
-    instruction: { type: 'prompt', text: hydratePrompt(FLOW_BOOKING_PROMPT, cn) },
-    tool_ids: [
-      'lookupPatient',
-      'checkAvailability',
-      'bookAppointment',
-      'rescheduleAppointment',
-    ],
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_BOOKING_COLLECT_PROMPT, cn) },
     edges: [
       promptEdge(
-        'Caller describes urgent/emergency symptoms during booking.',
+        'Caller describes pain, bleeding, or emergency symptoms.',
         'emergency',
       ),
       promptEdge(
-        'Caller wants to cancel or reschedule an existing appointment.',
+        'Caller has stated both the appointment type and preferred date/time.',
+        'fn_check_avail',
+      ),
+      promptEdge(
+        'Caller changes mind and does not want to book.',
+        'post_action',
+      ),
+    ],
+  };
+
+  const fnCheckAvail: ConversationFlowFunctionNode = {
+    id: 'fn_check_avail',
+    type: 'function',
+    tool_id: 'checkAvailability',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract the date (YYYY-MM-DD) and appointmentType from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [{ left: '{{avail_success}}', operator: '==', right: 'true' }],
+        '&&',
+        'booking_pick_slot',
+        'Availability found',
+      ),
+    ],
+    else_edge: { destination_node_id: 'booking_failed' },
+  };
+
+  const bookingPickSlot: ConversationFlowConversationNode = {
+    id: 'booking_pick_slot',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_BOOKING_PICK_SLOT_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller describes pain, bleeding, or emergency symptoms.',
+        'emergency',
+      ),
+      promptEdge(
+        'Caller has selected a specific time slot.',
+        'booking_contact',
+      ),
+      promptEdge(
+        'Caller wants to check a different date.',
+        'booking_collect',
+      ),
+    ],
+  };
+
+  const bookingContact: ConversationFlowConversationNode = {
+    id: 'booking_contact',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_BOOKING_CONTACT_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller describes pain, bleeding, or emergency symptoms.',
+        'emergency',
+      ),
+      promptEdge(
+        'Caller has confirmed phone number and provided or declined email, and name if new patient.',
+        'fn_book',
+      ),
+    ],
+  };
+
+  const fnBook: ConversationFlowFunctionNode = {
+    id: 'fn_book',
+    type: 'function',
+    tool_id: 'bookAppointment',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract booking details: date (YYYY-MM-DD), startTime (HH:MM), appointmentType. If {{caller_patient_id}} is set, pass it as patientId. Otherwise extract firstName, lastName, phone, email from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [{ left: '{{book_success}}', operator: '==', right: 'true' }],
+        '&&',
+        'booking_done',
+        'Booking succeeded',
+      ),
+    ],
+    else_edge: { destination_node_id: 'booking_failed' },
+  };
+
+  const bookingDone: ConversationFlowConversationNode = {
+    id: 'booking_done',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_BOOKING_DONE_PROMPT },
+    edges: [
+      promptEdge(
+        'Confirmation delivered and caller responds.',
+        'post_action',
+      ),
+    ],
+  };
+
+  const bookingFailed: ConversationFlowConversationNode = {
+    id: 'booking_failed',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_BOOKING_FAILED_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller wants to try a different date or time.',
+        'booking_collect',
+      ),
+      promptEdge(
+        'Caller is done trying or wants other help.',
+        'post_action',
+      ),
+    ],
+  };
+
+  // =====================================================================
+  // HUB NODES (free-form)
+  // =====================================================================
+
+  const postAction: ConversationFlowConversationNode = {
+    id: 'post_action',
+    type: 'conversation',
+    instruction: { type: 'prompt', text: FLOW_POST_ACTION_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller describes pain, bleeding, or emergency symptoms.',
+        'emergency',
+      ),
+      promptEdge(
+        'Caller wants to book a new appointment.',
+        'booking_collect',
+      ),
+      promptEdge(
+        'Caller wants to cancel, reschedule, or manage an existing appointment.',
         'appt_mgmt',
       ),
       promptEdge(
-        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
+        'Caller has a general question about the clinic.',
         'faq',
       ),
       promptEdge(
-        'The bookAppointment tool has been called and returned a successful result, AND the caller has no further needs or needs general help.',
-        'receptionist',
-      ),
-      promptEdge(
-        'The bookAppointment tool has been called and returned a successful result, AND the caller says goodbye or the conversation is complete.',
+        'Caller says goodbye or is done.',
         'end_call',
       ),
     ],
   };
 
-  const apptMgmtNode: ConversationFlowConversationNode = {
+  const faqNode: ConversationFlowConversationNode = {
+    id: 'faq',
+    type: 'conversation',
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_FAQ_PROMPT, cn) },
+    tool_ids: ['getProviders'],
+    ...(config.knowledgeBaseIds?.length
+      ? { knowledge_base_ids: config.knowledgeBaseIds }
+      : {}),
+    edges: [
+      promptEdge(
+        'Caller wants to book an appointment or continue booking.',
+        'booking_collect',
+      ),
+      promptEdge(
+        'Caller wants to cancel, reschedule, or manage an existing appointment.',
+        'appt_mgmt',
+      ),
+      promptEdge(
+        'Caller has questions about insurance, billing, or payments.',
+        'insurance_billing',
+      ),
+      promptEdge(
+        'Caller has another question or needs other help.',
+        'greeting',
+      ),
+      promptEdge(
+        'Caller says goodbye or conversation is complete.',
+        'end_call',
+      ),
+    ],
+  };
+
+  // =====================================================================
+  // APPOINTMENT MANAGEMENT SUB-FLOW (rigid, sequential)
+  // =====================================================================
+
+  const apptMgmtEntry: ConversationFlowConversationNode = {
     id: 'appt_mgmt',
     type: 'conversation',
     model_choice: FAST_MODEL,
-    instruction: { type: 'prompt', text: hydratePrompt(FLOW_APPT_MGMT_PROMPT, cn) },
-    tool_ids: [
-      'lookupPatient',
-      'getAppointments',
-      'rescheduleAppointment',
-      'cancelAppointment',
-    ],
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_APPT_MGMT_ENTRY_PROMPT, cn) },
+    tool_ids: ['lookupPatient'],
     edges: [
       promptEdge(
         'Caller describes urgent/emergency symptoms.',
@@ -294,23 +593,162 @@ export function buildDentalClinicFlow(
       ),
       promptEdge(
         'Caller wants to book a brand new appointment (not reschedule).',
-        'booking',
+        'booking_collect',
       ),
       promptEdge(
-        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
-        'faq',
-      ),
-      promptEdge(
-        'Agent has refused a privacy/third-party request multiple times and the caller keeps pressing, or the conversation is going in circles.',
-        'end_call',
-      ),
-      promptEdge(
-        'Task is complete or caller needs general help.',
-        'receptionist',
+        'Patient is identified and caller wants to cancel or reschedule — ready to fetch appointments.',
+        'fn_get_appts',
       ),
       promptEdge(
         'Caller says goodbye or conversation is complete.',
         'end_call',
+      ),
+    ],
+  };
+
+  const fnGetAppts: ConversationFlowFunctionNode = {
+    id: 'fn_get_appts',
+    type: 'function',
+    tool_id: 'getAppointments',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract patientId. Use {{caller_patient_id}} if set, otherwise extract from the lookupPatient result in the conversation.',
+    },
+    edges: [
+      promptEdge(
+        'Caller wants to cancel an appointment.',
+        'appt_cancel',
+      ),
+      promptEdge(
+        'Caller wants to reschedule an appointment.',
+        'appt_resched',
+      ),
+    ],
+    else_edge: { destination_node_id: 'appt_mgmt' },
+  };
+
+  const apptCancel: ConversationFlowConversationNode = {
+    id: 'appt_cancel',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_APPT_CANCEL_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller describes urgent/emergency symptoms.',
+        'emergency',
+      ),
+      promptEdge(
+        'Caller has confirmed which appointment to cancel and optionally provided a reason.',
+        'fn_cancel',
+      ),
+      promptEdge(
+        'Caller changes mind and does not want to cancel.',
+        'post_action',
+      ),
+    ],
+  };
+
+  const fnCancel: ConversationFlowFunctionNode = {
+    id: 'fn_cancel',
+    type: 'function',
+    tool_id: 'cancelAppointment',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract appointmentId and optional reason from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [{ left: '{{cancel_success}}', operator: '==', right: 'true' }],
+        '&&',
+        'appt_mgmt_done',
+        'Cancellation succeeded',
+      ),
+    ],
+    else_edge: { destination_node_id: 'appt_mgmt_failed' },
+  };
+
+  const apptResched: ConversationFlowConversationNode = {
+    id: 'appt_resched',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: hydratePrompt(FLOW_APPT_RESCHED_PROMPT, cn) },
+    edges: [
+      promptEdge(
+        'Caller describes urgent/emergency symptoms.',
+        'emergency',
+      ),
+      promptEdge(
+        'Caller has confirmed which appointment and stated the new preferred date and time.',
+        'fn_reschedule',
+      ),
+      promptEdge(
+        'Caller changes mind and does not want to reschedule.',
+        'post_action',
+      ),
+    ],
+  };
+
+  const fnReschedule: ConversationFlowFunctionNode = {
+    id: 'fn_reschedule',
+    type: 'function',
+    tool_id: 'rescheduleAppointment',
+    tool_type: 'local',
+    wait_for_result: true,
+    speak_during_execution: true,
+    model_choice: FAST_MODEL,
+    instruction: {
+      type: 'prompt',
+      text: 'Extract appointmentId, newDate (YYYY-MM-DD), and newStartTime (HH:MM) from the conversation.',
+    },
+    edges: [
+      equationEdge(
+        [{ left: '{{resched_success}}', operator: '==', right: 'true' }],
+        '&&',
+        'appt_mgmt_done',
+        'Reschedule succeeded',
+      ),
+    ],
+    else_edge: { destination_node_id: 'appt_mgmt_failed' },
+  };
+
+  const apptMgmtDone: ConversationFlowConversationNode = {
+    id: 'appt_mgmt_done',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_APPT_MGMT_DONE_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller wants to book a new appointment.',
+        'booking_collect',
+      ),
+      promptEdge(
+        'Confirmation delivered and caller responds.',
+        'post_action',
+      ),
+    ],
+  };
+
+  const apptMgmtFailed: ConversationFlowConversationNode = {
+    id: 'appt_mgmt_failed',
+    type: 'conversation',
+    model_choice: FAST_MODEL,
+    instruction: { type: 'prompt', text: FLOW_APPT_MGMT_FAILED_PROMPT },
+    edges: [
+      promptEdge(
+        'Caller wants to try again.',
+        'appt_mgmt',
+      ),
+      promptEdge(
+        'Caller is done or wants other help.',
+        'post_action',
       ),
     ],
   };
@@ -327,34 +765,13 @@ export function buildDentalClinicFlow(
       'addNote',
     ],
     edges: [
-      promptEdge(
-        'Caller describes urgent/emergency symptoms.',
-        'emergency',
-      ),
-      promptEdge(
-        'Caller wants to book an appointment.',
-        'booking',
-      ),
-      promptEdge(
-        'Caller wants to update insurance or check billing.',
-        'insurance_billing',
-      ),
-      promptEdge(
-        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
-        'faq',
-      ),
-      promptEdge(
-        'Agent has refused a privacy/HIPAA request multiple times and the caller keeps pressing, or the conversation is going in circles.',
-        'end_call',
-      ),
-      promptEdge(
-        'Task is complete or caller needs general help.',
-        'receptionist',
-      ),
-      promptEdge(
-        'Caller says goodbye or conversation is complete.',
-        'end_call',
-      ),
+      promptEdge('Caller describes urgent/emergency symptoms.', 'emergency'),
+      promptEdge('Caller wants to book an appointment.', 'booking_collect'),
+      promptEdge('Caller wants to update insurance or check billing.', 'insurance_billing'),
+      promptEdge('Caller asks a general question about the clinic.', 'faq'),
+      promptEdge('Agent has refused a privacy/HIPAA request multiple times.', 'end_call'),
+      promptEdge('Task is complete or caller needs general help.', 'post_action'),
+      promptEdge('Caller says goodbye or conversation is complete.', 'end_call'),
     ],
   };
 
@@ -371,34 +788,13 @@ export function buildDentalClinicFlow(
       'processPayment',
     ],
     edges: [
-      promptEdge(
-        'Caller describes urgent/emergency symptoms.',
-        'emergency',
-      ),
-      promptEdge(
-        'Caller wants to book an appointment.',
-        'booking',
-      ),
-      promptEdge(
-        'Caller wants to update personal (non-insurance) info.',
-        'patient_records',
-      ),
-      promptEdge(
-        'Caller asks a general question about the clinic (hours, location, services, dentists, parking, etc.) that cannot be answered with the current context.',
-        'faq',
-      ),
-      promptEdge(
-        'Agent has already answered the insurance/billing question and offered a callback, but the caller keeps asking repeated detailed follow-up questions. The conversation is going in circles.',
-        'end_call',
-      ),
-      promptEdge(
-        'Task is complete or caller needs general help.',
-        'receptionist',
-      ),
-      promptEdge(
-        'Caller says goodbye or conversation is complete.',
-        'end_call',
-      ),
+      promptEdge('Caller describes urgent/emergency symptoms.', 'emergency'),
+      promptEdge('Caller wants to book an appointment.', 'booking_collect'),
+      promptEdge('Caller wants to update personal (non-insurance) info.', 'patient_records'),
+      promptEdge('Caller asks a general question about the clinic.', 'faq'),
+      promptEdge('Conversation is going in circles after offering callback.', 'end_call'),
+      promptEdge('Task is complete or caller needs general help.', 'post_action'),
+      promptEdge('Caller says goodbye or conversation is complete.', 'end_call'),
     ],
   };
 
@@ -414,7 +810,7 @@ export function buildDentalClinicFlow(
     ],
     edges: [
       promptEdge(
-        'Agent has given the same advice (call 911, or refused medication advice, or refused medical guidance) at least twice and the caller keeps repeating themselves or the conversation is going in circles.',
+        'Agent has given the same advice at least twice and the caller keeps repeating.',
         'end_call',
       ),
       ...(config.clinicPhone
@@ -427,7 +823,7 @@ export function buildDentalClinicFlow(
         : []),
       promptEdge(
         'Emergency is assessed and patient needs a follow-up appointment.',
-        'booking',
+        'booking_collect',
       ),
       promptEdge(
         'Emergency is handled and caller says goodbye.',
@@ -436,48 +832,41 @@ export function buildDentalClinicFlow(
     ],
   };
 
-  const faqNode: ConversationFlowConversationNode = {
-    id: 'faq',
-    type: 'conversation',
-    instruction: { type: 'prompt', text: hydratePrompt(FLOW_FAQ_PROMPT, cn) },
-    ...(config.knowledgeBaseIds?.length
-      ? { knowledge_base_ids: config.knowledgeBaseIds }
-      : {}),
-    edges: [
-      promptEdge(
-        'Caller wants to book an appointment or continue booking.',
-        'booking',
-      ),
-      promptEdge(
-        'Caller wants to cancel, reschedule, or manage an existing appointment.',
-        'appt_mgmt',
-      ),
-      promptEdge(
-        'Caller has questions about insurance, billing, or payments.',
-        'insurance_billing',
-      ),
-      promptEdge(
-        'Caller has another question or needs other help.',
-        'receptionist',
-      ),
-      promptEdge(
-        'Caller says goodbye or conversation is complete.',
-        'end_call',
-      ),
-    ],
-  };
+  // =====================================================================
+  // ASSEMBLE NODES
+  // =====================================================================
 
   const nodes: ConversationFlowNode[] = [
-    receptionistNode,
-    bookingNode,
-    apptMgmtNode,
+    // Entry
+    fnGetContext,
+    greetingNode,
+    // Booking sub-flow
+    bookingCollect,
+    fnCheckAvail,
+    bookingPickSlot,
+    bookingContact,
+    fnBook,
+    bookingDone,
+    bookingFailed,
+    // Appointment management sub-flow
+    apptMgmtEntry,
+    fnGetAppts,
+    apptCancel,
+    fnCancel,
+    apptResched,
+    fnReschedule,
+    apptMgmtDone,
+    apptMgmtFailed,
+    // Hub
+    postAction,
+    faqNode,
+    // Existing (Phase 3 will optimize)
     patientRecordsNode,
     insuranceBillingNode,
     emergencyNode,
-    faqNode,
   ];
 
-  // Take-message node: collects caller info when transfer fails or staff unavailable
+  // Take-message node
   const takeMessageNode: ConversationFlowConversationNode = {
     id: 'take_message',
     type: 'conversation',
@@ -547,8 +936,11 @@ export function buildDentalClinicFlow(
     '- **NO FABRICATION**: If info isn\'t in the KB or a tool result, say you\'ll have the team follow up.',
     '',
     '## SHARED STATE',
-    '{{patient_id}}, {{patient_name}}, {{customer_phone}} persist across nodes. Don\'t re-ask if already known.',
+    '{{caller_patient_id}}, {{caller_patient_name}}, {{customer_phone}} persist across nodes. Don\'t re-ask if already known.',
+    GLOBAL_PROMPT_STAY_ON_TASK,
   ].join('\n');
+
+  autoLayoutNodes(nodes);
 
   return {
     start_speaker: 'agent',
@@ -560,12 +952,24 @@ export function buildDentalClinicFlow(
     global_prompt: globalPrompt,
     default_dynamic_variables: {
       customer_phone: '',
-      patient_id: '',
-      patient_name: '',
+      caller_patient_type: '',
+      caller_patient_name: '',
+      caller_patient_id: '',
+      caller_next_booking: '',
+      avail_success: '',
+      avail_message: '',
+      book_success: '',
+      book_message: '',
+      appts_found: '',
+      cancel_success: '',
+      cancel_message: '',
+      resched_success: '',
+      resched_message: '',
       now: new Date().toISOString(),
     },
     tools: allTools,
-    start_node_id: 'receptionist',
+    start_node_id: 'fn_get_context',
     nodes,
+    begin_tag_display_position: { x: 0, y: -100 },
   };
 }
