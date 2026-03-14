@@ -256,7 +256,7 @@ export const RETELL_TOOL_GROUP_MAP: Record<string, string> = {
 export const SHARED_RETELL_AGENT_CONFIG = {
   language: 'multi' as const,
   vocab_specialization: 'medical' as const,
-  stt_mode: 'accurate' as const,
+  stt_mode: 'fast' as const,
   denoising_mode: 'noise-cancellation' as const,
   responsiveness: 0.98,
   interruption_sensitivity: 0.95,
