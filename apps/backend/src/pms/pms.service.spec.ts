@@ -527,6 +527,98 @@ describe('PmsService', () => {
 
       expect(result.accountId).toBe('acc-2');
     });
+
+    it('should call enablePracticeLocationAccess when authorized_practices are available', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_id: 'p-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+      });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/practice_location',
+        { office_id: 'off-1', practice_id: 'p-1', access: 'ON' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'App-Id': 'test-app-id',
+            'App-Key': 'test-app-key',
+          }),
+        }),
+      );
+    });
+
+    it('should not call enablePracticeLocationAccess when no authorized_practices (SETUP_REQUIRED path)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(mockedAxios.post).not.toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/practice_location',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should still succeed when enablePracticeLocationAccess fails (non-fatal)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_id: 'p-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post
+        .mockRejectedValueOnce(new Error('Sikka location API error'))
+        .mockResolvedValueOnce({
+          data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+        });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      const result = await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(result.success).toBe(true);
+      expect(result.accountId).toBe('acc-1');
+      expect(prisma.pmsIntegration.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ status: 'ACTIVE' }),
+        }),
+      );
+    });
+
+    it('should omit practice_id from enablePracticeLocationAccess when not present', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        memberships: [{ account: { id: 'acc-1', name: 'Happy Dental', isPersonalAccount: false } }],
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+      });
+      prisma.pmsIntegration.upsert.mockResolvedValue({});
+
+      await service.handlePurchaseWebhook(basePurchaseDto as any);
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/practice_location',
+        { office_id: 'off-1', access: 'ON' },
+        expect.anything(),
+      );
+    });
   });
 
   describe('handleCancelWebhook', () => {
@@ -590,6 +682,94 @@ describe('PmsService', () => {
 
       expect(result.success).toBe(true);
       expect(prisma.pmsIntegration.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tryUpgradeIntegration (via getConnectionStatus)', () => {
+    it('should call enablePracticeLocationAccess when upgrading SETUP_REQUIRED to ACTIVE', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'int-1',
+        accountId: 'acc-1',
+        status: 'SETUP_REQUIRED',
+        masterCustomerId: 'mc-123',
+        metadata: { practiceName: 'Happy Dental' },
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_id: 'p-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+      });
+      prisma.pmsIntegration.update.mockResolvedValue({
+        id: 'int-1',
+        status: 'ACTIVE',
+        metadata: { practiceName: 'Happy Dental', actualPmsType: 'Dentrix', practiceId: 'p-1' },
+      });
+
+      const result = await service.getConnectionStatus('acc-1');
+
+      expect(result.isConnected).toBe(true);
+      expect(result.status).toBe('connected');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.sikkasoft.com/v4/practice_location',
+        { office_id: 'off-1', practice_id: 'p-1', access: 'ON' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'App-Id': 'test-app-id',
+            'App-Key': 'test-app-key',
+          }),
+        }),
+      );
+    });
+
+    it('should still upgrade successfully when enablePracticeLocationAccess fails', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'int-1',
+        accountId: 'acc-1',
+        status: 'SETUP_REQUIRED',
+        masterCustomerId: 'mc-123',
+        metadata: { practiceName: 'Happy Dental' },
+      });
+      mockedAxios.get.mockResolvedValue({
+        data: { items: [{ customer_id: 'mc-123', office_id: 'off-1', secret_key: 'sec-1', practice_id: 'p-1', practice_name: 'Happy Dental', practice_management_system: 'Dentrix' }] },
+      });
+      mockedAxios.post
+        .mockRejectedValueOnce(new Error('Location API unavailable'))
+        .mockResolvedValueOnce({
+          data: { request_key: 'rk-1', refresh_key: 'rfk-1', end_time: '2026-04-08T00:00:00Z' },
+        });
+      prisma.pmsIntegration.update.mockResolvedValue({
+        id: 'int-1',
+        status: 'ACTIVE',
+        metadata: { practiceName: 'Happy Dental', actualPmsType: 'Dentrix', practiceId: 'p-1' },
+      });
+
+      const result = await service.getConnectionStatus('acc-1');
+
+      expect(result.isConnected).toBe(true);
+      expect(result.status).toBe('connected');
+      expect(prisma.pmsIntegration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'ACTIVE' }),
+        }),
+      );
+    });
+
+    it('should remain SETUP_REQUIRED when authorized_practices not yet available', async () => {
+      prisma.pmsIntegration.findFirst.mockResolvedValue({
+        id: 'int-1',
+        accountId: 'acc-1',
+        status: 'SETUP_REQUIRED',
+        masterCustomerId: 'mc-123',
+        metadata: {},
+      });
+      mockedAxios.get.mockResolvedValue({ data: { items: [] } });
+
+      const result = await service.getConnectionStatus('acc-1');
+
+      expect(result.isConnected).toBe(false);
+      expect(result.status).toBe('connecting');
+      expect(mockedAxios.post).not.toHaveBeenCalled();
     });
   });
 
