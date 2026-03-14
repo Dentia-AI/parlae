@@ -1654,9 +1654,9 @@ export class SikkaPmsService extends BasePmsService {
 
     this.logger.log({
       accountId: this.accountId,
-      appointmentTypesCount: this.pmsMetadataCache.appointmentTypes.length,
-      operatoriesCount: this.pmsMetadataCache.operatories.length,
-      statusesCount: this.pmsMetadataCache.statuses.length,
+      appointmentTypesCount: this.pmsMetadataCache.appointmentTypes!.length,
+      operatoriesCount: this.pmsMetadataCache.operatories!.length,
+      statusesCount: this.pmsMetadataCache.statuses!.length,
       msg: '[Sikka] PMS metadata cache populated',
     });
   }
