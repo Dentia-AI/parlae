@@ -464,12 +464,13 @@ describe('SikkaPmsService', () => {
           date: '2025-03-15',
           length: '30',
           note: 'Annual checkup',
-          type: 'Checkup',
           description: 'Checkup',
           practice_id: '1',
         }),
         expect.anything()
       );
+      const sentPayload = mockPost.mock.calls[0][1];
+      expect(sentPayload.type).toBeUndefined();
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({
         patientId: 'pat-1',

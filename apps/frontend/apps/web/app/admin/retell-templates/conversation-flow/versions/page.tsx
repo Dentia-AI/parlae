@@ -326,33 +326,38 @@ export default function FlowVersionOverviewPage() {
         />
       )}
 
-      {effectiveSelectedCount > 0 && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="p-4 flex items-center gap-4">
-            <span className="text-sm font-medium">
-              {effectiveSelectedCount} account{effectiveSelectedCount !== 1 ? 's' : ''} selected
-              {selectAllMatching && ' (all matching)'}
-            </span>
-            <select
-              value={deployTemplateId}
-              onChange={(e) => setDeployTemplateId(e.target.value)}
-              className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Deploy template...</option>
-              {templates.filter((t) => t.isActive).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.displayName} ({t.version})
-                </option>
-              ))}
-            </select>
-            <Button size="sm" onClick={handleBulkDeploy} disabled={!deployTemplateId || deploying}>
-              {deploying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Rocket className="h-4 w-4 mr-1" />}
-              Deploy
-            </Button>
-            <Button variant="ghost" size="sm" onClick={clearSelection}>Clear</Button>
-          </CardContent>
-        </Card>
-      )}
+      <div className={cn(
+        'grid transition-all duration-200 ease-in-out',
+        effectiveSelectedCount > 0 ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+      )}>
+        <div className="overflow-hidden">
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 flex items-center gap-4">
+              <span className="text-sm font-medium">
+                {effectiveSelectedCount} account{effectiveSelectedCount !== 1 ? 's' : ''} selected
+                {selectAllMatching && ' (all matching)'}
+              </span>
+              <select
+                value={deployTemplateId}
+                onChange={(e) => setDeployTemplateId(e.target.value)}
+                className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Deploy template...</option>
+                {templates.filter((t) => t.isActive).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.displayName} ({t.version})
+                  </option>
+                ))}
+              </select>
+              <Button size="sm" onClick={handleBulkDeploy} disabled={!deployTemplateId || deploying}>
+                {deploying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Rocket className="h-4 w-4 mr-1" />}
+                Deploy
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>Clear</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       <Card>
         <CardHeader>

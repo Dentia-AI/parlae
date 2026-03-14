@@ -803,7 +803,9 @@ export class SikkaPmsService extends BasePmsService {
       if (!payload.provider_id) {
         payload.provider_id = await this.resolveProviderId();
       }
-      if (data.appointmentType) payload.type = data.appointmentType;
+      if (data.metadata?.appointmentTypeId) {
+        payload.type = data.metadata.appointmentTypeId;
+      }
       payload.description = data.metadata?.description || data.appointmentType || data.notes || 'Appointment';
       if (data.notes) payload.note = data.notes;
       payload.operatory = data.metadata?.operatory || await this.resolveOperatory();
