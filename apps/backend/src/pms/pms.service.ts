@@ -276,6 +276,8 @@ export class PmsService {
         return null;
       }
 
+      await this.enablePracticeLocationAccess(systemCreds, practiceData.officeId, practiceData.practiceId);
+
       const tokens = await this.generateRequestKey(
         practiceData.officeId,
         practiceData.secretKey,
@@ -644,6 +646,9 @@ export class PmsService {
         return { success: true, accountId: account.id };
       }
 
+      // Enable API access for all practice locations under this office
+      await this.enablePracticeLocationAccess(systemCreds, practiceData.officeId, practiceData.practiceId);
+
       // Generate request_key using office_id + secret_key
       const tokens = await this.generateRequestKey(
         practiceData.officeId,
@@ -801,6 +806,51 @@ export class PmsService {
     } catch (error: any) {
       this.logger.error({ error: error.message, msg: '[PMS] Failed to fetch authorized practices' });
       return null;
+    }
+  }
+
+  /**
+   * Enable API access for all practice locations under an office_id.
+   * Calls POST /v4/practice_location with access=ON.
+   */
+  private async enablePracticeLocationAccess(
+    systemCreds: { appId: string; appKey: string },
+    officeId: string,
+    practiceId?: string,
+  ): Promise<void> {
+    try {
+      const payload: Record<string, string> = {
+        office_id: officeId,
+        access: 'ON',
+      };
+      if (practiceId) {
+        payload.practice_id = practiceId;
+      }
+
+      const response = await axios.post(
+        'https://api.sikkasoft.com/v4/practice_location',
+        payload,
+        {
+          headers: {
+            'App-Id': systemCreds.appId,
+            'App-Key': systemCreds.appKey,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      this.logger.log({
+        officeId,
+        practiceId,
+        responseMessage: response.data?.long_message,
+        msg: '[PMS] Practice location access enabled',
+      });
+    } catch (error: any) {
+      this.logger.warn({
+        officeId,
+        error: error.response?.data || error.message,
+        msg: '[PMS] Failed to enable practice location access (non-fatal)',
+      });
     }
   }
 

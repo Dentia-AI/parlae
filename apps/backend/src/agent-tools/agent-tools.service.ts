@@ -26,6 +26,7 @@ interface CallerContext {
   patientName?: string;
   patientId?: string;
   patientType: 'returning' | 'new';
+  familyMembers?: Array<{ id: string; firstName: string; lastName: string }>;
   nextBooking?: {
     date: string;
     dayOfWeek: string;
@@ -239,6 +240,15 @@ export class AgentToolsService {
       ...(callerPhone ? { callerPhone } : {}),
     };
 
+    if (ctx.patientId) {
+      response.patientId = ctx.patientId;
+    }
+
+    if (ctx.familyMembers && ctx.familyMembers.length > 1) {
+      response.familyAccount = true;
+      response.familyMembers = ctx.familyMembers.map(m => ({ id: m.id, name: m.firstName }));
+    }
+
     if (ctx.nextBooking) {
       response.nextBooking = ctx.nextBooking;
     }
@@ -252,7 +262,10 @@ export class AgentToolsService {
       response.lastCallOutcome = ctx.lastCallOutcome;
     }
 
-    const parts: string[] = [`Welcome back, ${(ctx.patientName || '').split(' ')[0]}!`];
+    const isFamily = ctx.familyMembers && ctx.familyMembers.length > 1;
+    const parts: string[] = isFamily
+      ? [`This is a family account with members: ${ctx.familyMembers!.map(m => m.firstName).join(', ')}. Ask who is calling.`]
+      : [`Welcome back, ${(ctx.patientName || '').split(' ')[0]}!`];
     if (ctx.nextBooking) {
       parts.push(`They have an upcoming ${ctx.nextBooking.type || 'appointment'} on ${ctx.nextBooking.dayOfWeek} at ${ctx.nextBooking.time}.`);
     }
@@ -369,10 +382,22 @@ export class AgentToolsService {
 
     if (!searchResult.success || !searchResult.data?.length) return;
 
-    const patient = searchResult.data[0];
+    const patients = searchResult.data;
+    const patient = patients[0];
     context.patientType = 'returning';
-    context.patientName = `${patient.firstName} ${patient.lastName}`.trim();
-    context.patientId = patient.id;
+
+    if (patients.length > 1) {
+      const names = patients.map(p => p.firstName).filter(Boolean);
+      context.patientName = names.join(', ');
+      context.familyMembers = patients.map(p => ({
+        id: p.id,
+        firstName: p.firstName,
+        lastName: p.lastName,
+      }));
+    } else {
+      context.patientName = `${patient.firstName} ${patient.lastName}`.trim();
+      context.patientId = patient.id;
+    }
 
     if (patient.lastVisit) {
       const d = new Date(patient.lastVisit);

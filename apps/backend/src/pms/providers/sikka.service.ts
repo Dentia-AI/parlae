@@ -1503,7 +1503,7 @@ export class SikkaPmsService extends BasePmsService {
   private async resolveOperatory(): Promise<string | undefined> {
     try {
       const response = await this.client.get('/operatories', {
-        params: { practice_id: this.practiceId, is_hidden: 'F', limit: 1 },
+        params: { cust_id: this.practiceId, practice_id: this.practiceId, is_hidden: 'F', limit: 1 },
       });
       const items = response.data?.items || [];
       if (items.length > 0) {
