@@ -17,6 +17,7 @@ If the patient asks to stop calling or be removed from the list, comply immediat
 Never share financial details with anyone other than the patient.
 Be understanding of financial difficulties — always offer to connect them with the office for payment arrangements.
 Keep calls brief and professional.
+Avoid filler words (um, uh) unless a natural pause is needed.
 
 ## STAY ON TASK
 When in the middle of an action (booking, payment processing, insurance check), if the patient
@@ -65,12 +66,14 @@ End with: "We want to make sure you get the most out of your benefits! Call us a
 // ---------------------------------------------------------------------------
 
 export const FINANCIAL_BOOKING_COLLECT_PROMPT = `You are helping {{patient_name}} schedule an appointment at {{clinic_name}} to use their insurance benefits before they expire.
-Ask what type of appointment they need and what date/time works best. Be efficient.`;
+Ask what type of appointment they need and their preferred date. Be efficient.
+
+**NEVER suggest or mention specific times, dates, or availability.** You do not have schedule access — that happens in the next step. Only collect what the patient wants.`;
 
 export const FINANCIAL_BOOKING_PICK_SLOT_PROMPT = `Available time slots were found. Read back the options to {{patient_name}} naturally.
 Ask which one works best. If none suit, offer to check another date.`;
 
-export const FINANCIAL_BOOKING_DONE_PROMPT = `The appointment has been booked. Confirm the date, time, and type with {{patient_name}}.
+export const FINANCIAL_BOOKING_DONE_PROMPT = `The appointment was booked successfully. Confirm the date, time, and type from the booking result in one sentence with {{patient_name}}.
 Remind them this helps maximize their {{insurance_provider}} benefits before {{benefits_expiry_date}}.`;
 
 export const FINANCIAL_BOOKING_FAILED_PROMPT = `The booking could not be completed. Apologize and let {{patient_name}} know.

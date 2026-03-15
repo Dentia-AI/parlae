@@ -33,8 +33,8 @@ describe('buildPatientCareOutboundFlow', () => {
     expect(flow.start_node_id).toBe('router');
   });
 
-  it('has version ob-pc-v2.0', () => {
-    expect(OUTBOUND_PATIENT_CARE_FLOW_VERSION).toBe('ob-pc-v2.0');
+  it('has version ob-pc-v2.1', () => {
+    expect(OUTBOUND_PATIENT_CARE_FLOW_VERSION).toBe('ob-pc-v2.1');
   });
 
   it('attaches knowledge_base_ids at flow level when provided', () => {
@@ -286,8 +286,8 @@ describe('buildFinancialOutboundFlow', () => {
     expect(flow.start_node_id).toBe('router');
   });
 
-  it('has version ob-fin-v2.0', () => {
-    expect(OUTBOUND_FINANCIAL_FLOW_VERSION).toBe('ob-fin-v2.0');
+  it('has version ob-fin-v2.1', () => {
+    expect(OUTBOUND_FINANCIAL_FLOW_VERSION).toBe('ob-fin-v2.1');
   });
 
   it('attaches knowledge_base_ids at flow level when provided', () => {
