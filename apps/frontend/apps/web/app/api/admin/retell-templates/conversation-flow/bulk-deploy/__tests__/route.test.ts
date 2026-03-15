@@ -28,7 +28,7 @@ jest.mock('@kit/prisma', () => ({
           phoneNumber: '+15551234567',
           retellReceptionistAgentId: 'old-agent-id',
           conversationFlowId: 'old-flow-id',
-          voiceConfig: { voiceId: 'retell-Chloe' },
+          voiceConfig: { voiceId: 'minimax-Chloe' },
           sipTerminationUri: 'sip:test@trunk.twilio.com',
         },
       }),
@@ -64,6 +64,7 @@ jest.mock('@kit/shared/retell/retell.service', () => ({
 jest.mock('@kit/shared/retell/templates/conversation-flow/flow-deploy-utils', () => ({
   deployRetellConversationFlow: mockDeployRetellConversationFlow,
   teardownRetellConversationFlow: mockTeardownRetellConversationFlow,
+  migrateLegacyVoiceId: (id: string) => id,
 }));
 
 function makeRequest(body) {
@@ -109,7 +110,7 @@ describe('POST /api/admin/retell-templates/conversation-flow/bulk-deploy', () =>
       expect.objectContaining({
         clinicName: 'Test Clinic',
         accountId: 'acc-1',
-        voiceId: 'retell-Chloe',
+        voiceId: 'minimax-Chloe',
       }),
     );
   });

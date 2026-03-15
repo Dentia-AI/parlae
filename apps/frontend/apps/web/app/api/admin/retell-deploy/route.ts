@@ -9,6 +9,7 @@ import {
   type RetellDeploymentConfig,
 } from '@kit/shared/retell/templates/retell-template-utils';
 import { RETELL_AGENT_ROLES, DEFAULT_VOICE_ID, type RetellAgentRole } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { migrateLegacyVoiceId } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service';
 
 /**
@@ -24,7 +25,7 @@ import { ensureRetellKnowledgeBase } from '@kit/shared/retell/retell-kb.service'
  * {
  *   accountId: string           // Required
  *   phoneNumber?: string        // E.164 phone number to import into Retell
- *   voiceId?: string            // Retell voice ID (default: retell-Chloe)
+ *   voiceId?: string            // Retell voice ID (default: minimax-Chloe)
  * }
  */
 export async function POST(request: NextRequest) {
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret: process.env.RETELL_WEBHOOK_SECRET || process.env.VAPI_WEBHOOK_SECRET || process.env.VAPI_SERVER_SECRET || '',
       accountId,
-      voiceId: voiceId || DEFAULT_VOICE_ID,
+      voiceId: migrateLegacyVoiceId(voiceId || DEFAULT_VOICE_ID),
       webhookBaseUrl: backendUrl,
       knowledgeBaseIds: knowledgeBaseIds.length > 0 ? knowledgeBaseIds : undefined,
     };

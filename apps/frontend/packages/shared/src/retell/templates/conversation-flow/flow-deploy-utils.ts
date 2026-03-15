@@ -31,6 +31,21 @@ import {
 } from './dental-clinic.flow-template';
 
 // ---------------------------------------------------------------------------
+// Legacy voice migration (slow providers → fast minimax/cartesia equivalents)
+// ---------------------------------------------------------------------------
+
+const LEGACY_VOICE_MAP: Record<string, string> = {
+  'retell-Chloe': 'minimax-Chloe',
+  'inworld-Grace': 'minimax-Grace',
+  '11labs-Kate': 'minimax-Kate',
+  '11labs-Joe': 'minimax-Andrew',
+};
+
+export function migrateLegacyVoiceId(voiceId: string): string {
+  return LEGACY_VOICE_MAP[voiceId] ?? voiceId;
+}
+
+// ---------------------------------------------------------------------------
 // Voice model resolution (same logic as retell-template-utils.ts)
 // ---------------------------------------------------------------------------
 
@@ -88,7 +103,7 @@ export async function deployRetellConversationFlow(
   );
 
   // 3. Create the agent linked to the conversation flow
-  const voiceId = config.voiceId || 'minimax-Chloe';
+  const voiceId = migrateLegacyVoiceId(config.voiceId || 'minimax-Chloe');
   const voiceModel = resolveVoiceModel(voiceId);
 
   const agent = await retell.createAgent({

@@ -254,7 +254,7 @@ describe('POST /api/outbound/settings', () => {
         phoneIntegrationSettings: {
           retellKnowledgeBaseId: 'kb-test-123',
           phoneNumber: '+15551234567',
-          voiceConfig: { voiceId: 'retell-Chloe' },
+          voiceConfig: { voiceId: 'minimax-Chloe' },
         },
       });
 

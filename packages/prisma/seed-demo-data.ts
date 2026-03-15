@@ -87,11 +87,11 @@ async function seedForAccount(accountId: string, label: string) {
         deploymentStatus: 'completed',
         deploymentError: null,
         voiceConfig: {
-          id: 'retell-Chloe',
+          id: 'retell-chloe',
           name: 'Chloe',
           accent: 'American',
           gender: 'female',
-          voiceId: 'retell-Chloe',
+          voiceId: 'minimax-Chloe',
           provider: 'retell',
           previewUrl: '/audio/voices/retell-chloe.mp3',
           description: 'Warm and professional',

@@ -13,6 +13,7 @@ import {
   DEFAULT_VOICE_ID,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
 import { createTwilioService } from '@kit/shared/twilio/twilio.service';
+import { migrateLegacyVoiceId } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 
 function resolveVoiceModel(voiceId: string): string | undefined {
   const prefix = voiceId.split('-')[0]?.toLowerCase();
@@ -107,8 +108,8 @@ export async function POST(request: NextRequest) {
         const agentName = `${clinicName} - Outbound ${groupLabel} (${template.version})`;
 
         // Mirror voice from inbound agent config
-        const voiceId: string =
-          integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID;
+        const voiceId: string = migrateLegacyVoiceId(
+          integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID);
         const voiceModel = resolveVoiceModel(voiceId);
 
         const agentConfig: RetellAgentConfig = {

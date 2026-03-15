@@ -52,6 +52,7 @@ import {
 } from '../retell-pms-tools.config';
 
 import { hydratePlaceholders } from '../../vapi/templates/template-utils';
+import { migrateLegacyVoiceId } from './conversation-flow/flow-deploy-utils';
 
 // ---------------------------------------------------------------------------
 // Voice model resolution — each Retell voice provider requires a specific
@@ -223,7 +224,7 @@ export async function deployRetellSquad(
     accountId: config.accountId,
   };
 
-  const defaultVoiceId = config.voiceId || 'minimax-Chloe';
+  const defaultVoiceId = migrateLegacyVoiceId(config.voiceId || 'minimax-Chloe');
   const defaultVoiceModel = config.voiceModel ?? resolveVoiceModel(defaultVoiceId);
   const webhookUrl = config.webhookBaseUrl || config.webhookUrl;
 

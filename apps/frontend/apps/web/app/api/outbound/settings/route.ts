@@ -11,6 +11,7 @@ import {
   ALLOWED_OUTBOUND_COUNTRIES,
   DEFAULT_VOICE_ID,
 } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { migrateLegacyVoiceId } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 import { buildPatientCareOutboundFlow } from '@kit/shared/retell/templates/outbound/patient-care.flow-template';
 import { buildFinancialOutboundFlow } from '@kit/shared/retell/templates/outbound/financial.flow-template';
 
@@ -118,8 +119,8 @@ async function createOutboundRetellAgent(
   const integrationSettings = (account?.phoneIntegrationSettings as any) ?? {};
   const clinicPhone = integrationSettings.phoneNumber as string || '';
 
-  const voiceId: string =
-    integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID;
+  const voiceId: string = migrateLegacyVoiceId(
+    integrationSettings.voiceConfig?.voiceId || DEFAULT_VOICE_ID);
   const voiceModel = resolveVoiceModel(voiceId);
 
   const retellKbId = integrationSettings.retellKnowledgeBaseId as string | undefined;

@@ -17,6 +17,7 @@ import {
   prepareToolDefinitionsForCreation,
 } from '@kit/shared/vapi/templates';
 import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { migrateLegacyVoiceId } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 import type {
   TemplateVariables,
   RuntimeConfig,
@@ -531,7 +532,7 @@ export async function executeDeployment(
             process.env.VAPI_WEBHOOK_SECRET ||
             '',
           accountId: account.id,
-          voiceId: data.voice?.voiceId || DEFAULT_VOICE_ID,
+          voiceId: migrateLegacyVoiceId(data.voice?.voiceId || DEFAULT_VOICE_ID),
           knowledgeBaseIds:
             retellKbIds.length > 0 ? retellKbIds : undefined,
         };
@@ -1658,7 +1659,7 @@ export const updateVoiceAction = enhanceAction(
           return { success: false, error: 'Retell not configured' };
         }
 
-        const voiceId = data.voice.voiceId || DEFAULT_VOICE_ID;
+        const voiceId = migrateLegacyVoiceId(data.voice.voiceId || DEFAULT_VOICE_ID);
         const voicePrefix = voiceId.split('-')[0]?.toLowerCase();
         const voiceModelMap: Record<string, string> = {
           '11labs': 'eleven_turbo_v2_5',

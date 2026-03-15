@@ -116,8 +116,9 @@ export const VAPI_AVAILABLE_VOICES: VoiceDefinition[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Retell voices (ElevenLabs / Retell platform)
+// Retell voices (minimax / cartesia — low-latency providers)
 //
+// All voices use minimax or cartesia TTS for 200-300ms faster response times.
 // Voice IDs populated via: npx tsx fetch-retell-voices.ts
 // Preview audio files saved to: public/audio/voices/retell-*.mp3
 // ---------------------------------------------------------------------------
@@ -128,7 +129,7 @@ export const RETELL_AVAILABLE_VOICES: VoiceDefinition[] = [
     name: 'Chloe',
     subtitle: 'Warm Professional',
     provider: 'retell',
-    voiceId: 'retell-Chloe',
+    voiceId: 'minimax-Chloe',
     gender: 'female',
     accent: 'American',
     description: 'Warm and professional, perfect for welcoming callers',
@@ -139,7 +140,7 @@ export const RETELL_AVAILABLE_VOICES: VoiceDefinition[] = [
     name: 'Grace',
     subtitle: 'Calm & Caring',
     provider: 'retell',
-    voiceId: 'inworld-Grace',
+    voiceId: 'minimax-Grace',
     gender: 'female',
     accent: 'American',
     description: 'Calm and caring, puts patients at ease',
@@ -150,7 +151,7 @@ export const RETELL_AVAILABLE_VOICES: VoiceDefinition[] = [
     name: 'Kate',
     subtitle: 'Clear Communicator',
     provider: 'retell',
-    voiceId: '11labs-Kate',
+    voiceId: 'minimax-Kate',
     gender: 'female',
     accent: 'American',
     description: 'Clear and articulate, excellent for detailed information',
@@ -179,15 +180,15 @@ export const RETELL_AVAILABLE_VOICES: VoiceDefinition[] = [
     previewUrl: '/audio/voices/retell-brian.mp3',
   },
   {
-    id: 'retell-joe',
-    name: 'Joe',
+    id: 'retell-andrew',
+    name: 'Andrew',
     subtitle: 'Easygoing Helper',
     provider: 'retell',
-    voiceId: '11labs-Joe',
+    voiceId: 'minimax-Andrew',
     gender: 'male',
     accent: 'American',
     description: 'Relaxed and approachable, naturally conversational',
-    previewUrl: '/audio/voices/retell-joe.mp3',
+    previewUrl: '/audio/voices/retell-andrew.mp3',
   },
   {
     id: 'retell-max',

@@ -8,6 +8,7 @@ import {
   teardownRetellConversationFlow,
 } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.retell-template';
+import { migrateLegacyVoiceId } from '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils';
 
 /**
  * POST /api/admin/retell-deploy-flow
@@ -18,7 +19,7 @@ import { DEFAULT_VOICE_ID } from '@kit/shared/retell/templates/dental-clinic.ret
  * Body:
  * {
  *   accountId: string
- *   voiceId?: string        // default: retell-Chloe
+ *   voiceId?: string        // default: minimax-Chloe
  *   teardownOnly?: boolean  // if true, only tears down existing flow agent
  * }
  *
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: backendUrl,
       webhookSecret,
       accountId,
-      voiceId: voiceId || DEFAULT_VOICE_ID,
+      voiceId: migrateLegacyVoiceId(voiceId || DEFAULT_VOICE_ID),
       knowledgeBaseIds,
     });
 

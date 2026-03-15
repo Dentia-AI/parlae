@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
         const {
           deployRetellConversationFlow,
           teardownRetellConversationFlow,
+          migrateLegacyVoiceId,
         } = await import(
           '@kit/shared/retell/templates/conversation-flow/flow-deploy-utils'
         );
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
           webhookUrl: backendUrl,
           webhookSecret: process.env.RETELL_WEBHOOK_SECRET || '',
           accountId,
-          voiceId: settings.voiceConfig?.voiceId || DEFAULT_VOICE_ID,
+          voiceId: migrateLegacyVoiceId(settings.voiceConfig?.voiceId || DEFAULT_VOICE_ID),
           knowledgeBaseIds: settings.retellKnowledgeBaseId ? [settings.retellKnowledgeBaseId] : undefined,
         });
 

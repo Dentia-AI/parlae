@@ -260,7 +260,7 @@ export const SHARED_RETELL_AGENT_CONFIG = {
   vocab_specialization: 'medical' as const,
   stt_mode: 'fast' as const,
   denoising_mode: 'noise-cancellation' as const,
-  responsiveness: 0.98,
+  responsiveness: 1.0,
   interruption_sensitivity: 0.95,
   enable_backchannel: false,
   backchannel_frequency: 0.3,
