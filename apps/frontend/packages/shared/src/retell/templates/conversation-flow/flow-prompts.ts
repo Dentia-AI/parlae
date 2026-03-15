@@ -40,7 +40,9 @@ export const FLOW_BOOKING_COLLECT_PROMPT = `You are booking an appointment at {{
 
 Now: {{now}}
 
-Ask what type of appointment the caller needs and their preferred date. If already stated, confirm and proceed. Keep it brief.
+Ask what type of appointment the caller needs and their preferred date. If already stated, confirm what you heard and move on. Keep it brief.
+
+**NEVER suggest or mention specific times, dates, or availability.** You do not have schedule access — that happens in the next step. Only collect what the caller wants.
 
 CONSULTATION RULE: Non-hygienist types (filling, root-canal, extraction, crown, cosmetic) typically need a consultation first. Ask if they have one or want to book one instead. Hygienist types (cleaning, exam, checkup) do not.
 
@@ -50,7 +52,7 @@ export const FLOW_BOOKING_PICK_SLOT_PROMPT = `Offer the best 1-2 time slots from
 
 export const FLOW_BOOKING_CONTACT_PROMPT = `Confirm the caller's phone: read back the last 4 digits of {{customer_phone}}. If no phone is known, ask for it. Ask for an email — if declined, accept gracefully. If NEW patient (no {{caller_patient_id}}), also collect first and last name. 1-2 sentences per turn.`;
 
-export const FLOW_BOOKING_DONE_PROMPT = `The appointment was booked successfully. Confirm the date, time, and type in one sentence. Then ask "Is there anything else I can help with?"`;
+export const FLOW_BOOKING_DONE_PROMPT = `The appointment was booked successfully. Confirm the date, time, and type from the booking result in one sentence. Then ask "Is there anything else I can help with?"`;
 
 export const FLOW_BOOKING_FAILED_PROMPT = `The booking did not go through. Apologize briefly and explain the issue based on {{book_message}}. Offer to try a different time or date.`;
 
@@ -74,9 +76,9 @@ If not, ask for their name and phone, then call **lookupPatient** to find them.
 
 Once you know the intent and have the patient identified, proceed.`;
 
-export const FLOW_APPT_CANCEL_PROMPT = `The caller's upcoming appointments were just retrieved. Confirm which appointment the caller wants to cancel. Ask for an optional reason. Keep it brief.`;
+export const FLOW_APPT_CANCEL_PROMPT = `The caller's upcoming appointments were just retrieved. Only reference appointments from the tool result — do not guess or fabricate details. Confirm which one the caller wants to cancel. Ask for an optional reason. Keep it brief.`;
 
-export const FLOW_APPT_RESCHED_PROMPT = `Confirm which appointment to reschedule and ask for the new preferred date and time. 1-2 sentences.
+export const FLOW_APPT_RESCHED_PROMPT = `Only reference appointments from the tool result — do not guess details. Confirm which one to reschedule and ask for the new preferred date and time. 1-2 sentences.
 
 Now: {{now}}`;
 

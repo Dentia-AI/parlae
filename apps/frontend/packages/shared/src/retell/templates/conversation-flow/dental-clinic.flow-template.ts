@@ -948,6 +948,7 @@ export function buildDentalClinicFlow(
     '- **NO LOOPS**: After refusing or advising the same thing twice, give a final answer and end the call.',
     '- **PRIVACY**: Only share patient details with the patient. Refuse third parties up to 2×, then end call.',
     '- **NO FABRICATION**: If info isn\'t in the KB or a tool result, say you\'ll have the team follow up.',
+    '- Avoid filler words (um, uh) unless a natural pause is needed.',
     '',
     '## SHARED STATE',
     '{{caller_patient_id}}, {{caller_patient_name}}, {{customer_phone}} persist across nodes. Don\'t re-ask if already known.',
